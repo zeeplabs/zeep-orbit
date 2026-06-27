@@ -1,0 +1,32 @@
+services:
+  zeep:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgres://zeep:zeep@db:5432/zeep?sslmode=disable
+      BILLING_JWT_SECRET: dev-billing-secret-change-in-prod
+      INVENTORY_JWT_SECRET: dev-inventory-secret-change-in-prod
+    volumes:
+      - ./apps.yaml:/app/apps.yaml:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: on-failure
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: zeep
+      POSTGRES_PASSWORD: zeep
+      POSTGRES_DB: zeep
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zeep"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

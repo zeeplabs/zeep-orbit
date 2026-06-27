@@ -1,0 +1,4 @@
+bin/
+*.env
+.env
+*.test
