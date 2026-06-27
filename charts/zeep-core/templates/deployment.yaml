@@ -1,45 +1,38 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: zeep-core
+  name: {{ include "zeep-core.fullname" . }}
   labels:
-    app: zeep-core
+    {{- include "zeep-core.labels" . | nindent 4 }}
 spec:
-  replicas: 2
+  replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      app: zeep-core
+      {{- include "zeep-core.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        app: zeep-core
+        {{- include "zeep-core.selectorLabels" . | nindent 8 }}
     spec:
       terminationGracePeriodSeconds: 35
       containers:
-        - name: zeep-core
-          # Para produção, pin por digest imutável:
-          # image: ghcr.io/zeeplabs/zeep-core@sha256:<digest>
-          image: ghcr.io/zeeplabs/zeep-core:latest
-          imagePullPolicy: Always
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           args: ["serve", "--config", "/app/apps.yaml"]
           ports:
             - containerPort: 8080
               protocol: TCP
           envFrom:
             - secretRef:
-                name: zeep-core-secret
+                name: {{ include "zeep-core.fullname" . }}
           volumeMounts:
             - name: config
               mountPath: /app/apps.yaml
               subPath: apps.yaml
               readOnly: true
           resources:
-            requests:
-              memory: "32Mi"
-              cpu: "50m"
-            limits:
-              memory: "128Mi"
-              cpu: "200m"
+            {{- toYaml .Values.resources | nindent 12 }}
           livenessProbe:
             httpGet:
               path: /health
@@ -57,4 +50,4 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: zeep-core-config
+            name: {{ include "zeep-core.fullname" . }}

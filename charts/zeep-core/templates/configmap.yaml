@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "zeep-core.fullname" . }}
+  labels:
+    {{- include "zeep-core.labels" . | nindent 4 }}
+data:
+  apps.yaml: |
+{{ .Values.appsConfig | indent 4 }}

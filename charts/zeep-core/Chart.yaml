@@ -1,0 +1,17 @@
+apiVersion: v2
+name: zeep-core
+description: Schema YAML → REST API automático no PostgreSQL
+type: application
+version: 0.1.0
+appVersion: "latest"
+keywords:
+  - baas
+  - rest
+  - postgresql
+  - api
+home: https://github.com/zeeplabs/zeep-core
+sources:
+  - https://github.com/zeeplabs/zeep-core
+maintainers:
+  - name: zeeplabs
+    url: https://github.com/zeeplabs

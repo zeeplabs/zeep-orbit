@@ -1,0 +1,37 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/zeeplabs/zeep-core
+  tag: "latest"
+  pullPolicy: Always
+
+service:
+  type: ClusterIP
+  port: 80
+
+resources:
+  requests:
+    memory: "32Mi"
+    cpu: "50m"
+  limits:
+    memory: "128Mi"
+    cpu: "200m"
+
+# Credenciais — obrigatórias, não têm default seguro.
+secrets:
+  databaseUrl: ""
+  # Map de app → jwtSecret. Chave vira <APPNAME_UPPER>_JWT_SECRET no Pod.
+  # Exemplo:
+  #   apps:
+  #     billing:
+  #       jwtSecret: "gere-com-openssl-rand-base64-32"
+  #     inventory:
+  #       jwtSecret: "gere-com-openssl-rand-base64-32"
+  apps: {}
+
+# Conteúdo completo do apps.yaml — define quais apps e tabelas existem.
+# ${DATABASE_URL} e ${<APP>_JWT_SECRET} são substituídos pelos env vars do Secret.
+appsConfig: |
+  platform:
+    database_url: ${DATABASE_URL}
+  apps: []
