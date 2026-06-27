@@ -139,7 +139,7 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 	r.Get("/docs/{app}/openapi.json", dh.HandleSpec)
 
 	// Dashboard — deve vir antes dos wildcards /{app}
-	dashH := dashboard.NewHandler(pool)
+	dashH := dashboard.NewHandler(pool, reg)
 	authLimiter := dashboard.NewRateLimiter(5, time.Minute)
 	r.Route("/dashboard", func(r chi.Router) {
 		r.Use(dashboard.SecurityHeaders)
@@ -147,6 +147,11 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(authLimiter.Middleware).Post("/api/login", dashH.Login)
 		r.Post("/api/logout", dashH.Logout)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/me", dashH.Me)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/apps", dashH.ListApps)
+		r.With(dashboard.RequireAuth(pool)).Post("/api/apps", dashH.CreateApp)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/apps/{id}", dashH.GetApp)
+		r.With(dashboard.RequireAuth(pool)).Put("/api/apps/{id}", dashH.UpdateApp)
+		r.With(dashboard.RequireAuth(pool)).Delete("/api/apps/{id}", dashH.DeleteApp)
 		r.Handle("/*", dashboard.StaticHandler())
 	})
 

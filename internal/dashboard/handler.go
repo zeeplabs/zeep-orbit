@@ -10,18 +10,24 @@ import (
 	"os"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"golang.org/x/crypto/bcrypt"
+	"github.com/zeeplabs/zeep-core/internal/config"
 	"github.com/zeeplabs/zeep-core/internal/db"
+	"github.com/zeeplabs/zeep-core/internal/provisioner"
+	"github.com/zeeplabs/zeep-core/internal/registry"
 )
 
 // Handler holds dependencies for dashboard HTTP handlers.
 type Handler struct {
 	pool *db.Pool
+	reg  *registry.Registry
+	prov *provisioner.Provisioner
 }
 
 // NewHandler creates a new Handler.
-func NewHandler(pool *db.Pool) *Handler {
-	return &Handler{pool: pool}
+func NewHandler(pool *db.Pool, reg *registry.Registry) *Handler {
+	return &Handler{pool: pool, reg: reg, prov: provisioner.New(pool)}
 }
 
 // Bootstrap handles POST /dashboard/api/bootstrap
@@ -171,6 +177,211 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		"email": user.Email,
 		"role":  user.Role,
 	})
+}
+
+// ListApps handles GET /dashboard/api/apps
+func (h *Handler) ListApps(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	apps, err := ListApps(r.Context(), h.pool, user.ID, user.Role)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	if apps == nil {
+		apps = []*AppRow{}
+	}
+	writeJSON(w, http.StatusOK, apps)
+}
+
+// appRequestBody is the JSON body for create/update app requests.
+type appRequestBody struct {
+	Name             string        `json:"name"`
+	AuthEmailEnabled bool          `json:"auth_email_enabled"`
+	Tables           []AppTableRow `json:"tables"`
+}
+
+// CreateApp handles POST /dashboard/api/apps
+func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
+	var body appRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if body.Name == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name is required"})
+		return
+	}
+
+	app, err := CreateApp(r.Context(), h.pool, body.Name, user.ID, body.AuthEmailEnabled, body.Tables)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	cfg := buildAppConfig(app)
+	if _, err := h.prov.Apply(r.Context(), &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "provisioning failed"})
+		return
+	}
+
+	h.reg.Register(appRowToRegistryApp(app))
+
+	writeJSON(w, http.StatusCreated, app)
+}
+
+// GetApp handles GET /dashboard/api/apps/{id}
+func (h *Handler) GetApp(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appID := chi.URLParam(r, "id")
+
+	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, app)
+}
+
+// UpdateApp handles PUT /dashboard/api/apps/{id}
+func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appID := chi.URLParam(r, "id")
+
+	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
+	var body appRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	app, err := UpdateApp(r.Context(), h.pool, appID, user.ID, user.Role, body.AuthEmailEnabled, body.Tables)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	cfg := buildAppConfig(app)
+	if _, err := h.prov.Apply(r.Context(), &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "provisioning failed"})
+		return
+	}
+
+	h.reg.Register(appRowToRegistryApp(app))
+
+	writeJSON(w, http.StatusOK, app)
+}
+
+// DeleteApp handles DELETE /dashboard/api/apps/{id}
+func (h *Handler) DeleteApp(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appID := chi.URLParam(r, "id")
+
+	// Fetch name before deletion for registry unregister.
+	existing, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	if err := DeleteApp(r.Context(), h.pool, appID, user.ID, user.Role); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	h.reg.Unregister(existing.Name)
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// buildAppConfig converts an AppRow into a config.AppConfig for the provisioner.
+func buildAppConfig(app *AppRow) config.AppConfig {
+	tables := make([]config.TableConfig, 0, len(app.Tables))
+	for _, t := range app.Tables {
+		tables = append(tables, config.TableConfig{
+			Name:    t.Name,
+			RLS:     t.RLS,
+			Columns: t.Columns,
+		})
+	}
+	return config.AppConfig{
+		Name: app.Name,
+		Auth: config.AuthConfig{
+			JWTSecret: app.JWTSecret,
+			Providers: config.AuthProviders{Email: app.AuthEmailEnabled},
+		},
+		Tables: tables,
+	}
+}
+
+// appRowToRegistryApp converts an AppRow into a *registry.App.
+func appRowToRegistryApp(app *AppRow) *registry.App {
+	tables := make(map[string]*registry.Table, len(app.Tables))
+	for _, t := range app.Tables {
+		cols := make([]registry.Column, 0, len(t.Columns))
+		for _, c := range t.Columns {
+			cols = append(cols, registry.Column{
+				Name:     c.Name,
+				Type:     c.Type,
+				Required: c.Required,
+				Default:  c.Default,
+				Unique:   c.Unique,
+			})
+		}
+		tables[t.Name] = &registry.Table{
+			Name:    t.Name,
+			RLS:     t.RLS,
+			Columns: cols,
+		}
+	}
+	return &registry.App{
+		Config:     buildAppConfig(app),
+		SchemaName: app.Name,
+		Tables:     tables,
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

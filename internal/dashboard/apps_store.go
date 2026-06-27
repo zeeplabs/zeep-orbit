@@ -1,0 +1,285 @@
+package dashboard
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/zeeplabs/zeep-core/internal/config"
+	"github.com/zeeplabs/zeep-core/internal/db"
+)
+
+// AppRow represents a row from zeep_system.apps, optionally with its tables.
+type AppRow struct {
+	ID               string
+	Name             string
+	JWTSecret        string
+	AuthEmailEnabled bool
+	OwnerID          string
+	CreatedAt        time.Time
+	Tables           []AppTableRow
+}
+
+// AppTableRow represents a row from zeep_system.app_tables.
+type AppTableRow struct {
+	ID      string
+	Name    string
+	RLS     string
+	Columns []config.ColumnConfig
+}
+
+// ListApps returns apps visible to the given user.
+// superadmin → all apps; admin → only apps owned by userID or listed in app_ownership.
+func ListApps(ctx context.Context, pool *db.Pool, userID, role string) ([]*AppRow, error) {
+	var (
+		rows pgx.Rows
+		err  error
+	)
+
+	if role == "superadmin" {
+		rows, err = pool.Query(ctx,
+			`SELECT id, name, jwt_secret, auth_email_enabled, owner_id, created_at
+			 FROM zeep_system.apps
+			 ORDER BY created_at DESC`,
+		)
+	} else {
+		rows, err = pool.Query(ctx,
+			`SELECT DISTINCT a.id, a.name, a.jwt_secret, a.auth_email_enabled, a.owner_id, a.created_at
+			 FROM zeep_system.apps a
+			 LEFT JOIN zeep_system.app_ownership o ON o.app_id = a.id AND o.user_id = $1
+			 WHERE a.owner_id = $1 OR o.user_id = $1
+			 ORDER BY a.created_at DESC`,
+			userID,
+		)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("dashboard: list apps: %w", err)
+	}
+	defer rows.Close()
+
+	var apps []*AppRow
+	for rows.Next() {
+		var a AppRow
+		if err := rows.Scan(&a.ID, &a.Name, &a.JWTSecret, &a.AuthEmailEnabled, &a.OwnerID, &a.CreatedAt); err != nil {
+			return nil, fmt.Errorf("dashboard: list apps scan: %w", err)
+		}
+		apps = append(apps, &a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("dashboard: list apps rows: %w", err)
+	}
+
+	for _, app := range apps {
+		tables, err := loadAppTables(ctx, pool, app.ID)
+		if err != nil {
+			return nil, err
+		}
+		app.Tables = tables
+	}
+
+	return apps, nil
+}
+
+// CreateApp inserts into zeep_system.apps + app_tables, adds app_ownership for owner.
+// Returns the created AppRow with ID and CreatedAt populated.
+func CreateApp(ctx context.Context, pool *db.Pool, name, ownerID string, authEmail bool, tables []AppTableRow) (*AppRow, error) {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("dashboard: create app begin: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	var app AppRow
+	err = tx.QueryRow(ctx,
+		`INSERT INTO zeep_system.apps (name, owner_id, auth_email_enabled)
+		 VALUES ($1, $2, $3)
+		 RETURNING id, name, jwt_secret, auth_email_enabled, owner_id, created_at`,
+		name, ownerID, authEmail,
+	).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.OwnerID, &app.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("dashboard: create app insert: %w", err)
+	}
+
+	app.Tables, err = insertAppTables(ctx, tx, app.ID, tables)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO zeep_system.app_ownership (user_id, app_id) VALUES ($1, $2)`,
+		ownerID, app.ID,
+	); err != nil {
+		return nil, fmt.Errorf("dashboard: create app ownership: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("dashboard: create app commit: %w", err)
+	}
+
+	return &app, nil
+}
+
+// GetApp returns a single app by ID.
+// admin can only access apps they own or are members of; superadmin accesses any.
+func GetApp(ctx context.Context, pool *db.Pool, appID, userID, role string) (*AppRow, error) {
+	var app AppRow
+	var err error
+
+	if role == "superadmin" {
+		err = pool.QueryRow(ctx,
+			`SELECT id, name, jwt_secret, auth_email_enabled, owner_id, created_at
+			 FROM zeep_system.apps WHERE id = $1`,
+			appID,
+		).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.OwnerID, &app.CreatedAt)
+	} else {
+		err = pool.QueryRow(ctx,
+			`SELECT DISTINCT a.id, a.name, a.jwt_secret, a.auth_email_enabled, a.owner_id, a.created_at
+			 FROM zeep_system.apps a
+			 LEFT JOIN zeep_system.app_ownership o ON o.app_id = a.id AND o.user_id = $2
+			 WHERE a.id = $1 AND (a.owner_id = $2 OR o.user_id = $2)`,
+			appID, userID,
+		).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.OwnerID, &app.CreatedAt)
+	}
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("dashboard: get app: %w", err)
+	}
+
+	app.Tables, err = loadAppTables(ctx, pool, app.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &app, nil
+}
+
+// UpdateApp replaces app_tables (delete + reinsert) and updates the apps row.
+// Ownership check is the same as GetApp.
+func UpdateApp(ctx context.Context, pool *db.Pool, appID, userID, role string, authEmail bool, tables []AppTableRow) (*AppRow, error) {
+	// Verify access first.
+	existing, err := GetApp(ctx, pool, appID, userID, role)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("dashboard: update app begin: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	var app AppRow
+	err = tx.QueryRow(ctx,
+		`UPDATE zeep_system.apps
+		 SET auth_email_enabled = $2
+		 WHERE id = $1
+		 RETURNING id, name, jwt_secret, auth_email_enabled, owner_id, created_at`,
+		appID, authEmail,
+	).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.OwnerID, &app.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("dashboard: update app: %w", err)
+	}
+
+	// Delete existing tables and reinsert.
+	if _, err := tx.Exec(ctx, `DELETE FROM zeep_system.app_tables WHERE app_id = $1`, appID); err != nil {
+		return nil, fmt.Errorf("dashboard: update app delete tables: %w", err)
+	}
+
+	app.Tables, err = insertAppTables(ctx, tx, appID, tables)
+	if err != nil {
+		return nil, err
+	}
+
+	// Suppress unused variable warning — existing is used for access check above.
+	_ = existing
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("dashboard: update app commit: %w", err)
+	}
+
+	return &app, nil
+}
+
+// DeleteApp removes an app from zeep_system.apps.
+// Cascades to app_tables and app_ownership via FK constraints.
+// Does NOT drop the Postgres schema/tables for the app.
+// Ownership check is the same as GetApp.
+func DeleteApp(ctx context.Context, pool *db.Pool, appID, userID, role string) error {
+	// Verify access.
+	if _, err := GetApp(ctx, pool, appID, userID, role); err != nil {
+		return err
+	}
+
+	tag, err := pool.Exec(ctx, `DELETE FROM zeep_system.apps WHERE id = $1`, appID)
+	if err != nil {
+		return fmt.Errorf("dashboard: delete app: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// loadAppTables fetches all tables for a given app ID from the pool (not in a transaction).
+func loadAppTables(ctx context.Context, pool *db.Pool, appID string) ([]AppTableRow, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT id, name, rls, columns FROM zeep_system.app_tables WHERE app_id = $1 ORDER BY name`,
+		appID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("dashboard: load app tables: %w", err)
+	}
+	defer rows.Close()
+	return scanAppTableRows(rows)
+}
+
+// insertAppTables inserts a slice of AppTableRow within an existing transaction.
+func insertAppTables(ctx context.Context, tx pgx.Tx, appID string, tables []AppTableRow) ([]AppTableRow, error) {
+	result := make([]AppTableRow, 0, len(tables))
+	for _, t := range tables {
+		colsJSON, err := json.Marshal(t.Columns)
+		if err != nil {
+			return nil, fmt.Errorf("dashboard: marshal columns for table %q: %w", t.Name, err)
+		}
+		var row AppTableRow
+		err = tx.QueryRow(ctx,
+			`INSERT INTO zeep_system.app_tables (app_id, name, rls, columns)
+			 VALUES ($1, $2, $3, $4)
+			 RETURNING id, name, rls, columns`,
+			appID, t.Name, t.RLS, colsJSON,
+		).Scan(&row.ID, &row.Name, &row.RLS, &colsJSON)
+		if err != nil {
+			return nil, fmt.Errorf("dashboard: insert app table %q: %w", t.Name, err)
+		}
+		if err := json.Unmarshal(colsJSON, &row.Columns); err != nil {
+			return nil, fmt.Errorf("dashboard: unmarshal columns for table %q: %w", t.Name, err)
+		}
+		result = append(result, row)
+	}
+	return result, nil
+}
+
+// scanAppTableRows scans pgx.Rows into a slice of AppTableRow.
+func scanAppTableRows(rows pgx.Rows) ([]AppTableRow, error) {
+	var result []AppTableRow
+	for rows.Next() {
+		var t AppTableRow
+		var colsJSON []byte
+		if err := rows.Scan(&t.ID, &t.Name, &t.RLS, &colsJSON); err != nil {
+			return nil, fmt.Errorf("dashboard: scan app table row: %w", err)
+		}
+		if err := json.Unmarshal(colsJSON, &t.Columns); err != nil {
+			return nil, fmt.Errorf("dashboard: unmarshal columns: %w", err)
+		}
+		result = append(result, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("dashboard: app table rows: %w", err)
+	}
+	return result, nil
+}
