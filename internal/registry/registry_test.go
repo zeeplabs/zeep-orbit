@@ -53,7 +53,7 @@ func TestLoad(t *testing.T) {
 		if app.Config.Name != name {
 			t.Errorf("app.Config.Name: esperado %q, obteve %q", name, app.Config.Name)
 		}
-		want := "app_" + name
+		want := name
 		if app.SchemaName != want {
 			t.Errorf("app.SchemaName: esperado %q, obteve %q", want, app.SchemaName)
 		}

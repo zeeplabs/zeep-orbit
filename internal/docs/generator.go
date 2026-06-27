@@ -255,6 +255,11 @@ func buildResponseSchema(table *registry.Table) schemaOrRef {
 	}
 	required := []string{"id", "created_at", "updated_at"}
 
+	if table.RLS == "owner" {
+		props["owner_id"] = schemaOrRef{Type: "string", Format: "uuid", ReadOnly: true}
+		required = append(required, "owner_id")
+	}
+
 	for _, col := range table.Columns {
 		t, f := openAPIType(col.Type)
 		props[col.Name] = schemaOrRef{Type: t, Format: f}

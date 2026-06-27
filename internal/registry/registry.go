@@ -24,6 +24,7 @@ type App struct {
 // Table representa uma tabela dentro de um app.
 type Table struct {
 	Name    string
+	RLS     string
 	Columns []Column
 }
 
@@ -68,6 +69,7 @@ func (r *Registry) Load(cfg *config.Config) error {
 			}
 			tables[tblCfg.Name] = &Table{
 				Name:    tblCfg.Name,
+				RLS:     tblCfg.RLS,
 				Columns: cols,
 			}
 		}

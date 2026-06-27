@@ -46,13 +46,16 @@ func TestMain(m *testing.M) {
 		"DROP SCHEMA IF EXISTS " + testSchema + " CASCADE",
 		"CREATE SCHEMA " + testSchema,
 		`CREATE TABLE ` + testSchema + `."_auth_users" (
-			"id"            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-			"email"         TEXT        NOT NULL UNIQUE,
-			"password_hash" TEXT        NOT NULL,
-			"name"          TEXT,
-			"avatar_url"    TEXT,
-			"created_at"    TIMESTAMPTZ NOT NULL DEFAULT now(),
-			"updated_at"    TIMESTAMPTZ NOT NULL DEFAULT now()
+			"id"                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+			"email"              TEXT        NOT NULL UNIQUE,
+			"phone"              TEXT,
+			"password_hash"      TEXT        NOT NULL,
+			"name"               TEXT,
+			"avatar_url"         TEXT,
+			"email_confirmed_at" TIMESTAMPTZ,
+			"last_sign_in_at"    TIMESTAMPTZ,
+			"created_at"         TIMESTAMPTZ NOT NULL DEFAULT now(),
+			"updated_at"         TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
 		`CREATE TABLE ` + testSchema + `."_auth_sessions" (
 			"id"            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -398,8 +401,13 @@ func TestMeReturnsUser(t *testing.T) {
 		"email": "me@test.com", "password": "pass", "name": "Me User",
 	}))
 	regReq.Header.Set("Content-Type", "application/json")
+	// unique RemoteAddr: all tests share the same rate limiter; prior tests exhaust the 10 req/min quota on the default IP
+	regReq.RemoteAddr = "10.0.0.99:1234"
 	router.ServeHTTP(regRec, regReq)
 
+	if regRec.Code != http.StatusCreated {
+		t.Fatalf("register failed: %d %s", regRec.Code, regRec.Body.String())
+	}
 	regData := decodeJSON(t, regRec.Body)
 	token := regData["token"].(string)
 

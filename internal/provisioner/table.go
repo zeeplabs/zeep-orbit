@@ -55,7 +55,7 @@ func columnDDL(col config.ColumnConfig) string {
 // createTable executa CREATE TABLE IF NOT EXISTS com colunas de sistema (id, created_at,
 // updated_at) e as colunas definidas no config.
 // Retorna true se a tabela foi criada (não existia), false se já existia.
-func (p *Provisioner) createTable(ctx context.Context, schemaName, tableName string, cols []config.ColumnConfig) (bool, error) {
+func (p *Provisioner) createTable(ctx context.Context, schemaName, tableName string, cols []config.ColumnConfig, rls string) (bool, error) {
 	var exists bool
 	err := p.pool.QueryRow(ctx,
 		`SELECT EXISTS(
@@ -79,6 +79,10 @@ func (p *Provisioner) createTable(ctx context.Context, schemaName, tableName str
 		colDefs = append(colDefs, columnDDL(col))
 	}
 
+	if rls == "owner" {
+		colDefs = append(colDefs, fmt.Sprintf(`"owner_id" UUID NOT NULL REFERENCES %q."_auth_users"("id")`, schemaName))
+	}
+
 	colDefs = append(colDefs,
 		`"created_at" TIMESTAMPTZ NOT NULL DEFAULT now()`,
 		`"updated_at" TIMESTAMPTZ NOT NULL DEFAULT now()`,
@@ -100,7 +104,7 @@ func (p *Provisioner) createTable(ctx context.Context, schemaName, tableName str
 // addMissingColumns inspeciona information_schema e executa ALTER TABLE ADD COLUMN IF NOT EXISTS
 // para cada coluna do config que não existe ainda na tabela.
 // Retorna a lista de colunas adicionadas no formato "schema.table.column".
-func (p *Provisioner) addMissingColumns(ctx context.Context, schemaName, tableName string, cols []config.ColumnConfig) ([]string, error) {
+func (p *Provisioner) addMissingColumns(ctx context.Context, schemaName, tableName string, cols []config.ColumnConfig, rls string) ([]string, error) {
 	// Busca colunas existentes de uma vez.
 	rows, err := p.pool.Query(ctx,
 		`SELECT column_name FROM information_schema.columns
@@ -140,6 +144,19 @@ func (p *Provisioner) addMissingColumns(ctx context.Context, schemaName, tableNa
 		}
 
 		added = append(added, fmt.Sprintf("%s.%s.%s", schemaName, tableName, col.Name))
+	}
+
+	if rls == "owner" {
+		if _, found := existing["owner_id"]; !found {
+			sql := fmt.Sprintf(
+				`ALTER TABLE %q.%q ADD COLUMN IF NOT EXISTS "owner_id" UUID REFERENCES %q."_auth_users"("id")`,
+				schemaName, tableName, schemaName,
+			)
+			if _, err := p.pool.Exec(ctx, sql); err != nil {
+				return nil, fmt.Errorf("table: add owner_id to %q.%q: %w", schemaName, tableName, err)
+			}
+			added = append(added, fmt.Sprintf("%s.%s.owner_id", schemaName, tableName))
+		}
 	}
 
 	return added, nil

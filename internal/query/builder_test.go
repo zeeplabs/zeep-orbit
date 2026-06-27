@@ -26,7 +26,7 @@ func testTable() *registry.Table {
 
 func TestBuildList_Basic(t *testing.T) {
 	tbl := testTable()
-	q, err := BuildList("app_billing", "invoices", tbl, map[string]string{})
+	q, err := BuildList("app_billing", "invoices", tbl, map[string]string{}, "")
 	if err != nil {
 		t.Fatalf("esperava nil error, got: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestBuildList_WithFilters(t *testing.T) {
 		"limit":   "10",
 		"offset":  "5",
 	}
-	q, err := BuildList("app_billing", "invoices", tbl, params)
+	q, err := BuildList("app_billing", "invoices", tbl, params, "")
 	if err != nil {
 		t.Fatalf("erro inesperado: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestBuildList_UnknownField(t *testing.T) {
 	params := map[string]string{
 		"nonexistent": "eq.foo",
 	}
-	_, err := BuildList("app_billing", "invoices", tbl, params)
+	_, err := BuildList("app_billing", "invoices", tbl, params, "")
 	if err == nil {
 		t.Fatal("esperava erro para campo desconhecido, got nil")
 	}
@@ -115,7 +115,7 @@ func TestBuildList_UnknownFieldInOrder(t *testing.T) {
 	params := map[string]string{
 		"order": "nonexistent.asc",
 	}
-	_, err := BuildList("app_billing", "invoices", tbl, params)
+	_, err := BuildList("app_billing", "invoices", tbl, params, "")
 	if err == nil {
 		t.Fatal("esperava erro para campo desconhecido em order, got nil")
 	}
@@ -126,7 +126,7 @@ func TestBuildList_LimitClamp(t *testing.T) {
 	params := map[string]string{
 		"limit": "9999",
 	}
-	q, err := BuildList("app_billing", "invoices", tbl, params)
+	q, err := BuildList("app_billing", "invoices", tbl, params, "")
 	if err != nil {
 		t.Fatalf("erro inesperado: %v", err)
 	}
@@ -145,7 +145,7 @@ func TestBuildInsert_Valid(t *testing.T) {
 		"customer_id": "uuid-abc",
 		"status":      "pending",
 	}
-	q, err := BuildInsert("app_billing", "invoices", tbl, body)
+	q, err := BuildInsert("app_billing", "invoices", tbl, body, "")
 	if err != nil {
 		t.Fatalf("erro inesperado: %v", err)
 	}
@@ -167,7 +167,7 @@ func TestBuildInsert_Required(t *testing.T) {
 	body := map[string]any{
 		"amount": "50.00",
 	}
-	_, err := BuildInsert("app_billing", "invoices", tbl, body)
+	_, err := BuildInsert("app_billing", "invoices", tbl, body, "")
 	if err == nil {
 		t.Fatal("esperava erro por campo required ausente, got nil")
 	}
@@ -182,7 +182,7 @@ func TestBuildInsert_RequiredNull(t *testing.T) {
 		"amount":      nil, // presente mas null
 		"customer_id": "uuid-xyz",
 	}
-	_, err := BuildInsert("app_billing", "invoices", tbl, body)
+	_, err := BuildInsert("app_billing", "invoices", tbl, body, "")
 	if err == nil {
 		t.Fatal("esperava erro por campo required null, got nil")
 	}
@@ -198,7 +198,7 @@ func TestBuildInsert_UnknownField(t *testing.T) {
 		"customer_id": "uuid-abc",
 		"hack_field":  "DROP TABLE",
 	}
-	_, err := BuildInsert("app_billing", "invoices", tbl, body)
+	_, err := BuildInsert("app_billing", "invoices", tbl, body, "")
 	if err == nil {
 		t.Fatal("esperava erro para campo desconhecido, got nil")
 	}
@@ -216,7 +216,7 @@ func TestBuildInsert_StripsSystemFields(t *testing.T) {
 		"amount":      "42.00",
 		"customer_id": "uuid-123",
 	}
-	q, err := BuildInsert("app_billing", "invoices", tbl, body)
+	q, err := BuildInsert("app_billing", "invoices", tbl, body, "")
 	if err != nil {
 		t.Fatalf("erro inesperado: %v", err)
 	}
@@ -251,7 +251,7 @@ func TestBuildUpdate_Valid(t *testing.T) {
 	body := map[string]any{
 		"status": "paid",
 	}
-	q, err := BuildUpdate("app_billing", "invoices", tbl, "uuid-999", body)
+	q, err := BuildUpdate("app_billing", "invoices", tbl, "uuid-999", body, "")
 	if err != nil {
 		t.Fatalf("erro inesperado: %v", err)
 	}
@@ -283,7 +283,7 @@ func TestBuildUpdate_UnknownField(t *testing.T) {
 		"status":    "paid",
 		"evil_col":  "1=1",
 	}
-	_, err := BuildUpdate("app_billing", "invoices", tbl, "uuid-1", body)
+	_, err := BuildUpdate("app_billing", "invoices", tbl, "uuid-1", body, "")
 	if err == nil {
 		t.Fatal("esperava erro para campo desconhecido, got nil")
 	}
@@ -299,7 +299,7 @@ func TestBuildUpdate_SystemFieldsStripped(t *testing.T) {
 		"created_at": "ignored",
 		"status":     "refunded",
 	}
-	q, err := BuildUpdate("app_billing", "invoices", tbl, "uuid-2", body)
+	q, err := BuildUpdate("app_billing", "invoices", tbl, "uuid-2", body, "")
 	if err != nil {
 		t.Fatalf("erro inesperado: %v", err)
 	}
@@ -315,25 +315,25 @@ func TestBuildUpdate_SystemFieldsStripped(t *testing.T) {
 // ── BuildGetByID ──────────────────────────────────────────────────────────────
 
 func TestBuildGetByID(t *testing.T) {
-	q := BuildGetByID("app_billing", "invoices")
-	expected := "SELECT * FROM app_billing.invoices WHERE id = $1"
+	q := BuildGetByID("app_billing", "invoices", "uuid-test", "")
+	expected := "SELECT * FROM app_billing.invoices WHERE id = $1::uuid"
 	if q.SQL != expected {
 		t.Errorf("SQL esperado %q, got %q", expected, q.SQL)
 	}
-	if q.Args != nil {
-		t.Errorf("Args deveria ser nil, got %v", q.Args)
+	if len(q.Args) != 1 || q.Args[0] != "uuid-test" {
+		t.Errorf("Args deveria ser [uuid-test], got %v", q.Args)
 	}
 }
 
 // ── BuildDelete ───────────────────────────────────────────────────────────────
 
 func TestBuildDelete(t *testing.T) {
-	q := BuildDelete("app_billing", "invoices")
-	expected := "DELETE FROM app_billing.invoices WHERE id = $1"
+	q := BuildDelete("app_billing", "invoices", "uuid-del", "")
+	expected := "DELETE FROM app_billing.invoices WHERE id = $1::uuid"
 	if q.SQL != expected {
 		t.Errorf("SQL esperado %q, got %q", expected, q.SQL)
 	}
-	if q.Args != nil {
-		t.Errorf("Args deveria ser nil, got %v", q.Args)
+	if len(q.Args) != 1 || q.Args[0] != "uuid-del" {
+		t.Errorf("Args deveria ser [uuid-del], got %v", q.Args)
 	}
 }

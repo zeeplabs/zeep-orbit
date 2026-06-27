@@ -50,7 +50,7 @@ func (p *Provisioner) Apply(ctx context.Context, cfg *config.Config) (*Report, e
 		}
 
 		for _, table := range app.Tables {
-			tableCreated, err := p.createTable(ctx, schemaName, table.Name, table.Columns)
+			tableCreated, err := p.createTable(ctx, schemaName, table.Name, table.Columns, table.RLS)
 			if err != nil {
 				return nil, fmt.Errorf("provisioner: app %q table %q: %w", app.Name, table.Name, err)
 			}
@@ -60,7 +60,7 @@ func (p *Provisioner) Apply(ctx context.Context, cfg *config.Config) (*Report, e
 			}
 
 			// Tabela já existia — verifica colunas ausentes.
-			added, err := p.addMissingColumns(ctx, schemaName, table.Name, table.Columns)
+			added, err := p.addMissingColumns(ctx, schemaName, table.Name, table.Columns, table.RLS)
 			if err != nil {
 				return nil, fmt.Errorf("provisioner: app %q table %q add columns: %w", app.Name, table.Name, err)
 			}

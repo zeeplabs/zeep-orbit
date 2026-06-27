@@ -19,8 +19,14 @@ import (
 // Setup de integração
 // ----------------------------------------------------------------------------
 
-const testSchema = "app_testhandler"
+const testSchema = "testhandler"
 const testTable = "items"
+
+const (
+	rlsSchema  = "rls_test_app"
+	rlsAppName = "rls_test_app"
+	rlsSecret  = "rls-jwt-secret"
+)
 
 var (
 	testPool *db.Pool
@@ -42,7 +48,7 @@ func TestMain(m *testing.M) {
 	}
 	defer testPool.Close()
 
-	// Cria schema e tabela de teste.
+	// Cria schema e tabela de teste (CRUD sem RLS).
 	setup := []string{
 		"DROP SCHEMA IF EXISTS " + testSchema + " CASCADE",
 		"CREATE SCHEMA " + testSchema,
@@ -57,6 +63,36 @@ func TestMain(m *testing.M) {
 	for _, sql := range setup {
 		if _, err := testPool.Exec(ctx, sql); err != nil {
 			panic("TestMain: setup falhou: " + err.Error())
+		}
+	}
+
+	// Cria schema e tabelas para testes de RLS.
+	rlsSetup := []string{
+		"DROP SCHEMA IF EXISTS " + rlsSchema + " CASCADE",
+		"CREATE SCHEMA " + rlsSchema,
+		`CREATE TABLE ` + rlsSchema + `."_auth_users" (
+			"id"                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+			"email"              TEXT        NOT NULL UNIQUE,
+			"phone"              TEXT,
+			"password_hash"      TEXT        NOT NULL,
+			"name"               TEXT,
+			"avatar_url"         TEXT,
+			"email_confirmed_at" TIMESTAMPTZ,
+			"last_sign_in_at"    TIMESTAMPTZ,
+			"created_at"         TIMESTAMPTZ NOT NULL DEFAULT now(),
+			"updated_at"         TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE TABLE ` + rlsSchema + `.notes (
+			id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			title      TEXT NOT NULL,
+			owner_id   UUID NOT NULL REFERENCES ` + rlsSchema + `."_auth_users"("id"),
+			created_at TIMESTAMPTZ DEFAULT now(),
+			updated_at TIMESTAMPTZ DEFAULT now()
+		)`,
+	}
+	for _, sql := range rlsSetup {
+		if _, err := testPool.Exec(ctx, sql); err != nil {
+			panic("TestMain: rls setup falhou: " + err.Error())
 		}
 	}
 
@@ -77,6 +113,22 @@ func TestMain(m *testing.M) {
 					},
 				},
 			},
+			{
+				Name: rlsAppName,
+				Auth: config.AuthConfig{
+					JWTSecret: rlsSecret,
+					Providers: config.AuthProviders{Email: true},
+				},
+				Tables: []config.TableConfig{
+					{
+						Name: "notes",
+						RLS:  "owner",
+						Columns: []config.ColumnConfig{
+							{Name: "title", Type: "text", Required: true},
+						},
+					},
+				},
+			},
 		},
 	})
 
@@ -84,6 +136,7 @@ func TestMain(m *testing.M) {
 
 	// Cleanup
 	_, _ = testPool.Exec(ctx, "DROP SCHEMA IF EXISTS "+testSchema+" CASCADE")
+	_, _ = testPool.Exec(ctx, "DROP SCHEMA IF EXISTS "+rlsSchema+" CASCADE")
 
 	os.Exit(code)
 }

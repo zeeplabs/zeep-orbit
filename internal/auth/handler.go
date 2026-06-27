@@ -51,9 +51,10 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-		Name     string `json:"name"`
+		Email    string  `json:"email"`
+		Password string  `json:"password"`
+		Name     string  `json:"name"`
+		Phone    *string `json:"phone"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -73,8 +74,8 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	schema := app.SchemaName
 	var userID string
 	err = h.pool.QueryRow(r.Context(),
-		fmt.Sprintf(`INSERT INTO %q."_auth_users" (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id`, schema),
-		body.Email, string(hash), body.Name,
+		fmt.Sprintf(`INSERT INTO %q."_auth_users" (email, phone, password_hash, name) VALUES ($1, $2, $3, $4) RETURNING id`, schema),
+		body.Email, body.Phone, string(hash), body.Name,
 	).Scan(&userID)
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -128,6 +129,14 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(body.Password)); err != nil {
 		writeError(w, http.StatusUnauthorized, "invalid credentials")
+		return
+	}
+
+	if _, err := h.pool.Exec(r.Context(),
+		fmt.Sprintf(`UPDATE %q."_auth_users" SET last_sign_in_at = now() WHERE id = $1`, schema),
+		userID,
+	); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update sign-in timestamp")
 		return
 	}
 
@@ -269,12 +278,13 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var id, email string
-	var name, avatarURL *string
+	var phone, name, avatarURL *string
+	var emailConfirmedAt, lastSignInAt *time.Time
 	var createdAt, updatedAt time.Time
 	err := h.pool.QueryRow(r.Context(),
-		fmt.Sprintf(`SELECT id, email, name, avatar_url, created_at, updated_at FROM %q."_auth_users" WHERE id = $1`, app.SchemaName),
+		fmt.Sprintf(`SELECT id, email, phone, name, avatar_url, email_confirmed_at, last_sign_in_at, created_at, updated_at FROM %q."_auth_users" WHERE id = $1`, app.SchemaName),
 		user.ID,
-	).Scan(&id, &email, &name, &avatarURL, &createdAt, &updatedAt)
+	).Scan(&id, &email, &phone, &name, &avatarURL, &emailConfirmedAt, &lastSignInAt, &createdAt, &updatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "user not found")
@@ -285,12 +295,15 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"id":         id,
-		"email":      email,
-		"name":       name,
-		"avatar_url": avatarURL,
-		"created_at": createdAt,
-		"updated_at": updatedAt,
+		"id":                  id,
+		"email":               email,
+		"phone":               phone,
+		"name":                name,
+		"avatar_url":          avatarURL,
+		"email_confirmed_at":  emailConfirmedAt,
+		"last_sign_in_at":     lastSignInAt,
+		"created_at":          createdAt,
+		"updated_at":          updatedAt,
 	})
 }
 
@@ -309,6 +322,7 @@ func (h *Handler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 
 	var body struct {
 		Name      *string `json:"name"`
+		Phone     *string `json:"phone"`
 		AvatarURL *string `json:"avatar_url"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -317,15 +331,16 @@ func (h *Handler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var id, email string
-	var name, avatarURL *string
+	var phone, name, avatarURL *string
+	var emailConfirmedAt, lastSignInAt *time.Time
 	var createdAt, updatedAt time.Time
 	err := h.pool.QueryRow(r.Context(),
 		fmt.Sprintf(`UPDATE %q."_auth_users"
-			SET name = COALESCE($1, name), avatar_url = COALESCE($2, avatar_url), updated_at = now()
-			WHERE id = $3
-			RETURNING id, email, name, avatar_url, created_at, updated_at`, app.SchemaName),
-		body.Name, body.AvatarURL, user.ID,
-	).Scan(&id, &email, &name, &avatarURL, &createdAt, &updatedAt)
+			SET name = COALESCE($1, name), phone = COALESCE($2, phone), avatar_url = COALESCE($3, avatar_url), updated_at = now()
+			WHERE id = $4
+			RETURNING id, email, phone, name, avatar_url, email_confirmed_at, last_sign_in_at, created_at, updated_at`, app.SchemaName),
+		body.Name, body.Phone, body.AvatarURL, user.ID,
+	).Scan(&id, &email, &phone, &name, &avatarURL, &emailConfirmedAt, &lastSignInAt, &createdAt, &updatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "user not found")
@@ -336,12 +351,15 @@ func (h *Handler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"id":         id,
-		"email":      email,
-		"name":       name,
-		"avatar_url": avatarURL,
-		"created_at": createdAt,
-		"updated_at": updatedAt,
+		"id":                 id,
+		"email":              email,
+		"phone":              phone,
+		"name":               name,
+		"avatar_url":         avatarURL,
+		"email_confirmed_at": emailConfirmedAt,
+		"last_sign_in_at":    lastSignInAt,
+		"created_at":         createdAt,
+		"updated_at":         updatedAt,
 	})
 }
 

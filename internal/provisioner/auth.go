@@ -11,13 +11,16 @@ func (p *Provisioner) provisionAuthTables(ctx context.Context, schema string) ([
 	var created []string
 
 	usersDDL := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %q."_auth_users" (
-		"id"            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-		"email"         TEXT        NOT NULL UNIQUE,
-		"password_hash" TEXT        NOT NULL,
-		"name"          TEXT,
-		"avatar_url"    TEXT,
-		"created_at"    TIMESTAMPTZ NOT NULL DEFAULT now(),
-		"updated_at"    TIMESTAMPTZ NOT NULL DEFAULT now()
+		"id"                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+		"email"              TEXT        NOT NULL UNIQUE,
+		"phone"              TEXT,
+		"password_hash"      TEXT        NOT NULL,
+		"name"               TEXT,
+		"avatar_url"         TEXT,
+		"email_confirmed_at" TIMESTAMPTZ,
+		"last_sign_in_at"    TIMESTAMPTZ,
+		"created_at"         TIMESTAMPTZ NOT NULL DEFAULT now(),
+		"updated_at"         TIMESTAMPTZ NOT NULL DEFAULT now()
 	)`, schema)
 
 	usersCreated, err := p.createAuthTable(ctx, schema, "_auth_users", usersDDL)
@@ -26,6 +29,11 @@ func (p *Provisioner) provisionAuthTables(ctx context.Context, schema string) ([
 	}
 	if usersCreated {
 		created = append(created, schema+"._auth_users")
+	}
+
+	// Ensure new columns exist on pre-existing tables (idempotent).
+	if err := p.addMissingAuthUserColumns(ctx, schema); err != nil {
+		return nil, err
 	}
 
 	sessionsDDL := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %q."_auth_sessions" (
@@ -45,6 +53,20 @@ func (p *Provisioner) provisionAuthTables(ctx context.Context, schema string) ([
 	}
 
 	return created, nil
+}
+
+func (p *Provisioner) addMissingAuthUserColumns(ctx context.Context, schema string) error {
+	alters := []string{
+		fmt.Sprintf(`ALTER TABLE %q."_auth_users" ADD COLUMN IF NOT EXISTS "phone"              TEXT`, schema),
+		fmt.Sprintf(`ALTER TABLE %q."_auth_users" ADD COLUMN IF NOT EXISTS "email_confirmed_at" TIMESTAMPTZ`, schema),
+		fmt.Sprintf(`ALTER TABLE %q."_auth_users" ADD COLUMN IF NOT EXISTS "last_sign_in_at"    TIMESTAMPTZ`, schema),
+	}
+	for _, sql := range alters {
+		if _, err := p.pool.Exec(ctx, sql); err != nil {
+			return fmt.Errorf("auth migration %q: %w", sql, err)
+		}
+	}
+	return nil
 }
 
 func (p *Provisioner) createAuthTable(ctx context.Context, schema, table, ddl string) (bool, error) {

@@ -26,6 +26,7 @@ type AuthProviders struct {
 
 type TableConfig struct {
 	Name    string         `yaml:"name"`
+	RLS     string         `yaml:"rls"`
 	Columns []ColumnConfig `yaml:"columns"`
 }
 

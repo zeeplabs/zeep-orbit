@@ -57,6 +57,7 @@ var systemFields = map[string]struct{}{
 	"id":         {},
 	"created_at": {},
 	"updated_at": {},
+	"owner_id":   {},
 }
 
 // BuildList constrói SELECT paginado para GET /{app}/{table}.
@@ -66,7 +67,7 @@ var systemFields = map[string]struct{}{
 //   - offset: inteiro não-negativo (default 0)
 //   - {field}=eq.{value}: filtro de igualdade; campo deve existir na tabela
 //   - order={field}.asc|{field}.desc: ordenação; campo deve existir na tabela
-func BuildList(schemaName, tableName string, table *registry.Table, params map[string]string) (*ListQuery, error) {
+func BuildList(schemaName, tableName string, table *registry.Table, params map[string]string, ownerID string) (*ListQuery, error) {
 	const defaultLimit = 50
 	const maxLimit = 1000
 
@@ -116,6 +117,11 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 		whereClauses = append(whereClauses, fmt.Sprintf("%s = $%d%s", key, len(args), pgCast(types[key])))
 	}
 
+	if ownerID != "" {
+		args = append(args, ownerID)
+		whereClauses = append(whereClauses, fmt.Sprintf("owner_id = $%d::uuid", len(args)))
+	}
+
 	// --- order ---
 	var orderClause string
 	if raw, ok := params["order"]; ok {
@@ -163,7 +169,7 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 // Strip silencioso: id, created_at, updated_at são ignorados mesmo que venham no body.
 // Campos required ausentes ou null retornam erro.
 // Campos desconhecidos retornam erro.
-func BuildInsert(schemaName, tableName string, table *registry.Table, body map[string]any) (*WriteQuery, error) {
+func BuildInsert(schemaName, tableName string, table *registry.Table, body map[string]any, ownerID string) (*WriteQuery, error) {
 	known := columnSet(table)
 	types := columnTypes(table)
 
@@ -206,6 +212,12 @@ func BuildInsert(schemaName, tableName string, table *registry.Table, body map[s
 		placeholders = append(placeholders, fmt.Sprintf("$%d%s", len(args), pgCast(types[col.Name])))
 	}
 
+	if ownerID != "" {
+		cols = append(cols, "owner_id")
+		args = append(args, ownerID)
+		placeholders = append(placeholders, fmt.Sprintf("$%d::uuid", len(args)))
+	}
+
 	if len(cols) == 0 {
 		return nil, fmt.Errorf("query: nenhum campo válido fornecido para INSERT")
 	}
@@ -225,7 +237,7 @@ func BuildInsert(schemaName, tableName string, table *registry.Table, body map[s
 // Strip silencioso: id, created_at, updated_at são ignorados mesmo que venham no body.
 // updated_at = now() é sempre incluído server-side.
 // Campos desconhecidos retornam erro.
-func BuildUpdate(schemaName, tableName string, table *registry.Table, id string, body map[string]any) (*WriteQuery, error) {
+func BuildUpdate(schemaName, tableName string, table *registry.Table, id string, body map[string]any, ownerID string) (*WriteQuery, error) {
 	known := columnSet(table)
 	types := columnTypes(table)
 
@@ -266,30 +278,47 @@ func BuildUpdate(schemaName, tableName string, table *registry.Table, id string,
 	args = append(args, id)
 	idPlaceholder := fmt.Sprintf("$%d", len(args))
 
+	whereClause := "id = " + idPlaceholder
+	if ownerID != "" {
+		args = append(args, ownerID)
+		whereClause += fmt.Sprintf(" AND owner_id = $%d::uuid", len(args))
+	}
 	sql := fmt.Sprintf(
-		"UPDATE %s.%s SET %s WHERE id = %s RETURNING *",
+		"UPDATE %s.%s SET %s WHERE %s RETURNING *",
 		schemaName, tableName,
 		strings.Join(setClauses, ", "),
-		idPlaceholder,
+		whereClause,
 	)
 
 	return &WriteQuery{SQL: sql, Args: args}, nil
 }
 
 // BuildGetByID constrói SELECT por id para GET /{app}/{table}/{id}.
-// O valor do id deve ser passado como primeiro argumento na execução.
-func BuildGetByID(schemaName, tableName string) *WriteQuery {
+// id e ownerID são incluídos em Args; o caller usa pool.Query(ctx, q.SQL, q.Args...).
+func BuildGetByID(schemaName, tableName string, id string, ownerID string) *WriteQuery {
+	if ownerID != "" {
+		return &WriteQuery{
+			SQL:  fmt.Sprintf("SELECT * FROM %s.%s WHERE id = $1::uuid AND owner_id = $2::uuid", schemaName, tableName),
+			Args: []any{id, ownerID},
+		}
+	}
 	return &WriteQuery{
-		SQL:  fmt.Sprintf("SELECT * FROM %s.%s WHERE id = $1", schemaName, tableName),
-		Args: nil,
+		SQL:  fmt.Sprintf("SELECT * FROM %s.%s WHERE id = $1::uuid", schemaName, tableName),
+		Args: []any{id},
 	}
 }
 
 // BuildDelete constrói DELETE por id para DELETE /{app}/{table}/{id}.
-// O valor do id deve ser passado como primeiro argumento na execução.
-func BuildDelete(schemaName, tableName string) *WriteQuery {
+// id e ownerID são incluídos em Args; o caller usa pool.Exec(ctx, q.SQL, q.Args...).
+func BuildDelete(schemaName, tableName string, id string, ownerID string) *WriteQuery {
+	if ownerID != "" {
+		return &WriteQuery{
+			SQL:  fmt.Sprintf("DELETE FROM %s.%s WHERE id = $1::uuid AND owner_id = $2::uuid", schemaName, tableName),
+			Args: []any{id, ownerID},
+		}
+	}
 	return &WriteQuery{
-		SQL:  fmt.Sprintf("DELETE FROM %s.%s WHERE id = $1", schemaName, tableName),
-		Args: nil,
+		SQL:  fmt.Sprintf("DELETE FROM %s.%s WHERE id = $1::uuid", schemaName, tableName),
+		Args: []any{id},
 	}
 }

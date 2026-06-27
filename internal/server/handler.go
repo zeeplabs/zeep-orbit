@@ -1,12 +1,14 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
+	"github.com/zeeplabs/zeep-core/internal/auth"
 	"github.com/zeeplabs/zeep-core/internal/db"
 	"github.com/zeeplabs/zeep-core/internal/query"
 	"github.com/zeeplabs/zeep-core/internal/registry"
@@ -21,6 +23,20 @@ type Handler struct {
 // NewHandler cria um Handler com pool e registry injetados.
 func NewHandler(pool *db.Pool, reg *registry.Registry) *Handler {
 	return &Handler{pool: pool, reg: reg}
+}
+
+// resolveOwner retorna o ownerID quando a tabela exige RLS do tipo "owner".
+// Retorna ok=true (com ownerID vazio) quando a tabela não tem RLS.
+// Retorna ok=false quando RLS é "owner" mas não há usuário autenticado no contexto.
+func resolveOwner(ctx context.Context, table *registry.Table) (ownerID string, ok bool) {
+	if table.RLS != "owner" {
+		return "", true
+	}
+	user, hasUser := auth.UserFromContext(ctx)
+	if !hasUser {
+		return "", false
+	}
+	return user.ID, true
 }
 
 // HandleList implementa GET /{app}/{table}.
@@ -40,6 +56,12 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ownerID, ok := resolveOwner(r.Context(), table)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
 	// Converter query params para map[string]string
 	params := make(map[string]string)
 	for k, vals := range r.URL.Query() {
@@ -48,7 +70,7 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	q, err := query.BuildList(app.SchemaName, tableName, table, params)
+	q, err := query.BuildList(app.SchemaName, tableName, table, params, ownerID)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -109,13 +131,19 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ownerID, ok := resolveOwner(r.Context(), table)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
 	var body map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
-	q, err := query.BuildInsert(app.SchemaName, tableName, table, body)
+	q, err := query.BuildInsert(app.SchemaName, tableName, table, body, ownerID)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -147,14 +175,21 @@ func (h *Handler) HandleGetByID(w http.ResponseWriter, r *http.Request) {
 	tableName := chi.URLParam(r, "table")
 	id := chi.URLParam(r, "id")
 
-	if _, ok := app.Tables[tableName]; !ok {
+	table, ok := app.Tables[tableName]
+	if !ok {
 		writeError(w, http.StatusNotFound, "table not found")
 		return
 	}
 
-	q := query.BuildGetByID(app.SchemaName, tableName)
+	ownerID, ok := resolveOwner(r.Context(), table)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
 
-	rows, err := h.pool.Query(r.Context(), q.SQL, id)
+	q := query.BuildGetByID(app.SchemaName, tableName, id, ownerID)
+
+	rows, err := h.pool.Query(r.Context(), q.SQL, q.Args...)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to query row")
 		return
@@ -190,13 +225,19 @@ func (h *Handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ownerID, ok := resolveOwner(r.Context(), table)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
 	var body map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
-	q, err := query.BuildUpdate(app.SchemaName, tableName, table, id, body)
+	q, err := query.BuildUpdate(app.SchemaName, tableName, table, id, body, ownerID)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -232,14 +273,21 @@ func (h *Handler) HandleDelete(w http.ResponseWriter, r *http.Request) {
 	tableName := chi.URLParam(r, "table")
 	id := chi.URLParam(r, "id")
 
-	if _, ok := app.Tables[tableName]; !ok {
+	table, ok := app.Tables[tableName]
+	if !ok {
 		writeError(w, http.StatusNotFound, "table not found")
 		return
 	}
 
-	q := query.BuildDelete(app.SchemaName, tableName)
+	ownerID, ok := resolveOwner(r.Context(), table)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
 
-	tag, err := h.pool.Exec(r.Context(), q.SQL, id)
+	q := query.BuildDelete(app.SchemaName, tableName, id, ownerID)
+
+	tag, err := h.pool.Exec(r.Context(), q.SQL, q.Args...)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete row")
 		return

@@ -105,8 +105,16 @@ func JWTMiddleware(reg *registry.Registry) func(http.Handler) http.Handler {
 				return
 			}
 
-			// 6. Injetar app no contexto e chamar next
-			ctx := context.WithValue(r.Context(), appContextKey, app)
+			// 6. Injetar AuthUser para RLS (best-effort, non-blocking)
+			ctx := r.Context()
+			if authClaims, err := auth.ParseJWT(secret, rawToken); err == nil && authClaims.Subject != "" {
+				ctx = auth.WithUser(ctx, &auth.AuthUser{
+					ID:    authClaims.Subject,
+					Email: authClaims.Email,
+					App:   authClaims.App,
+				})
+			}
+			ctx = context.WithValue(ctx, appContextKey, app)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
