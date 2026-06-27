@@ -1,22 +1,30 @@
-import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Pencil, Trash2, Table2, Mail, MailX, LayoutGrid } from 'lucide-react'
-import { useApps, useDeleteApp, AppDef } from '../lib/api'
-import CreateAppModal from '../components/CreateAppModal'
-import DeleteConfirmDialog from '../components/DeleteConfirmDialog'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { cn } from '@/lib/utils'
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  Table2,
+  Mail,
+  MailX,
+  LayoutGrid,
+} from "lucide-react";
+import { useApps, useDeleteApp, AppDef } from "../lib/api";
+import DeleteConfirmDialog from "../components/DeleteConfirmDialog";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 // ── Animation presets ──────────────────────────────────────────────────────────
 
-const ease = [0.32, 0.72, 0, 1] as const
+const ease = [0.32, 0.72, 0, 1] as const;
 
 const fadeUp = {
   initial: { opacity: 0, y: 16 },
   animate: { opacity: 1, y: 0 },
   transition: { duration: 0.6, ease },
-}
+};
 
 // ── Skeleton card ──────────────────────────────────────────────────────────────
 
@@ -30,24 +38,24 @@ function SkeletonCard() {
         <div className="h-3 w-1/3 rounded bg-white/[0.05]" />
       </div>
     </div>
-  )
+  );
 }
 
 // ── App card ───────────────────────────────────────────────────────────────────
 
 interface AppCardProps {
-  app: AppDef
-  index: number
-  onEdit: (app: AppDef) => void
-  onDelete: (app: AppDef) => void
+  app: AppDef;
+  index: number;
+  onEdit: (app: AppDef) => void;
+  onDelete: (app: AppDef) => void;
 }
 
 function AppCard({ app, index, onEdit, onDelete }: AppCardProps) {
-  const createdAt = new Date(app.created_at).toLocaleDateString('pt-BR', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  })
+  const createdAt = new Date(app.created_at).toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 
   return (
     <motion.div
@@ -68,15 +76,16 @@ function AppCard({ app, index, onEdit, onDelete }: AppCardProps) {
               variant="outline"
             >
               <Table2 size={10} strokeWidth={1.5} />
-              {app.tables?.length ?? 0} {app.tables?.length === 1 ? 'tabela' : 'tabelas'}
+              {app.tables?.length ?? 0}{" "}
+              {app.tables?.length === 1 ? "tabela" : "tabelas"}
             </Badge>
 
             <Badge
               className={cn(
-                'gap-1 text-[10px]',
+                "gap-1 text-[10px]",
                 app.auth_email_enabled
-                  ? 'border-purple-500/20 bg-[#7C3AED]/10 text-purple-300 hover:bg-[#7C3AED]/20'
-                  : 'border-white/[0.10] bg-white/[0.05] text-[#94A3B8] hover:bg-white/[0.08]',
+                  ? "border-purple-500/20 bg-[#7C3AED]/10 text-purple-300 hover:bg-[#7C3AED]/20"
+                  : "border-white/[0.10] bg-white/[0.05] text-[#94A3B8] hover:bg-white/[0.08]",
               )}
               variant="outline"
             >
@@ -118,7 +127,7 @@ function AppCard({ app, index, onEdit, onDelete }: AppCardProps) {
 
       <p className="mt-3 text-[10px] text-[#64748B]">Criado em {createdAt}</p>
     </motion.div>
-  )
+  );
 }
 
 // ── Empty state ────────────────────────────────────────────────────────────────
@@ -133,15 +142,20 @@ function EmptyState({ onCreateClick }: { onCreateClick: () => void }) {
         <div className="relative z-[1] rounded-[20px] bg-white/[0.03] px-8 py-10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)]">
           <motion.div
             animate={{ y: [0, -6, 0] }}
-            transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
+            transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
             className="mx-auto mb-5 flex size-16 items-center justify-center rounded-[18px] border border-[#0347A5]/20 bg-[#0347A5]/12"
           >
-            <LayoutGrid size={28} strokeWidth={1.5} className="text-[#B3D1FF]" />
+            <LayoutGrid
+              size={28}
+              strokeWidth={1.5}
+              className="text-[#B3D1FF]"
+            />
           </motion.div>
 
           <h3 className="mb-2 text-base font-bold">Nenhum app criado</h3>
           <p className="mb-6 text-[13px] leading-relaxed text-[#94A3B8]">
-            Crie seu primeiro app para gerar APIs automaticamente e gerenciar seus dados.
+            Crie seu primeiro app para gerar APIs automaticamente e gerenciar
+            seus dados.
           </p>
 
           <motion.div
@@ -162,7 +176,7 @@ function EmptyState({ onCreateClick }: { onCreateClick: () => void }) {
         </div>
       </div>
     </motion.div>
-  )
+  );
 }
 
 // ── Error state ────────────────────────────────────────────────────────────────
@@ -172,34 +186,27 @@ function ErrorState({ message }: { message: string }) {
     <div className="rounded-2xl border border-red-500/[0.18] bg-red-500/[0.06] px-6 py-5 text-sm text-red-400">
       Erro ao carregar apps: {message}
     </div>
-  )
+  );
 }
 
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function AppsPage() {
-  const { data: apps, isLoading, error } = useApps()
-  const deleteApp = useDeleteApp()
+  const { data: apps, isLoading, error } = useApps();
+  const deleteApp = useDeleteApp();
+  const navigate = useNavigate();
 
-  const [createOpen, setCreateOpen] = useState(false)
-  const [editTarget, setEditTarget] = useState<AppDef | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<AppDef | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<AppDef | null>(null);
 
   function handleEdit(app: AppDef) {
-    setEditTarget(app)
-    setCreateOpen(true)
-  }
-
-  function handleCloseModal() {
-    setCreateOpen(false)
-    setEditTarget(null)
+    navigate(`/apps/${app.id}/edit`);
   }
 
   async function handleConfirmDelete() {
-    if (!deleteTarget) return
+    if (!deleteTarget) return;
     try {
-      await deleteApp.mutateAsync(deleteTarget.id)
-      setDeleteTarget(null)
+      await deleteApp.mutateAsync(deleteTarget.id);
+      setDeleteTarget(null);
     } catch {
       // error surfaces via deleteApp.error if needed
     }
@@ -238,10 +245,7 @@ export default function AppsPage() {
               className="shrink-0"
             >
               <Button
-                onClick={() => {
-                  setEditTarget(null)
-                  setCreateOpen(true)
-                }}
+                onClick={() => navigate("/apps/new")}
                 className="gap-2 rounded-3xl bg-gradient-to-br from-[#0347A5] to-[#7C3AED] px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90"
               >
                 Criar App
@@ -287,12 +291,7 @@ export default function AppsPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
             >
-              <EmptyState
-                onCreateClick={() => {
-                  setEditTarget(null)
-                  setCreateOpen(true)
-                }}
-              />
+              <EmptyState onCreateClick={() => navigate("/apps/new")} />
             </motion.div>
           )}
 
@@ -317,19 +316,14 @@ export default function AppsPage() {
         </AnimatePresence>
       </div>
 
-      {/* Modals */}
-      <CreateAppModal
-        open={createOpen}
-        editTarget={editTarget}
-        onClose={handleCloseModal}
-      />
+      {/* Delete dialog */}
       <DeleteConfirmDialog
         open={Boolean(deleteTarget)}
-        appName={deleteTarget?.name ?? ''}
+        appName={deleteTarget?.name ?? ""}
         loading={deleteApp.isPending}
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeleteTarget(null)}
       />
     </>
-  )
+  );
 }
