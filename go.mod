@@ -1,4 +1,4 @@
-module github.com/zeep-tecnologia/zeep-core
+module github.com/zeeplabs/zeep-core
 
 go 1.26.3
 

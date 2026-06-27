@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zeep-tecnologia/zeep-core/internal/registry"
+	"github.com/zeeplabs/zeep-core/internal/registry"
 )
 
 // newTestServer cria um Server com registry vazio e pool nil, sem Start().

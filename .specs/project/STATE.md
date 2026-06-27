@@ -39,7 +39,7 @@ None.
 
 ## Todos
 
-- [ ] Decide module name: `github.com/zeep-tecnologia/zeep-core`
+- [ ] Decide module name: `github.com/zeeplabs/zeep-core`
 - [ ] Choose PostgreSQL migration approach: pure SQL files vs. programmatic via `pgx`
 - [ ] Define filtering DSL for query params (PostgREST-compatible vs. custom)
 

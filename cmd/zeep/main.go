@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/zeep-tecnologia/zeep-core/internal/config"
-	"github.com/zeep-tecnologia/zeep-core/internal/db"
-	"github.com/zeep-tecnologia/zeep-core/internal/provisioner"
-	"github.com/zeep-tecnologia/zeep-core/internal/registry"
-	"github.com/zeep-tecnologia/zeep-core/internal/server"
+	"github.com/zeeplabs/zeep-core/internal/config"
+	"github.com/zeeplabs/zeep-core/internal/db"
+	"github.com/zeeplabs/zeep-core/internal/provisioner"
+	"github.com/zeeplabs/zeep-core/internal/registry"
+	"github.com/zeeplabs/zeep-core/internal/server"
 )
 
 var (

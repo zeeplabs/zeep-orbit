@@ -4,7 +4,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/zeep-tecnologia/zeep-core/internal/config"
+	"github.com/zeeplabs/zeep-core/internal/config"
 )
 
 // buildConfig é um helper que monta um config.Config com N apps simples.

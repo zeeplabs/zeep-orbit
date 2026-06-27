@@ -7,9 +7,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
-	"github.com/zeep-tecnologia/zeep-core/internal/db"
-	"github.com/zeep-tecnologia/zeep-core/internal/query"
-	"github.com/zeep-tecnologia/zeep-core/internal/registry"
+	"github.com/zeeplabs/zeep-core/internal/db"
+	"github.com/zeeplabs/zeep-core/internal/query"
+	"github.com/zeeplabs/zeep-core/internal/registry"
 )
 
 // Handler encapsula as dependências dos CRUD handlers HTTP.

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zeep-tecnologia/zeep-core/internal/db"
+	"github.com/zeeplabs/zeep-core/internal/db"
 )
 
 func TestNew(t *testing.T) {

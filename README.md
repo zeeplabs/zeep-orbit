@@ -47,7 +47,7 @@ Every table gets `id` (UUID, auto-generated), `created_at`, and `updated_at` aut
 **Requirements:** Docker + Docker Compose
 
 ```bash
-git clone https://github.com/zeep-tecnologia/zeep-core
+git clone https://github.com/zeeplabs/zeep-core
 cd zeep-core
 cp .env.example .env   # edit secrets
 

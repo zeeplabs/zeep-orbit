@@ -7,7 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	jwtlib "github.com/golang-jwt/jwt/v5"
-	"github.com/zeep-tecnologia/zeep-core/internal/registry"
+	"github.com/zeeplabs/zeep-core/internal/registry"
 )
 
 // contextKey é o tipo para chaves de contexto deste pacote.

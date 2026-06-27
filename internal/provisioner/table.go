@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/zeep-tecnologia/zeep-core/internal/config"
+	"github.com/zeeplabs/zeep-core/internal/config"
 )
 
 // pgType converte o tipo do config para o tipo PostgreSQL correspondente.

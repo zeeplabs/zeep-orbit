@@ -8,8 +8,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	jwtlib "github.com/golang-jwt/jwt/v5"
-	"github.com/zeep-tecnologia/zeep-core/internal/config"
-	"github.com/zeep-tecnologia/zeep-core/internal/registry"
+	"github.com/zeeplabs/zeep-core/internal/config"
+	"github.com/zeeplabs/zeep-core/internal/registry"
 )
 
 // buildRegistry cria um Registry com um único app de nome appName e secret dado.

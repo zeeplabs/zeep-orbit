@@ -9,7 +9,7 @@
 ## Development setup
 
 ```bash
-git clone https://github.com/zeep-tecnologia/zeep-core
+git clone https://github.com/zeeplabs/zeep-core
 cd zeep-core
 go mod download
 make build

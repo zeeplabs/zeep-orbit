@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/zeep-tecnologia/zeep-core/internal/config"
+	"github.com/zeeplabs/zeep-core/internal/config"
 )
 
 // Registry mantém o mapa de apps carregados em memória.
