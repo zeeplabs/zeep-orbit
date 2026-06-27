@@ -26,10 +26,10 @@ type AppRow struct {
 
 // AppTableRow represents a row from zeep_system.app_tables.
 type AppTableRow struct {
-	ID      string
-	Name    string
-	RLS     string
-	Columns []config.ColumnConfig
+	ID      string              `json:"id"`
+	Name    string              `json:"name"`
+	RLS     string              `json:"rls"`
+	Columns []config.ColumnConfig `json:"columns"`
 }
 
 // ListApps returns apps visible to the given user.

@@ -274,7 +274,7 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 
 	cfg := buildAppConfig(app)
 	if _, err := h.prov.Apply(r.Context(), &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "provisioning failed"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "provisioning failed: " + err.Error()})
 		return
 	}
 
@@ -340,7 +340,7 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 
 	cfg := buildAppConfig(app)
 	if _, err := h.prov.Apply(r.Context(), &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "provisioning failed"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "provisioning failed: " + err.Error()})
 		return
 	}
 

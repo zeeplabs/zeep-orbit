@@ -8,6 +8,15 @@ import (
 	"github.com/zeeplabs/zeep-core/internal/config"
 )
 
+// systemColumnNames são colunas adicionadas automaticamente pelo provisionador
+// e não devem ser definidas pelo usuário.
+var systemColumnNames = map[string]bool{
+	"id":         true,
+	"created_at": true,
+	"updated_at": true,
+	"owner_id":   true,
+}
+
 // pgType converte o tipo do config para o tipo PostgreSQL correspondente.
 func pgType(t string) string {
 	switch t {
@@ -76,10 +85,13 @@ func (p *Provisioner) createTable(ctx context.Context, schemaName, tableName str
 	colDefs = append(colDefs, `"id" UUID PRIMARY KEY DEFAULT gen_random_uuid()`)
 
 	for _, col := range cols {
+		if systemColumnNames[col.Name] {
+			continue
+		}
 		colDefs = append(colDefs, columnDDL(col))
 	}
 
-	if rls == "owner" {
+	if rls == "owner" || rls == "enabled" {
 		colDefs = append(colDefs, fmt.Sprintf(`"owner_id" UUID NOT NULL REFERENCES %q."_auth_users"("id")`, schemaName))
 	}
 
@@ -130,6 +142,9 @@ func (p *Provisioner) addMissingColumns(ctx context.Context, schemaName, tableNa
 
 	var added []string
 	for _, col := range cols {
+		if systemColumnNames[col.Name] {
+			continue
+		}
 		if _, found := existing[col.Name]; found {
 			continue
 		}
@@ -146,7 +161,7 @@ func (p *Provisioner) addMissingColumns(ctx context.Context, schemaName, tableNa
 		added = append(added, fmt.Sprintf("%s.%s.%s", schemaName, tableName, col.Name))
 	}
 
-	if rls == "owner" {
+	if rls == "owner" || rls == "enabled" {
 		if _, found := existing["owner_id"]; !found {
 			sql := fmt.Sprintf(
 				`ALTER TABLE %q.%q ADD COLUMN IF NOT EXISTS "owner_id" UUID REFERENCES %q."_auth_users"("id")`,

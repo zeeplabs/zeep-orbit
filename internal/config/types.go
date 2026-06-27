@@ -31,9 +31,9 @@ type TableConfig struct {
 }
 
 type ColumnConfig struct {
-	Name     string `yaml:"name"`
-	Type     string `yaml:"type"`
-	Required bool   `yaml:"required"`
-	Default  string `yaml:"default"`
-	Unique   bool   `yaml:"unique"`
+	Name     string `json:"name" yaml:"name"`
+	Type     string `json:"type" yaml:"type"`
+	Required bool   `json:"required" yaml:"required"`
+	Default  string `json:"default" yaml:"default"`
+	Unique   bool   `json:"unique" yaml:"unique"`
 }

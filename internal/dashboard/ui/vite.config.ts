@@ -10,4 +10,13 @@ export default defineConfig({
     alias: { '@': path.resolve(__dirname, './src') }
   },
   build: { outDir: '../static', emptyOutDir: true },
+  server: {
+    port: 5173,
+    proxy: {
+      '/dashboard/api': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
+    },
+  },
 })

@@ -8,6 +8,26 @@
   --color-accent-light: #B3D1FF;
   --color-accent-purple: #7C3AED;
   --color-accent-pink: #EC4899;
+
+  --color-background: #0A0A0F;
+  --color-foreground: #F8FAFC;
+  --color-card: rgba(255,255,255,0.04);
+  --color-card-foreground: #F8FAFC;
+  --color-popover: #0D0D14;
+  --color-popover-foreground: #F8FAFC;
+  --color-primary: #0347A5;
+  --color-primary-foreground: #F8FAFC;
+  --color-secondary: rgba(255,255,255,0.06);
+  --color-secondary-foreground: #F8FAFC;
+  --color-muted: rgba(255,255,255,0.06);
+  --color-muted-foreground: #94A3B8;
+  --color-accent-bg: rgba(255,255,255,0.08);
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #F8FAFC;
+  --color-border: rgba(255,255,255,0.10);
+  --color-input: rgba(255,255,255,0.10);
+  --color-ring: #0347A5;
+
   --radius-lg: 16px;
   --radius-xl: 20px;
 }
@@ -43,7 +63,7 @@
   --radius: 0.75rem;
 }
 
-* { margin: 0; padding: 0; box-sizing: border-box; }
+* { box-sizing: border-box; }
 
 body {
   background: var(--bg);
