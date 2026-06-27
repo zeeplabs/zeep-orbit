@@ -114,6 +114,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		Value:    token,
 		Path:     "/dashboard",
 		HttpOnly: true,
+		Secure:   os.Getenv("ZEEP_INSECURE_COOKIES") != "1",
 		SameSite: http.SameSiteStrictMode,
 		MaxAge:   86400,
 	})
@@ -139,6 +140,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		Value:    "",
 		Path:     "/dashboard",
 		HttpOnly: true,
+		Secure:   os.Getenv("ZEEP_INSECURE_COOKIES") != "1",
 		SameSite: http.SameSiteStrictMode,
 		MaxAge:   -1,
 	})
