@@ -15,11 +15,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 
-	"github.com/zeeplabs/zeep-core/internal/auth"
-	"github.com/zeeplabs/zeep-core/internal/dashboard"
-	"github.com/zeeplabs/zeep-core/internal/db"
-	"github.com/zeeplabs/zeep-core/internal/docs"
-	"github.com/zeeplabs/zeep-core/internal/registry"
+	"github.com/zeeplabs/zeep-orbit/internal/auth"
+	"github.com/zeeplabs/zeep-orbit/internal/dashboard"
+	"github.com/zeeplabs/zeep-orbit/internal/db"
+	"github.com/zeeplabs/zeep-orbit/internal/docs"
+	"github.com/zeeplabs/zeep-orbit/internal/registry"
 )
 
 var (

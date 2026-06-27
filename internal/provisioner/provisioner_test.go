@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zeeplabs/zeep-core/internal/config"
-	"github.com/zeeplabs/zeep-core/internal/db"
-	"github.com/zeeplabs/zeep-core/internal/provisioner"
+	"github.com/zeeplabs/zeep-orbit/internal/config"
+	"github.com/zeeplabs/zeep-orbit/internal/db"
+	"github.com/zeeplabs/zeep-orbit/internal/provisioner"
 )
 
 func testPool(t *testing.T) *db.Pool {

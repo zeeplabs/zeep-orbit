@@ -8,7 +8,7 @@ import (
 
 const TokenTTL = time.Hour
 
-// Claims is the JWT payload emitted by zeep-core native auth.
+// Claims is the JWT payload emitted by zeep-orbit native auth.
 type Claims struct {
 	Email string `json:"email"`
 	App   string `json:"app"`

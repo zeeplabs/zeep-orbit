@@ -1,7 +1,17 @@
+import { useState } from "react";
 import { Navigate, NavLink, Outlet } from "react-router-dom";
 import { motion } from "framer-motion";
 import { LogOut, Grid, Database, Users, Activity } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 interface User {
   id: string;
@@ -20,15 +30,23 @@ const NAV_ITEMS: NavItem[] = [
 
 export default function DashboardShell({ user }: { user: User | null }) {
   const qc = useQueryClient();
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   if (!user) return <Navigate to="/login" replace />;
 
   const handleLogout = async () => {
-    await fetch("/dashboard/api/logout", {
-      method: "POST",
-      credentials: "include",
-    });
-    qc.invalidateQueries({ queryKey: ["me"] });
+    setLoggingOut(true);
+    try {
+      await fetch("/dashboard/api/logout", {
+        method: "POST",
+        credentials: "include",
+      });
+      qc.invalidateQueries({ queryKey: ["me"] });
+    } finally {
+      setLoggingOut(false);
+      setShowLogoutDialog(false);
+    }
   };
 
   return (
@@ -173,7 +191,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
             </p>
           </div>
           <button
-            onClick={handleLogout}
+            onClick={() => setShowLogoutDialog(true)}
             style={{
               display: "flex",
               alignItems: "center",
@@ -207,6 +225,42 @@ export default function DashboardShell({ user }: { user: User | null }) {
           <Outlet />
         </div>
       </main>
+
+      {/* Logout confirmation dialog */}
+      <Dialog open={showLogoutDialog} onOpenChange={(open) => { if (!open) setShowLogoutDialog(false) }}>
+        <DialogContent className="max-w-[380px] border border-white/[0.10] bg-[#0D0D14]/60 backdrop-blur-xl rounded-2xl p-0 gap-0 shadow-[0_0_40px_rgba(3,71,165,0.10)]">
+          <div className="bg-white/[0.04] shadow-[inset_0_1px_1px_rgba(255,255,255,0.10)] rounded-[calc(1rem-2px)] px-7 pb-6 pt-7">
+            <DialogHeader className="mb-0">
+              <div className="w-11 h-11 rounded-xl bg-white/[0.08] border border-white/[0.10] flex items-center justify-center mb-[18px]">
+                <LogOut size={18} strokeWidth={1.5} className="text-[#94A3B8]" />
+              </div>
+              <DialogTitle className="text-base font-bold text-[#F8FAFC] mb-2">
+                Sair do dashboard?
+              </DialogTitle>
+              <DialogDescription className="text-[13px] text-[#94A3B8] leading-relaxed mb-6">
+                Você será desconectado e precisará fazer login novamente.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="flex flex-row gap-2.5 sm:flex-row sm:justify-start sm:space-x-0">
+              <Button
+                variant="outline"
+                onClick={() => setShowLogoutDialog(false)}
+                disabled={loggingOut}
+                className="flex-1 rounded-xl border-white/[0.10] bg-white/[0.06] text-[#94A3B8] hover:bg-white/[0.10] hover:text-[#F8FAFC] font-medium"
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleLogout}
+                disabled={loggingOut}
+                className="flex-1 rounded-xl bg-gradient-to-br from-[#0347A5] to-[#7C3AED] text-white font-semibold border-0 disabled:opacity-40"
+              >
+                {loggingOut ? 'Saindo...' : 'Sair'}
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

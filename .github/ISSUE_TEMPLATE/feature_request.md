@@ -10,7 +10,7 @@ labels: enhancement
 
 ## Proposed solution
 
-<!-- What should zeep-core do? -->
+<!-- What should zeep-orbit do? -->
 
 ## Alternatives considered
 

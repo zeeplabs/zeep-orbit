@@ -27,7 +27,7 @@ Apps defined in `apps.yaml`. No web UI for M1.
 ### D-005: JWT auth bring-your-own-secret per app
 
 No built-in user management in M1. Each app has a JWT secret. Callers generate/verify tokens themselves.
-**Reason:** Keeps zeep-core stateless on auth. No user table to maintain. Apps choose their own auth strategy.
+**Reason:** Keeps zeep-orbit stateless on auth. No user table to maintain. Apps choose their own auth strategy.
 **Trade-off:** More work for app developers. Acceptable — they already have auth in their frontend apps.
 
 ### D-006: CLI-first workflow
@@ -45,7 +45,7 @@ None.
 
 ## Todos
 
-- [ ] Decide module name: `github.com/zeeplabs/zeep-core`
+- [ ] Decide module name: `github.com/zeeplabs/zeep-orbit`
 - [ ] Choose PostgreSQL migration approach: pure SQL files vs. programmatic via `pgx`
 - [ ] Define filtering DSL for query params (PostgREST-compatible vs. custom)
 

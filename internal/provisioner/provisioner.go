@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/zeeplabs/zeep-core/internal/config"
-	"github.com/zeeplabs/zeep-core/internal/db"
+	"github.com/zeeplabs/zeep-orbit/internal/config"
+	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
 
 // Provisioner aplica schemas e tabelas para todos os apps definidos no config.

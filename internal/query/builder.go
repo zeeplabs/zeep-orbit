@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/zeeplabs/zeep-core/internal/registry"
+	"github.com/zeeplabs/zeep-orbit/internal/registry"
 )
 
 // ListQuery é o resultado de BuildList: SQL paginado + CountSQL sem paginação.

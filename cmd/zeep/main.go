@@ -9,10 +9,10 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/spf13/cobra"
-	"github.com/zeeplabs/zeep-core/internal/dashboard"
-	"github.com/zeeplabs/zeep-core/internal/db"
-	"github.com/zeeplabs/zeep-core/internal/registry"
-	"github.com/zeeplabs/zeep-core/internal/server"
+	"github.com/zeeplabs/zeep-orbit/internal/dashboard"
+	"github.com/zeeplabs/zeep-orbit/internal/db"
+	"github.com/zeeplabs/zeep-orbit/internal/registry"
+	"github.com/zeeplabs/zeep-orbit/internal/server"
 )
 
 var (
@@ -25,7 +25,7 @@ func main() {
 
 	rootCmd := &cobra.Command{
 		Use:   "zeep",
-		Short: "zeep-core — self-hosted BaaS",
+		Short: "zeep-orbit — self-hosted BaaS",
 	}
 
 	rootCmd.PersistentFlags().StringVar(&dbOverride, "db", "", "override DATABASE_URL")
@@ -72,7 +72,7 @@ func cmdServe() *cobra.Command {
 				os.Exit(1)
 			}
 
-			fmt.Printf("zeep-core starting on :%d (%d apps loaded)\n", port, len(reg.Apps()))
+			fmt.Printf("zeep-orbit starting on :%d (%d apps loaded)\n", port, len(reg.Apps()))
 
 			srv, err := server.New(reg, pool, port)
 			if err != nil {

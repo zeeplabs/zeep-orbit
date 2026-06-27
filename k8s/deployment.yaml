@@ -1,25 +1,25 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: zeep-core
+  name: zeep-orbit
   labels:
-    app: zeep-core
+    app: zeep-orbit
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: zeep-core
+      app: zeep-orbit
   template:
     metadata:
       labels:
-        app: zeep-core
+        app: zeep-orbit
     spec:
       terminationGracePeriodSeconds: 35
       containers:
-        - name: zeep-core
+        - name: zeep-orbit
           # Para produção, pin por digest imutável:
-          # image: ghcr.io/zeeplabs/zeep-core@sha256:<digest>
-          image: ghcr.io/zeeplabs/zeep-core:latest
+          # image: ghcr.io/zeeplabs/zeep-orbit@sha256:<digest>
+          image: ghcr.io/zeeplabs/zeep-orbit:latest
           imagePullPolicy: Always
           args: ["serve", "--config", "/app/apps.yaml"]
           ports:
@@ -27,7 +27,7 @@ spec:
               protocol: TCP
           envFrom:
             - secretRef:
-                name: zeep-core-secret
+                name: zeep-orbit-secret
           volumeMounts:
             - name: config
               mountPath: /app/apps.yaml
@@ -57,4 +57,4 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: zeep-core-config
+            name: zeep-orbit-config

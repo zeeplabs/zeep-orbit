@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/zeeplabs/zeep-core/internal/config"
+	"github.com/zeeplabs/zeep-orbit/internal/config"
 )
 
 // systemColumnNames são colunas adicionadas automaticamente pelo provisionador

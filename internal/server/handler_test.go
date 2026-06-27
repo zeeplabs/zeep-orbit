@@ -10,9 +10,9 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/zeeplabs/zeep-core/internal/config"
-	"github.com/zeeplabs/zeep-core/internal/db"
-	"github.com/zeeplabs/zeep-core/internal/registry"
+	"github.com/zeeplabs/zeep-orbit/internal/config"
+	"github.com/zeeplabs/zeep-orbit/internal/db"
+	"github.com/zeeplabs/zeep-orbit/internal/registry"
 )
 
 // ----------------------------------------------------------------------------

@@ -1,8 +1,8 @@
-# zeep-core
+# zeep-orbit
 
 **YAML schema → instant REST API backed by PostgreSQL.**
 
-Define your data model in a YAML file. zeep-core provisions the database and serves a fully authenticated CRUD API — no migrations, no boilerplate.
+Define your data model in a YAML file. zeep-orbit provisions the database and serves a fully authenticated CRUD API — no migrations, no boilerplate.
 
 ```yaml
 platform:
@@ -47,8 +47,8 @@ Every table gets `id` (UUID, auto-generated), `created_at`, and `updated_at` aut
 **Requirements:** Docker + Docker Compose
 
 ```bash
-git clone https://github.com/zeeplabs/zeep-core
-cd zeep-core
+git clone https://github.com/zeeplabs/zeep-orbit
+cd zeep-orbit
 cp .env.example .env   # edit secrets
 
 docker compose up -d

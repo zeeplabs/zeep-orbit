@@ -1,4 +1,4 @@
-module github.com/zeeplabs/zeep-core
+module github.com/zeeplabs/zeep-orbit
 
 go 1.26.3
 

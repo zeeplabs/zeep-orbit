@@ -1,4 +1,4 @@
-# Contributing to zeep-core
+# Contributing to zeep-orbit
 
 ## Prerequisites
 
@@ -9,8 +9,8 @@
 ## Development setup
 
 ```bash
-git clone https://github.com/zeeplabs/zeep-core
-cd zeep-core
+git clone https://github.com/zeeplabs/zeep-orbit
+cd zeep-orbit
 go mod download
 make build
 ```

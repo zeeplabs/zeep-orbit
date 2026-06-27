@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/zeeplabs/zeep-core/internal/db"
+	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
 
 // ErrNotFound is returned when a record is not found.

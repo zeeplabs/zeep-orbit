@@ -1,4 +1,4 @@
-# zeep-core
+# zeep-orbit
 
 ## Vision
 
@@ -12,7 +12,7 @@ AI tools (Claude Code, Lovable, Cursor, v0) generate complete frontends in minut
 2. **Use Supabase / external BaaS** — data leaves company infrastructure, no governance, cost at scale
 3. **Do nothing** — frontends never ship or ship without persistence
 
-zeep-core eliminates all three problems: one platform, N apps, shared PostgreSQL, auto REST APIs, data inside your own infrastructure.
+zeep-orbit eliminates all three problems: one platform, N apps, shared PostgreSQL, auto REST APIs, data inside your own infrastructure.
 
 ## Core Principle
 

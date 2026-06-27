@@ -1,8 +1,8 @@
-{{- define "zeep-core.name" -}}
+{{- define "zeep-orbit.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
-{{- define "zeep-core.fullname" -}}
+{{- define "zeep-orbit.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -15,17 +15,17 @@
 {{- end }}
 {{- end }}
 
-{{- define "zeep-core.chart" -}}
+{{- define "zeep-orbit.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
-{{- define "zeep-core.labels" -}}
-helm.sh/chart: {{ include "zeep-core.chart" . }}
-{{ include "zeep-core.selectorLabels" . }}
+{{- define "zeep-orbit.labels" -}}
+helm.sh/chart: {{ include "zeep-orbit.chart" . }}
+{{ include "zeep-orbit.selectorLabels" . }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 
-{{- define "zeep-core.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "zeep-core.name" . }}
+{{- define "zeep-orbit.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "zeep-orbit.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}

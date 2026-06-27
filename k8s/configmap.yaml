@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: zeep-core-config
+  name: zeep-orbit-config
   labels:
-    app: zeep-core
+    app: zeep-orbit
 data:
   apps.yaml: |
     platform:

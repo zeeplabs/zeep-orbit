@@ -20,7 +20,7 @@ labels: bug
 
 ## Environment
 
-- zeep-core version:
+- zeep-orbit version:
 - Go version:
 - PostgreSQL version:
 - OS:

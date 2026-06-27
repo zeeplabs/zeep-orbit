@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/zeeplabs/zeep-core/internal/db"
+	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
 
 // ProvisionZeepSystem creates zeep_system schema and all required tables.

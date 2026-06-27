@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/zeeplabs/zeep-core/internal/registry"
+	"github.com/zeeplabs/zeep-orbit/internal/registry"
 )
 
 // Spec representa a estrutura OpenAPI 3.0.
@@ -98,7 +98,7 @@ func generate(apps []*registry.App) *Spec {
 	spec := &Spec{
 		OpenAPI: "3.0.3",
 		Info: specInfo{
-			Title:   "zeep-core API",
+			Title:   "zeep-orbit API",
 			Version: "1.0.0",
 		},
 		Paths: make(map[string]pathItem),

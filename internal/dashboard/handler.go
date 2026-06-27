@@ -13,10 +13,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"golang.org/x/crypto/bcrypt"
-	"github.com/zeeplabs/zeep-core/internal/config"
-	"github.com/zeeplabs/zeep-core/internal/db"
-	"github.com/zeeplabs/zeep-core/internal/provisioner"
-	"github.com/zeeplabs/zeep-core/internal/registry"
+	"github.com/zeeplabs/zeep-orbit/internal/config"
+	"github.com/zeeplabs/zeep-orbit/internal/db"
+	"github.com/zeeplabs/zeep-orbit/internal/provisioner"
+	"github.com/zeeplabs/zeep-orbit/internal/registry"
 )
 
 // Handler holds dependencies for dashboard HTTP handlers.

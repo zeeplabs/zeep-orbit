@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/zeeplabs/zeep-core/internal/auth"
+	"github.com/zeeplabs/zeep-orbit/internal/auth"
 )
 
 // buildRLSRouter monta um chi.Router com JWTMiddleware real (injeta AuthUser).

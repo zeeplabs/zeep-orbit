@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/zeeplabs/zeep-core/internal/config"
-	"github.com/zeeplabs/zeep-core/internal/db"
+	"github.com/zeeplabs/zeep-orbit/internal/config"
+	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
 
 // AppRow represents a row from zeep_system.apps, optionally with its tables.

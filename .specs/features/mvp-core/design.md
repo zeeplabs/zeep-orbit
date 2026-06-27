@@ -4,7 +4,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                      zeep-core                          │
+│                      zeep-orbit                          │
 │                                                         │
 │  ┌──────────┐   ┌──────────┐   ┌──────────────────┐   │
 │  │   CLI    │   │  Server  │   │  Config Loader   │   │
@@ -47,7 +47,7 @@
 ## Repository Structure
 
 ```
-zeep-core/
+zeep-orbit/
 ├── cmd/
 │   └── zeep/
 │       └── main.go          # Entrypoint, cobra root command
@@ -276,7 +276,7 @@ All MIT/Apache-2.0. No CGO — pure Go binary.
 ```yaml
 services:
   zeep:
-    image: ghcr.io/zeeplabs/zeep-core:latest
+    image: ghcr.io/zeeplabs/zeep-orbit:latest
     ports:
       - "8080:8080"
     environment:

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The foundational capability of zeep-core: parse a YAML config defining N apps with schemas, provision those schemas on a PostgreSQL instance, and serve auto-generated REST CRUD APIs — one per table per app — protected by per-app JWT auth.
+The foundational capability of zeep-orbit: parse a YAML config defining N apps with schemas, provision those schemas on a PostgreSQL instance, and serve auto-generated REST CRUD APIs — one per table per app — protected by per-app JWT auth.
 
 ---
 
@@ -120,7 +120,7 @@ DELETE /{app}/{table}/{id}      → delete row
 
 ### Deploy
 
-**REQ-060** Ship `docker-compose.yml` that starts zeep-core + PostgreSQL with zero additional config.
+**REQ-060** Ship `docker-compose.yml` that starts zeep-orbit + PostgreSQL with zero additional config.
 
 **REQ-061** Docker image MUST be < 50MB.
 

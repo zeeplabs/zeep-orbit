@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zeeplabs/zeep-core/internal/registry"
+	"github.com/zeeplabs/zeep-orbit/internal/registry"
 )
 
 // testTable retorna uma Table de teste com colunas representativas.

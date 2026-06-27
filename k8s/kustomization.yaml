@@ -2,7 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 # Secret NÃO está no GitOps — criar manualmente antes do apply:
-#   kubectl create secret generic zeep-core-secret \
+#   kubectl create secret generic zeep-orbit-secret \
 #     --from-literal=DATABASE_URL="postgres://..." \
 #     --from-literal=BILLING_JWT_SECRET="$(openssl rand -base64 32)" \
 #     --from-literal=INVENTORY_JWT_SECRET="$(openssl rand -base64 32)"
