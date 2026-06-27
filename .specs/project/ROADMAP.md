@@ -5,6 +5,7 @@
 **Goal:** Schema YAML → REST API running on your PostgreSQL. CLI-driven. Docker Compose deploy.
 
 Features:
+
 - [ ] Config loader (apps.yaml)
 - [ ] Schema parser + validation
 - [ ] PostgreSQL schema provisioning (CREATE/ALTER TABLE)

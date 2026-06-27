@@ -58,6 +58,7 @@ DELETE /{app}/{table}/{id}      → delete row
 ```
 
 **REQ-021** `GET /{app}/{table}` MUST support query params:
+
 - `?limit={n}` — max rows returned (default 50, max 1000)
 - `?offset={n}` — pagination offset (default 0)
 - `?{field}=eq.{value}` — equality filter

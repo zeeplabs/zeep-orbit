@@ -208,7 +208,7 @@ DELETE FROM app_billing.invoices WHERE id=$1;
 
 ```yaml
 platform:
-  database_url: ${DATABASE_URL}  # env var interpolation at load time
+  database_url: ${DATABASE_URL} # env var interpolation at load time
 
 apps:
   - name: billing
@@ -217,8 +217,8 @@ apps:
     tables:
       - name: invoices
         columns:
-          - { name: amount,      type: decimal, required: true }
-          - { name: status,      type: text,    default: pending }
+          - { name: amount, type: decimal, required: true }
+          - { name: status, type: text, default: pending }
           - { name: customer_id, type: uuid }
 
   - name: inventory
@@ -227,7 +227,7 @@ apps:
     tables:
       - name: items
         columns:
-          - { name: sku,      type: text,    required: true, unique: true }
+          - { name: sku, type: text, required: true, unique: true }
           - { name: quantity, type: integer, default: "0" }
 ```
 
@@ -257,15 +257,15 @@ Env var interpolation: `${VAR}` resolved from OS env at load time. No fallback â
 
 ## Dependencies
 
-| Package | Purpose |
-|---|---|
-| `github.com/go-chi/chi/v5` | HTTP router |
-| `github.com/jackc/pgx/v5` | PostgreSQL driver + connection pool |
-| `gopkg.in/yaml.v3` | YAML parsing |
-| `github.com/golang-jwt/jwt/v5` | JWT validation |
-| `github.com/spf13/cobra` | CLI framework |
-| `github.com/prometheus/client_golang` | Metrics |
-| `go.uber.org/zap` | Structured logging |
+| Package                               | Purpose                             |
+| ------------------------------------- | ----------------------------------- |
+| `github.com/go-chi/chi/v5`            | HTTP router                         |
+| `github.com/jackc/pgx/v5`             | PostgreSQL driver + connection pool |
+| `gopkg.in/yaml.v3`                    | YAML parsing                        |
+| `github.com/golang-jwt/jwt/v5`        | JWT validation                      |
+| `github.com/spf13/cobra`              | CLI framework                       |
+| `github.com/prometheus/client_golang` | Metrics                             |
+| `go.uber.org/zap`                     | Structured logging                  |
 
 All MIT/Apache-2.0. No CGO â€” pure Go binary.
 
