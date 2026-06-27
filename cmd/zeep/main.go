@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/spf13/cobra"
 	"github.com/zeeplabs/zeep-core/internal/dashboard"
 	"github.com/zeeplabs/zeep-core/internal/db"
@@ -20,6 +21,8 @@ var (
 )
 
 func main() {
+	_ = godotenv.Load()
+
 	rootCmd := &cobra.Command{
 		Use:   "zeep",
 		Short: "zeep-core — self-hosted BaaS",

@@ -114,3 +114,37 @@ export function useDeleteApp(): UseMutationResult<void, Error, string> {
     },
   })
 }
+
+// ── Bootstrap ──────────────────────────────────────────────────────────────────
+
+export interface BootstrapStatus {
+  bootstrapped: boolean
+}
+
+export function useBootstrapStatus(): UseQueryResult<BootstrapStatus> {
+  return useQuery({
+    queryKey: ['bootstrap-status'],
+    queryFn: () => apiFetch<BootstrapStatus>('/dashboard/api/bootstrap/status'),
+    staleTime: Infinity,
+    retry: false,
+  })
+}
+
+export function useBootstrap(): UseMutationResult<
+  { message: string; email: string },
+  Error,
+  { secret: string; email: string; password: string }
+> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input) =>
+      apiFetch('/dashboard/api/bootstrap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['bootstrap-status'] })
+    },
+  })
+}

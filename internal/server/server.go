@@ -143,6 +143,7 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 	authLimiter := dashboard.NewRateLimiter(5, time.Minute)
 	r.Route("/dashboard", func(r chi.Router) {
 		r.Use(dashboard.SecurityHeaders)
+		r.Get("/api/bootstrap/status", dashH.BootstrapStatus)
 		r.With(authLimiter.Middleware).Post("/api/bootstrap", dashH.Bootstrap)
 		r.With(authLimiter.Middleware).Post("/api/login", dashH.Login)
 		r.Post("/api/logout", dashH.Logout)

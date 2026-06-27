@@ -1,5 +1,13 @@
-import { motion, AnimatePresence } from 'framer-motion'
 import { AlertTriangle } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
 
 interface Props {
   open: boolean
@@ -11,100 +19,45 @@ interface Props {
 
 export default function DeleteConfirmDialog({ open, appName, loading, onConfirm, onCancel }: Props) {
   return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          onClick={onCancel}
-          style={{
-            position: 'fixed', inset: 0,
-            background: 'rgba(0,0,0,0.65)',
-            backdropFilter: 'blur(4px)',
-            zIndex: 60,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: 24,
-          }}
-        >
-          <motion.div
-            initial={{ opacity: 0, scale: 0.92, y: 8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.92, y: 8 }}
-            transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
-            onClick={e => e.stopPropagation()}
-            style={{
-              background: 'rgba(255,255,255,0.05)',
-              border: '1px solid rgba(255,255,255,0.10)',
-              borderRadius: 20,
-              padding: 6,
-              width: '100%',
-              maxWidth: 420,
-            }}
-          >
-            {/* inner bezel */}
-            <div style={{
-              background: 'rgba(255,255,255,0.03)',
-              boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.08)',
-              borderRadius: 16,
-              padding: '28px 28px 24px',
-            }}>
-              {/* icon */}
-              <div style={{
-                width: 44, height: 44, borderRadius: 12,
-                background: 'rgba(239,68,68,0.12)',
-                border: '1px solid rgba(239,68,68,0.2)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                marginBottom: 18,
-              }}>
-                <AlertTriangle size={20} strokeWidth={1.5} style={{ color: '#EF4444' }} />
-              </div>
-
-              <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>
-                Deletar app "{appName}"?
-              </h3>
-              <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: 24 }}>
-                Esta ação remove o app do dashboard. As tabelas no banco{' '}
-                <strong style={{ color: 'var(--text)' }}>NÃO serão deletadas</strong>.
-              </p>
-
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button
-                  onClick={onCancel}
-                  disabled={loading}
-                  style={{
-                    flex: 1, padding: '10px 0', borderRadius: 12,
-                    border: '1px solid rgba(255,255,255,0.10)',
-                    background: 'rgba(255,255,255,0.05)',
-                    color: 'var(--text-muted)', fontSize: 14, fontWeight: 500,
-                    cursor: 'pointer', fontFamily: 'inherit',
-                    transition: 'background 0.15s',
-                  }}
-                >
-                  Cancelar
-                </button>
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={onConfirm}
-                  disabled={loading}
-                  style={{
-                    flex: 1, padding: '10px 0', borderRadius: 12,
-                    border: 'none',
-                    background: loading ? 'rgba(239,68,68,0.4)' : '#EF4444',
-                    color: '#fff', fontSize: 14, fontWeight: 600,
-                    cursor: loading ? 'not-allowed' : 'pointer',
-                    fontFamily: 'inherit',
-                  }}
-                >
-                  {loading ? 'Deletando...' : 'Deletar'}
-                </motion.button>
-              </div>
+    <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) onCancel() }}>
+      <DialogContent className="max-w-[420px] bg-white/[0.04] border-white/[0.08] text-[#F8FAFC] backdrop-blur-md rounded-2xl p-0 gap-0 [&>button]:text-[#94A3B8] [&>button]:hover:text-[#F8FAFC] [&>button]:hover:bg-white/[0.08]">
+        {/* inner bezel */}
+        <div className="bg-white/[0.03] shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)] rounded-[calc(1rem-2px)] px-7 pb-6 pt-7">
+          <DialogHeader className="mb-0">
+            {/* icon */}
+            <div className="w-11 h-11 rounded-xl bg-red-500/[0.12] border border-red-500/[0.20] flex items-center justify-center mb-[18px]">
+              <AlertTriangle size={20} strokeWidth={1.5} className="text-red-500" />
             </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+
+            <DialogTitle className="text-base font-bold text-[#F8FAFC] mb-2">
+              Deletar app &ldquo;{appName}&rdquo;?
+            </DialogTitle>
+
+            <DialogDescription className="text-[13px] text-[#94A3B8] leading-relaxed mb-6">
+              Esta ação remove o app do dashboard. As tabelas no banco{' '}
+              <strong className="text-[#F8FAFC]">NÃO serão deletadas</strong>.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="flex flex-row gap-2.5 sm:flex-row sm:justify-start sm:space-x-0">
+            <Button
+              variant="outline"
+              onClick={onCancel}
+              disabled={loading}
+              className="flex-1 rounded-xl border-white/[0.10] bg-white/[0.05] text-[#94A3B8] hover:bg-white/[0.08] hover:text-[#F8FAFC] hover:border-white/[0.10] font-medium"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={onConfirm}
+              disabled={loading}
+              className="flex-1 rounded-xl bg-red-500 hover:bg-red-600 text-white font-semibold border-0 disabled:bg-red-500/40"
+            >
+              {loading ? 'Deletando...' : 'Deletar'}
+            </Button>
+          </DialogFooter>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }

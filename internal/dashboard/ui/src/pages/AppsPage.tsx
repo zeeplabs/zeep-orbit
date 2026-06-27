@@ -4,6 +4,10 @@ import { Plus, Pencil, Trash2, Table2, Mail, MailX, LayoutGrid } from 'lucide-re
 import { useApps, useDeleteApp, AppDef } from '../lib/api'
 import CreateAppModal from '../components/CreateAppModal'
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { BorderBeam } from '@/components/magicui/border-beam'
+import { cn } from '@/lib/utils'
 
 // ── Animation presets ──────────────────────────────────────────────────────────
 
@@ -20,30 +24,17 @@ const fadeUp = {
 function SkeletonCard({ wide = false }: { wide?: boolean }) {
   return (
     <div
-      style={{
-        gridColumn: wide ? 'span 2' : 'span 1',
-        background: 'rgba(255,255,255,0.05)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: 20,
-        padding: 6,
-      }}
+      className={cn(
+        'rounded-[20px] border border-white/[0.08] bg-white/[0.05] p-1.5',
+        wide && 'col-span-2',
+      )}
     >
-      <div style={{
-        background: 'rgba(255,255,255,0.03)',
-        borderRadius: 16,
-        padding: 20,
-        height: 160,
-        position: 'relative',
-        overflow: 'hidden',
-      }}>
-        <div style={{
-          position: 'absolute', inset: 0,
-          background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.04) 50%, transparent 100%)',
-          animation: 'shimmer 1.6s infinite',
-        }} />
-        <div style={{ width: '60%', height: 18, background: 'rgba(255,255,255,0.07)', borderRadius: 6, marginBottom: 10 }} />
-        <div style={{ width: '35%', height: 14, background: 'rgba(255,255,255,0.05)', borderRadius: 5, marginBottom: 6 }} />
-        <div style={{ width: '45%', height: 14, background: 'rgba(255,255,255,0.05)', borderRadius: 5 }} />
+      <div className="relative h-40 overflow-hidden rounded-2xl bg-white/[0.03] p-5">
+        {/* shimmer sweep */}
+        <div className="absolute inset-0 animate-[shimmer_1.6s_infinite] bg-gradient-to-r from-transparent via-white/[0.04] to-transparent" />
+        <div className="mb-2.5 h-[18px] w-3/5 rounded-md bg-white/[0.07]" />
+        <div className="mb-1.5 h-3.5 w-[35%] rounded-[5px] bg-white/[0.05]" />
+        <div className="h-3.5 w-[45%] rounded-[5px] bg-white/[0.05]" />
       </div>
     </div>
   )
@@ -61,7 +52,9 @@ interface AppCardProps {
 
 function AppCard({ app, wide, index, onEdit, onDelete }: AppCardProps) {
   const createdAt = new Date(app.created_at).toLocaleDateString('pt-BR', {
-    day: '2-digit', month: 'short', year: 'numeric',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
   })
 
   return (
@@ -69,102 +62,92 @@ function AppCard({ app, wide, index, onEdit, onDelete }: AppCardProps) {
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease, delay: index * 0.07 }}
-      style={{
-        gridColumn: wide ? 'span 2' : 'span 1',
-        background: 'rgba(255,255,255,0.05)',
-        border: '1px solid rgba(255,255,255,0.10)',
-        borderRadius: 20,
-        padding: 6,
-      }}
+      className={cn(
+        'relative overflow-hidden rounded-[20px] border border-white/[0.10] bg-white/[0.05] p-1.5',
+        wide && 'col-span-2',
+      )}
     >
-      <div style={{
-        background: 'rgba(255,255,255,0.03)',
-        boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.08)',
-        borderRadius: 16,
-        padding: '20px',
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 14,
-      }}>
+      <BorderBeam size={220} duration={8} />
+
+      <div className="relative z-[1] flex h-full flex-col gap-3.5 rounded-2xl bg-white/[0.03] p-5 shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)]">
         {/* Top row */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h3 style={{
-              fontSize: wide ? 20 : 16, fontWeight: 700,
-              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-              marginBottom: 8,
-            }}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <h3
+              className={cn(
+                'mb-2 truncate font-bold',
+                wide ? 'text-xl' : 'text-base',
+              )}
+            >
               {app.name}
             </h3>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+
+            <div className="flex flex-wrap gap-1.5">
               {/* Table count badge */}
-              <span style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                fontSize: 11, fontWeight: 600,
-                background: 'rgba(3,71,165,0.15)',
-                border: '1px solid rgba(3,71,165,0.3)',
-                color: 'var(--accent-light)',
-                borderRadius: 20, padding: '3px 9px',
-              }}>
+              <Badge
+                className="gap-1 border-[#0347A5]/20 bg-[#0347A5]/10 text-[#B3D1FF] hover:bg-[#0347A5]/20"
+                variant="outline"
+              >
                 <Table2 size={11} strokeWidth={1.5} />
-                {app.tables?.length ?? 0} {app.tables?.length === 1 ? 'tabela' : 'tabelas'}
-              </span>
+                {app.tables?.length ?? 0}{' '}
+                {app.tables?.length === 1 ? 'tabela' : 'tabelas'}
+              </Badge>
+
               {/* Auth badge */}
-              <span style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                fontSize: 11, fontWeight: 600,
-                background: app.auth_email_enabled ? 'rgba(124,58,237,0.12)' : 'rgba(255,255,255,0.05)',
-                border: `1px solid ${app.auth_email_enabled ? 'rgba(124,58,237,0.3)' : 'rgba(255,255,255,0.10)'}`,
-                color: app.auth_email_enabled ? '#A78BFA' : 'var(--text-muted)',
-                borderRadius: 20, padding: '3px 9px',
-              }}>
-                {app.auth_email_enabled
-                  ? <><Mail size={11} strokeWidth={1.5} /> Email Auth</>
-                  : <><MailX size={11} strokeWidth={1.5} /> Sem Email Auth</>
-                }
-              </span>
+              <Badge
+                className={cn(
+                  'gap-1',
+                  app.auth_email_enabled
+                    ? 'border-purple-500/20 bg-[#7C3AED]/10 text-purple-300 hover:bg-[#7C3AED]/20'
+                    : 'border-white/[0.10] bg-white/[0.05] text-[#94A3B8] hover:bg-white/[0.08]',
+                )}
+                variant="outline"
+              >
+                {app.auth_email_enabled ? (
+                  <>
+                    <Mail size={11} strokeWidth={1.5} />
+                    Email Auth
+                  </>
+                ) : (
+                  <>
+                    <MailX size={11} strokeWidth={1.5} />
+                    Sem Email Auth
+                  </>
+                )}
+              </Badge>
             </div>
           </div>
-          {/* Actions */}
-          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => onEdit(app)}
-              title="Editar app"
-              style={{
-                width: 32, height: 32, borderRadius: 8,
-                border: '1px solid rgba(255,255,255,0.10)',
-                background: 'rgba(255,255,255,0.05)',
-                color: 'var(--text-muted)', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}
-            >
-              <Pencil size={14} strokeWidth={1.5} />
-            </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => onDelete(app)}
-              title="Deletar app"
-              style={{
-                width: 32, height: 32, borderRadius: 8,
-                border: '1px solid rgba(239,68,68,0.15)',
-                background: 'rgba(239,68,68,0.07)',
-                color: '#EF4444', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}
-            >
-              <Trash2 size={14} strokeWidth={1.5} />
-            </motion.button>
+
+          {/* Action buttons */}
+          <div className="flex shrink-0 gap-1.5">
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => onEdit(app)}
+                title="Editar app"
+                className="size-8 rounded-lg border-white/[0.10] bg-white/[0.04] text-[#94A3B8] hover:bg-white/[0.08] hover:text-white"
+              >
+                <Pencil size={14} strokeWidth={1.5} />
+              </Button>
+            </motion.div>
+
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => onDelete(app)}
+                title="Deletar app"
+                className="size-8 rounded-lg border-red-500/20 bg-red-500/[0.06] text-red-400 hover:bg-red-500/10 hover:text-red-400"
+              >
+                <Trash2 size={14} strokeWidth={1.5} />
+              </Button>
+            </motion.div>
           </div>
         </div>
 
         {/* Created at */}
-        <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 'auto' }}>
-          Criado em {createdAt}
-        </p>
+        <p className="mt-auto text-[11px] text-[#94A3B8]">Criado em {createdAt}</p>
       </div>
     </motion.div>
   )
@@ -176,61 +159,40 @@ function EmptyState({ onCreateClick }: { onCreateClick: () => void }) {
   return (
     <motion.div
       {...fadeUp}
-      style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        minHeight: 360,
-      }}
+      className="flex min-h-[360px] items-center justify-center"
     >
-      <div style={{
-        background: 'rgba(255,255,255,0.05)',
-        border: '1px solid rgba(255,255,255,0.10)',
-        borderRadius: 24, padding: 6,
-        maxWidth: 380, width: '100%',
-        textAlign: 'center',
-      }}>
-        <div style={{
-          background: 'rgba(255,255,255,0.03)',
-          boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.08)',
-          borderRadius: 20, padding: '40px 32px',
-        }}>
+      <div className="relative w-full max-w-[380px] overflow-hidden rounded-3xl border border-white/[0.10] bg-white/[0.05] p-1.5 text-center">
+        <BorderBeam size={260} duration={10} />
+
+        <div className="relative z-[1] rounded-[20px] bg-white/[0.03] px-8 py-10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)]">
           <motion.div
             animate={{ y: [0, -6, 0] }}
             transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
-            style={{
-              width: 64, height: 64, borderRadius: 18,
-              background: 'rgba(3,71,165,0.12)',
-              border: '1px solid rgba(3,71,165,0.2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              margin: '0 auto 20px',
-            }}
+            className="mx-auto mb-5 flex size-16 items-center justify-center rounded-[18px] border border-[#0347A5]/20 bg-[#0347A5]/12"
           >
-            <LayoutGrid size={28} strokeWidth={1.5} style={{ color: 'var(--accent-light)' }} />
+            <LayoutGrid size={28} strokeWidth={1.5} className="text-[#B3D1FF]" />
           </motion.div>
-          <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Nenhum app criado</h3>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: 24 }}>
+
+          <h3 className="mb-2 text-base font-bold">Nenhum app criado</h3>
+          <p className="mb-6 text-[13px] leading-relaxed text-[#94A3B8]">
             Crie seu primeiro app para gerar APIs automaticamente e gerenciar seus dados.
           </p>
-          <motion.button
+
+          <motion.div
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            onClick={onCreateClick}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 8,
-              padding: '10px 22px', borderRadius: 24,
-              border: 'none', background: 'var(--accent)',
-              color: '#fff', fontSize: 14, fontWeight: 600,
-              cursor: 'pointer', fontFamily: 'inherit',
-            }}
+            className="inline-flex"
           >
-            Criar App
-            <span style={{
-              width: 22, height: 22, borderRadius: 11,
-              background: 'rgba(255,255,255,0.15)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <Plus size={12} strokeWidth={2} />
-            </span>
-          </motion.button>
+            <Button
+              onClick={onCreateClick}
+              className="gap-2 rounded-3xl bg-[#0347A5] px-[22px] py-2.5 text-sm font-semibold text-white hover:bg-[#0347A5]/90"
+            >
+              Criar App
+              <span className="flex size-[22px] items-center justify-center rounded-full bg-white/[0.15]">
+                <Plus size={12} strokeWidth={2} />
+              </span>
+            </Button>
+          </motion.div>
         </div>
       </div>
     </motion.div>
@@ -241,12 +203,7 @@ function EmptyState({ onCreateClick }: { onCreateClick: () => void }) {
 
 function ErrorState({ message }: { message: string }) {
   return (
-    <div style={{
-      background: 'rgba(239,68,68,0.06)',
-      border: '1px solid rgba(239,68,68,0.18)',
-      borderRadius: 16, padding: '20px 24px',
-      color: '#EF4444', fontSize: 14,
-    }}>
+    <div className="rounded-2xl border border-red-500/[0.18] bg-red-500/[0.06] px-6 py-5 text-sm text-red-400">
       Erro ao carregar apps: {message}
     </div>
   )
@@ -284,62 +241,49 @@ export default function AppsPage() {
 
   return (
     <>
-      {/* Mesh orb backdrop */}
-      <div style={{
-        position: 'fixed', top: 0, left: 240, right: 0, bottom: 0,
-        pointerEvents: 'none', zIndex: 0,
-        background: `
-          radial-gradient(ellipse 60% 50% at 70% 20%, rgba(3,71,165,0.08) 0%, transparent 70%),
-          radial-gradient(ellipse 40% 40% at 30% 70%, rgba(124,58,237,0.06) 0%, transparent 70%)
-        `,
-      }} />
+      {/* Mesh orb backdrop — fixed, behind sidebar */}
+      <div
+        className="pointer-events-none fixed bottom-0 right-0 top-0 z-0"
+        style={{ left: 240 }}
+      >
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_70%_20%,rgba(3,71,165,0.08)_0%,transparent_70%),radial-gradient(ellipse_40%_40%_at_30%_70%,rgba(124,58,237,0.06)_0%,transparent_70%)]" />
+      </div>
 
-      <div style={{ position: 'relative', zIndex: 1 }}>
+      <div className="relative z-10">
         {/* Header */}
-        <motion.div {...fadeUp} style={{ marginBottom: 36 }}>
-          <span style={{
-            display: 'inline-block',
-            fontSize: 10, fontWeight: 700, letterSpacing: '0.12em',
-            color: 'var(--accent-light)',
-            background: 'rgba(3,71,165,0.12)',
-            border: '1px solid rgba(3,71,165,0.2)',
-            borderRadius: 20, padding: '4px 12px',
-            textTransform: 'uppercase',
-            marginBottom: 12,
-          }}>
+        <motion.div {...fadeUp} className="mb-9">
+          <span className="mb-3 inline-block rounded-full border border-[#0347A5]/20 bg-[#0347A5]/12 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[#B3D1FF]">
             Apps
           </span>
-          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+
+          <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <h2 style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.2, marginBottom: 6 }}>
+              <h2 className="mb-1.5 text-[28px] font-extrabold leading-tight">
                 Seus Aplicativos
               </h2>
-              <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>
+              <p className="text-sm text-[#94A3B8]">
                 Gerencie seus apps e APIs geradas automaticamente
               </p>
             </div>
-            <motion.button
+
+            <motion.div
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              onClick={() => { setEditTarget(null); setCreateOpen(true) }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '10px 20px', borderRadius: 24,
-                border: 'none', background: 'var(--accent)',
-                color: '#fff', fontSize: 14, fontWeight: 600,
-                cursor: 'pointer', fontFamily: 'inherit',
-                flexShrink: 0,
-              }}
+              className="shrink-0"
             >
-              Criar App
-              <span style={{
-                width: 24, height: 24, borderRadius: 12,
-                background: 'rgba(255,255,255,0.12)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <Plus size={12} strokeWidth={2} />
-              </span>
-            </motion.button>
+              <Button
+                onClick={() => {
+                  setEditTarget(null)
+                  setCreateOpen(true)
+                }}
+                className="gap-2 rounded-3xl bg-[#0347A5] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#0347A5]/90"
+              >
+                Criar App
+                <span className="flex size-6 items-center justify-center rounded-full bg-white/[0.12]">
+                  <Plus size={12} strokeWidth={2} />
+                </span>
+              </Button>
+            </motion.div>
           </div>
         </motion.div>
 
@@ -351,11 +295,7 @@ export default function AppsPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: 16,
-              }}
+              className="grid grid-cols-3 gap-4"
             >
               <style>{`@keyframes shimmer { 0%{transform:translateX(-100%)} 100%{transform:translateX(100%)} }`}</style>
               <SkeletonCard wide />
@@ -366,14 +306,27 @@ export default function AppsPage() {
           )}
 
           {!isLoading && error && (
-            <motion.div key="error" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <motion.div
+              key="error"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+            >
               <ErrorState message={(error as Error).message} />
             </motion.div>
           )}
 
           {!isLoading && !error && apps && apps.length === 0 && (
-            <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-              <EmptyState onCreateClick={() => { setEditTarget(null); setCreateOpen(true) }} />
+            <motion.div
+              key="empty"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+            >
+              <EmptyState
+                onCreateClick={() => {
+                  setEditTarget(null)
+                  setCreateOpen(true)
+                }}
+              />
             </motion.div>
           )}
 
@@ -382,11 +335,7 @@ export default function AppsPage() {
               key="grid"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: 16,
-              }}
+              className="grid grid-cols-3 gap-4"
             >
               {apps.map((app, i) => (
                 <AppCard

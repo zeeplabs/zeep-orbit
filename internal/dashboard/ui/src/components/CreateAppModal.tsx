@@ -2,6 +2,18 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Plus, Trash2, ChevronDown, ChevronUp, Table2 } from 'lucide-react'
 import { useCreateApp, useUpdateApp, AppDef, TableDef, ColumnDef } from '../lib/api'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -16,27 +28,6 @@ const emptyColumn = (): ColumnDef => ({
 const emptyTable = (): TableDef => ({
   name: '', rls: 'disabled', columns: [emptyColumn()],
 })
-
-// ── Shared input style ─────────────────────────────────────────────────────────
-
-const inputStyle: React.CSSProperties = {
-  background: 'rgba(255,255,255,0.05)',
-  border: '1px solid rgba(255,255,255,0.10)',
-  borderRadius: 10,
-  padding: '10px 14px',
-  color: '#F8FAFC',
-  outline: 'none',
-  fontSize: 14,
-  width: '100%',
-  fontFamily: 'inherit',
-  transition: 'border-color 0.2s',
-}
-
-const selectStyle: React.CSSProperties = {
-  ...inputStyle,
-  cursor: 'pointer',
-  appearance: 'none' as React.CSSProperties['appearance'],
-}
 
 // ── Validation ─────────────────────────────────────────────────────────────────
 
@@ -188,14 +179,7 @@ export default function CreateAppModal({ open, editTarget, onClose }: Props) {
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
           onClick={onClose}
-          style={{
-            position: 'fixed', inset: 0,
-            background: 'rgba(0,0,0,0.60)',
-            backdropFilter: 'blur(6px)',
-            zIndex: 50,
-            display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-            padding: '0 0 0 0',
-          }}
+          className="fixed inset-0 flex items-center justify-center p-4 bg-black/60 backdrop-blur-[6px] z-50"
         >
           <motion.div
             initial={{ opacity: 0, y: 40 }}
@@ -203,59 +187,27 @@ export default function CreateAppModal({ open, editTarget, onClose }: Props) {
             exit={{ opacity: 0, y: 40 }}
             transition={{ duration: 0.4, ease: [0.32, 0.72, 0, 1] }}
             onClick={e => e.stopPropagation()}
-            style={{
-              width: '100%',
-              maxWidth: 720,
-              maxHeight: '92vh',
-              margin: '0 auto',
-              background: 'rgba(255,255,255,0.05)',
-              border: '1px solid rgba(255,255,255,0.10)',
-              borderRadius: '20px 20px 0 0',
-              padding: 6,
-              display: 'flex',
-              flexDirection: 'column',
-            }}
+            className="w-full max-w-[720px] max-h-[92vh] flex flex-col bg-white/[0.05] border border-white/[0.10] rounded-[20px] p-1.5"
           >
-            {/* inner bezel */}
-            <div style={{
-              background: 'rgba(255,255,255,0.03)',
-              boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.08)',
-              borderRadius: '16px 16px 0 0',
-              display: 'flex',
-              flexDirection: 'column',
-              flex: 1,
-              overflow: 'hidden',
-            }}>
+            {/* Inner bezel */}
+            <div className="bg-white/[0.03] [box-shadow:inset_0_1px_1px_rgba(255,255,255,0.08)] rounded-2xl flex-1 flex flex-col overflow-hidden">
+
               {/* Header */}
-              <div style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '20px 24px 16px',
-                borderBottom: '1px solid rgba(255,255,255,0.06)',
-                flexShrink: 0,
-              }}>
+              <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-white/[0.06] shrink-0">
                 <div>
-                  <span style={{
-                    fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
-                    color: 'var(--accent-light)', textTransform: 'uppercase',
-                    display: 'block', marginBottom: 4,
-                  }}>
+                  <span className="block mb-1 text-[10px] font-bold tracking-[0.1em] uppercase text-[#B3D1FF]">
                     {isEdit ? 'EDITAR APP' : 'NOVO APP'}
                   </span>
-                  <h2 style={{ fontSize: 18, fontWeight: 700 }}>
+                  <h2 className="text-lg font-bold text-[#F8FAFC]">
                     {isEdit ? `Editar "${editTarget?.name}"` : 'Criar Aplicativo'}
                   </h2>
                 </div>
                 <motion.button
+                  type="button"
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={onClose}
-                  style={{
-                    width: 32, height: 32, borderRadius: 8,
-                    border: '1px solid rgba(255,255,255,0.10)',
-                    background: 'rgba(255,255,255,0.05)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    cursor: 'pointer', color: 'var(--text-muted)',
-                  }}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg border border-white/[0.10] bg-white/[0.05] text-[#94A3B8] cursor-pointer hover:bg-white/[0.08] transition-colors"
                 >
                   <X size={16} strokeWidth={1.5} />
                 </motion.button>
@@ -264,102 +216,68 @@ export default function CreateAppModal({ open, editTarget, onClose }: Props) {
               {/* Scrollable body */}
               <form
                 onSubmit={handleSubmit}
-                style={{ flex: 1, overflowY: 'auto', padding: '24px' }}
+                className="flex-1 overflow-y-auto p-6 flex flex-col gap-5"
               >
                 {/* App name */}
-                <div style={{ marginBottom: 20 }}>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--text-muted)' }}>
+                <div className="flex flex-col gap-2">
+                  <Label className="text-[13px] font-semibold text-[#94A3B8]">
                     Nome do App
-                  </label>
-                  <input
+                  </Label>
+                  <Input
                     value={appName}
                     onChange={e => setAppName(e.target.value)}
                     placeholder="meu-app"
-                    style={{
-                      ...inputStyle,
-                      borderColor: errors['appName'] ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.10)',
-                    }}
-                    onFocus={e => (e.target.style.borderColor = 'rgba(3,71,165,0.6)')}
-                    onBlur={e => (e.target.style.borderColor = errors['appName'] ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.10)')}
+                    className={cn(
+                      'bg-white/[0.05] border-white/[0.10] rounded-xl text-[#F8FAFC] placeholder:text-white/30 focus-visible:ring-[#0347A5]/40 focus-visible:border-[#0347A5]/60 h-10',
+                      errors['appName'] && 'border-red-500/50 focus-visible:border-red-500/50'
+                    )}
                   />
                   {errors['appName'] && (
-                    <p style={{ fontSize: 12, color: '#EF4444', marginTop: 4 }}>{errors['appName']}</p>
+                    <p className="text-xs text-red-400">{errors['appName']}</p>
                   )}
-                  <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                  <p className="text-[11px] text-[#94A3B8]">
                     Apenas minúsculas, números e hífens. Máx 32 chars.
                   </p>
                 </div>
 
                 {/* Auth email toggle */}
-                <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  borderRadius: 12, padding: '14px 16px',
-                  marginBottom: 28,
-                }}>
+                <div className="flex items-center justify-between bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3.5">
                   <div>
-                    <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 2 }}>Auth por Email</p>
-                    <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    <p className="text-sm font-semibold text-[#F8FAFC] mb-0.5">Auth por Email</p>
+                    <p className="text-xs text-[#94A3B8]">
                       Habilita registro e login via email/senha
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setAuthEmail(v => !v)}
-                    style={{
-                      width: 44, height: 24, borderRadius: 12,
-                      background: authEmail ? 'var(--accent)' : 'rgba(255,255,255,0.12)',
-                      border: 'none', cursor: 'pointer', padding: 2,
-                      transition: 'background 0.2s',
-                      flexShrink: 0,
-                    }}
-                  >
-                    <motion.div
-                      animate={{ x: authEmail ? 20 : 0 }}
-                      transition={{ duration: 0.2 }}
-                      style={{
-                        width: 20, height: 20, borderRadius: 10,
-                        background: '#fff',
-                      }}
-                    />
-                  </button>
+                  <Switch
+                    checked={authEmail}
+                    onCheckedChange={setAuthEmail}
+                    className="data-[state=checked]:bg-[#0347A5] data-[state=unchecked]:bg-white/[0.12] shrink-0"
+                  />
                 </div>
 
                 {/* Tables */}
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                    <p style={{ fontSize: 14, fontWeight: 700 }}>Tabelas</p>
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-bold text-[#F8FAFC]">Tabelas</p>
                     <motion.button
                       type="button"
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={addTable}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 6,
-                        padding: '6px 14px', borderRadius: 20,
-                        border: '1px solid rgba(255,255,255,0.12)',
-                        background: 'rgba(255,255,255,0.05)',
-                        color: 'var(--text)', fontSize: 13, fontWeight: 500,
-                        cursor: 'pointer', fontFamily: 'inherit',
-                      }}
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-white/[0.12] bg-white/[0.05] text-[#F8FAFC] text-[13px] font-medium cursor-pointer hover:bg-white/[0.08] transition-colors"
                     >
-                      <Plus size={13} strokeWidth={2} /> Adicionar Tabela
+                      <Plus size={13} strokeWidth={2} />
+                      Adicionar Tabela
                     </motion.button>
                   </div>
 
                   {tables.length === 0 && (
-                    <div style={{
-                      textAlign: 'center', padding: '28px 0',
-                      color: 'var(--text-muted)', fontSize: 13,
-                      border: '1px dashed rgba(255,255,255,0.08)',
-                      borderRadius: 12,
-                    }}>
+                    <div className="text-center py-7 text-[#94A3B8] text-[13px] border border-dashed border-white/[0.08] rounded-xl">
                       Nenhuma tabela. Clique em "Adicionar Tabela" para começar.
                     </div>
                   )}
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div className="flex flex-col gap-2.5">
                     {tables.map((table, ti) => {
                       const isCollapsed = collapsedTables.has(ti)
                       return (
@@ -368,168 +286,155 @@ export default function CreateAppModal({ open, editTarget, onClose }: Props) {
                           initial={{ opacity: 0, y: 8 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
-                          style={{
-                            background: 'rgba(255,255,255,0.04)',
-                            border: '1px solid rgba(255,255,255,0.08)',
-                            borderRadius: 14,
-                            overflow: 'hidden',
-                          }}
+                          className="bg-white/[0.04] border border-white/[0.08] rounded-xl overflow-hidden"
                         >
                           {/* Table header row */}
-                          <div style={{
-                            display: 'flex', alignItems: 'center', gap: 10,
-                            padding: '12px 14px',
-                          }}>
-                            <Table2 size={15} strokeWidth={1.5} style={{ color: 'var(--accent-light)', flexShrink: 0 }} />
-                            <input
+                          <div className="flex items-center gap-2.5 px-3.5 py-3">
+                            <Table2
+                              size={15}
+                              strokeWidth={1.5}
+                              className="text-[#B3D1FF] shrink-0"
+                            />
+                            <Input
                               value={table.name}
                               onChange={e => updateTable(ti, { name: e.target.value })}
                               placeholder={`tabela_${ti + 1}`}
-                              style={{
-                                ...inputStyle,
-                                padding: '7px 12px',
-                                fontSize: 13,
-                                borderColor: errors[`table_${ti}_name`] ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.10)',
-                              }}
-                              onFocus={e => (e.target.style.borderColor = 'rgba(3,71,165,0.6)')}
-                              onBlur={e => (e.target.style.borderColor = errors[`table_${ti}_name`] ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.10)')}
+                              className={cn(
+                                'h-8 px-3 py-1.5 text-[13px] bg-white/[0.05] border-white/[0.10] rounded-xl text-[#F8FAFC] placeholder:text-white/30 focus-visible:ring-[#0347A5]/40 focus-visible:border-[#0347A5]/60',
+                                errors[`table_${ti}_name`] && 'border-red-500/50'
+                              )}
                             />
-                            <select
+                            <Select
                               value={table.rls}
-                              onChange={e => updateTable(ti, { rls: e.target.value })}
-                              style={{ ...selectStyle, width: 120, padding: '7px 12px', fontSize: 12, flexShrink: 0 }}
+                              onValueChange={val => updateTable(ti, { rls: val })}
                             >
-                              <option value="disabled">RLS off</option>
-                              <option value="enabled">RLS on</option>
-                            </select>
+                              <SelectTrigger className="h-8 w-[100px] shrink-0 text-[12px] bg-white/[0.05] border-white/[0.10] text-[#F8FAFC] focus:ring-[#0347A5]/40 rounded-xl px-3">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent className="bg-[#0D0D14] border-white/[0.10] text-[#F8FAFC]">
+                                <SelectItem
+                                  value="disabled"
+                                  className="text-[12px] focus:bg-white/[0.08] focus:text-[#F8FAFC]"
+                                >
+                                  RLS off
+                                </SelectItem>
+                                <SelectItem
+                                  value="enabled"
+                                  className="text-[12px] focus:bg-white/[0.08] focus:text-[#F8FAFC]"
+                                >
+                                  RLS on
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+
+                            {/* Collapse button */}
                             <button
                               type="button"
                               onClick={() => toggleCollapse(ti)}
-                              style={{
-                                width: 28, height: 28, borderRadius: 6, flexShrink: 0,
-                                border: '1px solid rgba(255,255,255,0.08)',
-                                background: 'transparent', color: 'var(--text-muted)',
-                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              }}
+                              className="w-7 h-7 shrink-0 flex items-center justify-center rounded-md border border-white/[0.08] bg-transparent text-[#94A3B8] cursor-pointer hover:bg-white/[0.06] transition-colors"
                             >
                               {isCollapsed
                                 ? <ChevronDown size={13} strokeWidth={1.5} />
                                 : <ChevronUp size={13} strokeWidth={1.5} />}
                             </button>
+
+                            {/* Remove table button */}
                             <button
                               type="button"
                               onClick={() => removeTable(ti)}
-                              style={{
-                                width: 28, height: 28, borderRadius: 6, flexShrink: 0,
-                                border: '1px solid rgba(239,68,68,0.15)',
-                                background: 'rgba(239,68,68,0.08)', color: '#EF4444',
-                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              }}
+                              className="w-7 h-7 shrink-0 flex items-center justify-center rounded-md border border-red-500/[0.15] bg-red-500/[0.08] text-red-400 cursor-pointer hover:bg-red-500/[0.14] transition-colors"
                             >
                               <Trash2 size={13} strokeWidth={1.5} />
                             </button>
                           </div>
 
                           {!isCollapsed && (
-                            <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', padding: '12px 14px' }}>
+                            <div className="border-t border-white/[0.06] px-3.5 py-3 flex flex-col gap-2">
                               {errors[`table_${ti}_cols`] && (
-                                <p style={{ fontSize: 12, color: '#EF4444', marginBottom: 8 }}>
+                                <p className="text-xs text-red-400 mb-1">
                                   {errors[`table_${ti}_cols`]}
                                 </p>
                               )}
 
                               {/* Column header */}
-                              <div style={{
-                                display: 'grid',
-                                gridTemplateColumns: '1fr 110px 60px 60px 28px',
-                                gap: 8, alignItems: 'center',
-                                marginBottom: 6,
-                              }}>
+                              <div className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr 110px 60px 60px 28px' }}>
                                 {['Nome', 'Tipo', 'Req.', 'Único', ''].map(h => (
-                                  <span key={h} style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>{h}</span>
+                                  <span
+                                    key={h}
+                                    className="text-[11px] text-[#94A3B8] font-semibold"
+                                  >
+                                    {h}
+                                  </span>
                                 ))}
                               </div>
 
                               {/* Column rows */}
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+                              <div className="flex flex-col gap-1.5 mb-2">
                                 {table.columns.map((col, ci) => (
                                   <div
                                     key={ci}
-                                    style={{
-                                      display: 'grid',
-                                      gridTemplateColumns: '1fr 110px 60px 60px 28px',
-                                      gap: 8, alignItems: 'center',
-                                    }}
+                                    className="grid gap-2 items-center"
+                                    style={{ gridTemplateColumns: '1fr 110px 60px 60px 28px' }}
                                   >
-                                    <input
+                                    <Input
                                       value={col.name}
                                       onChange={e => updateColumn(ti, ci, { name: e.target.value })}
                                       placeholder="nome_coluna"
-                                      style={{
-                                        ...inputStyle, padding: '7px 10px', fontSize: 13,
-                                        borderColor: errors[`col_${ti}_${ci}_name`] ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.10)',
-                                      }}
-                                      onFocus={e => (e.target.style.borderColor = 'rgba(3,71,165,0.6)')}
-                                      onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.10)')}
+                                      className={cn(
+                                        'h-8 px-2.5 py-1.5 text-[13px] bg-white/[0.05] border-white/[0.10] rounded-xl text-[#F8FAFC] placeholder:text-white/30 focus-visible:ring-[#0347A5]/40 focus-visible:border-[#0347A5]/60',
+                                        errors[`col_${ti}_${ci}_name`] && 'border-red-500/50'
+                                      )}
                                     />
-                                    <select
+
+                                    <Select
                                       value={col.type}
-                                      onChange={e => updateColumn(ti, ci, { type: e.target.value })}
-                                      style={{ ...selectStyle, padding: '7px 8px', fontSize: 12 }}
+                                      onValueChange={val => updateColumn(ti, ci, { type: val })}
                                     >
-                                      {COLUMN_TYPES.map(t => (
-                                        <option key={t} value={t}>{t}</option>
-                                      ))}
-                                    </select>
+                                      <SelectTrigger className="h-8 text-[12px] bg-white/[0.05] border-white/[0.10] text-[#F8FAFC] focus:ring-[#0347A5]/40 rounded-xl px-2">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent className="bg-[#0D0D14] border-white/[0.10] text-[#F8FAFC]">
+                                        {COLUMN_TYPES.map(t => (
+                                          <SelectItem
+                                            key={t}
+                                            value={t}
+                                            className="text-[12px] focus:bg-white/[0.08] focus:text-[#F8FAFC]"
+                                          >
+                                            {t}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+
                                     {/* Required toggle */}
-                                    <div style={{ display: 'flex', justifyContent: 'center' }}>
-                                      <button
-                                        type="button"
-                                        onClick={() => updateColumn(ti, ci, { required: !col.required })}
-                                        style={{
-                                          width: 36, height: 20, borderRadius: 10,
-                                          background: col.required ? 'var(--accent)' : 'rgba(255,255,255,0.10)',
-                                          border: 'none', cursor: 'pointer', padding: 2,
-                                          transition: 'background 0.2s',
-                                        }}
-                                      >
-                                        <motion.div
-                                          animate={{ x: col.required ? 16 : 0 }}
-                                          transition={{ duration: 0.15 }}
-                                          style={{ width: 16, height: 16, borderRadius: 8, background: '#fff' }}
-                                        />
-                                      </button>
+                                    <div className="flex justify-center">
+                                      <Switch
+                                        checked={col.required}
+                                        onCheckedChange={val => updateColumn(ti, ci, { required: val })}
+                                        className="data-[state=checked]:bg-[#0347A5] data-[state=unchecked]:bg-white/[0.10] h-5 w-9"
+                                      />
                                     </div>
+
                                     {/* Unique toggle */}
-                                    <div style={{ display: 'flex', justifyContent: 'center' }}>
-                                      <button
-                                        type="button"
-                                        onClick={() => updateColumn(ti, ci, { unique: !col.unique })}
-                                        style={{
-                                          width: 36, height: 20, borderRadius: 10,
-                                          background: col.unique ? '#7C3AED' : 'rgba(255,255,255,0.10)',
-                                          border: 'none', cursor: 'pointer', padding: 2,
-                                          transition: 'background 0.2s',
-                                        }}
-                                      >
-                                        <motion.div
-                                          animate={{ x: col.unique ? 16 : 0 }}
-                                          transition={{ duration: 0.15 }}
-                                          style={{ width: 16, height: 16, borderRadius: 8, background: '#fff' }}
-                                        />
-                                      </button>
+                                    <div className="flex justify-center">
+                                      <Switch
+                                        checked={col.unique}
+                                        onCheckedChange={val => updateColumn(ti, ci, { unique: val })}
+                                        className="data-[state=checked]:bg-[#7C3AED] data-[state=unchecked]:bg-white/[0.10] h-5 w-9"
+                                      />
                                     </div>
+
+                                    {/* Remove column button */}
                                     <button
                                       type="button"
                                       onClick={() => removeColumn(ti, ci)}
                                       disabled={table.columns.length <= 1}
-                                      style={{
-                                        width: 28, height: 28, borderRadius: 6,
-                                        border: '1px solid rgba(239,68,68,0.12)',
-                                        background: 'rgba(239,68,68,0.06)', color: table.columns.length <= 1 ? 'rgba(239,68,68,0.3)' : '#EF4444',
-                                        cursor: table.columns.length <= 1 ? 'not-allowed' : 'pointer',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                      }}
+                                      className={cn(
+                                        'w-7 h-7 flex items-center justify-center rounded-md border border-red-500/[0.12] bg-red-500/[0.06] transition-colors',
+                                        table.columns.length <= 1
+                                          ? 'text-red-400/30 cursor-not-allowed'
+                                          : 'text-red-400 cursor-pointer hover:bg-red-500/[0.12]'
+                                      )}
                                     >
                                       <Trash2 size={12} strokeWidth={1.5} />
                                     </button>
@@ -540,15 +445,10 @@ export default function CreateAppModal({ open, editTarget, onClose }: Props) {
                               <button
                                 type="button"
                                 onClick={() => addColumn(ti)}
-                                style={{
-                                  display: 'flex', alignItems: 'center', gap: 5,
-                                  fontSize: 12, color: 'var(--accent-light)',
-                                  background: 'transparent', border: 'none',
-                                  cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600,
-                                  padding: 0,
-                                }}
+                                className="flex items-center gap-1.5 text-[12px] font-semibold text-[#B3D1FF] bg-transparent border-none cursor-pointer p-0 hover:text-[#D6E8FF] transition-colors"
                               >
-                                <Plus size={12} strokeWidth={2} /> Adicionar Coluna
+                                <Plus size={12} strokeWidth={2} />
+                                Adicionar Coluna
                               </button>
                             </div>
                           )}
@@ -558,36 +458,31 @@ export default function CreateAppModal({ open, editTarget, onClose }: Props) {
                   </div>
                 </div>
 
-                {/* Error */}
+                {/* Submit error */}
                 {submitError && (
-                  <div style={{
-                    marginTop: 20, padding: '12px 16px', borderRadius: 10,
-                    background: 'rgba(239,68,68,0.08)',
-                    border: '1px solid rgba(239,68,68,0.2)',
-                    color: '#EF4444', fontSize: 13,
-                  }}>
+                  <div className="px-4 py-3 rounded-xl bg-red-500/[0.08] border border-red-500/[0.20] text-red-400 text-[13px]">
                     {submitError}
                   </div>
                 )}
 
-                {/* Submit */}
-                <motion.button
-                  type="submit"
+                {/* Submit button */}
+                <motion.div
                   whileHover={{ scale: 1.01 }}
                   whileTap={{ scale: 0.99 }}
-                  disabled={isMutating}
-                  style={{
-                    marginTop: 24,
-                    width: '100%', padding: '13px 0', borderRadius: 14,
-                    border: 'none',
-                    background: isMutating ? 'rgba(3,71,165,0.5)' : 'var(--accent)',
-                    color: '#fff', fontSize: 15, fontWeight: 700,
-                    cursor: isMutating ? 'not-allowed' : 'pointer',
-                    fontFamily: 'inherit',
-                  }}
                 >
-                  {isMutating ? 'Salvando...' : isEdit ? 'Salvar Alterações' : 'Criar App'}
-                </motion.button>
+                  <Button
+                    type="submit"
+                    disabled={isMutating}
+                    className={cn(
+                      'w-full h-12 rounded-[14px] text-[15px] font-bold text-white border-none',
+                      isMutating
+                        ? 'bg-[#0347A5]/50 cursor-not-allowed'
+                        : 'bg-gradient-to-br from-[#0347A5] to-[#7C3AED] cursor-pointer hover:opacity-90'
+                    )}
+                  >
+                    {isMutating ? 'Salvando...' : isEdit ? 'Salvar Alterações' : 'Criar App'}
+                  </Button>
+                </motion.div>
               </form>
             </div>
           </motion.div>

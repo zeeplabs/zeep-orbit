@@ -111,6 +111,16 @@ func (h *Handler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]string{"message": "superadmin created", "email": body.Email})
 }
 
+// BootstrapStatus handles GET /dashboard/api/bootstrap/status
+func (h *Handler) BootstrapStatus(w http.ResponseWriter, r *http.Request) {
+	ok, err := IsBootstrapped(r.Context(), h.pool)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"bootstrapped": ok})
+}
+
 // Login handles POST /dashboard/api/login
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1024)

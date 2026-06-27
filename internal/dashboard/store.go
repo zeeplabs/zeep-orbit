@@ -65,6 +65,17 @@ func UserCount(ctx context.Context, pool *db.Pool) (int, error) {
 	return n, nil
 }
 
+// IsBootstrapped returns true when at least one dashboard user exists.
+func IsBootstrapped(ctx context.Context, pool *db.Pool) (bool, error) {
+	var n int
+	if err := pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM zeep_system.dashboard_users`,
+	).Scan(&n); err != nil {
+		return false, fmt.Errorf("dashboard: is bootstrapped: %w", err)
+	}
+	return n > 0, nil
+}
+
 // BootstrapFirstSuperadmin atomically inserts the first superadmin using an exclusive
 // table lock to prevent TOCTOU races. Returns (true, nil) on creation, (false, nil) if
 // users already exist.
