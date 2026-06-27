@@ -13,14 +13,15 @@ import (
 )
 
 // AppRow represents a row from zeep_system.apps, optionally with its tables.
+// JWTSecret is omitted from JSON when empty (list responses never populate it).
 type AppRow struct {
-	ID               string
-	Name             string
-	JWTSecret        string
-	AuthEmailEnabled bool
-	OwnerID          string
-	CreatedAt        time.Time
-	Tables           []AppTableRow
+	ID               string        `json:"id"`
+	Name             string        `json:"name"`
+	JWTSecret        string        `json:"jwt_secret,omitempty"`
+	AuthEmailEnabled bool          `json:"auth_email_enabled"`
+	OwnerID          string        `json:"owner_id"`
+	CreatedAt        time.Time     `json:"created_at"`
+	Tables           []AppTableRow `json:"tables"`
 }
 
 // AppTableRow represents a row from zeep_system.app_tables.
@@ -41,13 +42,13 @@ func ListApps(ctx context.Context, pool *db.Pool, userID, role string) ([]*AppRo
 
 	if role == "superadmin" {
 		rows, err = pool.Query(ctx,
-			`SELECT id, name, jwt_secret, auth_email_enabled, owner_id, created_at
+			`SELECT id, name, auth_email_enabled, owner_id, created_at
 			 FROM zeep_system.apps
 			 ORDER BY created_at DESC`,
 		)
 	} else {
 		rows, err = pool.Query(ctx,
-			`SELECT DISTINCT a.id, a.name, a.jwt_secret, a.auth_email_enabled, a.owner_id, a.created_at
+			`SELECT DISTINCT a.id, a.name, a.auth_email_enabled, a.owner_id, a.created_at
 			 FROM zeep_system.apps a
 			 LEFT JOIN zeep_system.app_ownership o ON o.app_id = a.id AND o.user_id = $1
 			 WHERE a.owner_id = $1 OR o.user_id = $1
@@ -63,7 +64,7 @@ func ListApps(ctx context.Context, pool *db.Pool, userID, role string) ([]*AppRo
 	var apps []*AppRow
 	for rows.Next() {
 		var a AppRow
-		if err := rows.Scan(&a.ID, &a.Name, &a.JWTSecret, &a.AuthEmailEnabled, &a.OwnerID, &a.CreatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.Name, &a.AuthEmailEnabled, &a.OwnerID, &a.CreatedAt); err != nil {
 			return nil, fmt.Errorf("dashboard: list apps scan: %w", err)
 		}
 		apps = append(apps, &a)

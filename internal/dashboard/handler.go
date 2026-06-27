@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"regexp"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -28,6 +29,37 @@ type Handler struct {
 // NewHandler creates a new Handler.
 func NewHandler(pool *db.Pool, reg *registry.Registry) *Handler {
 	return &Handler{pool: pool, reg: reg, prov: provisioner.New(pool)}
+}
+
+var (
+	identRe      = regexp.MustCompile(`^[a-z][a-z0-9_]{0,62}$`)
+	appNameRe    = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
+	allowedTypes = map[string]bool{
+		"text": true, "integer": true, "bigint": true, "boolean": true,
+		"uuid": true, "timestamptz": true, "numeric": true, "jsonb": true,
+	}
+)
+
+// validateAppInput checks that app name, table names, column names, and column types
+// are safe SQL identifiers / known types before they reach the provisioner DDL.
+func validateAppInput(name string, tables []AppTableRow) error {
+	if !appNameRe.MatchString(name) {
+		return errors.New("app name must be lowercase letters, digits, or underscores (max 32), starting with a letter")
+	}
+	for _, t := range tables {
+		if !identRe.MatchString(t.Name) {
+			return errors.New("table name must be lowercase letters, digits, or underscores (max 63), starting with a letter")
+		}
+		for _, c := range t.Columns {
+			if !identRe.MatchString(c.Name) {
+				return errors.New("column name must be lowercase letters, digits, or underscores (max 63), starting with a letter")
+			}
+			if !allowedTypes[c.Type] {
+				return errors.New("unsupported column type: " + c.Type)
+			}
+		}
+	}
+	return nil
 }
 
 // Bootstrap handles POST /dashboard/api/bootstrap
@@ -219,8 +251,8 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
-	if body.Name == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name is required"})
+	if err := validateAppInput(body.Name, body.Tables); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 
@@ -281,6 +313,11 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := validateAppInput(body.Name, body.Tables); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
 	app, err := UpdateApp(r.Context(), h.pool, appID, user.ID, user.Role, body.AuthEmailEnabled, body.Tables)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -299,6 +336,7 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 
 	h.reg.Register(appRowToRegistryApp(app))
 
+	app.JWTSecret = "" // not returned on update; fetch via GET /apps/{id} if needed
 	writeJSON(w, http.StatusOK, app)
 }
 

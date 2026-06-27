@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/main.tsx","./src/pages/dashboardshell.tsx","./src/pages/loginpage.tsx"],"version":"5.6.3"}
+{"root":["./src/app.tsx","./src/main.tsx","./src/components/createappmodal.tsx","./src/components/deleteconfirmdialog.tsx","./src/lib/api.ts","./src/pages/appspage.tsx","./src/pages/dashboardshell.tsx","./src/pages/loginpage.tsx"],"version":"5.6.3"}
