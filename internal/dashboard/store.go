@@ -65,6 +65,47 @@ func UserCount(ctx context.Context, pool *db.Pool) (int, error) {
 	return n, nil
 }
 
+// BootstrapFirstSuperadmin atomically inserts the first superadmin using an exclusive
+// table lock to prevent TOCTOU races. Returns (true, nil) on creation, (false, nil) if
+// users already exist.
+func BootstrapFirstSuperadmin(ctx context.Context, pool *db.Pool, email, passwordHash string) (bool, error) {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return false, fmt.Errorf("dashboard: bootstrap begin: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	if _, err := tx.Exec(ctx, `LOCK TABLE zeep_system.dashboard_users IN EXCLUSIVE MODE`); err != nil {
+		return false, fmt.Errorf("dashboard: bootstrap lock: %w", err)
+	}
+
+	var count int
+	if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM zeep_system.dashboard_users`).Scan(&count); err != nil {
+		return false, fmt.Errorf("dashboard: bootstrap count: %w", err)
+	}
+	if count > 0 {
+		return false, nil
+	}
+
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO zeep_system.dashboard_users (email, password_hash, role) VALUES ($1, $2, 'superadmin')`,
+		email, passwordHash,
+	); err != nil {
+		return false, fmt.Errorf("dashboard: bootstrap insert: %w", err)
+	}
+
+	return true, tx.Commit(ctx)
+}
+
+// DeleteExpiredSessions removes sessions past their expiry time.
+func DeleteExpiredSessions(ctx context.Context, pool *db.Pool) error {
+	_, err := pool.Exec(ctx, `DELETE FROM zeep_system.sessions WHERE expires_at <= now()`)
+	if err != nil {
+		return fmt.Errorf("dashboard: cleanup sessions: %w", err)
+	}
+	return nil
+}
+
 // CreateSession inserts a new session token.
 func CreateSession(ctx context.Context, pool *db.Pool, token, userID string, expiresAt time.Time) error {
 	_, err := pool.Exec(ctx,

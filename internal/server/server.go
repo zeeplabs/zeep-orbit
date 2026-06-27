@@ -140,9 +140,11 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 
 	// Dashboard — deve vir antes dos wildcards /{app}
 	dashH := dashboard.NewHandler(pool)
+	authLimiter := dashboard.NewRateLimiter(5, time.Minute)
 	r.Route("/dashboard", func(r chi.Router) {
-		r.Post("/api/bootstrap", dashH.Bootstrap)
-		r.Post("/api/login", dashH.Login)
+		r.Use(dashboard.SecurityHeaders)
+		r.With(authLimiter.Middleware).Post("/api/bootstrap", dashH.Bootstrap)
+		r.With(authLimiter.Middleware).Post("/api/login", dashH.Login)
 		r.Post("/api/logout", dashH.Logout)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/me", dashH.Me)
 		r.Handle("/*", dashboard.StaticHandler())

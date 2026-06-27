@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -32,6 +33,7 @@ func (h *Handler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 1024)
 	var body struct {
 		Secret   string `json:"secret"`
 		Email    string `json:"email"`
@@ -47,13 +49,8 @@ func (h *Handler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	count, err := UserCount(r.Context(), h.pool)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
-		return
-	}
-	if count > 0 {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "already bootstrapped"})
+	if len(body.Password) < 12 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password must be at least 12 characters"})
 		return
 	}
 
@@ -63,8 +60,13 @@ func (h *Handler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := CreateUser(r.Context(), h.pool, body.Email, string(hash), "superadmin"); err != nil {
+	created, err := BootstrapFirstSuperadmin(r.Context(), h.pool, body.Email, string(hash))
+	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	if !created {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "already bootstrapped"})
 		return
 	}
 
@@ -73,6 +75,7 @@ func (h *Handler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 
 // Login handles POST /dashboard/api/login
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1024)
 	var body struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
@@ -118,6 +121,13 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteStrictMode,
 		MaxAge:   86400,
 	})
+
+	// Lazy cleanup: purge expired sessions in the background on each login.
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		DeleteExpiredSessions(ctx, h.pool) //nolint:errcheck
+	}()
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"user": map[string]string{
