@@ -20,9 +20,9 @@ interface Props {
 export default function DeleteConfirmDialog({ open, appName, loading, onConfirm, onCancel }: Props) {
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) onCancel() }}>
-      <DialogContent className="max-w-[420px] bg-white/[0.04] border-white/[0.08] text-[#F8FAFC] backdrop-blur-md rounded-2xl p-0 gap-0 [&>button]:text-[#94A3B8] [&>button]:hover:text-[#F8FAFC] [&>button]:hover:bg-white/[0.08]">
+      <DialogContent className="max-w-[420px] border border-white/[0.10] bg-[#0D0D14]/60 backdrop-blur-xl rounded-2xl p-0 gap-0 shadow-[0_0_40px_rgba(3,71,165,0.10)] [&>button]:text-[#94A3B8] [&>button]:hover:text-[#F8FAFC] [&>button]:hover:bg-white/[0.08]">
         {/* inner bezel */}
-        <div className="bg-white/[0.03] shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)] rounded-[calc(1rem-2px)] px-7 pb-6 pt-7">
+        <div className="bg-white/[0.04] shadow-[inset_0_1px_1px_rgba(255,255,255,0.10)] rounded-[calc(1rem-2px)] px-7 pb-6 pt-7">
           <DialogHeader className="mb-0">
             {/* icon */}
             <div className="w-11 h-11 rounded-xl bg-red-500/[0.12] border border-red-500/[0.20] flex items-center justify-center mb-[18px]">
@@ -44,7 +44,7 @@ export default function DeleteConfirmDialog({ open, appName, loading, onConfirm,
               variant="outline"
               onClick={onCancel}
               disabled={loading}
-              className="flex-1 rounded-xl border-white/[0.10] bg-white/[0.05] text-[#94A3B8] hover:bg-white/[0.08] hover:text-[#F8FAFC] hover:border-white/[0.10] font-medium"
+              className="flex-1 rounded-xl border-white/[0.10] bg-white/[0.06] text-[#94A3B8] hover:bg-white/[0.10] hover:text-[#F8FAFC] hover:border-white/[0.10] font-medium"
             >
               Cancelar
             </Button>

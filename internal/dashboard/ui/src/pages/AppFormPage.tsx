@@ -226,49 +226,58 @@ export default function AppFormPage() {
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-          {/* App name */}
-          <div className="flex flex-col gap-2">
-            <Label className="text-[13px] font-semibold text-[#94A3B8]">
-              Nome do App
-            </Label>
-            <Input
-              value={appName}
-              onChange={(e) => setAppName(e.target.value.toLowerCase().replace(/[\s-]+/g, '_'))}
-              placeholder="meu_app"
-              className={cn(
-                'bg-white/[0.05] border-white/[0.10] rounded-xl text-[#F8FAFC] placeholder:text-white/30 focus-visible:ring-[#0347A5]/40 focus-visible:border-[#0347A5]/60 h-10',
-                errors['appName'] && 'border-red-500/50 focus-visible:border-red-500/50',
+          {/* ── Basic Info Card ── */}
+          <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-5 flex flex-col gap-5">
+            {/* App name */}
+            <div className="flex flex-col gap-2">
+              <Label className="text-[13px] font-semibold text-[#94A3B8]">
+                Nome do App
+              </Label>
+              <Input
+                value={appName}
+                onChange={(e) => setAppName(e.target.value.toLowerCase().replace(/[\s-]+/g, '_'))}
+                placeholder="meu_app"
+                className={cn(
+                  'bg-white/[0.05] border-white/[0.10] rounded-md text-[#F8FAFC] placeholder:text-white/30 focus-visible:ring-[#0347A5]/40 focus-visible:border-[#0347A5]/60 h-10',
+                  errors['appName'] && 'border-red-500/50 focus-visible:border-red-500/50',
+                )}
+              />
+              {errors['appName'] && (
+                <p className="text-xs text-red-400">{errors['appName']}</p>
               )}
-            />
-            {errors['appName'] && (
-              <p className="text-xs text-red-400">{errors['appName']}</p>
-            )}
-            <p className="text-[11px] text-[#94A3B8]">
-              Apenas minúsculas, números e underscore. Máx 32 chars, começando com letra.
-            </p>
-          </div>
-
-          {/* Auth email toggle */}
-          <div className="flex items-center justify-between bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3.5">
-            <div>
-              <p className="text-sm font-semibold text-[#F8FAFC] mb-0.5">
-                Auth por Email
-              </p>
-              <p className="text-xs text-[#94A3B8]">
-                Habilita registro e login via email/senha
+              <p className="text-[11px] text-[#94A3B8]">
+                Apenas minúsculas, números e underscore. Máx 32 chars, começando com letra.
               </p>
             </div>
-            <Switch
-              checked={authEmail}
-              onCheckedChange={setAuthEmail}
-              className="data-[state=checked]:bg-[#0347A5] data-[state=unchecked]:bg-white/[0.12] shrink-0"
-            />
+
+            {/* Divider */}
+            <div className="border-t border-white/[0.06]" />
+
+            {/* Auth toggle */}
+            <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-0.5">
+                <p className="text-sm font-semibold text-[#F8FAFC]">
+                  Auth por Email
+                </p>
+                <p className="text-xs text-[#94A3B8]">
+                  Habilita registro e login via email/senha
+                </p>
+              </div>
+              <Switch
+                checked={authEmail}
+                onCheckedChange={setAuthEmail}
+                className="data-[state=checked]:bg-[#0347A5] data-[state=unchecked]:bg-white/[0.12] shrink-0"
+              />
+            </div>
           </div>
 
-          {/* Tables */}
-          <div className="flex flex-col gap-3">
+          {/* ── Tables Section ── */}
+          <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-bold text-[#F8FAFC]">Tabelas</p>
+              <div className="flex items-center gap-3">
+                <div className="h-6 w-1 rounded-full bg-gradient-to-b from-[#0347A5] to-[#7C3AED]" />
+                <p className="text-[15px] font-extrabold text-[#F8FAFC]">Tabelas</p>
+              </div>
               <button
                 type="button"
                 onClick={addTable}
@@ -280,8 +289,14 @@ export default function AppFormPage() {
             </div>
 
             {tables.length === 0 && (
-              <div className="text-center py-7 text-[#94A3B8] text-[13px] border border-dashed border-white/[0.08] rounded-xl">
-                Nenhuma tabela. Clique em "Adicionar Tabela" para começar.
+              <div className="flex flex-col items-center justify-center gap-3 py-14 text-[#94A3B8] border border-dashed border-white/[0.08] rounded-2xl">
+                <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-white/[0.04] border border-white/[0.06]">
+                  <Table2 size={18} strokeWidth={1} className="opacity-40" />
+                </div>
+                <div className="text-center">
+                  <p className="text-[13px] font-medium">Nenhuma tabela</p>
+                  <p className="text-[12px] text-white/30 mt-1">Adicione tabelas para começar a estruturar seu app</p>
+                </div>
               </div>
             )}
 
@@ -306,7 +321,7 @@ export default function AppFormPage() {
                         }
                         placeholder={`tabela_${ti + 1}`}
                         className={cn(
-                          'h-8 px-3 py-1.5 text-[13px] bg-white/[0.05] border-white/[0.10] rounded-xl text-[#F8FAFC] placeholder:text-white/30 focus-visible:ring-[#0347A5]/40 focus-visible:border-[#0347A5]/60',
+                          'h-8 px-3 py-1.5 text-[13px] bg-white/[0.05] border-white/[0.10] rounded-md text-[#F8FAFC] placeholder:text-white/30 focus-visible:ring-[#0347A5]/40 focus-visible:border-[#0347A5]/60',
                           errors[`table_${ti}_name`] && 'border-red-500/50',
                         )}
                       />
@@ -322,7 +337,7 @@ export default function AppFormPage() {
                         value={table.rls}
                         onValueChange={(val) => updateTable(ti, { rls: val })}
                       >
-                        <SelectTrigger className="h-8 w-[100px] shrink-0 text-[12px] bg-white/[0.05] border-white/[0.10] text-[#F8FAFC] focus:ring-[#0347A5]/40 rounded-xl px-3">
+                        <SelectTrigger className="h-8 w-[100px] shrink-0 text-[12px] bg-white/[0.05] border-white/[0.10] text-[#F8FAFC] focus:ring-[#0347A5]/40 rounded-md px-3">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent className="bg-[#0D0D14] border-white/[0.10] text-[#F8FAFC]">
@@ -366,23 +381,23 @@ export default function AppFormPage() {
 
                         {/* Column header */}
                         <div
-                          className="grid gap-2 items-center"
-                          style={{ gridTemplateColumns: '1fr 130px 72px 72px 36px' }}
+                          className="grid gap-3 items-center"
+                          style={{ gridTemplateColumns: '1fr 140px 80px 80px 40px' }}
                         >
-                          {['Nome', 'Tipo', 'Req.', 'Único', ''].map((h) => (
-                            <span key={h} className="text-[11px] text-[#94A3B8] font-semibold">
-                              {h}
-                            </span>
-                          ))}
+                          <span className="text-[11px] text-[#94A3B8] font-semibold">Nome</span>
+                          <span className="text-[11px] text-[#94A3B8] font-semibold">Tipo</span>
+                          <span className="text-[11px] text-[#94A3B8] font-semibold text-center">Req.</span>
+                          <span className="text-[11px] text-[#94A3B8] font-semibold text-center">Único</span>
+                          <span />
                         </div>
 
                         {/* Column rows */}
-                        <div className="flex flex-col gap-2 mb-3">
+                        <div className="flex flex-col gap-2.5 mb-3">
                           {table.columns.map((col, ci) => (
                             <div
                               key={ci}
-                              className="grid gap-2 items-center"
-                              style={{ gridTemplateColumns: '1fr 130px 72px 72px 36px' }}
+                              className="grid gap-3 items-center"
+                              style={{ gridTemplateColumns: '1fr 140px 80px 80px 40px' }}
                             >
                               <Input
                                 value={col.name}
@@ -393,7 +408,7 @@ export default function AppFormPage() {
                                 }
                                 placeholder="nome_coluna"
                                 className={cn(
-                                  'h-8 px-2.5 py-1.5 text-[13px] bg-white/[0.05] border-white/[0.10] rounded-xl text-[#F8FAFC] placeholder:text-white/30 focus-visible:ring-[#0347A5]/40 focus-visible:border-[#0347A5]/60',
+                                  'h-8 px-2.5 py-1.5 text-[13px] bg-white/[0.05] border-white/[0.10] rounded-md text-[#F8FAFC] placeholder:text-white/30 focus-visible:ring-[#0347A5]/40 focus-visible:border-[#0347A5]/60',
                                   errors[`col_${ti}_${ci}_name`] && 'border-red-500/50',
                                 )}
                               />
@@ -402,7 +417,7 @@ export default function AppFormPage() {
                                 value={col.type}
                                 onValueChange={(val) => updateColumn(ti, ci, { type: val })}
                               >
-                                <SelectTrigger className="h-8 text-[12px] bg-white/[0.05] border-white/[0.10] text-[#F8FAFC] focus:ring-[#0347A5]/40 rounded-xl px-2">
+                                <SelectTrigger className="h-8 text-[12px] bg-white/[0.05] border-white/[0.10] text-[#F8FAFC] focus:ring-[#0347A5]/40 rounded-md px-2">
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent className="bg-[#0D0D14] border-white/[0.10] text-[#F8FAFC]">
@@ -453,9 +468,9 @@ export default function AppFormPage() {
                         <button
                           type="button"
                           onClick={() => addColumn(ti)}
-                          className="flex items-center gap-1.5 text-[12px] font-semibold text-[#B3D1FF] bg-transparent border-none cursor-pointer p-0 hover:text-[#D6E8FF] transition-colors"
+                          className="flex items-center gap-1.5 text-[12px] font-semibold text-[#B3D1FF] bg-transparent border border-white/[0.08] rounded-full px-3 py-1.5 cursor-pointer hover:bg-white/[0.06] hover:text-[#D6E8FF] transition-colors self-start"
                         >
-                          <Plus size={12} strokeWidth={2} />
+                          <Plus size={11} strokeWidth={2} />
                           Adicionar Coluna
                         </button>
                       </div>

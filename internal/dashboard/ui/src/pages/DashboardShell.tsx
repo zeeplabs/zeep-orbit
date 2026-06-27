@@ -32,13 +32,15 @@ export default function DashboardShell({ user }: { user: User | null }) {
   };
 
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "240px 1fr",
-        minHeight: "100vh",
-      }}
-    >
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "240px 1fr",
+          minHeight: "100vh",
+          background:
+            "radial-gradient(ellipse at 20% 50%, rgba(3,71,165,0.15) 0%, transparent 50%), radial-gradient(ellipse at 80% 20%, rgba(124,58,237,0.15) 0%, transparent 50%), var(--bg)",
+        }}
+      >
       {/* Sidebar */}
       <motion.aside
         initial={{ x: -20, opacity: 0 }}

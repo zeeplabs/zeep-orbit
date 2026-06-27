@@ -30,7 +30,7 @@ const fadeUp = {
 
 function SkeletonCard() {
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
+    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5">
       <div className="relative overflow-hidden rounded-xl bg-white/[0.03]">
         <div className="absolute inset-0 animate-[shimmer_1.6s_infinite] bg-gradient-to-r from-transparent via-white/[0.04] to-transparent" />
         <div className="mb-3 h-4 w-3/5 rounded bg-white/[0.07]" />
@@ -57,16 +57,27 @@ function AppCard({ app, index, onEdit, onDelete }: AppCardProps) {
     year: "numeric",
   });
 
+  const initial = app.name.charAt(0).toUpperCase();
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease, delay: index * 0.07 }}
-      className="group relative rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4 transition-colors hover:border-white/[0.12] hover:bg-white/[0.05]"
+      className="group relative rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5 transition-all duration-200 hover:border-[#0347A5]/20 hover:bg-white/[0.06]"
     >
-      <div className="flex items-start justify-between gap-3">
+      {/* Gradient accent bar on hover */}
+      <div className="absolute left-5 right-5 top-0 h-[2px] rounded-full bg-gradient-to-r from-[#0347A5]/40 via-[#7C3AED]/40 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+
+      {/* Avatar + name + badges */}
+      <div className="flex items-start gap-3.5">
+        {/* Initial */}
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#0347A5]/15 to-[#7C3AED]/15 border border-white/[0.06] text-[15px] font-extrabold text-[#B3D1FF]">
+          {initial}
+        </div>
+
         <div className="min-w-0 flex-1">
-          <h3 className="mb-2.5 truncate text-sm font-bold text-[#F8FAFC]">
+          <h3 className="mb-1.5 truncate text-sm font-bold text-[#F8FAFC]">
             {app.name}
           </h3>
 
@@ -97,8 +108,15 @@ function AppCard({ app, index, onEdit, onDelete }: AppCardProps) {
             </Badge>
           </div>
         </div>
+      </div>
 
-        <div className="flex shrink-0 gap-1 transition-opacity opacity-0 group-hover:opacity-100">
+      {/* Bottom row: date + actions */}
+      <div className="mt-3 flex items-center justify-between">
+        <p className="text-[10px] text-[#64748B] tracking-wide">
+          {createdAt}
+        </p>
+
+        <div className="flex gap-1 transition-all duration-200 opacity-0 translate-x-2 group-hover:opacity-100 group-hover:translate-x-0">
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
             <Button
               variant="outline"
@@ -124,8 +142,6 @@ function AppCard({ app, index, onEdit, onDelete }: AppCardProps) {
           </motion.div>
         </div>
       </div>
-
-      <p className="mt-3 text-[10px] text-[#64748B]">Criado em {createdAt}</p>
     </motion.div>
   );
 }
@@ -214,14 +230,6 @@ export default function AppsPage() {
 
   return (
     <>
-      {/* Mesh orb backdrop — fixed, behind sidebar */}
-      <div
-        className="pointer-events-none fixed bottom-0 right-0 top-0 z-0"
-        style={{ left: 240 }}
-      >
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_70%_20%,rgba(3,71,165,0.08)_0%,transparent_70%),radial-gradient(ellipse_40%_40%_at_30%_70%,rgba(124,58,237,0.06)_0%,transparent_70%)]" />
-      </div>
-
       <div className="relative z-10">
         {/* Header */}
         <motion.div {...fadeUp} className="mb-9">
@@ -265,7 +273,7 @@ export default function AppsPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+              className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"
             >
               <style>{`@keyframes shimmer { 0%{transform:translateX(-100%)} 100%{transform:translateX(100%)} }`}</style>
               <SkeletonCard />
@@ -300,7 +308,7 @@ export default function AppsPage() {
               key="grid"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+              className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"
             >
               {apps.map((app, i) => (
                 <AppCard
