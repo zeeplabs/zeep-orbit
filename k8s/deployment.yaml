@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zeep-core
+  labels:
+    app: zeep-core
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: zeep-core
+  template:
+    metadata:
+      labels:
+        app: zeep-core
+    spec:
+      terminationGracePeriodSeconds: 35
+      containers:
+        - name: zeep-core
+          image: ghcr.io/zeeplabs/zeep-core:latest
+          args: ["serve", "--config", "/app/apps.yaml"]
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - secretRef:
+                name: zeep-core-secret
+          volumeMounts:
+            - name: config
+              mountPath: /app/apps.yaml
+              subPath: apps.yaml
+              readOnly: true
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            failureThreshold: 2
+      volumes:
+        - name: config
+          configMap:
+            name: zeep-core-config
