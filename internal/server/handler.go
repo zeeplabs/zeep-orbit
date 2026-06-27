@@ -86,7 +86,7 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 	offset := q.Args[len(q.Args)-1]
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"data":   data,
+		"data":   sanitizeRows(data),
 		"count":  count,
 		"limit":  limit,
 		"offset": offset,
@@ -132,7 +132,7 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, row)
+	writeJSON(w, http.StatusCreated, sanitizeRow(row))
 }
 
 // HandleGetByID implementa GET /{app}/{table}/{id}.
@@ -169,7 +169,7 @@ func (h *Handler) HandleGetByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, row)
+	writeJSON(w, http.StatusOK, sanitizeRow(row))
 }
 
 // HandleUpdate implementa PATCH /{app}/{table}/{id} (parcial).
@@ -217,7 +217,7 @@ func (h *Handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, row)
+	writeJSON(w, http.StatusOK, sanitizeRow(row))
 }
 
 // HandleDelete implementa DELETE /{app}/{table}/{id} → 204 No Content.

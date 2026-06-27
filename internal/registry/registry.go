@@ -74,7 +74,7 @@ func (r *Registry) Load(cfg *config.Config) error {
 
 		newApps[appCfg.Name] = &App{
 			Config:     appCfg,
-			SchemaName: "app_" + appCfg.Name,
+			SchemaName: appCfg.Name,
 			Tables:     tables,
 		}
 	}

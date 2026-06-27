@@ -30,6 +30,28 @@ func columnSet(table *registry.Table) map[string]struct{} {
 	return set
 }
 
+// columnTypes retorna map[colName]colType para lookup rápido de tipo.
+func columnTypes(table *registry.Table) map[string]string {
+	m := make(map[string]string, len(table.Columns))
+	for _, col := range table.Columns {
+		m[col.Name] = col.Type
+	}
+	return m
+}
+
+// pgCast retorna o cast SQL necessário para o tipo da coluna no extended protocol.
+// uuid e timestamptz não têm auto-cast de text no protocolo estendido do pgx.
+func pgCast(colType string) string {
+	switch colType {
+	case "uuid":
+		return "::uuid"
+	case "timestamptz":
+		return "::timestamptz"
+	default:
+		return ""
+	}
+}
+
 // systemFields são campos gerenciados pelo servidor que nunca devem vir do caller.
 var systemFields = map[string]struct{}{
 	"id":         {},
@@ -49,6 +71,7 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 	const maxLimit = 1000
 
 	known := columnSet(table)
+	types := columnTypes(table)
 
 	// --- limit ---
 	limit := defaultLimit
@@ -90,7 +113,7 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 		}
 		filterVal := strings.TrimPrefix(val, "eq.")
 		args = append(args, filterVal)
-		whereClauses = append(whereClauses, fmt.Sprintf("%s = $%d", key, len(args)))
+		whereClauses = append(whereClauses, fmt.Sprintf("%s = $%d%s", key, len(args), pgCast(types[key])))
 	}
 
 	// --- order ---
@@ -142,6 +165,7 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 // Campos desconhecidos retornam erro.
 func BuildInsert(schemaName, tableName string, table *registry.Table, body map[string]any) (*WriteQuery, error) {
 	known := columnSet(table)
+	types := columnTypes(table)
 
 	// Valida campos do body
 	for key := range body {
@@ -179,7 +203,7 @@ func BuildInsert(schemaName, tableName string, table *registry.Table, body map[s
 		}
 		cols = append(cols, col.Name)
 		args = append(args, val)
-		placeholders = append(placeholders, fmt.Sprintf("$%d", len(args)))
+		placeholders = append(placeholders, fmt.Sprintf("$%d%s", len(args), pgCast(types[col.Name])))
 	}
 
 	if len(cols) == 0 {
@@ -203,6 +227,7 @@ func BuildInsert(schemaName, tableName string, table *registry.Table, body map[s
 // Campos desconhecidos retornam erro.
 func BuildUpdate(schemaName, tableName string, table *registry.Table, id string, body map[string]any) (*WriteQuery, error) {
 	known := columnSet(table)
+	types := columnTypes(table)
 
 	// Valida campos do body
 	for key := range body {
@@ -227,7 +252,7 @@ func BuildUpdate(schemaName, tableName string, table *registry.Table, id string,
 			continue
 		}
 		args = append(args, val)
-		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", col.Name, len(args)))
+		setClauses = append(setClauses, fmt.Sprintf("%s = $%d%s", col.Name, len(args), pgCast(types[col.Name])))
 	}
 
 	if len(setClauses) == 0 {
