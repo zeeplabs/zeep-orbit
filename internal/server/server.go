@@ -16,6 +16,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/zeeplabs/zeep-core/internal/db"
+	"github.com/zeeplabs/zeep-core/internal/docs"
 	"github.com/zeeplabs/zeep-core/internal/registry"
 )
 
@@ -129,6 +130,11 @@ func newRouter(reg *registry.Registry, h *Handler, logger *zap.Logger) *chi.Mux 
 	// Rotas sem JWT
 	r.Get("/health", h.HandleHealth)
 	r.Handle("/metrics", promhttp.Handler())
+
+	dh := docs.NewHandler(reg)
+	r.Get("/docs/", dh.HandleIndex)
+	r.Get("/docs/{app}", dh.HandleUI)
+	r.Get("/docs/{app}/openapi.json", dh.HandleSpec)
 
 	// Rotas com JWT — grupo /{app}/{table}
 	r.Route("/{app}/{table}", func(r chi.Router) {
