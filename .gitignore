@@ -3,3 +3,4 @@ bin/
 .env
 *.test
 test-local/
+internal/dashboard/ui/node_modules/

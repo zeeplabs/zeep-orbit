@@ -1,0 +1,109 @@
+package dashboard
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/zeeplabs/zeep-core/internal/db"
+)
+
+// ErrNotFound is returned when a record is not found.
+var ErrNotFound = errors.New("not found")
+
+// DashboardUser represents a row in zeep_system.dashboard_users.
+type DashboardUser struct {
+	ID           string
+	Email        string
+	PasswordHash string
+	Role         string
+	CreatedAt    time.Time
+}
+
+// GetUserByEmail fetches a dashboard user by email.
+func GetUserByEmail(ctx context.Context, pool *db.Pool, email string) (*DashboardUser, error) {
+	var u DashboardUser
+	err := pool.QueryRow(ctx,
+		`SELECT id, email, password_hash, role, created_at
+		 FROM zeep_system.dashboard_users WHERE email = $1`,
+		email,
+	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &u.CreatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("dashboard: get user: %w", err)
+	}
+	return &u, nil
+}
+
+// CreateUser inserts a new dashboard user with a pre-hashed password.
+func CreateUser(ctx context.Context, pool *db.Pool, email, passwordHash, role string) (*DashboardUser, error) {
+	var u DashboardUser
+	err := pool.QueryRow(ctx,
+		`INSERT INTO zeep_system.dashboard_users (email, password_hash, role)
+		 VALUES ($1, $2, $3)
+		 RETURNING id, email, password_hash, role, created_at`,
+		email, passwordHash, role,
+	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &u.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("dashboard: create user: %w", err)
+	}
+	return &u, nil
+}
+
+// UserCount returns the total number of dashboard users.
+func UserCount(ctx context.Context, pool *db.Pool) (int, error) {
+	var n int
+	if err := pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM zeep_system.dashboard_users`,
+	).Scan(&n); err != nil {
+		return 0, fmt.Errorf("dashboard: user count: %w", err)
+	}
+	return n, nil
+}
+
+// CreateSession inserts a new session token.
+func CreateSession(ctx context.Context, pool *db.Pool, token, userID string, expiresAt time.Time) error {
+	_, err := pool.Exec(ctx,
+		`INSERT INTO zeep_system.sessions (token, user_id, expires_at) VALUES ($1, $2, $3)`,
+		token, userID, expiresAt,
+	)
+	if err != nil {
+		return fmt.Errorf("dashboard: create session: %w", err)
+	}
+	return nil
+}
+
+// GetSessionUser fetches the user for a valid (non-expired) session token.
+func GetSessionUser(ctx context.Context, pool *db.Pool, token string) (*DashboardUser, error) {
+	var u DashboardUser
+	err := pool.QueryRow(ctx,
+		`SELECT u.id, u.email, u.password_hash, u.role, u.created_at
+		 FROM zeep_system.sessions s
+		 JOIN zeep_system.dashboard_users u ON u.id = s.user_id
+		 WHERE s.token = $1 AND s.expires_at > now()`,
+		token,
+	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &u.CreatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("dashboard: get session user: %w", err)
+	}
+	return &u, nil
+}
+
+// DeleteSession removes a session by token.
+func DeleteSession(ctx context.Context, pool *db.Pool, token string) error {
+	_, err := pool.Exec(ctx,
+		`DELETE FROM zeep_system.sessions WHERE token = $1`,
+		token,
+	)
+	if err != nil {
+		return fmt.Errorf("dashboard: delete session: %w", err)
+	}
+	return nil
+}

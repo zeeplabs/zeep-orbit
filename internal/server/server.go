@@ -16,6 +16,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/zeeplabs/zeep-core/internal/auth"
+	"github.com/zeeplabs/zeep-core/internal/dashboard"
 	"github.com/zeeplabs/zeep-core/internal/db"
 	"github.com/zeeplabs/zeep-core/internal/docs"
 	"github.com/zeeplabs/zeep-core/internal/registry"
@@ -136,6 +137,16 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 	r.Get("/docs/", dh.HandleIndex)
 	r.Get("/docs/{app}", dh.HandleUI)
 	r.Get("/docs/{app}/openapi.json", dh.HandleSpec)
+
+	// Dashboard — deve vir antes dos wildcards /{app}
+	dashH := dashboard.NewHandler(pool)
+	r.Route("/dashboard", func(r chi.Router) {
+		r.Post("/api/bootstrap", dashH.Bootstrap)
+		r.Post("/api/login", dashH.Login)
+		r.Post("/api/logout", dashH.Logout)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/me", dashH.Me)
+		r.Handle("/*", dashboard.StaticHandler())
+	})
 
 	// Auth nativo por app — deve vir antes das rotas CRUD wildcard
 	ah := auth.New(pool, reg)
