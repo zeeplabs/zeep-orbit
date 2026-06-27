@@ -11,6 +11,7 @@ import (
 // Idempotent — safe to call on every startup.
 func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 	stmts := []string{
+		`CREATE EXTENSION IF NOT EXISTS pgcrypto`,
 		`CREATE SCHEMA IF NOT EXISTS zeep_system`,
 		`CREATE TABLE IF NOT EXISTS zeep_system.dashboard_users (
 			id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
