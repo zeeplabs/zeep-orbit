@@ -16,7 +16,12 @@ type AppConfig struct {
 }
 
 type AuthConfig struct {
-	JWTSecret string `yaml:"jwt_secret"`
+	JWTSecret string        `yaml:"jwt_secret"`
+	Providers AuthProviders `yaml:"providers"`
+}
+
+type AuthProviders struct {
+	Email bool `yaml:"email"`
 }
 
 type TableConfig struct {

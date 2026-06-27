@@ -15,6 +15,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 
+	"github.com/zeeplabs/zeep-core/internal/auth"
 	"github.com/zeeplabs/zeep-core/internal/db"
 	"github.com/zeeplabs/zeep-core/internal/docs"
 	"github.com/zeeplabs/zeep-core/internal/registry"
@@ -57,7 +58,7 @@ func New(reg *registry.Registry, pool *db.Pool, port int) (*Server, error) {
 	}
 
 	h := NewHandler(pool, reg)
-	r := newRouter(reg, h, logger)
+	r := newRouter(reg, h, pool, logger)
 
 	s := &Server{
 		httpServer: &http.Server{
@@ -120,7 +121,7 @@ func buildLogger() (*zap.Logger, error) {
 }
 
 // newRouter monta o chi.Mux com todas as rotas e middlewares.
-func newRouter(reg *registry.Registry, h *Handler, logger *zap.Logger) *chi.Mux {
+func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Logger) *chi.Mux {
 	r := chi.NewRouter()
 
 	// Middleware stack global
@@ -135,6 +136,17 @@ func newRouter(reg *registry.Registry, h *Handler, logger *zap.Logger) *chi.Mux 
 	r.Get("/docs/", dh.HandleIndex)
 	r.Get("/docs/{app}", dh.HandleUI)
 	r.Get("/docs/{app}/openapi.json", dh.HandleSpec)
+
+	// Auth nativo por app — deve vir antes das rotas CRUD wildcard
+	ah := auth.New(pool, reg)
+	r.Route("/{app}/auth", func(r chi.Router) {
+		r.With(ah.RateLimit).Post("/register", ah.Register)
+		r.With(ah.RateLimit).Post("/login", ah.Login)
+		r.Post("/refresh", ah.Refresh)
+		r.With(AuthJWTMiddleware(reg)).Post("/logout", ah.Logout)
+		r.With(AuthJWTMiddleware(reg)).Get("/me", ah.Me)
+		r.With(AuthJWTMiddleware(reg)).Put("/me", ah.UpdateMe)
+	})
 
 	// Rotas com JWT — grupo /{app}/{table}
 	r.Route("/{app}/{table}", func(r chi.Router) {

@@ -5,6 +5,8 @@ apps:
   - name: billing
     auth:
       jwt_secret: ${BILLING_JWT_SECRET}
+      providers:
+        email: true
     tables:
       - name: invoices
         columns:
@@ -34,6 +36,8 @@ apps:
   - name: inventory
     auth:
       jwt_secret: ${INVENTORY_JWT_SECRET}
+      providers:
+        email: true
     tables:
       - name: products
         columns:

@@ -41,6 +41,14 @@ func (p *Provisioner) Apply(ctx context.Context, cfg *config.Config) (*Report, e
 			report.SchemasCreated = append(report.SchemasCreated, schemaName)
 		}
 
+		if app.Auth.Providers.Email {
+			authCreated, err := p.provisionAuthTables(ctx, schemaName)
+			if err != nil {
+				return nil, fmt.Errorf("provisioner: app %q auth tables: %w", app.Name, err)
+			}
+			report.TablesCreated = append(report.TablesCreated, authCreated...)
+		}
+
 		for _, table := range app.Tables {
 			tableCreated, err := p.createTable(ctx, schemaName, table.Name, table.Columns)
 			if err != nil {

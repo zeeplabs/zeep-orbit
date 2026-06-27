@@ -126,6 +126,10 @@ func generate(apps []*registry.App) *Spec {
 		appName := app.Config.Name
 		spec.Tags = append(spec.Tags, specTag{Name: appName})
 
+		if app.Config.Auth.Providers.Email {
+			addAuthPaths(spec, appName, security)
+		}
+
 		tableNames := make([]string, 0, len(app.Tables))
 		for name := range app.Tables {
 			tableNames = append(tableNames, name)
@@ -300,4 +304,116 @@ func openAPIType(zeepType string) (typ, format string) {
 
 func jsonContent(s schemaOrRef) map[string]mediaType {
 	return map[string]mediaType{"application/json": {Schema: s}}
+}
+
+func addAuthPaths(spec *Spec, appName string, security []map[string][]string) {
+	base := fmt.Sprintf("/%s/auth", appName)
+	noSec := []map[string][]string{}
+
+	tokenResp := schemaOrRef{
+		Type: "object",
+		Properties: map[string]schemaOrRef{
+			"token": {Type: "string"},
+		},
+	}
+	tokenWithRefresh := schemaOrRef{
+		Type: "object",
+		Properties: map[string]schemaOrRef{
+			"token":         {Type: "string"},
+			"refresh_token": {Type: "string"},
+		},
+	}
+	userSchema := schemaOrRef{
+		Type: "object",
+		Properties: map[string]schemaOrRef{
+			"id":         {Type: "string", Format: "uuid"},
+			"email":      {Type: "string"},
+			"name":       {Type: "string"},
+			"avatar_url": {Type: "string"},
+			"created_at": {Type: "string", Format: "date-time"},
+			"updated_at": {Type: "string", Format: "date-time"},
+		},
+	}
+
+	spec.Paths[base+"/register"] = pathItem{Post: &operation{
+		Tags: []string{appName}, Summary: "Register", OperationID: "auth_register_" + appName,
+		Security: noSec,
+		RequestBody: &requestBody{Required: true, Content: jsonContent(schemaOrRef{
+			Type: "object",
+			Properties: map[string]schemaOrRef{
+				"email":    {Type: "string"},
+				"password": {Type: "string"},
+				"name":     {Type: "string"},
+			},
+			Required: []string{"email", "password"},
+		})},
+		Responses: map[string]response{
+			"201": {Description: "Created", Content: jsonContent(tokenResp)},
+			"400": {Description: "Bad Request"}, "409": {Description: "Conflict"},
+		},
+	}}
+
+	spec.Paths[base+"/login"] = pathItem{Post: &operation{
+		Tags: []string{appName}, Summary: "Login", OperationID: "auth_login_" + appName,
+		Security: noSec,
+		RequestBody: &requestBody{Required: true, Content: jsonContent(schemaOrRef{
+			Type: "object",
+			Properties: map[string]schemaOrRef{
+				"email":    {Type: "string"},
+				"password": {Type: "string"},
+			},
+			Required: []string{"email", "password"},
+		})},
+		Responses: map[string]response{
+			"200": {Description: "OK", Content: jsonContent(tokenWithRefresh)},
+			"401": {Description: "Unauthorized"},
+		},
+	}}
+
+	spec.Paths[base+"/refresh"] = pathItem{Post: &operation{
+		Tags: []string{appName}, Summary: "Refresh token", OperationID: "auth_refresh_" + appName,
+		Security: noSec,
+		RequestBody: &requestBody{Required: true, Content: jsonContent(schemaOrRef{
+			Type: "object",
+			Properties: map[string]schemaOrRef{
+				"refresh_token": {Type: "string"},
+			},
+			Required: []string{"refresh_token"},
+		})},
+		Responses: map[string]response{
+			"200": {Description: "OK", Content: jsonContent(tokenWithRefresh)},
+			"401": {Description: "Unauthorized"},
+		},
+	}}
+
+	spec.Paths[base+"/logout"] = pathItem{Post: &operation{
+		Tags:        []string{appName},
+		Summary:     "Logout",
+		OperationID: "auth_logout_" + appName,
+		Security:    security,
+		Responses: map[string]response{
+			"204": {Description: "No Content"},
+			"401": {Description: "Unauthorized"},
+		},
+	}}
+
+	spec.Paths[base+"/me"] = pathItem{
+		Get: &operation{
+			Tags: []string{appName}, Summary: "Get current user", OperationID: "auth_me_get_" + appName,
+			Security:  security,
+			Responses: map[string]response{"200": {Description: "OK", Content: jsonContent(userSchema)}, "401": {Description: "Unauthorized"}},
+		},
+		Patch: &operation{
+			Tags: []string{appName}, Summary: "Update current user", OperationID: "auth_me_put_" + appName,
+			Security: security,
+			RequestBody: &requestBody{Required: true, Content: jsonContent(schemaOrRef{
+				Type: "object",
+				Properties: map[string]schemaOrRef{
+					"name":       {Type: "string"},
+					"avatar_url": {Type: "string"},
+				},
+			})},
+			Responses: map[string]response{"200": {Description: "OK", Content: jsonContent(userSchema)}, "401": {Description: "Unauthorized"}},
+		},
+	}
 }

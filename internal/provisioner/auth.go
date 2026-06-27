@@ -1,0 +1,66 @@
+package provisioner
+
+import (
+	"context"
+	"fmt"
+)
+
+// provisionAuthTables creates _auth_users and _auth_sessions within the app schema.
+// Idempotent — safe to call on every startup.
+func (p *Provisioner) provisionAuthTables(ctx context.Context, schema string) ([]string, error) {
+	var created []string
+
+	usersDDL := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %q."_auth_users" (
+		"id"            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+		"email"         TEXT        NOT NULL UNIQUE,
+		"password_hash" TEXT        NOT NULL,
+		"name"          TEXT,
+		"avatar_url"    TEXT,
+		"created_at"    TIMESTAMPTZ NOT NULL DEFAULT now(),
+		"updated_at"    TIMESTAMPTZ NOT NULL DEFAULT now()
+	)`, schema)
+
+	usersCreated, err := p.createAuthTable(ctx, schema, "_auth_users", usersDDL)
+	if err != nil {
+		return nil, err
+	}
+	if usersCreated {
+		created = append(created, schema+"._auth_users")
+	}
+
+	sessionsDDL := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %q."_auth_sessions" (
+		"id"            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+		"user_id"       UUID        NOT NULL REFERENCES %q."_auth_users"("id") ON DELETE CASCADE,
+		"refresh_token" TEXT        NOT NULL UNIQUE,
+		"expires_at"    TIMESTAMPTZ NOT NULL,
+		"created_at"    TIMESTAMPTZ NOT NULL DEFAULT now()
+	)`, schema, schema)
+
+	sessionsCreated, err := p.createAuthTable(ctx, schema, "_auth_sessions", sessionsDDL)
+	if err != nil {
+		return nil, err
+	}
+	if sessionsCreated {
+		created = append(created, schema+"._auth_sessions")
+	}
+
+	return created, nil
+}
+
+func (p *Provisioner) createAuthTable(ctx context.Context, schema, table, ddl string) (bool, error) {
+	var exists bool
+	err := p.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = $2)`,
+		schema, table,
+	).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("auth table: check existence %q.%q: %w", schema, table, err)
+	}
+	if exists {
+		return false, nil
+	}
+	if _, err := p.pool.Exec(ctx, ddl); err != nil {
+		return false, fmt.Errorf("auth table: create %q.%q: %w", schema, table, err)
+	}
+	return true, nil
+}
