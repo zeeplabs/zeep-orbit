@@ -30,7 +30,7 @@ Project maintainers are responsible for clarifying and enforcing our standards a
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the project team at **security@zeeptech.com.br**. All complaints will be reviewed and investigated promptly and fairly.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the project team at **security@zeeptecnologia.com.br**. All complaints will be reviewed and investigated promptly and fairly.
 
 ## Attribution
 
