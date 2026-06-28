@@ -3,6 +3,7 @@ package dashboard
 import (
 	"context"
 	"crypto/rand"
+	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -844,6 +845,105 @@ func (h *Handler) DataBrowserQuery(w http.ResponseWriter, r *http.Request) {
 		"limit":  limit,
 		"offset": offset,
 	})
+}
+
+// DataBrowserExport handles GET /dashboard/api/data-browser/export
+// Exports table data as CSV (max 10 000 rows). Respects the same filters as DataBrowserQuery.
+func (h *Handler) DataBrowserExport(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appName := r.URL.Query().Get("app")
+	tableName := r.URL.Query().Get("table")
+	if appName == "" || tableName == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "app and table are required"})
+		return
+	}
+
+	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	if allowedApps != nil && !allowedApps[appName] {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+
+	app, ok := h.reg.Get(appName)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "app not found"})
+		return
+	}
+
+	table, ok := app.Tables[tableName]
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
+		return
+	}
+
+	const exportLimit = 10000
+	params := make(map[string]string)
+	params["limit"] = strconv.Itoa(exportLimit)
+	params["offset"] = "0"
+	for k, vals := range r.URL.Query() {
+		if k == "app" || k == "table" {
+			continue
+		}
+		if len(vals) > 0 {
+			params[k] = vals[0]
+		}
+	}
+
+	q, err := query.BuildList(app.SchemaName, tableName, table, params, "")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	rows, err := h.pool.Query(r.Context(), q.SQL, q.Args...)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to query rows"})
+		return
+	}
+	data, err := pgx.CollectRows(rows, pgx.RowToMap)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to collect rows"})
+		return
+	}
+
+	sanitized := sanitizeData(data)
+
+	// Build column order from table definition
+	colNames := make([]string, 0, len(table.Columns))
+	for _, col := range table.Columns {
+		colNames = append(colNames, col.Name)
+	}
+
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s_%s.csv"`, appName, tableName))
+	if len(sanitized) == exportLimit {
+		w.Header().Set("X-Truncated", "true")
+	}
+
+	cw := csv.NewWriter(w)
+	_ = cw.Write(colNames)
+	for _, row := range sanitized {
+		record := make([]string, len(colNames))
+		for i, col := range colNames {
+			v := row[col]
+			if v == nil {
+				record[i] = ""
+			} else {
+				record[i] = fmt.Sprintf("%v", v)
+			}
+		}
+		_ = cw.Write(record)
+	}
+	cw.Flush()
 }
 
 // sanitizeData converte [16]byte (UUID do pgx v5) em string UUID.

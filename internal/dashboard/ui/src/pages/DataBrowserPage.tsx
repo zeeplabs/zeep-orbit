@@ -16,6 +16,8 @@ import {
   Pencil,
   Trash2,
   X,
+  Filter,
+  Download,
 } from "lucide-react";
 import {
   useDataBrowserApps,
@@ -23,9 +25,21 @@ import {
   useCreateDataBrowserRow,
   useUpdateDataBrowserRow,
   useDeleteDataBrowserRow,
+  exportDataBrowserCSV,
   DataBrowserApp,
   DataBrowserTable,
 } from "../lib/api";
+
+const FILTER_OPERATORS = [
+  { value: "eq", label: "=" },
+  { value: "ne", label: "≠" },
+  { value: "gt", label: ">" },
+  { value: "gte", label: ">=" },
+  { value: "lt", label: "<" },
+  { value: "lte", label: "<=" },
+  { value: "ilike", label: "contém" },
+  { value: "like", label: "LIKE" },
+];
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -116,12 +130,21 @@ export default function DataBrowserPage() {
   const [sortOrder, setSortOrder] = useState<string | undefined>(undefined);
   const [limit] = useState(50);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterDraft, setFilterDraft] = useState<Record<string, { op: string; value: string }>>({});
+  const [isExporting, setIsExporting] = useState(false);
 
   // CRUD state
   const [modalOpen, setModalOpen] = useState(false);
   const [editingRow, setEditingRow] = useState<Record<string, unknown> | null>(null);
   const [formValues, setFormValues] = useState<Record<string, string>>({});
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  const activeFilters: Record<string, string> = {};
+  for (const [col, f] of Object.entries(filterDraft)) {
+    if (f.value.trim()) activeFilters[col] = `${f.op}.${f.value.trim()}`;
+  }
+  const activeFilterCount = Object.keys(activeFilters).length;
 
   const { data: apps, isLoading: appsLoading } = useDataBrowserApps();
   const {
@@ -135,6 +158,7 @@ export default function DataBrowserPage() {
     limit,
     pageOffset,
     sortOrder,
+    activeFilterCount > 0 ? activeFilters : undefined,
   );
 
   const createRow = useCreateDataBrowserRow();
@@ -157,6 +181,34 @@ export default function DataBrowserPage() {
     setSelectedTable({ app: app.name, table: table.name, columns: table.columns });
     setPageOffset(0);
     setSortOrder(undefined);
+    setFilterDraft({});
+  };
+
+  const handleFilterChange = (col: string, field: "op" | "value", val: string) => {
+    setFilterDraft((prev) => ({
+      ...prev,
+      [col]: { op: prev[col]?.op || "eq", value: prev[col]?.value || "", [field]: val },
+    }));
+    setPageOffset(0);
+  };
+
+  const clearFilters = () => {
+    setFilterDraft({});
+    setPageOffset(0);
+  };
+
+  const handleExport = async () => {
+    if (!selectedTable) return;
+    setIsExporting(true);
+    try {
+      await exportDataBrowserCSV(
+        selectedTable.app,
+        selectedTable.table,
+        activeFilterCount > 0 ? activeFilters : undefined,
+      );
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const handleSort = (col: string) => {
@@ -455,6 +507,48 @@ export default function DataBrowserPage() {
                 <Button
                   variant="ghost"
                   size="sm"
+                  onClick={() => setShowFilters((v) => !v)}
+                  style={{
+                    fontSize: 12,
+                    background: showFilters ? "rgba(var(--brand-primary-rgb),0.12)" : undefined,
+                    color: showFilters ? "var(--brand-primary)" : undefined,
+                  }}
+                >
+                  <Filter size={14} style={{ marginRight: 6 }} />
+                  Filtros
+                  {activeFilterCount > 0 && (
+                    <span
+                      style={{
+                        marginLeft: 6,
+                        background: "var(--brand-primary)",
+                        color: "#fff",
+                        borderRadius: 999,
+                        fontSize: 10,
+                        padding: "0 5px",
+                        lineHeight: "16px",
+                      }}
+                    >
+                      {activeFilterCount}
+                    </span>
+                  )}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleExport}
+                  disabled={isExporting}
+                  style={{ fontSize: 12 }}
+                >
+                  {isExporting ? (
+                    <Loader2 size={14} style={{ marginRight: 6, animation: "spin 1s linear infinite" }} />
+                  ) : (
+                    <Download size={14} style={{ marginRight: 6 }} />
+                  )}
+                  CSV
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={handleRefresh}
                   disabled={isRefreshing || queryFetching}
                   style={{ fontSize: 12 }}
@@ -470,6 +564,75 @@ export default function DataBrowserPage() {
                 </Button>
               </div>
             </div>
+
+            {/* Filter panel */}
+            {showFilters && columns.length > 0 && (
+              <div
+                style={{
+                  padding: "10px 16px",
+                  borderBottom: "1px solid rgba(255,255,255,0.06)",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 8,
+                  alignItems: "flex-end",
+                }}
+              >
+                {columns.map((col) => (
+                  <div key={col.name} style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 140 }}>
+                    <span style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 500 }}>{col.name}</span>
+                    <div style={{ display: "flex", gap: 2 }}>
+                      <select
+                        value={filterDraft[col.name]?.op || "eq"}
+                        onChange={(e) => handleFilterChange(col.name, "op", e.target.value)}
+                        style={{
+                          padding: "4px 6px",
+                          borderRadius: 6,
+                          border: "1px solid rgba(255,255,255,0.1)",
+                          background: "rgba(255,255,255,0.03)",
+                          color: "var(--text)",
+                          fontSize: 11,
+                          cursor: "pointer",
+                          flexShrink: 0,
+                        }}
+                      >
+                        {FILTER_OPERATORS.map((op) => (
+                          <option key={op.value} value={op.value}>{op.label}</option>
+                        ))}
+                      </select>
+                      <input
+                        type="text"
+                        value={filterDraft[col.name]?.value || ""}
+                        onChange={(e) => handleFilterChange(col.name, "value", e.target.value)}
+                        placeholder="valor"
+                        style={{
+                          padding: "4px 8px",
+                          borderRadius: 6,
+                          border: "1px solid rgba(255,255,255,0.1)",
+                          background: filterDraft[col.name]?.value
+                            ? "rgba(var(--brand-primary-rgb),0.08)"
+                            : "rgba(255,255,255,0.03)",
+                          color: "var(--text)",
+                          fontSize: 12,
+                          outline: "none",
+                          width: 90,
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+                {activeFilterCount > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearFilters}
+                    style={{ fontSize: 11, alignSelf: "flex-end", color: "#ef4444" }}
+                  >
+                    <X size={12} style={{ marginRight: 4 }} />
+                    Limpar
+                  </Button>
+                )}
+              </div>
+            )}
 
             {/* Desktop table */}
             <div className="max-md:hidden" style={{ overflow: "auto", flex: 1, position: "relative" }}>

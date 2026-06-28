@@ -253,9 +253,10 @@ export function useDataBrowserQuery(
   limit: number,
   offset: number,
   order?: string,
+  filters?: Record<string, string>,
 ): UseQueryResult<QueryResult> {
   return useQuery({
-    queryKey: ['data-browser-query', app, table, limit, offset, order],
+    queryKey: ['data-browser-query', app, table, limit, offset, order, filters],
     queryFn: () => {
       const params = new URLSearchParams()
       params.set('app', app)
@@ -263,10 +264,41 @@ export function useDataBrowserQuery(
       params.set('limit', String(limit))
       params.set('offset', String(offset))
       if (order) params.set('order', order)
+      if (filters) {
+        for (const [col, val] of Object.entries(filters)) {
+          if (val) params.set(col, val)
+        }
+      }
       return apiFetch<QueryResult>(`/dashboard/api/data-browser/query?${params}`)
     },
     enabled: Boolean(app) && Boolean(table),
   })
+}
+
+export async function exportDataBrowserCSV(
+  app: string,
+  table: string,
+  filters?: Record<string, string>,
+): Promise<void> {
+  const params = new URLSearchParams()
+  params.set('app', app)
+  params.set('table', table)
+  if (filters) {
+    for (const [col, val] of Object.entries(filters)) {
+      if (val) params.set(col, val)
+    }
+  }
+  const res = await fetch(`/dashboard/api/data-browser/export?${params}`, {
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error('Export failed')
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${app}_${table}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 export interface MutationRowInput {
