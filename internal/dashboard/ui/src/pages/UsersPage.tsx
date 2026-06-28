@@ -365,86 +365,137 @@ export default function UsersPage() {
           )}
 
           {!isLoading && !error && users && users.length > 0 && (
-            <motion.div
-              key="table"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, ease }}
-              className="overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02]"
-            >
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-white/[0.06]">
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">
-                      Email
-                    </th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">
-                      Permissão
-                    </th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">
-                      Criado em
-                    </th>
-                    <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">
-                      Ações
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map((u, i) => (
-                    <motion.tr
-                      key={u.id}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: i * 0.04 }}
-                      className="group border-b border-white/[0.04] last:border-0 hover:bg-white/[0.03]"
-                    >
-                      <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-2.5">
-                          <div
-                            className="flex size-8 items-center justify-center rounded-lg border border-white/[0.06] text-[12px] font-bold"
-                            style={{
-                              background: 'linear-gradient(to bottom right, rgba(var(--brand-primary-rgb), 0.15), rgba(var(--brand-secondary-rgb), 0.15))',
-                              color: 'var(--brand-light)',
-                            }}
-                          >
-                            {u.email.charAt(0).toUpperCase()}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Mail size={12} strokeWidth={1.5} className="text-[#64748B]" />
-                            <span className="text-[13px] font-medium text-[#F8FAFC]">
-                              {u.email}
-                            </span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3.5">{roleBadge(u.role)}</td>
-                      <td className="px-4 py-3.5 text-[12px] text-[#64748B]">
-                        {formatDate(u.created_at)}
-                      </td>
-                      <td className="px-4 py-3.5 text-right">
-                        {currentUser && u.id !== currentUser.id && (
-                          <motion.div
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            className="inline-flex"
-                          >
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              onClick={() => { setDeleteTarget(u); setDeleteError(""); }}
-                              title="Remover usuário"
-                              className="size-7 rounded-lg border-red-500/20 bg-red-500/[0.06] text-red-400 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-400"
+            <>
+              {/* Desktop table */}
+              <motion.div
+                key="table"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, ease }}
+                className="max-md:hidden overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02]"
+              >
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-white/[0.06]">
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">
+                        Email
+                      </th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">
+                        Permissão
+                      </th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">
+                        Criado em
+                      </th>
+                      <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">
+                        Ações
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.map((u, i) => (
+                      <motion.tr
+                        key={u.id}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: i * 0.04 }}
+                        className="group border-b border-white/[0.04] last:border-0 hover:bg-white/[0.03]"
+                      >
+                        <td className="px-4 py-3.5">
+                          <div className="flex items-center gap-2.5">
+                            <div
+                              className="flex size-8 items-center justify-center rounded-lg border border-white/[0.06] text-[12px] font-bold"
+                              style={{
+                                background: 'linear-gradient(to bottom right, rgba(var(--brand-primary-rgb), 0.15), rgba(var(--brand-secondary-rgb), 0.15))',
+                                color: 'var(--brand-light)',
+                              }}
                             >
-                              <Trash2 size={12} strokeWidth={1.5} />
-                            </Button>
-                          </motion.div>
-                        )}
-                      </td>
-                    </motion.tr>
-                  ))}
-                </tbody>
-              </table>
-            </motion.div>
+                              {u.email.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Mail size={12} strokeWidth={1.5} className="text-[#64748B]" />
+                              <span className="text-[13px] font-medium text-[#F8FAFC]">
+                                {u.email}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3.5">{roleBadge(u.role)}</td>
+                        <td className="px-4 py-3.5 text-[12px] text-[#64748B]">
+                          {formatDate(u.created_at)}
+                        </td>
+                        <td className="px-4 py-3.5 text-right">
+                          {currentUser && u.id !== currentUser.id && (
+                            <motion.div
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              className="inline-flex"
+                            >
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                onClick={() => { setDeleteTarget(u); setDeleteError(""); }}
+                                title="Remover usuário"
+                                className="size-7 rounded-lg border-red-500/20 bg-red-500/[0.06] text-red-400 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-400"
+                              >
+                                <Trash2 size={12} strokeWidth={1.5} />
+                              </Button>
+                            </motion.div>
+                          )}
+                        </td>
+                      </motion.tr>
+                    ))}
+                  </tbody>
+                </table>
+              </motion.div>
+
+              {/* Mobile card list */}
+              <motion.div
+                key="mobile-cards"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="md:hidden flex flex-col gap-3"
+              >
+                {users.map((u, i) => (
+                  <motion.div
+                    key={u.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.04 }}
+                    className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-4"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="flex size-10 items-center justify-center rounded-xl border border-white/[0.06] text-[14px] font-bold"
+                          style={{
+                            background: 'linear-gradient(to bottom right, rgba(var(--brand-primary-rgb), 0.15), rgba(var(--brand-secondary-rgb), 0.15))',
+                            color: 'var(--brand-light)',
+                          }}
+                        >
+                          {u.email.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="text-[13px] font-medium text-[#F8FAFC]">{u.email}</p>
+                          <p className="text-[11px] text-[#64748B] mt-0.5">{formatDate(u.created_at)}</p>
+                        </div>
+                      </div>
+                      {currentUser && u.id !== currentUser.id && (
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => { setDeleteTarget(u); setDeleteError(""); }}
+                          title="Remover usuário"
+                          className="size-8 rounded-xl border-red-500/20 bg-red-500/[0.06] text-red-400 hover:bg-red-500/10 hover:text-red-400"
+                        >
+                          <Trash2 size={14} strokeWidth={1.5} />
+                        </Button>
+                      )}
+                    </div>
+                    <div>{roleBadge(u.role)}</div>
+                  </motion.div>
+                ))}
+              </motion.div>
+            </>
           )}
         </AnimatePresence>
       </div>

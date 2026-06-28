@@ -91,11 +91,11 @@ function MetricCard({ icon, label, value, sub, accent }: MetricCardProps) {
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5"
+      className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5 max-md:p-3"
     >
-      <div className="mb-3 flex items-center gap-2.5">
+      <div className="mb-3 max-md:mb-2 flex items-center gap-2.5">
         <div
-          className="flex size-9 items-center justify-center rounded-xl border"
+          className="flex size-9 max-md:size-8 items-center justify-center rounded-xl border"
           style={{
             borderColor: accent ? `${accent}20` : "rgba(255,255,255,0.10)",
             backgroundColor: accent ? `${accent}10` : "rgba(255,255,255,0.06)",
@@ -108,7 +108,7 @@ function MetricCard({ icon, label, value, sub, accent }: MetricCardProps) {
           {label}
         </span>
       </div>
-      <div className="text-[28px] font-extrabold leading-none tracking-tight text-[#F8FAFC]">
+      <div className="text-[28px] max-md:text-[22px] font-extrabold leading-none tracking-tight text-[#F8FAFC]">
         {value}
       </div>
       {sub && (
@@ -127,7 +127,7 @@ export default function LogsPage() {
   return (
     <div className="relative z-10">
       {/* Header */}
-      <motion.div {...fadeUp} className="mb-8">
+      <motion.div {...fadeUp} className="mb-8 max-md:mb-6">
         <span
           className="mb-3 inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em]"
           style={{
@@ -142,17 +142,17 @@ export default function LogsPage() {
 
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h2 className="mb-1.5 text-[28px] font-extrabold leading-tight">
+            <h2 className="mb-1.5 text-[28px] max-md:text-[22px] font-extrabold leading-tight">
               Monitoramento
             </h2>
-            <p className="text-sm text-[#94A3B8]">
+            <p className="text-sm max-md:text-[13px] text-[#94A3B8]">
               Requisições em tempo real e métricas agregadas da plataforma
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 max-md:w-full">
             {metrics && (
-              <div className="flex items-center gap-1.5 rounded-full border border-emerald-500/[0.20] bg-emerald-500/[0.08] px-3 py-1">
+              <div className="flex items-center gap-1.5 rounded-full border border-emerald-500/[0.20] bg-emerald-500/[0.08] px-3 py-1 shrink-0">
                 <span className="relative flex size-2">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
                   <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
@@ -166,7 +166,7 @@ export default function LogsPage() {
             <select
               value={appFilter}
               onChange={(e) => setAppFilter(e.target.value)}
-              className="h-9 rounded-xl border border-white/[0.10] bg-white/[0.06] px-3 text-[12px] text-[#F8FAFC] outline-none appearance-none cursor-pointer"
+              className="h-9 rounded-xl border border-white/[0.10] bg-white/[0.06] px-3 text-[12px] text-[#F8FAFC] outline-none appearance-none cursor-pointer max-md:flex-1"
             >
               <option value="" className="bg-[#0D0D14]">Todos os apps</option>
               {apps?.map((a) => (
@@ -180,7 +180,7 @@ export default function LogsPage() {
       </motion.div>
 
       {/* Metrics grid */}
-      <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mb-8 max-md:mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <MetricCard
           icon={<BarChart3 size={15} strokeWidth={1.5} />}
           label="Requisições (1min)"
@@ -216,7 +216,7 @@ export default function LogsPage() {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="mb-8 flex flex-wrap items-center gap-2"
+          className="mb-8 max-md:mb-5 flex flex-wrap items-center gap-2"
         >
           <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">
             Métodos:
@@ -299,78 +299,126 @@ export default function LogsPage() {
           )}
 
           {!isLoading && !error && logs && logs.length > 0 && (
-            <motion.div
-              key="table"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.4, ease }}
-            >
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-white/[0.06]">
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B] w-[72px]">
-                      Status
-                    </th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B] w-[60px]">
-                      Método
-                    </th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">
-                      Path
-                    </th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B] w-[64px]">
-                      App
-                    </th>
-                    <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B] w-[72px]">
-                      Latência
-                    </th>
-                    <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B] w-[80px]">
-                      Hora
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {logs.map((entry: LogEntry, i: number) => (
-                    <motion.tr
-                      key={`${entry.timestamp}-${i}`}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: Math.min(i * 0.02, 0.3) }}
-                      className="group border-b border-white/[0.04] last:border-0 hover:bg-white/[0.03]"
-                    >
-                      <td className="px-4 py-2.5">{statusBadge(entry.status)}</td>
-                      <td className="px-4 py-2.5">{methodBadge(entry.method)}</td>
-                      <td className="px-4 py-2.5">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[13px] font-medium text-[#F8FAFC] font-mono">
-                            {entry.path}
+            <>
+              {/* Desktop table */}
+              <motion.div
+                key="table"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.4, ease }}
+                className="max-md:hidden"
+              >
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-white/[0.06]">
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B] w-[72px]">
+                        Status
+                      </th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B] w-[60px]">
+                        Método
+                      </th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">
+                        Path
+                      </th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B] w-[64px]">
+                        App
+                      </th>
+                      <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B] w-[72px]">
+                        Latência
+                      </th>
+                      <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B] w-[80px]">
+                        Hora
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {logs.map((entry: LogEntry, i: number) => (
+                      <motion.tr
+                        key={`${entry.timestamp}-${i}`}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: Math.min(i * 0.02, 0.3) }}
+                        className="group border-b border-white/[0.04] last:border-0 hover:bg-white/[0.03]"
+                      >
+                        <td className="px-4 py-2.5">{statusBadge(entry.status)}</td>
+                        <td className="px-4 py-2.5">{methodBadge(entry.method)}</td>
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[13px] font-medium text-[#F8FAFC] font-mono">
+                              {entry.path}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2.5">
+                          {entry.app ? (
+                            <span className="inline-flex items-center gap-1 rounded-md border border-white/[0.06] bg-white/[0.04] px-2 py-0.5 text-[11px] font-medium text-[#94A3B8]">
+                              <Server size={10} strokeWidth={1.5} />
+                              {entry.app}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-[#64748B]">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          <span className="text-[12px] font-medium tabular-nums text-[#94A3B8]">
+                            {entry.latency_ms}ms
                           </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-2.5">
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          <span className="text-[12px] text-[#64748B] tabular-nums">
+                            {formatTime(entry.timestamp)}
+                          </span>
+                        </td>
+                      </motion.tr>
+                    ))}
+                  </tbody>
+                </table>
+              </motion.div>
+
+              {/* Mobile cards */}
+              <motion.div
+                key="mobile-cards"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="md:hidden flex flex-col gap-2"
+              >
+                {logs.map((entry: LogEntry, i: number) => (
+                  <motion.div
+                    key={`${entry.timestamp}-${i}`}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: Math.min(i * 0.02, 0.3) }}
+                    className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3.5"
+                  >
+                    <div className="flex items-center justify-between mb-2.5">
+                      <div className="flex items-center gap-2">
+                        {statusBadge(entry.status)}
+                        {methodBadge(entry.method)}
+                      </div>
+                    </div>
+                    <div className="mb-2.5">
+                      <span className="text-[14px] font-medium text-[#F8FAFC] font-mono leading-snug break-all">
+                        {entry.path}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[12px] text-[#64748B]">
+                      <div className="flex items-center gap-2.5">
                         {entry.app ? (
-                          <span className="inline-flex items-center gap-1 rounded-md border border-white/[0.06] bg-white/[0.04] px-2 py-0.5 text-[11px] font-medium text-[#94A3B8]">
-                            <Server size={10} strokeWidth={1.5} />
+                          <span className="inline-flex items-center gap-1 rounded-md border border-white/[0.06] bg-white/[0.04] px-2 py-0.5">
+                            <Server size={11} strokeWidth={1.5} />
                             {entry.app}
                           </span>
                         ) : (
-                          <span className="text-[11px] text-[#64748B]">—</span>
+                          <span>—</span>
                         )}
-                      </td>
-                      <td className="px-4 py-2.5 text-right">
-                        <span className="text-[12px] font-medium tabular-nums text-[#94A3B8]">
-                          {entry.latency_ms}ms
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 text-right">
-                        <span className="text-[12px] text-[#64748B] tabular-nums">
-                          {formatTime(entry.timestamp)}
-                        </span>
-                      </td>
-                    </motion.tr>
-                  ))}
-                </tbody>
-              </table>
-            </motion.div>
+                        <span className="tabular-nums">{entry.latency_ms}ms</span>
+                      </div>
+                      <span className="tabular-nums">{formatTime(entry.timestamp)}</span>
+                    </div>
+                  </motion.div>
+                ))}
+              </motion.div>
+            </>
           )}
         </AnimatePresence>
       </div>

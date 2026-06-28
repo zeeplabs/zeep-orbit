@@ -163,9 +163,10 @@ export default function DataBrowserPage() {
   const currentPage = Math.floor(pageOffset / limit) + 1;
 
   return (
-    <motion.div {...fadeUp} style={{ display: "grid", gridTemplateColumns: "240px 1fr", minHeight: "100%" }}>
+    <motion.div {...fadeUp} className="grid grid-cols-[240px_1fr] max-md:flex max-md:flex-col max-md:gap-3" style={{ minHeight: "100%" }}>
       {/* Tree panel */}
       <div
+        className="max-md:max-h-[200px] max-md:overflow-y-auto"
         style={{
           background: "rgba(255,255,255,0.02)",
           borderRight: "1px solid rgba(255,255,255,0.06)",
@@ -287,8 +288,8 @@ export default function DataBrowserPage() {
 
       {/* Data panel */}
       <div
+        className="pl-4 max-md:pl-0 max-md:pt-3"
         style={{
-          padding: "0 0 0 16px",
           overflow: "hidden",
           display: "flex",
           flexDirection: "column",
@@ -335,8 +336,8 @@ export default function DataBrowserPage() {
               </Button>
             </div>
 
-            {/* Table */}
-            <div style={{ overflow: "auto", flex: 1, position: "relative" }}>
+            {/* Desktop table */}
+            <div className="max-md:hidden" style={{ overflow: "auto", flex: 1, position: "relative" }}>
               {queryLoading ? (
                 <TableSkeleton cols={columns.length} />
               ) : (
@@ -455,6 +456,84 @@ export default function DataBrowserPage() {
                     )}
                   </tbody>
                 </table>
+              )}
+            </div>
+
+            {/* Mobile card view */}
+            <div className="md:hidden flex-1 overflow-y-auto">
+              {queryLoading ? (
+                <TableSkeleton cols={columns.length} />
+              ) : data.length === 0 ? (
+                <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>
+                  Nenhum registro encontrado
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {data.map((row, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        background: "rgba(255,255,255,0.03)",
+                        border: "1px solid rgba(255,255,255,0.06)",
+                        borderRadius: 12,
+                        overflow: "hidden",
+                      }}
+                    >
+                      {columns.map((col, ci) => {
+                        const val = row[col.name];
+                        const isFirst = ci === 0;
+                        return (
+                          <div
+                            key={col.name}
+                            style={{
+                              display: "flex",
+                              alignItems: "flex-start",
+                              gap: 8,
+                              padding: isFirst ? "12px 14px 8px" : "6px 14px",
+                              borderBottom: ci < columns.length - 1 ? "1px solid rgba(255,255,255,0.04)" : undefined,
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontSize: isFirst ? 10 : 11,
+                                fontWeight: isFirst ? 700 : 500,
+                                color: "var(--text-muted)",
+                                minWidth: isFirst ? undefined : 90,
+                                flexShrink: 0,
+                                textTransform: isFirst ? "uppercase" : undefined,
+                                letterSpacing: isFirst ? "0.05em" : undefined,
+                              }}
+                            >
+                              {col.name}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: isFirst ? 12 : 13,
+                                fontWeight: isFirst ? 600 : 400,
+                                color:
+                                  val === null || val === undefined
+                                    ? "rgba(255,255,255,0.2)"
+                                    : isFirst
+                                      ? "var(--text)"
+                                      : undefined,
+                                fontStyle:
+                                  val === null || val === undefined
+                                    ? "italic"
+                                    : undefined,
+                                fontFamily: col.name === "id" || isFirst ? "monospace" : undefined,
+                                wordBreak: "break-word",
+                                textAlign: "right",
+                                flex: 1,
+                              }}
+                            >
+                              {formatCellValue(val, col.type)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
 

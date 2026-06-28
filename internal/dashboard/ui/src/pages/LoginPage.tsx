@@ -54,7 +54,7 @@ export default function LoginPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
-        className="w-[400px] border border-white/[0.10] bg-[#0D0D14]/60 backdrop-blur-xl rounded-2xl p-8"
+        className="w-full max-w-[400px] mx-4 border border-white/[0.10] bg-[#0D0D14]/60 backdrop-blur-xl rounded-2xl p-8 max-md:p-6"
       style={{ boxShadow: '0 0 40px rgba(var(--brand-primary-rgb), 0.10)' }}
       >
         {/* Header */}
@@ -62,7 +62,7 @@ export default function LoginPage() {
           <img
             src={logo}
             alt="Zeep Orbit"
-            className="size-42 object-contain mb-3"
+            className="size-42 max-md:size-32 object-contain mb-3"
           />
           <h1 className="text-lg font-bold text-[#F8FAFC]">
             BaaS Platform Manager

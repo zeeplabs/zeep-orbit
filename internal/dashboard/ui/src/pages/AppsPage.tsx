@@ -312,7 +312,7 @@ export default function AppsPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"
+              className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-4"
             >
               <style>{`@keyframes shimmer { 0%{transform:translateX(-100%)} 100%{transform:translateX(100%)} }`}</style>
               <SkeletonCard />
@@ -347,7 +347,7 @@ export default function AppsPage() {
               key="grid"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"
+              className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-4"
             >
               {apps.map((app, i) => (
                 <AppCard

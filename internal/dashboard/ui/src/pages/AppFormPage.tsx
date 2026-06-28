@@ -455,9 +455,9 @@ export default function AppFormPage() {
                           <code className="text-[#94A3B8] not-italic">updated_at</code> são criadas automaticamente.
                         </p>
 
-                        {/* Column header */}
+                        {/* Column header — hidden on mobile */}
                         <div
-                          className="grid gap-3 items-center"
+                          className="grid gap-3 items-center max-md:hidden"
                           style={{
                             gridTemplateColumns: "1fr 140px 80px 80px 40px",
                           }}
@@ -482,7 +482,7 @@ export default function AppFormPage() {
                           {table.columns.map((col, ci) => (
                             <div
                               key={ci}
-                              className="grid gap-3 items-center"
+                              className="grid gap-3 items-center max-md:flex max-md:flex-col max-md:gap-2 max-md:p-3 max-md:bg-white/[0.03] max-md:rounded-xl max-md:border max-md:border-white/[0.06]"
                               style={{
                                 gridTemplateColumns: "1fr 140px 80px 80px 40px",
                               }}
@@ -504,64 +504,66 @@ export default function AppFormPage() {
                                 )}
                               />
 
-                              <Select
-                                value={col.type}
-                                onValueChange={(val) =>
-                                  updateColumn(ti, ci, { type: val })
-                                }
-                              >
-                                <SelectTrigger className="h-8 text-[12px] bg-white/[0.05] border-white/[0.10] text-[#F8FAFC] rounded-md px-2 brand-focus">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent className="bg-[#0D0D14] border-white/[0.10] text-[#F8FAFC]">
-                                  {COLUMN_TYPES.map((t) => (
-                                    <SelectItem
-                                      key={t}
+                              <div className="contents max-md:flex max-md:items-center max-md:gap-2">
+                                <Select
+                                  value={col.type}
+                                  onValueChange={(val) =>
+                                    updateColumn(ti, ci, { type: val })
+                                  }
+                                >
+                                  <SelectTrigger className="h-8 w-[130px] max-md:flex-1 text-[12px] bg-white/[0.05] border-white/[0.10] text-[#F8FAFC] rounded-md px-2 brand-focus">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent className="bg-[#0D0D14] border-white/[0.10] text-[#F8FAFC]">
+                                    {COLUMN_TYPES.map((t) => (
+                                      <SelectItem
+                                        key={t}
                                       value={t}
                                       className="text-[12px] focus:bg-white/[0.08] focus:text-[#F8FAFC]"
-                                    >
-                                      {t}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                                      >
+                                        {t}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
 
-                              {/* Required toggle */}
-                              <div className="flex justify-center">
-                                <Switch
-                                  checked={col.required}
-                                  onCheckedChange={(val) =>
-                                    updateColumn(ti, ci, { required: val })
-                                  }
-                                  className="h-5 w-9"
-                                />
+                                {/* Required toggle */}
+                                <div className="flex justify-center">
+                                  <Switch
+                                    checked={col.required}
+                                    onCheckedChange={(val) =>
+                                      updateColumn(ti, ci, { required: val })
+                                    }
+                                    className="h-5 w-9"
+                                  />
+                                </div>
+
+                                {/* Unique toggle */}
+                                <div className="flex justify-center">
+                                  <Switch
+                                    checked={col.unique}
+                                    onCheckedChange={(val) =>
+                                      updateColumn(ti, ci, { unique: val })
+                                    }
+                                    className="h-5 w-9"
+                                  />
+                                </div>
+
+                                {/* Remove column button */}
+                                <button
+                                  type="button"
+                                  onClick={() => removeColumn(ti, ci)}
+                                  disabled={table.columns.length <= 1}
+                                  className={cn(
+                                    "w-7 h-7 flex items-center justify-center rounded-md border border-red-500/[0.12] bg-red-500/[0.06] transition-colors",
+                                    table.columns.length <= 1
+                                      ? "text-red-400/30 cursor-not-allowed"
+                                      : "text-red-400 cursor-pointer hover:bg-red-500/[0.12]",
+                                  )}
+                                >
+                                  <Trash2 size={12} strokeWidth={1.5} />
+                                </button>
                               </div>
-
-                              {/* Unique toggle */}
-                              <div className="flex justify-center">
-                                <Switch
-                                  checked={col.unique}
-                                  onCheckedChange={(val) =>
-                                    updateColumn(ti, ci, { unique: val })
-                                  }
-                                  className="h-5 w-9"
-                                />
-                              </div>
-
-                              {/* Remove column button */}
-                              <button
-                                type="button"
-                                onClick={() => removeColumn(ti, ci)}
-                                disabled={table.columns.length <= 1}
-                                className={cn(
-                                  "w-7 h-7 flex items-center justify-center rounded-md border border-red-500/[0.12] bg-red-500/[0.06] transition-colors",
-                                  table.columns.length <= 1
-                                    ? "text-red-400/30 cursor-not-allowed"
-                                    : "text-red-400 cursor-pointer hover:bg-red-500/[0.12]",
-                                )}
-                              >
-                                <Trash2 size={12} strokeWidth={1.5} />
-                              </button>
                             </div>
                           ))}
                         </div>

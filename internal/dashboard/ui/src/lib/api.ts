@@ -298,7 +298,7 @@ export function useLogs(appFilter?: string): UseQueryResult<LogEntry[]> {
       if (appFilter) params.set('app', appFilter)
       return apiFetch<LogEntry[]>(`/dashboard/api/logs?${params}`)
     },
-    refetchInterval: 3000,
+    refetchInterval: 10000,
   })
 }
 
@@ -306,7 +306,7 @@ export function useLogMetrics(): UseQueryResult<LogMetrics> {
   return useQuery({
     queryKey: ['logs-metrics'],
     queryFn: () => apiFetch<LogMetrics>('/dashboard/api/logs/metrics'),
-    refetchInterval: 5000,
+    refetchInterval: 10000,
   })
 }
 
