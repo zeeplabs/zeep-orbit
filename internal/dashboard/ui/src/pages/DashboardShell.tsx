@@ -22,13 +22,18 @@ interface User {
 
 type NavItem = { icon: typeof Grid; label: string; path: string };
 
-const NAV_ITEMS: NavItem[] = [
-  { icon: Grid, label: "Apps", path: "/apps" },
-  { icon: Database, label: "Data Browser", path: "/data-browser" },
-  { icon: Users, label: "Usuários", path: "/usuarios" },
-  { icon: Activity, label: "Logs", path: "/logs" },
-  { icon: Settings, label: "Aparência", path: "/configuracoes" },
-];
+function navItems(user: User | null): NavItem[] {
+  const items: NavItem[] = [
+    { icon: Grid, label: "Apps", path: "/apps" },
+    { icon: Database, label: "Data Browser", path: "/data-browser" },
+    { icon: Activity, label: "Logs", path: "/logs" },
+    { icon: Settings, label: "Aparência", path: "/configuracoes" },
+  ];
+  if (user?.role === "superadmin") {
+    items.splice(2, 0, { icon: Users, label: "Usuários", path: "/usuarios" });
+  }
+  return items;
+}
 
 export default function DashboardShell({ user }: { user: User | null }) {
   const qc = useQueryClient();
@@ -138,7 +143,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
         <nav
           style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}
         >
-          {NAV_ITEMS.map(({ icon: Icon, label, path }) => (
+          {navItems(user).map(({ icon: Icon, label, path }) => (
             <NavLink
               key={path}
               to={path}

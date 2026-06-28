@@ -15,11 +15,11 @@ var ErrNotFound = errors.New("not found")
 
 // DashboardUser represents a row in zeep_system.dashboard_users.
 type DashboardUser struct {
-	ID           string
-	Email        string
-	PasswordHash string
-	Role         string
-	CreatedAt    time.Time
+	ID           string    `json:"id"`
+	Email        string    `json:"email"`
+	PasswordHash string    `json:"-"`
+	Role         string    `json:"role"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 // GetUserByEmail fetches a dashboard user by email.
@@ -106,6 +106,60 @@ func BootstrapFirstSuperadmin(ctx context.Context, pool *db.Pool, email, passwor
 	}
 
 	return true, tx.Commit(ctx)
+}
+
+// ListUsers returns all dashboard users (password hash excluded from results).
+func ListUsers(ctx context.Context, pool *db.Pool) ([]*DashboardUser, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT id, email, role, created_at
+		 FROM zeep_system.dashboard_users
+		 ORDER BY created_at DESC`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("dashboard: list users: %w", err)
+	}
+	defer rows.Close()
+
+	var users []*DashboardUser
+	for rows.Next() {
+		var u DashboardUser
+		if err := rows.Scan(&u.ID, &u.Email, &u.Role, &u.CreatedAt); err != nil {
+			return nil, fmt.Errorf("dashboard: list users scan: %w", err)
+		}
+		users = append(users, &u)
+	}
+	return users, nil
+}
+
+// GetUser fetches a dashboard user by ID (without password hash).
+func GetUser(ctx context.Context, pool *db.Pool, id string) (*DashboardUser, error) {
+	var u DashboardUser
+	err := pool.QueryRow(ctx,
+		`SELECT id, email, role, created_at
+		 FROM zeep_system.dashboard_users WHERE id = $1`,
+		id,
+	).Scan(&u.ID, &u.Email, &u.Role, &u.CreatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("dashboard: get user: %w", err)
+	}
+	return &u, nil
+}
+
+// DeleteUser removes a dashboard user by ID.
+func DeleteUser(ctx context.Context, pool *db.Pool, id string) error {
+	tag, err := pool.Exec(ctx,
+		`DELETE FROM zeep_system.dashboard_users WHERE id = $1`, id,
+	)
+	if err != nil {
+		return fmt.Errorf("dashboard: delete user: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // DeleteExpiredSessions removes sessions past their expiry time.

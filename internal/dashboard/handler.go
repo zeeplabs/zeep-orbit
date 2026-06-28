@@ -87,8 +87,8 @@ func (h *Handler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(body.Password) < 12 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password must be at least 12 characters"})
+	if len(body.Password) < 8 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password must be at least 8 characters"})
 		return
 	}
 
@@ -287,6 +287,114 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		"email": user.Email,
 		"role":  user.Role,
 	})
+}
+
+// ListUsers handles GET /dashboard/api/users
+func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	if user.Role != "superadmin" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+
+	users, err := ListUsers(r.Context(), h.pool)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	if users == nil {
+		users = []*DashboardUser{}
+	}
+	writeJSON(w, http.StatusOK, users)
+}
+
+// CreateUser handles POST /dashboard/api/users
+func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	if user.Role != "superadmin" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
+	var body struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+		Role     string `json:"role"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	if body.Email == "" || body.Password == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "email and password are required"})
+		return
+	}
+	if body.Role != "admin" && body.Role != "superadmin" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "role must be 'admin' or 'superadmin'"})
+		return
+	}
+	if len(body.Password) < 8 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password must be at least 8 characters"})
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(body.Password), 12)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	newUser, err := CreateUser(r.Context(), h.pool, body.Email, string(hash), body.Role)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]string{
+		"id":    newUser.ID,
+		"email": newUser.Email,
+		"role":  newUser.Role,
+	})
+}
+
+// DeleteUser handles DELETE /dashboard/api/users/{id}
+func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
+	currentUser, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	if currentUser.Role != "superadmin" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+
+	targetID := chi.URLParam(r, "id")
+	if targetID == currentUser.ID {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "cannot delete yourself"})
+		return
+	}
+
+	if err := DeleteUser(r.Context(), h.pool, targetID); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ListApps handles GET /dashboard/api/apps

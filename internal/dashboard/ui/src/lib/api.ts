@@ -115,6 +115,58 @@ export function useDeleteApp(): UseMutationResult<void, Error, string> {
   })
 }
 
+// ── Users ──────────────────────────────────────────────────────────────────────
+
+export interface UserDef {
+  id: string
+  email: string
+  role: string
+  created_at: string
+}
+
+export interface CreateUserInput {
+  email: string
+  password: string
+  role: string
+}
+
+export function useUsers(): UseQueryResult<UserDef[]> {
+  return useQuery({
+    queryKey: ['users'],
+    queryFn: () => apiFetch<UserDef[]>('/dashboard/api/users'),
+  })
+}
+
+export function useCreateUser(): UseMutationResult<
+  { id: string; email: string; role: string },
+  Error,
+  CreateUserInput
+> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input) =>
+      apiFetch('/dashboard/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['users'] })
+    },
+  })
+}
+
+export function useDeleteUser(): UseMutationResult<void, Error, string> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<void>(`/dashboard/api/users/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['users'] })
+    },
+  })
+}
+
 // ── Bootstrap / Config ──────────────────────────────────────────────────────────
 
 export interface BootstrapStatus {
