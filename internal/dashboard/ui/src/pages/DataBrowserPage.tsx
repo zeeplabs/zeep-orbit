@@ -131,7 +131,10 @@ export default function DataBrowserPage() {
   const [limit] = useState(50);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-  const [filterDraft, setFilterDraft] = useState<Record<string, { op: string; value: string }>>({});
+  const [filterRules, setFilterRules] = useState<Array<{ col: string; op: string; value: string }>>([]);
+  const [draftCol, setDraftCol] = useState("");
+  const [draftOp, setDraftOp] = useState("eq");
+  const [draftValue, setDraftValue] = useState("");
   const [isExporting, setIsExporting] = useState(false);
 
   // CRUD state
@@ -141,10 +144,10 @@ export default function DataBrowserPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const activeFilters: Record<string, string> = {};
-  for (const [col, f] of Object.entries(filterDraft)) {
-    if (f.value.trim()) activeFilters[col] = `${f.op}.${f.value.trim()}`;
+  for (const r of filterRules) {
+    if (r.value.trim()) activeFilters[r.col] = `${r.op}.${r.value.trim()}`;
   }
-  const activeFilterCount = Object.keys(activeFilters).length;
+  const activeFilterCount = filterRules.length;
 
   const { data: apps, isLoading: appsLoading } = useDataBrowserApps();
   const {
@@ -181,19 +184,28 @@ export default function DataBrowserPage() {
     setSelectedTable({ app: app.name, table: table.name, columns: table.columns });
     setPageOffset(0);
     setSortOrder(undefined);
-    setFilterDraft({});
+    setFilterRules([]);
+    setDraftCol("");
+    setDraftValue("");
   };
 
-  const handleFilterChange = (col: string, field: "op" | "value", val: string) => {
-    setFilterDraft((prev) => ({
-      ...prev,
-      [col]: { op: prev[col]?.op || "eq", value: prev[col]?.value || "", [field]: val },
-    }));
+  const addFilterRule = () => {
+    if (!draftCol || !draftValue.trim()) return;
+    setFilterRules((prev) => [
+      ...prev.filter((r) => r.col !== draftCol),
+      { col: draftCol, op: draftOp, value: draftValue.trim() },
+    ]);
+    setDraftValue("");
+    setPageOffset(0);
+  };
+
+  const removeFilterRule = (col: string) => {
+    setFilterRules((prev) => prev.filter((r) => r.col !== col));
     setPageOffset(0);
   };
 
   const clearFilters = () => {
-    setFilterDraft({});
+    setFilterRules([]);
     setPageOffset(0);
   };
 
@@ -572,64 +584,130 @@ export default function DataBrowserPage() {
                   padding: "10px 16px",
                   borderBottom: "1px solid rgba(255,255,255,0.06)",
                   display: "flex",
-                  flexWrap: "wrap",
+                  flexDirection: "column",
                   gap: 8,
-                  alignItems: "flex-end",
                 }}
               >
-                {columns.map((col) => (
-                  <div key={col.name} style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 140 }}>
-                    <span style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 500 }}>{col.name}</span>
-                    <div style={{ display: "flex", gap: 2 }}>
-                      <select
-                        value={filterDraft[col.name]?.op || "eq"}
-                        onChange={(e) => handleFilterChange(col.name, "op", e.target.value)}
+                {/* Add rule row */}
+                <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                  <select
+                    value={draftCol}
+                    onChange={(e) => setDraftCol(e.target.value)}
+                    style={{
+                      padding: "5px 8px",
+                      borderRadius: 6,
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      background: "rgba(255,255,255,0.03)",
+                      color: draftCol ? "var(--text)" : "var(--text-muted)",
+                      fontSize: 12,
+                      cursor: "pointer",
+                      minWidth: 130,
+                    }}
+                  >
+                    <option value="">Coluna...</option>
+                    {columns.map((col) => (
+                      <option key={col.name} value={col.name}>{col.name}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={draftOp}
+                    onChange={(e) => setDraftOp(e.target.value)}
+                    style={{
+                      padding: "5px 8px",
+                      borderRadius: 6,
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      background: "rgba(255,255,255,0.03)",
+                      color: "var(--text)",
+                      fontSize: 12,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {FILTER_OPERATORS.map((op) => (
+                      <option key={op.value} value={op.value}>{op.label}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    value={draftValue}
+                    onChange={(e) => setDraftValue(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") addFilterRule(); }}
+                    placeholder="valor"
+                    style={{
+                      padding: "5px 10px",
+                      borderRadius: 6,
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      background: "rgba(255,255,255,0.03)",
+                      color: "var(--text)",
+                      fontSize: 12,
+                      outline: "none",
+                      flex: 1,
+                      minWidth: 120,
+                      maxWidth: 220,
+                    }}
+                  />
+                  <Button
+                    size="sm"
+                    onClick={addFilterRule}
+                    disabled={!draftCol || !draftValue.trim()}
+                    style={{ fontSize: 12 }}
+                  >
+                    + Adicionar
+                  </Button>
+                </div>
+
+                {/* Active filter chips */}
+                {filterRules.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                    {filterRules.map((r) => (
+                      <div
+                        key={r.col}
                         style={{
-                          padding: "4px 6px",
-                          borderRadius: 6,
-                          border: "1px solid rgba(255,255,255,0.1)",
-                          background: "rgba(255,255,255,0.03)",
-                          color: "var(--text)",
-                          fontSize: 11,
-                          cursor: "pointer",
-                          flexShrink: 0,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 4,
+                          background: "rgba(var(--brand-primary-rgb),0.1)",
+                          border: "1px solid rgba(var(--brand-primary-rgb),0.2)",
+                          borderRadius: 999,
+                          padding: "3px 8px 3px 10px",
+                          fontSize: 12,
                         }}
                       >
-                        {FILTER_OPERATORS.map((op) => (
-                          <option key={op.value} value={op.value}>{op.label}</option>
-                        ))}
-                      </select>
-                      <input
-                        type="text"
-                        value={filterDraft[col.name]?.value || ""}
-                        onChange={(e) => handleFilterChange(col.name, "value", e.target.value)}
-                        placeholder="valor"
-                        style={{
-                          padding: "4px 8px",
-                          borderRadius: 6,
-                          border: "1px solid rgba(255,255,255,0.1)",
-                          background: filterDraft[col.name]?.value
-                            ? "rgba(var(--brand-primary-rgb),0.08)"
-                            : "rgba(255,255,255,0.03)",
-                          color: "var(--text)",
-                          fontSize: 12,
-                          outline: "none",
-                          width: 90,
-                        }}
-                      />
-                    </div>
+                        <span style={{ fontWeight: 600, color: "var(--brand-primary)" }}>{r.col}</span>
+                        <span style={{ color: "var(--text-muted)", margin: "0 1px" }}>
+                          {FILTER_OPERATORS.find((o) => o.value === r.op)?.label}
+                        </span>
+                        <span style={{ color: "var(--text)" }}>{r.value}</span>
+                        <button
+                          onClick={() => removeFilterRule(r.col)}
+                          style={{
+                            marginLeft: 4,
+                            border: "none",
+                            background: "transparent",
+                            color: "var(--text-muted)",
+                            cursor: "pointer",
+                            padding: 0,
+                            display: "flex",
+                            alignItems: "center",
+                          }}
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      onClick={clearFilters}
+                      style={{
+                        fontSize: 11,
+                        color: "#ef4444",
+                        background: "transparent",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: "2px 6px",
+                      }}
+                    >
+                      Limpar tudo
+                    </button>
                   </div>
-                ))}
-                {activeFilterCount > 0 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={clearFilters}
-                    style={{ fontSize: 11, alignSelf: "flex-end", color: "#ef4444" }}
-                  >
-                    <X size={12} style={{ marginRight: 4 }} />
-                    Limpar
-                  </Button>
                 )}
               </div>
             )}
