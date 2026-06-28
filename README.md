@@ -64,13 +64,82 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/billing/invoices
 ### Docker Compose
 
 ```bash
-git clone https://github.com/zeeplabs/zeep-orbit
-cd zeep-orbit
-cp .env.example .env
+docker pull ghcr.io/zeeplabs/zeep-orbit:latest
+
+docker run -d \
+  --name zeep-orbit \
+  -p 8080:8080 \
+  -e DATABASE_URL=postgres://user:pass@host:5432/db \
+  -e DASHBOARD_BOOTSTRAP_SECRET=my-secret \
+  ghcr.io/zeeplabs/zeep-orbit:latest
+```
+
+Then visit **http://localhost:8080/dashboard** to complete the first-time setup.
+
+### Docker Compose
+
+Create a `docker-compose.yml`:
+
+```yaml
+services:
+  zeep:
+    image: ghcr.io/zeeplabs/zeep-orbit:latest
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgres://zeep:zeep@db:5432/zeep?sslmode=disable
+      DASHBOARD_BOOTSTRAP_SECRET: change-me
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: zeep
+      POSTGRES_PASSWORD: zeep
+      POSTGRES_DB: zeep
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zeep"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
+```
+
+```bash
 docker compose up -d
 ```
 
-Visit **http://localhost:8080/dashboard** to access the management dashboard.
+### Quick start with Docker
+
+```bash
+docker pull ghcr.io/zeeplabs/zeep-orbit:latest
+
+# Create a sample apps.yaml
+cat > apps.yaml << 'EOF'
+apps:
+  - name: myapp
+    auth:
+      jwt_secret: my-secret-key
+    tables:
+      - name: items
+        columns:
+          - { name: title, type: text }
+EOF
+
+docker run -d \
+  --name zeep-orbit \
+  -p 8080:8080 \
+  -v $(pwd)/apps.yaml:/app/apps.yaml:ro \
+  -e DATABASE_URL=postgres://user:pass@host:5432/db \
+  -e DASHBOARD_BOOTSTRAP_SECRET=my-secret \
+  ghcr.io/zeeplabs/zeep-orbit:latest
+```
 
 ### Binary
 

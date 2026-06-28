@@ -112,6 +112,7 @@ probes:
 # ── Secrets (obrigatório) ───────────────────────────────
 secrets:
   databaseUrl: ""
+  dashboardBootstrapSecret: ""
   # google:
   #   clientId: "..."
   #   clientSecret: "..."
