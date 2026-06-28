@@ -27,7 +27,7 @@ type DashboardUser struct {
 func GetUserByEmail(ctx context.Context, pool *db.Pool, email string) (*DashboardUser, error) {
 	var u DashboardUser
 	err := pool.QueryRow(ctx,
-		`SELECT id, email, password_hash, google_id, role, created_at
+		`SELECT id, email, password_hash, COALESCE(google_id, ''), role, created_at
 		 FROM zeep_system.dashboard_users WHERE email = $1`,
 		email,
 	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.GoogleID, &u.Role, &u.CreatedAt)
@@ -44,7 +44,7 @@ func GetUserByEmail(ctx context.Context, pool *db.Pool, email string) (*Dashboar
 func GetUserByGoogleID(ctx context.Context, pool *db.Pool, googleID string) (*DashboardUser, error) {
 	var u DashboardUser
 	err := pool.QueryRow(ctx,
-		`SELECT id, email, password_hash, google_id, role, created_at
+		`SELECT id, email, password_hash, COALESCE(google_id, ''), role, created_at
 		 FROM zeep_system.dashboard_users WHERE google_id = $1`,
 		googleID,
 	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.GoogleID, &u.Role, &u.CreatedAt)
@@ -232,7 +232,7 @@ func CreateSession(ctx context.Context, pool *db.Pool, token, userID string, exp
 func GetSessionUser(ctx context.Context, pool *db.Pool, token string) (*DashboardUser, error) {
 	var u DashboardUser
 	err := pool.QueryRow(ctx,
-		`SELECT u.id, u.email, u.password_hash, u.google_id, u.role, u.created_at
+		`SELECT u.id, u.email, u.password_hash, COALESCE(u.google_id, ''), u.role, u.created_at
 		 FROM zeep_system.sessions s
 		 JOIN zeep_system.dashboard_users u ON u.id = s.user_id
 		 WHERE s.token = $1 AND s.expires_at > now()`,
