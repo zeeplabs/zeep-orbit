@@ -34,11 +34,17 @@ type Handler struct {
 
 // NewHandler creates a new Handler.
 func NewHandler(pool *db.Pool, reg *registry.Registry) *Handler {
+	bufSize := 2000
+	if v := os.Getenv("DASHBOARD_LOG_BUFFER_SIZE"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			bufSize = n
+		}
+	}
 	return &Handler{
 		pool: pool,
 		reg:  reg,
 		prov: provisioner.New(pool),
-		Logs: NewRingBuffer(2000),
+		Logs: NewRingBuffer(bufSize),
 	}
 }
 
@@ -303,6 +309,134 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		"email": user.Email,
 		"role":  user.Role,
 	})
+}
+
+// ChangeMyPassword handles PUT /dashboard/api/me/password
+// Authenticated user changes own password (requires current password).
+func (h *Handler) ChangeMyPassword(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
+	var body struct {
+		CurrentPassword string `json:"current_password"`
+		NewPassword     string `json:"new_password"`
+		ConfirmPassword string `json:"confirm_password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	if body.CurrentPassword == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "current_password is required"})
+		return
+	}
+	if body.NewPassword == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "new_password is required"})
+		return
+	}
+	if len(body.NewPassword) < 8 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "new password must be at least 8 characters"})
+		return
+	}
+	if body.NewPassword != body.ConfirmPassword {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "new password and confirmation do not match"})
+		return
+	}
+
+	// Fetch current user to verify current password
+	fullUser, err := GetUserByEmail(r.Context(), h.pool, user.Email)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	if fullUser.PasswordHash == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "cannot change password for Google-only accounts. Use Google sign-in."})
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(fullUser.PasswordHash), []byte(body.CurrentPassword)); err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "current password is incorrect"})
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(body.NewPassword), 12)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	if err := UpdatePassword(r.Context(), h.pool, user.ID, string(hash)); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update password"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "password updated successfully"})
+}
+
+// ChangeUserPassword handles PUT /dashboard/api/users/{id}/password
+// Superadmin changes any user's password (no current password required).
+func (h *Handler) ChangeUserPassword(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	if user.Role != "superadmin" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+
+	targetID := chi.URLParam(r, "id")
+	if targetID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "user id is required"})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
+	var body struct {
+		NewPassword     string `json:"new_password"`
+		ConfirmPassword string `json:"confirm_password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	if body.NewPassword == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "new_password is required"})
+		return
+	}
+	if len(body.NewPassword) < 8 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "new password must be at least 8 characters"})
+		return
+	}
+	if body.NewPassword != body.ConfirmPassword {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "new password and confirmation do not match"})
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(body.NewPassword), 12)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	if err := UpdatePassword(r.Context(), h.pool, targetID, string(hash)); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update password"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "password updated successfully"})
 }
 
 // ListUsers handles GET /dashboard/api/users
@@ -1160,6 +1294,160 @@ func (h *Handler) DataBrowserDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"success": true})
+}
+
+// appUserRequest is the JSON body for app user list params.
+type appUserListParams struct {
+	Search string `json:"search"`
+	Limit  int    `json:"limit"`
+	Offset int    `json:"offset"`
+}
+
+// ListAppUsers handles GET /dashboard/api/apps/{id}/users
+// Lists users registered in an app's _auth_users table.
+func (h *Handler) ListAppUsers(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appID := chi.URLParam(r, "id")
+	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "app not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	schema := "app_" + app.Name
+
+	// Ensure _auth_users has the latest columns (active, provider, etc.)
+	if err := h.prov.EnsureAuthUserColumns(r.Context(), schema); err != nil {
+		// Non-fatal — best effort. If it fails, we still try the query.
+	}
+
+	search := r.URL.Query().Get("search")
+	limit := 50
+	offset := 0
+	if l, err := parseInt(r.URL.Query().Get("limit")); err == nil && l > 0 && l <= 100 {
+		limit = l
+	}
+	if o, err := parseInt(r.URL.Query().Get("offset")); err == nil && o >= 0 {
+		offset = o
+	}
+
+	users, total, err := ListAppUsers(r.Context(), h.pool, schema, search, limit, offset)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list users"})
+		return
+	}
+
+	counts, err := CountAppUsersByProvider(r.Context(), h.pool, schema)
+	if err != nil {
+		counts = []*AppUserProviderCount{}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data":          users,
+		"total":         total,
+		"limit":         limit,
+		"offset":        offset,
+		"providerCounts": counts,
+	})
+}
+
+// DeactivateAppUser handles PUT /dashboard/api/apps/{id}/users/{userId}/deactivate
+func (h *Handler) DeactivateAppUser(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appID := chi.URLParam(r, "id")
+	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "app not found"})
+		return
+	}
+
+	userID := chi.URLParam(r, "userId")
+	schema := "app_" + app.Name
+	h.prov.EnsureAuthUserColumns(r.Context(), schema)
+	if err := DeactivateAppUser(r.Context(), h.pool, schema, userID); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to deactivate user"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "user deactivated"})
+}
+
+// ActivateAppUser handles PUT /dashboard/api/apps/{id}/users/{userId}/activate
+func (h *Handler) ActivateAppUser(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appID := chi.URLParam(r, "id")
+	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "app not found"})
+		return
+	}
+
+	userID := chi.URLParam(r, "userId")
+	schema := "app_" + app.Name
+	h.prov.EnsureAuthUserColumns(r.Context(), schema)
+	if err := ActivateAppUser(r.Context(), h.pool, schema, userID); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to activate user"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "user activated"})
+}
+
+// ResetAppUserSessions handles POST /dashboard/api/apps/{id}/users/{userId}/reset-sessions
+func (h *Handler) ResetAppUserSessions(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appID := chi.URLParam(r, "id")
+	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "app not found"})
+		return
+	}
+
+	userID := chi.URLParam(r, "userId")
+	schema := "app_" + app.Name
+	h.prov.EnsureAuthUserColumns(r.Context(), schema)
+	if err := ResetAppUserSessions(r.Context(), h.pool, schema, userID); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "no sessions found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to reset sessions"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "sessions reset"})
 }
 
 func parseInt(s string) (int, error) {
