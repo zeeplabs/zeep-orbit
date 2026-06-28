@@ -4,3 +4,4 @@ bin/
 *.test
 test-local/
 internal/dashboard/ui/node_modules/
+internal/dashboard/static/
