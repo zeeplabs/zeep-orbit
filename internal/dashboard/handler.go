@@ -121,6 +121,74 @@ func (h *Handler) BootstrapStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"bootstrapped": ok})
 }
 
+// Config handles GET /dashboard/api/config
+// Reads from zeep_system.brand_config, falling back to environment defaults.
+func (h *Handler) Config(w http.ResponseWriter, r *http.Request) {
+	cfg, err := GetBrandConfig(r.Context(), h.pool)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	theme := os.Getenv("BRAND_THEME")
+	if theme == "" {
+		theme = "azure"
+	}
+	company := os.Getenv("BRAND_COMPANY_NAME")
+	if company == "" {
+		company = "Zeep Tecnologia"
+	}
+
+	if cfg != nil {
+		theme = cfg.Theme
+		company = cfg.CompanyName
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"theme":        theme,
+		"company_name": company,
+	})
+}
+
+// UpdateConfig handles PUT /dashboard/api/config
+// Updates the brand_config singleton row. Requires superadmin.
+func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	if user.Role != "superadmin" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
+	var body struct {
+		Theme       string `json:"theme"`
+		CompanyName string `json:"company_name"`
+		LogoURL     string `json:"logo_url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	validThemes := map[string]bool{"azure": true, "emerald": true, "ruby": true, "amber": true, "orange": true}
+	if body.Theme != "" && !validThemes[body.Theme] {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid theme"})
+		return
+	}
+
+	cfg, err := UpsertBrandConfig(r.Context(), h.pool, body.Theme, body.CompanyName, body.LogoURL)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, cfg)
+}
+
 // Login handles POST /dashboard/api/login
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1024)

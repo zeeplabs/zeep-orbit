@@ -28,6 +28,11 @@ spec:
           envFrom:
             - secretRef:
                 name: zeep-orbit-secret
+          env:
+            - name: BRAND_THEME
+              value: "azure"
+            - name: BRAND_COMPANY_NAME
+              value: "Zeep Tecnologia"
           volumeMounts:
             - name: config
               mountPath: /app/apps.yaml

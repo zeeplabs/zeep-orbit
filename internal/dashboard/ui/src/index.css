@@ -33,21 +33,34 @@
 }
 
 :root {
+  /* Brand defaults (azure) — overridden at runtime by useTheme */
+  --brand-primary: #0347A5;
+  --brand-secondary: #7C3AED;
+  --brand-tertiary: #EC4899;
+  --brand-primary-rgb: 3, 71, 165;
+  --brand-secondary-rgb: 124, 58, 237;
+  --brand-light: #B3D1FF;
+
   --bg: #0A0A0F;
   --text: #F8FAFC;
   --text-muted: #94A3B8;
-  --accent-light: #B3D1FF;
-  --accent-purple: #7C3AED;
-  --accent-pink: #EC4899;
 
-  /* shadcn CSS vars — dark theme */
+  /* Override @theme generated colors so Tailwind utilities follow brand vars */
+  --color-primary: var(--brand-primary);
+  --color-ring: var(--brand-primary);
+  --color-accent: var(--brand-secondary);
+  --color-accent-light: var(--brand-light);
+  --color-accent-purple: var(--brand-secondary);
+  --color-accent-pink: var(--brand-tertiary);
+
+  /* shadcn CSS vars — dark theme, reference brand vars */
   --background: #0A0A0F;
   --foreground: #F8FAFC;
   --card: rgba(255,255,255,0.04);
   --card-foreground: #F8FAFC;
   --popover: #0D0D14;
   --popover-foreground: #F8FAFC;
-  --primary: #0347A5;
+  --primary: var(--brand-primary);
   --primary-foreground: #F8FAFC;
   --secondary: rgba(255,255,255,0.06);
   --secondary-foreground: #F8FAFC;
@@ -59,7 +72,7 @@
   --destructive-foreground: #F8FAFC;
   --border: rgba(255,255,255,0.10);
   --input: rgba(255,255,255,0.10);
-  --ring: #0347A5;
+  --ring: var(--brand-primary);
   --radius: 0.75rem;
 }
 
@@ -80,4 +93,27 @@ body {
 @keyframes shimmer {
   0%   { transform: translateX(-100%); }
   100% { transform: translateX(100%); }
+}
+
+/* Brand-aware utility classes */
+.brand-focus {
+  outline: none;
+}
+.brand-focus:focus-visible {
+  --tw-ring-color: rgba(var(--brand-primary-rgb), 0.4);
+  --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
+  --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);
+  box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+  border-color: rgba(var(--brand-primary-rgb), 0.6);
+}
+
+.brand-border-hover {
+  border-color: rgba(255,255,255,0.06);
+}
+.brand-border-hover:hover {
+  border-color: rgba(var(--brand-primary-rgb), 0.2);
+}
+
+.brand-accent-bar {
+  background: linear-gradient(to right, rgba(var(--brand-primary-rgb), 0.4), rgba(var(--brand-secondary-rgb), 0.4), transparent);
 }

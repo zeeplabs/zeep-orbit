@@ -66,6 +66,20 @@ func cmdServe() *cobra.Command {
 				os.Exit(1)
 			}
 
+			brandTheme := os.Getenv("BRAND_THEME")
+			if brandTheme == "" {
+				brandTheme = "azure"
+			}
+			companyName := os.Getenv("BRAND_COMPANY_NAME")
+			if companyName == "" {
+				companyName = "Zeep Tecnologia"
+			}
+			// Seed the brand_config singleton row from env vars on first startup.
+			if _, err := dashboard.UpsertBrandConfig(context.Background(), pool, brandTheme, companyName, ""); err != nil {
+				fmt.Fprintf(os.Stderr, "error seeding brand config: %v\n", err)
+				os.Exit(1)
+			}
+
 			reg := registry.New()
 			if err := reg.LoadFromDB(context.Background(), pool); err != nil {
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)

@@ -64,15 +64,20 @@ function AppCard({ app, index, onEdit, onDelete }: AppCardProps) {
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease, delay: index * 0.07 }}
-      className="group relative rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5 transition-all duration-200 hover:border-[#0347A5]/20 hover:bg-white/[0.06]"
+      className="group relative rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5 transition-all duration-200 hover:bg-white/[0.06] brand-border-hover"
     >
       {/* Gradient accent bar on hover */}
-      <div className="absolute left-5 right-5 top-0 h-[2px] rounded-full bg-gradient-to-r from-[#0347A5]/40 via-[#7C3AED]/40 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+      <div className="absolute left-5 right-5 top-0 h-[2px] rounded-full brand-accent-bar opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
 
       {/* Avatar + name + badges */}
       <div className="flex items-start gap-3.5">
         {/* Initial */}
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#0347A5]/15 to-[#7C3AED]/15 border border-white/[0.06] text-[15px] font-extrabold text-[#B3D1FF]">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.06] text-[15px] font-extrabold"
+          style={{
+            background: 'linear-gradient(to bottom right, rgba(var(--brand-primary-rgb), 0.15), rgba(var(--brand-secondary-rgb), 0.15))',
+            color: 'var(--brand-light)',
+          }}
+        >
           {initial}
         </div>
 
@@ -83,8 +88,13 @@ function AppCard({ app, index, onEdit, onDelete }: AppCardProps) {
 
           <div className="flex flex-wrap gap-1.5">
             <Badge
-              className="gap-1 border-[#0347A5]/20 bg-[#0347A5]/10 text-[10px] text-[#B3D1FF] hover:bg-[#0347A5]/20"
+              className="gap-1 text-[10px]"
               variant="outline"
+              style={{
+                borderColor: 'rgba(var(--brand-primary-rgb), 0.2)',
+                backgroundColor: 'rgba(var(--brand-primary-rgb), 0.1)',
+                color: 'var(--brand-light)',
+              }}
             >
               <Table2 size={10} strokeWidth={1.5} />
               {app.tables?.length ?? 0}{" "}
@@ -95,10 +105,14 @@ function AppCard({ app, index, onEdit, onDelete }: AppCardProps) {
               className={cn(
                 "gap-1 text-[10px]",
                 app.auth_email_enabled
-                  ? "border-purple-500/20 bg-[#7C3AED]/10 text-purple-300 hover:bg-[#7C3AED]/20"
+                  ? "text-purple-300 hover:bg-white/[0.08]"
                   : "border-white/[0.10] bg-white/[0.05] text-[#94A3B8] hover:bg-white/[0.08]",
               )}
               variant="outline"
+              style={app.auth_email_enabled ? {
+                borderColor: 'rgba(var(--brand-secondary-rgb), 0.2)',
+                backgroundColor: 'rgba(var(--brand-secondary-rgb), 0.1)',
+              } : undefined}
             >
               {app.auth_email_enabled ? (
                 <Mail size={10} strokeWidth={1.5} />
@@ -159,12 +173,16 @@ function EmptyState({ onCreateClick }: { onCreateClick: () => void }) {
           <motion.div
             animate={{ y: [0, -6, 0] }}
             transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
-            className="mx-auto mb-5 flex size-16 items-center justify-center rounded-[18px] border border-[#0347A5]/20 bg-[#0347A5]/12"
+            className="mx-auto mb-5 flex size-16 items-center justify-center rounded-[18px]"
+            style={{
+              borderColor: 'rgba(var(--brand-primary-rgb), 0.2)',
+              backgroundColor: 'rgba(var(--brand-primary-rgb), 0.12)',
+            }}
           >
             <LayoutGrid
               size={28}
               strokeWidth={1.5}
-              className="text-[#B3D1FF]"
+              style={{ color: 'var(--brand-light)' }}
             />
           </motion.div>
 
@@ -181,7 +199,10 @@ function EmptyState({ onCreateClick }: { onCreateClick: () => void }) {
           >
             <Button
               onClick={onCreateClick}
-              className="gap-2 rounded-3xl bg-gradient-to-br from-[#0347A5] to-[#7C3AED] px-[22px] py-2.5 text-sm font-semibold text-white hover:opacity-90"
+              className="gap-2 rounded-3xl px-[22px] py-2.5 text-sm font-semibold text-white border-0 hover:opacity-90"
+              style={{
+                background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))',
+              }}
             >
               Criar App
               <span className="flex size-[22px] items-center justify-center rounded-full bg-white/[0.15]">
@@ -233,7 +254,13 @@ export default function AppsPage() {
       <div className="relative z-10">
         {/* Header */}
         <motion.div {...fadeUp} className="mb-9">
-          <span className="mb-3 inline-block rounded-full border border-[#0347A5]/20 bg-[#0347A5]/12 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[#B3D1FF]">
+          <span className="mb-3 inline-block rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em]"
+            style={{
+              borderColor: 'rgba(var(--brand-primary-rgb), 0.2)',
+              backgroundColor: 'rgba(var(--brand-primary-rgb), 0.12)',
+              color: 'var(--brand-light)',
+            }}
+          >
             Apps
           </span>
 
@@ -254,7 +281,10 @@ export default function AppsPage() {
             >
               <Button
                 onClick={() => navigate("/apps/new")}
-                className="gap-2 rounded-3xl bg-gradient-to-br from-[#0347A5] to-[#7C3AED] px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90"
+                className="gap-2 rounded-3xl px-5 py-2.5 text-sm font-semibold text-white border-0 hover:opacity-90"
+                style={{
+                  background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))',
+                }}
               >
                 Criar App
                 <span className="flex size-6 items-center justify-center rounded-full bg-white/[0.12]">

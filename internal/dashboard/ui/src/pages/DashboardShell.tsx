@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Navigate, NavLink, Outlet } from "react-router-dom";
 import { motion } from "framer-motion";
-import { LogOut, Grid, Database, Users, Activity } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { LogOut, Grid, Database, Users, Activity, Settings } from "lucide-react";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -27,12 +27,24 @@ const NAV_ITEMS: NavItem[] = [
   { icon: Database, label: "Data Browser", path: "/data-browser" },
   { icon: Users, label: "Usuários", path: "/usuarios" },
   { icon: Activity, label: "Logs", path: "/logs" },
+  { icon: Settings, label: "Aparência", path: "/configuracoes" },
 ];
 
 export default function DashboardShell({ user }: { user: User | null }) {
   const qc = useQueryClient();
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+
+  const { data: brandConfig } = useQuery({
+    queryKey: ["brand-config"],
+    queryFn: async () => {
+      const res = await fetch("/dashboard/api/config");
+      return res.json() as Promise<{ theme: string; company_name: string }>;
+    },
+    staleTime: 30000,
+  });
+
+  const companyName = brandConfig?.company_name || "Orbit";
 
   if (!user) return <Navigate to="/login" replace />;
 
@@ -57,7 +69,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
         gridTemplateColumns: "240px 1fr",
         minHeight: "100vh",
         background:
-          "radial-gradient(ellipse at 20% 50%, rgba(3,71,165,0.15) 0%, transparent 50%), radial-gradient(ellipse at 80% 20%, rgba(124,58,237,0.15) 0%, transparent 50%), var(--bg)",
+          "radial-gradient(ellipse at 20% 50%, rgba(var(--brand-primary-rgb),0.15) 0%, transparent 50%), radial-gradient(ellipse at 80% 20%, rgba(var(--brand-secondary-rgb),0.15) 0%, transparent 50%), var(--bg)",
       }}
     >
       {/* Sidebar */}
@@ -97,8 +109,17 @@ export default function DashboardShell({ user }: { user: User | null }) {
             }}
           />
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 16, fontWeight: 700, lineHeight: 1 }}>
-              Orbit
+            <span
+              style={{
+              fontSize: 16,
+              fontWeight: 700,
+              lineHeight: 1.3,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {companyName}
             </span>
             <p
               style={{
@@ -129,7 +150,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
                 padding: "9px 12px",
                 borderRadius: 10,
                 border: "none",
-                background: isActive ? "rgba(3,71,165,0.12)" : "transparent",
+                background: isActive ? "rgba(var(--brand-primary-rgb), 0.12)" : "transparent",
                 color: isActive ? "var(--text)" : "var(--text-muted)",
                 cursor: "pointer",
                 fontSize: 14,
@@ -235,7 +256,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
           if (!open) setShowLogoutDialog(false);
         }}
       >
-        <DialogContent className="max-w-[380px] border border-white/[0.10] bg-[#0D0D14]/60 backdrop-blur-xl rounded-2xl p-0 gap-0 shadow-[0_0_40px_rgba(3,71,165,0.10)]">
+        <DialogContent className="max-w-[380px] border border-white/[0.10] bg-[#0D0D14]/60 backdrop-blur-xl rounded-2xl p-0 gap-0" style={{ boxShadow: '0 0 40px rgba(var(--brand-primary-rgb), 0.10)' }}>
           <div className="bg-white/[0.04] shadow-[inset_0_1px_1px_rgba(255,255,255,0.10)] rounded-[calc(1rem-2px)] px-7 pb-6 pt-7">
             <DialogHeader className="mb-0">
               <div className="w-11 h-11 rounded-xl bg-white/[0.08] border border-white/[0.10] flex items-center justify-center mb-[18px]">
@@ -264,7 +285,10 @@ export default function DashboardShell({ user }: { user: User | null }) {
               <Button
                 onClick={handleLogout}
                 disabled={loggingOut}
-                className="flex-1 rounded-xl bg-gradient-to-br from-[#0347A5] to-[#7C3AED] text-white font-semibold border-0 disabled:opacity-40"
+                className="flex-1 rounded-xl border-0 text-white font-semibold disabled:opacity-40"
+                style={{
+                  background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))',
+                }}
               >
                 {loggingOut ? "Saindo..." : "Sair"}
               </Button>

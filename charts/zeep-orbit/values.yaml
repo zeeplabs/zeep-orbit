@@ -29,6 +29,11 @@ secrets:
   #       jwtSecret: "gere-com-openssl-rand-base64-32"
   apps: {}
 
+# White-label branding
+brand:
+  theme: "azure"
+  companyName: "Zeep Tecnologia"
+
 # Conteúdo completo do apps.yaml — define quais apps e tabelas existem.
 # ${DATABASE_URL} e ${<APP>_JWT_SECRET} são substituídos pelos env vars do Secret.
 appsConfig: |

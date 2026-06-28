@@ -48,6 +48,17 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			app_id  UUID NOT NULL REFERENCES zeep_system.apps(id) ON DELETE CASCADE,
 			PRIMARY KEY (user_id, app_id)
 		)`,
+		`CREATE TABLE IF NOT EXISTS zeep_system.brand_config (
+			id           SERIAL      PRIMARY KEY,
+			theme        TEXT        NOT NULL DEFAULT 'azure',
+			company_name TEXT        NOT NULL DEFAULT 'Zeep Tecnologia',
+			logo_url     TEXT        NOT NULL DEFAULT '',
+			updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		// Ensure only one row via a unique constraint on a constant expression.
+		// This lets callers use INSERT ... ON CONFLICT with a known conflict target.
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_brand_config_singleton
+		 ON zeep_system.brand_config ((TRUE))`,
 	}
 
 	for _, stmt := range stmts {

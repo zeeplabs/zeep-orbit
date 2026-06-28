@@ -115,10 +115,16 @@ export function useDeleteApp(): UseMutationResult<void, Error, string> {
   })
 }
 
-// ── Bootstrap ──────────────────────────────────────────────────────────────────
+// ── Bootstrap / Config ──────────────────────────────────────────────────────────
 
 export interface BootstrapStatus {
   bootstrapped: boolean
+}
+
+export interface BrandConfig {
+  theme: string
+  company_name: string
+  logo_url: string
 }
 
 export function useBootstrapStatus(): UseQueryResult<BootstrapStatus> {
@@ -145,6 +151,33 @@ export function useBootstrap(): UseMutationResult<
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['bootstrap-status'] })
+    },
+  })
+}
+
+export function useBrandConfig(): UseQueryResult<BrandConfig> {
+  return useQuery({
+    queryKey: ['brand-config'],
+    queryFn: () => apiFetch<BrandConfig>('/dashboard/api/config'),
+    staleTime: 30000,
+  })
+}
+
+export function useUpdateBrandConfig(): UseMutationResult<
+  BrandConfig,
+  Error,
+  { theme?: string; company_name?: string; logo_url?: string }
+> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input) =>
+      apiFetch<BrandConfig>('/dashboard/api/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      }),
+    onSuccess: (data) => {
+      qc.setQueryData(['brand-config'], data)
     },
   })
 }

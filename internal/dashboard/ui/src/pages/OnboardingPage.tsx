@@ -42,12 +42,16 @@ function StepDots({ current }: { current: Step }) {
           className={cn(
             "h-2 rounded-full transition-all",
             i === idx
-              ? "w-5 bg-[#0347A5]"
+              ? "w-5"
               : i < idx
-                ? "w-2 bg-[#0347A5]/40"
+                ? "w-2"
                 : "w-2 bg-white/15"
           )}
-          style={{ transitionDuration: `${DURATION}s`, transitionTimingFunction: `cubic-bezier(${EASE.join(",")})` }}
+          style={{
+            backgroundColor: i === idx ? 'var(--brand-primary)' : i < idx ? 'rgba(var(--brand-primary-rgb), 0.4)' : undefined,
+            transitionDuration: `${DURATION}s`,
+            transitionTimingFunction: `cubic-bezier(${EASE.join(",")})`,
+          }}
         />
       ))}
     </div>
@@ -57,7 +61,11 @@ function StepDots({ current }: { current: Step }) {
 function WelcomeStep({ onNext }: { onNext: () => void }) {
   return (
     <div className="text-center">
-      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#0347A5] to-[#7C3AED] flex items-center justify-center mx-auto mb-6 text-[28px]">
+      <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 text-[28px]"
+        style={{
+          background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))',
+        }}
+      >
         ⚡
       </div>
       <h1 className="text-[26px] font-bold mb-3 tracking-tight leading-tight text-[#F8FAFC]">
@@ -69,7 +77,10 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
       </p>
       <Button
         onClick={onNext}
-        className="bg-gradient-to-br from-[#0347A5] to-[#7C3AED] border-0 text-white font-semibold px-8 py-[13px] h-auto rounded-lg hover:opacity-90 transition-opacity"
+        className="border-0 text-white font-semibold px-8 py-[13px] h-auto rounded-lg hover:opacity-90 transition-opacity"
+        style={{
+          background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))',
+        }}
       >
         Começar configuração
       </Button>
@@ -132,7 +143,7 @@ function CreateSuperadminStep({ onSuccess }: { onSuccess: () => void }) {
             onChange={(e) => setSecret(e.target.value)}
             required
             autoComplete="off"
-            className="bg-white/[0.06] border-white/10 text-[#F8FAFC] placeholder:text-white/30 focus-visible:ring-[#0347A5]/50 focus-visible:border-[#0347A5]/50 rounded-lg h-auto px-4 py-3 text-sm"
+            className="bg-white/[0.06] border-white/10 text-[#F8FAFC] placeholder:text-white/30 rounded-lg h-auto px-4 py-3 text-sm brand-focus"
           />
         </div>
         <div className="flex flex-col gap-1.5">
@@ -146,7 +157,7 @@ function CreateSuperadminStep({ onSuccess }: { onSuccess: () => void }) {
             onChange={(e) => setEmail(e.target.value)}
             required
             autoComplete="email"
-            className="bg-white/[0.06] border-white/10 text-[#F8FAFC] placeholder:text-white/30 focus-visible:ring-[#0347A5]/50 focus-visible:border-[#0347A5]/50 rounded-lg h-auto px-4 py-3 text-sm"
+            className="bg-white/[0.06] border-white/10 text-[#F8FAFC] placeholder:text-white/30 rounded-lg h-auto px-4 py-3 text-sm brand-focus"
           />
         </div>
         <div className="flex flex-col gap-1.5">
@@ -160,7 +171,7 @@ function CreateSuperadminStep({ onSuccess }: { onSuccess: () => void }) {
             onChange={(e) => setPassword(e.target.value)}
             required
             autoComplete="new-password"
-            className="bg-white/[0.06] border-white/10 text-[#F8FAFC] placeholder:text-white/30 focus-visible:ring-[#0347A5]/50 focus-visible:border-[#0347A5]/50 rounded-lg h-auto px-4 py-3 text-sm"
+            className="bg-white/[0.06] border-white/10 text-[#F8FAFC] placeholder:text-white/30 rounded-lg h-auto px-4 py-3 text-sm brand-focus"
           />
         </div>
         <div className="flex flex-col gap-1.5">
@@ -174,7 +185,7 @@ function CreateSuperadminStep({ onSuccess }: { onSuccess: () => void }) {
             onChange={(e) => setConfirmPassword(e.target.value)}
             required
             autoComplete="new-password"
-            className="bg-white/[0.06] border-white/10 text-[#F8FAFC] placeholder:text-white/30 focus-visible:ring-[#0347A5]/50 focus-visible:border-[#0347A5]/50 rounded-lg h-auto px-4 py-3 text-sm"
+            className="bg-white/[0.06] border-white/10 text-[#F8FAFC] placeholder:text-white/30 rounded-lg h-auto px-4 py-3 text-sm brand-focus"
           />
         </div>
         {error && (
@@ -185,7 +196,10 @@ function CreateSuperadminStep({ onSuccess }: { onSuccess: () => void }) {
         <Button
           type="submit"
           disabled={bootstrap.isPending}
-          className="bg-gradient-to-br from-[#0347A5] to-[#7C3AED] border-0 text-white font-semibold px-6 py-[13px] h-auto rounded-lg mt-1 hover:opacity-90 transition-opacity disabled:opacity-65"
+          className="border-0 text-white font-semibold px-6 py-[13px] h-auto rounded-lg mt-1 hover:opacity-90 transition-opacity disabled:opacity-65"
+          style={{
+            background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))',
+          }}
         >
           {bootstrap.isPending ? "Criando conta..." : "Criar superadmin"}
         </Button>
@@ -209,7 +223,10 @@ function DoneStep({ onComplete }: { onComplete: () => void }) {
       </p>
       <Button
         onClick={onComplete}
-        className="bg-gradient-to-br from-[#0347A5] to-[#7C3AED] border-0 text-white font-semibold px-8 py-[13px] h-auto rounded-lg hover:opacity-90 transition-opacity"
+        className="border-0 text-white font-semibold px-8 py-[13px] h-auto rounded-lg hover:opacity-90 transition-opacity"
+        style={{
+          background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))',
+        }}
       >
         Ir para o login
       </Button>
@@ -233,7 +250,7 @@ export default function OnboardingPage({ onComplete }: OnboardingPageProps) {
       className="min-h-screen flex items-center justify-center p-4"
       style={{
         background:
-          "radial-gradient(ellipse 60% 50% at 20% 60%, rgba(59,130,246,0.12) 0%, transparent 60%), radial-gradient(ellipse 50% 40% at 80% 20%, rgba(124,58,237,0.12) 0%, transparent 60%), #0A0A0F",
+          "radial-gradient(ellipse 60% 50% at 20% 60%, rgba(var(--brand-primary-rgb),0.12) 0%, transparent 60%), radial-gradient(ellipse 50% 40% at 80% 20%, rgba(var(--brand-secondary-rgb),0.12) 0%, transparent 60%), #0A0A0F",
       }}
     >
       {/* Outer bezel */}

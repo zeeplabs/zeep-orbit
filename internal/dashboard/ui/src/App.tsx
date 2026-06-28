@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Navigate, Routes, Route } from 'react-router-dom'
 import LoginPage from './pages/LoginPage'
@@ -5,7 +6,9 @@ import DashboardShell from './pages/DashboardShell'
 import OnboardingPage from './pages/OnboardingPage'
 import AppsPage from './pages/AppsPage'
 import AppFormPage from './pages/AppFormPage'
+import BrandSettingsPage from './pages/BrandSettingsPage'
 import { useBootstrapStatus } from './lib/api'
+import { THEMES, applyTheme } from './lib/themes'
 
 function LoadingScreen() {
   return (
@@ -15,7 +18,7 @@ function LoadingScreen() {
         alignItems: 'center',
         justifyContent: 'center',
         height: '100vh',
-        background: '#0A0A0F',
+        background: 'var(--bg)',
       }}
     >
       <div
@@ -28,6 +31,18 @@ function LoadingScreen() {
       </div>
     </div>
   )
+}
+
+function useTheme() {
+  useEffect(() => {
+    fetch('/dashboard/api/config', { cache: 'no-cache' })
+      .then((res) => res.json())
+      .then((config) => {
+        const theme = THEMES[config.theme] || THEMES.azure
+        applyTheme(theme)
+      })
+      .catch(() => {})
+  }, [])
 }
 
 function Placeholder({ label }: { label: string }) {
@@ -50,6 +65,8 @@ function Placeholder({ label }: { label: string }) {
 
 function App() {
   const qc = useQueryClient()
+
+  useTheme()
 
   const { data: status, isLoading: statusLoading } = useBootstrapStatus()
 
@@ -86,6 +103,7 @@ function App() {
         <Route path="/apps" element={<AppsPage />} />
         <Route path="/apps/new" element={<AppFormPage />} />
         <Route path="/apps/:id/edit" element={<AppFormPage />} />
+        <Route path="/configuracoes" element={<BrandSettingsPage />} />
         <Route path="/data-browser" element={<Placeholder label="Data Browser" />} />
         <Route path="/usuarios" element={<Placeholder label="Usuários" />} />
         <Route path="/logs" element={<Placeholder label="Logs" />} />

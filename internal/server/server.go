@@ -59,7 +59,8 @@ func New(reg *registry.Registry, pool *db.Pool, port int) (*Server, error) {
 	}
 
 	h := NewHandler(pool, reg)
-	r := newRouter(reg, h, pool, logger)
+	dashH := dashboard.NewHandler(pool, reg)
+	r := newRouter(reg, h, pool, logger, dashH)
 
 	s := &Server{
 		httpServer: &http.Server{
@@ -122,7 +123,7 @@ func buildLogger() (*zap.Logger, error) {
 }
 
 // newRouter monta o chi.Mux com todas as rotas e middlewares.
-func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Logger) *chi.Mux {
+func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Logger, dashH *dashboard.Handler) *chi.Mux {
 	r := chi.NewRouter()
 
 	// Middleware stack global
@@ -139,11 +140,12 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 	r.Get("/docs/{app}/openapi.json", dh.HandleSpec)
 
 	// Dashboard — deve vir antes dos wildcards /{app}
-	dashH := dashboard.NewHandler(pool, reg)
 	authLimiter := dashboard.NewRateLimiter(5, time.Minute)
 	r.Route("/dashboard", func(r chi.Router) {
 		r.Use(dashboard.SecurityHeaders)
+		r.Get("/api/config", dashH.Config)
 		r.Get("/api/bootstrap/status", dashH.BootstrapStatus)
+		r.Get("/api/config", dashH.Config)
 		r.With(authLimiter.Middleware).Post("/api/bootstrap", dashH.Bootstrap)
 		r.With(authLimiter.Middleware).Post("/api/login", dashH.Login)
 		r.Post("/api/logout", dashH.Logout)
@@ -153,6 +155,7 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Get("/api/apps/{id}", dashH.GetApp)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/apps/{id}", dashH.UpdateApp)
 		r.With(dashboard.RequireAuth(pool)).Delete("/api/apps/{id}", dashH.DeleteApp)
+		r.With(dashboard.RequireAuth(pool)).Put("/api/config", dashH.UpdateConfig)
 		r.Handle("/*", dashboard.StaticHandler())
 	})
 

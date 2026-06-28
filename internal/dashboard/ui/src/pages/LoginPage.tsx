@@ -40,21 +40,22 @@ export default function LoginPage() {
   };
 
   const inputClass =
-    "h-10 rounded-lg bg-white/[0.05] border border-white/[0.10] px-4 py-2.5 text-sm text-[#F8FAFC] placeholder:text-white/30 outline-none focus-visible:ring-2 focus-visible:ring-[#0347A5]/40 focus-visible:border-[#0347A5]/60 transition-colors";
+    "h-10 rounded-lg bg-white/[0.05] border border-white/[0.10] px-4 py-2.5 text-sm text-[#F8FAFC] placeholder:text-white/30 outline-none brand-focus transition-colors";
 
   return (
     <div
       className="flex min-h-screen items-center justify-center relative"
       style={{
         background:
-          "radial-gradient(ellipse at 20% 50%, rgba(3,71,165,0.15) 0%, transparent 50%), radial-gradient(ellipse at 80% 20%, rgba(124,58,237,0.15) 0%, transparent 50%), var(--bg)",
+          "radial-gradient(ellipse at 20% 50%, rgba(var(--brand-primary-rgb),0.15) 0%, transparent 50%), radial-gradient(ellipse at 80% 20%, rgba(var(--brand-secondary-rgb),0.15) 0%, transparent 50%), var(--bg)",
       }}
     >
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
-        className="w-[400px] border border-white/[0.10] bg-[#0D0D14]/60 backdrop-blur-xl rounded-2xl shadow-[0_0_40px_rgba(3,71,165,0.10)] p-8"
+        className="w-[400px] border border-white/[0.10] bg-[#0D0D14]/60 backdrop-blur-xl rounded-2xl p-8"
+      style={{ boxShadow: '0 0 40px rgba(var(--brand-primary-rgb), 0.10)' }}
       >
         {/* Header */}
         <div className="flex flex-col items-center mb-8">
@@ -112,9 +113,14 @@ export default function LoginPage() {
             className={cn(
               "h-10 rounded-lg text-sm font-bold text-white border-0 mt-1",
               loading
-                ? "bg-gradient-to-br from-[#0347A5]/50 to-[#7C3AED]/50 cursor-not-allowed"
-                : "bg-gradient-to-br from-[#0347A5] to-[#7C3AED] cursor-pointer hover:opacity-90",
+                ? "cursor-not-allowed opacity-50"
+                : "cursor-pointer hover:opacity-90",
             )}
+            style={{
+              background: loading
+                ? 'linear-gradient(to bottom right, rgba(var(--brand-primary-rgb), 0.5), rgba(var(--brand-secondary-rgb), 0.5))'
+                : 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))',
+            }}
           >
             {loading ? "Accessing..." : "Access"}
           </Button>

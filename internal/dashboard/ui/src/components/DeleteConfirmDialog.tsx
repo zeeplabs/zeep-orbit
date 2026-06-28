@@ -20,7 +20,9 @@ interface Props {
 export default function DeleteConfirmDialog({ open, appName, loading, onConfirm, onCancel }: Props) {
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) onCancel() }}>
-      <DialogContent className="max-w-[420px] border border-white/[0.10] bg-[#0D0D14]/60 backdrop-blur-xl rounded-2xl p-0 gap-0 shadow-[0_0_40px_rgba(3,71,165,0.10)] [&>button]:text-[#94A3B8] [&>button]:hover:text-[#F8FAFC] [&>button]:hover:bg-white/[0.08]">
+      <DialogContent className="max-w-[420px] border border-white/[0.10] bg-[#0D0D14]/60 backdrop-blur-xl rounded-2xl p-0 gap-0 [&>button]:text-[#94A3B8] [&>button]:hover:text-[#F8FAFC] [&>button]:hover:bg-white/[0.08]"
+        style={{ boxShadow: '0 0 40px rgba(var(--brand-primary-rgb), 0.10)' }}
+      >
         {/* inner bezel */}
         <div className="bg-white/[0.04] shadow-[inset_0_1px_1px_rgba(255,255,255,0.10)] rounded-[calc(1rem-2px)] px-7 pb-6 pt-7">
           <DialogHeader className="mb-0">

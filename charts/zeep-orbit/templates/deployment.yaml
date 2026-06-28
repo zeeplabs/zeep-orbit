@@ -26,6 +26,11 @@ spec:
           envFrom:
             - secretRef:
                 name: {{ include "zeep-orbit.fullname" . }}
+          env:
+            - name: BRAND_THEME
+              value: {{ .Values.brand.theme }}
+            - name: BRAND_COMPANY_NAME
+              value: {{ .Values.brand.companyName | quote }}
           volumeMounts:
             - name: config
               mountPath: /app/apps.yaml

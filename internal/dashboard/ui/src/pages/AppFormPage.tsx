@@ -233,7 +233,13 @@ export default function AppFormPage() {
 
       {/* Header */}
       <div className="mb-8">
-        <span className="mb-3 inline-block rounded-full border border-[#0347A5]/20 bg-[#0347A5]/12 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[#B3D1FF]">
+        <span className="mb-3 inline-block rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em]"
+          style={{
+            borderColor: 'rgba(var(--brand-primary-rgb), 0.2)',
+            backgroundColor: 'rgba(var(--brand-primary-rgb), 0.12)',
+            color: 'var(--brand-light)',
+          }}
+        >
           {isEdit ? "EDITAR APP" : "NOVO APP"}
         </span>
         <h2 className="text-[22px] font-extrabold text-[#F8FAFC]">
@@ -272,9 +278,9 @@ export default function AppFormPage() {
                 }
                 placeholder="meu_app"
                 className={cn(
-                  "bg-white/[0.05] border-white/[0.10] rounded-md text-[#F8FAFC] placeholder:text-white/30 focus-visible:ring-[#0347A5]/40 focus-visible:border-[#0347A5]/60 h-10",
+                  "h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus",
                   errors["appName"] &&
-                    "border-red-500/50 focus-visible:border-red-500/50",
+                    "border-red-500/50",
                 )}
               />
               {errors["appName"] && (
@@ -303,7 +309,7 @@ export default function AppFormPage() {
               <Switch
                 checked={authEmail}
                 onCheckedChange={setAuthEmail}
-                className="data-[state=checked]:bg-[#0347A5] data-[state=unchecked]:bg-white/[0.12] shrink-0"
+                className="shrink-0"
               />
             </div>
           </div>
@@ -312,7 +318,11 @@ export default function AppFormPage() {
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="h-6 w-1 rounded-full bg-gradient-to-b from-[#0347A5] to-[#7C3AED]" />
+                <div className="h-6 w-1 rounded-full"
+                  style={{
+                    background: 'linear-gradient(to bottom, var(--brand-primary), var(--brand-secondary))',
+                  }}
+                />
                 <p className="text-[15px] font-extrabold text-[#F8FAFC]">
                   Tabelas
                 </p>
@@ -370,7 +380,7 @@ export default function AppFormPage() {
                         }
                         placeholder={`tabela_${ti + 1}`}
                         className={cn(
-                          "h-8 px-3 py-1.5 text-[13px] bg-white/[0.05] border-white/[0.10] rounded-md text-[#F8FAFC] placeholder:text-white/30 focus-visible:ring-[#0347A5]/40 focus-visible:border-[#0347A5]/60",
+                          "h-8 px-3 py-1.5 text-[13px] bg-white/[0.05] border-white/[0.10] rounded-md text-[#F8FAFC] placeholder:text-white/30 brand-focus",
                           errors[`table_${ti}_name`] && "border-red-500/50",
                         )}
                       />
@@ -388,7 +398,7 @@ export default function AppFormPage() {
                         value={table.rls}
                         onValueChange={(val) => updateTable(ti, { rls: val })}
                       >
-                        <SelectTrigger className="h-8 w-[100px] shrink-0 text-[12px] bg-white/[0.05] border-white/[0.10] text-[#F8FAFC] focus:ring-[#0347A5]/40 rounded-md px-3">
+                        <SelectTrigger className="h-8 w-[100px] shrink-0 text-[12px] bg-white/[0.05] border-white/[0.10] text-[#F8FAFC] rounded-md px-3 brand-focus">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent className="bg-[#0D0D14] border-white/[0.10] text-[#F8FAFC]">
@@ -488,7 +498,7 @@ export default function AppFormPage() {
                                 }
                                 placeholder="nome_coluna"
                                 className={cn(
-                                  "h-8 px-2.5 py-1.5 text-[13px] bg-white/[0.05] border-white/[0.10] rounded-md text-[#F8FAFC] placeholder:text-white/30 focus-visible:ring-[#0347A5]/40 focus-visible:border-[#0347A5]/60",
+                                  "h-8 px-2.5 py-1.5 text-[13px] bg-white/[0.05] border-white/[0.10] rounded-md text-[#F8FAFC] placeholder:text-white/30 brand-focus",
                                   errors[`col_${ti}_${ci}_name`] &&
                                     "border-red-500/50",
                                 )}
@@ -500,7 +510,7 @@ export default function AppFormPage() {
                                   updateColumn(ti, ci, { type: val })
                                 }
                               >
-                                <SelectTrigger className="h-8 text-[12px] bg-white/[0.05] border-white/[0.10] text-[#F8FAFC] focus:ring-[#0347A5]/40 rounded-md px-2">
+                                <SelectTrigger className="h-8 text-[12px] bg-white/[0.05] border-white/[0.10] text-[#F8FAFC] rounded-md px-2 brand-focus">
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent className="bg-[#0D0D14] border-white/[0.10] text-[#F8FAFC]">
@@ -523,7 +533,7 @@ export default function AppFormPage() {
                                   onCheckedChange={(val) =>
                                     updateColumn(ti, ci, { required: val })
                                   }
-                                  className="data-[state=checked]:bg-[#0347A5] data-[state=unchecked]:bg-white/[0.10] h-5 w-9"
+                                  className="h-5 w-9"
                                 />
                               </div>
 
@@ -534,7 +544,7 @@ export default function AppFormPage() {
                                   onCheckedChange={(val) =>
                                     updateColumn(ti, ci, { unique: val })
                                   }
-                                  className="data-[state=checked]:bg-[#7C3AED] data-[state=unchecked]:bg-white/[0.10] h-5 w-9"
+                                  className="h-5 w-9"
                                 />
                               </div>
 
@@ -559,7 +569,10 @@ export default function AppFormPage() {
                         <button
                           type="button"
                           onClick={() => addColumn(ti)}
-                          className="flex items-center gap-1.5 text-[12px] font-semibold text-[#B3D1FF] bg-transparent border border-white/[0.08] rounded-full px-3 py-1.5 cursor-pointer hover:bg-white/[0.06] hover:text-[#D6E8FF] transition-colors self-start"
+                          className="flex items-center gap-1.5 text-[12px] font-semibold bg-transparent border border-white/[0.08] rounded-full px-3 py-1.5 cursor-pointer hover:bg-white/[0.06] transition-colors self-start"
+                          style={{ color: 'var(--brand-light)' }}
+                          onMouseEnter={(e) => e.currentTarget.style.color = '#D6E8FF'}
+                          onMouseLeave={(e) => e.currentTarget.style.color = 'var(--brand-light)'}
                         >
                           <Plus size={11} strokeWidth={2} />
                           Adicionar Coluna
@@ -595,9 +608,14 @@ export default function AppFormPage() {
               className={cn(
                 "rounded-xl px-6 py-2.5 text-sm font-bold text-white border-none",
                 isMutating
-                  ? "bg-[#0347A5]/50 cursor-not-allowed"
-                  : "bg-gradient-to-br from-[#0347A5] to-[#7C3AED] cursor-pointer hover:opacity-90",
+                  ? "cursor-not-allowed opacity-50"
+                  : "cursor-pointer hover:opacity-90",
               )}
+              style={{
+                background: isMutating
+                  ? 'rgba(var(--brand-primary-rgb), 0.5)'
+                  : 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))',
+              }}
             >
               {isMutating
                 ? "Salvando..."
