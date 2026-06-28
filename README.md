@@ -40,22 +40,22 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/billing/invoices
 
 ## ✨ Features
 
-| Feature | Description |
-|---------|-------------|
-| **Schema → REST** | Define tables in YAML or Dashboard UI → instant CRUD API |
-| **Web Dashboard** | Premium dark UI to manage apps, tables, data, users |
-| **Auth by Email** | Built-in email/password register & login per app |
-| **Google OAuth** | Sign in with Google — both dashboard and per-app |
-| **Row-Level Security** | Auto-filter data by owner (`rls: owner`) |
-| **OpenAPI Docs** | Auto-generated Swagger UI per app |
-| **Data Browser** | GUI to browse, filter, edit, export CSV, delete rows |
-| **User Management** | Manage dashboard admins and app users |
-| **Audit Logs** | Real-time request log with metrics |
-| **White-label** | Custom branding, themes, company name |
-| **Prometheus Metrics** | `zeep_http_requests_total`, latency histograms |
-| **Multi-app** | One service, N apps, isolated schemas & JWT secrets |
-| **CLI** | `zeep serve`, `zeep apply`, `zeep list`, `zeep status` |
-| **Kubernetes** | Production-grade Helm chart (HPA, PDB, ingress, IRSA) |
+| Feature                | Description                                              |
+| ---------------------- | -------------------------------------------------------- |
+| **Schema → REST**      | Define tables in YAML or Dashboard UI → instant CRUD API |
+| **Web Dashboard**      | Premium dark UI to manage apps, tables, data, users      |
+| **Auth by Email**      | Built-in email/password register & login per app         |
+| **Google OAuth**       | Sign in with Google — both dashboard and per-app         |
+| **Row-Level Security** | Auto-filter data by owner (`rls: owner`)                 |
+| **OpenAPI Docs**       | Auto-generated Swagger UI per app                        |
+| **Data Browser**       | GUI to browse, filter, edit, export CSV, delete rows     |
+| **User Management**    | Manage dashboard admins and app users                    |
+| **Audit Logs**         | Real-time request log with metrics                       |
+| **White-label**        | Custom branding, themes, company name                    |
+| **Prometheus Metrics** | `zeep_http_requests_total`, latency histograms           |
+| **Multi-app**          | One service, N apps, isolated schemas & JWT secrets      |
+| **CLI**                | `zeep serve`, `zeep apply`, `zeep list`, `zeep status`   |
+| **Kubernetes**         | Production-grade Helm chart (HPA, PDB, ingress, IRSA)    |
 
 ---
 
@@ -105,17 +105,17 @@ The web dashboard is embedded in the binary and accessible at `/dashboard`. Feat
 
 ### Environment variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `DATABASE_URL` | ✅ | PostgreSQL connection string |
-| `DASHBOARD_BOOTSTRAP_SECRET` | ✅ | First-time admin setup secret |
-| `GOOGLE_CLIENT_ID` | ❌ | Google OAuth Client ID (for dashboard login) |
-| `GOOGLE_CLIENT_SECRET` | ❌ | Google OAuth Client Secret |
-| `GOOGLE_REDIRECT_URL` | ❌ | Google OAuth redirect URL |
-| `GOOGLE_ALLOWED_DOMAINS` | ❌ | Comma-separated allowed email domains |
-| `BRAND_THEME` | ❌ | Default theme (azure, emerald, ruby, amber, orange) |
-| `BRAND_COMPANY_NAME` | ❌ | Company name for white-label |
-| `LOG_LEVEL` | ❌ | Set `debug` for development output |
+| Variable                     | Required | Description                                         |
+| ---------------------------- | -------- | --------------------------------------------------- |
+| `DATABASE_URL`               | ✅       | PostgreSQL connection string                        |
+| `DASHBOARD_BOOTSTRAP_SECRET` | ✅       | First-time admin setup secret                       |
+| `GOOGLE_CLIENT_ID`           | ❌       | Google OAuth Client ID (for dashboard login)        |
+| `GOOGLE_CLIENT_SECRET`       | ❌       | Google OAuth Client Secret                          |
+| `GOOGLE_REDIRECT_URL`        | ❌       | Google OAuth redirect URL                           |
+| `GOOGLE_ALLOWED_DOMAINS`     | ❌       | Comma-separated allowed email domains               |
+| `BRAND_THEME`                | ❌       | Default theme (azure, emerald, ruby, amber, orange) |
+| `BRAND_COMPANY_NAME`         | ❌       | Company name for white-label                        |
+| `LOG_LEVEL`                  | ❌       | Set `debug` for development output                  |
 
 ### apps.yaml
 
@@ -128,7 +128,7 @@ apps:
     auth:
       jwt_secret: ${MYAPP_JWT_SECRET}
       providers:
-        email: true           # enable email/password auth
+        email: true # enable email/password auth
     tables:
       - name: items
         columns:
@@ -152,12 +152,12 @@ Auto-generated columns: `id` (UUID), `created_at`, `updated_at`.
 
 Each app supports configurable login providers:
 
-| Provider | Endpoint | Description |
-|----------|----------|-------------|
-| Email | `POST /{app}/auth/register` | Register with email + password |
-| Email | `POST /{app}/auth/login` | Login with email + password |
-| Google | `GET /{app}/auth/google/login` | Sign in with Google |
-| All | `GET /{app}/auth/providers` | List enabled providers |
+| Provider | Endpoint                       | Description                    |
+| -------- | ------------------------------ | ------------------------------ |
+| Email    | `POST /{app}/auth/register`    | Register with email + password |
+| Email    | `POST /{app}/auth/login`       | Login with email + password    |
+| Google   | `GET /{app}/auth/google/login` | Sign in with Google            |
+| All      | `GET /{app}/auth/providers`    | List enabled providers         |
 
 After authentication, you receive a JWT token signed with the app's secret.
 
@@ -169,17 +169,17 @@ Dashboard has its own auth system (email/password or Google OAuth), separate fro
 
 ## 📡 REST API
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/{app}/{table}` | List (paginated, filtered, sorted) |
-| POST | `/{app}/{table}` | Create |
-| GET | `/{app}/{table}/{id}` | Get by ID |
-| PUT/PATCH | `/{app}/{table}/{id}` | Update (partial) |
-| DELETE | `/{app}/{table}/{id}` | Delete |
-| GET | `/health` | Health check |
-| GET | `/metrics` | Prometheus metrics |
-| GET | `/docs/{app}` | Swagger UI |
-| GET | `/{app}/auth/*` | Auth endpoints |
+| Method    | Path                  | Description                        |
+| --------- | --------------------- | ---------------------------------- |
+| GET       | `/{app}/{table}`      | List (paginated, filtered, sorted) |
+| POST      | `/{app}/{table}`      | Create                             |
+| GET       | `/{app}/{table}/{id}` | Get by ID                          |
+| PUT/PATCH | `/{app}/{table}/{id}` | Update (partial)                   |
+| DELETE    | `/{app}/{table}/{id}` | Delete                             |
+| GET       | `/health`             | Health check                       |
+| GET       | `/metrics`            | Prometheus metrics                 |
+| GET       | `/docs/{app}`         | Swagger UI                         |
+| GET       | `/{app}/auth/*`       | Auth endpoints                     |
 
 Query params for list: `?limit=`, `?offset=`, `?field=eq.value`, `?order=field.asc`
 
@@ -196,6 +196,7 @@ Commands:
 ```
 
 Example:
+
 ```bash
 zeep serve --config ./apps.yaml --port 8080
 zeep apply                   # idempotent provisioning
@@ -245,6 +246,7 @@ make run          # go run ./cmd/zeep
 ```
 
 Integration tests require PostgreSQL:
+
 ```bash
 TEST_DATABASE_URL=postgres://user:pass@localhost/testdb go test ./...
 ```
@@ -284,7 +286,7 @@ MIT — see [LICENSE](LICENSE).
 
 ## 🏢 About Zeep Tecnologia
 
-zeep-orbit was created by [Zeep Tecnologia](https://zeeptech.com.br) to solve a real pain we saw everywhere: small businesses, entrepreneurs, and indie developers using AI tools (Claude Code, Cursor, Lovable, v0) to build frontends in minutes — but getting stuck when they need a backend.
+zeep-orbit was created by [Zeep Tecnologia](https://zeeptecnologia.com.br) to solve a real pain we saw everywhere: small businesses, entrepreneurs, and indie developers using AI tools (Claude Code, Cursor, Lovable, v0) to build frontends in minutes — but getting stuck when they need a backend.
 
 Spin up a database, write migrations, deploy an API, manage auth, handle secrets — it kills the momentum. And the alternative (Supabase, Firebase) sends your data outside your infrastructure.
 
