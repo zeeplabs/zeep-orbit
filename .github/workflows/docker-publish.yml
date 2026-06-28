@@ -91,6 +91,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -110,3 +112,26 @@ jobs:
             helm install zeep-orbit zeeplabs/zeep-orbit
             ```
           generate_release_notes: true
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Package and publish Helm chart
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          helm package charts/zeep-orbit --version "$VERSION" --app-version "$VERSION" --destination .cr-release-packages
+          git fetch origin gh-pages
+          git worktree add .cr-index origin/gh-pages
+          helm repo index .cr-release-packages --url https://zeeplabs.github.io/zeep-orbit --merge .cr-index/index.yaml
+          cp .cr-release-packages/index.yaml .cr-index/index.yaml
+          cp .cr-release-packages/*.tgz .cr-index/
+          cd .cr-index
+          git add .
+          git commit -m "chore: publish helm chart ${{ github.ref_name }}"
+          git push origin HEAD:gh-pages

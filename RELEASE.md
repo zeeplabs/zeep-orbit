@@ -49,9 +49,11 @@ Pushing the tag triggers:
 
 | Workflow | What it does |
 |----------|-------------|
-| `docker-publish.yml` | Builds multi-arch Docker image → pushes to `ghcr.io/zeeplabs/zeep-orbit:v0.1.3` |
-| Same workflow | Creates GitHub Release with auto-generated release notes |
-| `chart-release.yml` | Packages Helm chart → publishes to `gh-pages` branch |
+| `docker-publish.yml` | Test → Build multi-arch Docker image → Push to GHCR |
+| Same workflow | Create GitHub Release with auto-generated notes |
+| Same workflow | Package Helm chart → Update `gh-pages` branch (no separate release) |
+
+The Helm chart version is automatically set from the git tag (e.g. `v0.1.3` → chart `0.1.3`).
 
 ## 6. Verify
 
@@ -61,8 +63,6 @@ Pushing the tag triggers:
 
 ## Checklist
 
-- [ ] `Chart.yaml` version bumped
-- [ ] `Chart.yaml` appVersion bumped
 - [ ] `CHANGELOG.md` updated
 - [ ] All changes committed
 - [ ] Tag pushed to GitHub
