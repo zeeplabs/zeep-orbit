@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
@@ -9,6 +10,7 @@ import pkg from "../../package.json";
 
 export default function LoginPage() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -44,6 +46,7 @@ export default function LoginPage() {
       }
       qc.clear();
       qc.invalidateQueries({ queryKey: ["me"] });
+      navigate("/apps");
     } catch {
       setError("Connection error");
     } finally {

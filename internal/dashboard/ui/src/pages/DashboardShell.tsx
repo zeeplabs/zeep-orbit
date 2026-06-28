@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Navigate, NavLink, Outlet } from "react-router-dom";
+import { Navigate, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { LogOut, Grid, Database, Users, Activity, Settings, User, Lock } from "lucide-react";
 import ChangePasswordModal from "./ChangePasswordModal";
@@ -101,6 +101,7 @@ function BottomBar({ items, user, onUserClick }: { items: NavItem[]; user: User;
 
 export default function DashboardShell({ user }: { user: User | null }) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -127,6 +128,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
         credentials: "include",
       });
       qc.clear();
+      navigate("/login");
     } finally {
       setLoggingOut(false);
       setShowLogoutDialog(false);

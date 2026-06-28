@@ -132,6 +132,9 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 	r.Use(chimiddleware.Recoverer)
 
 	// Rotas sem JWT
+	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/dashboard", http.StatusFound)
+	})
 	r.Get("/health", h.HandleHealth)
 	r.Handle("/metrics", promhttp.Handler())
 
