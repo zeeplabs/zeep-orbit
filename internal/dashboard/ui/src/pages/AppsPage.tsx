@@ -72,10 +72,12 @@ function AppCard({ app, index, onEdit, onDelete }: AppCardProps) {
       {/* Avatar + name + badges */}
       <div className="flex items-start gap-3.5">
         {/* Initial */}
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.06] text-[15px] font-extrabold"
+        <div
+          className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.06] text-[15px] font-extrabold"
           style={{
-            background: 'linear-gradient(to bottom right, rgba(var(--brand-primary-rgb), 0.15), rgba(var(--brand-secondary-rgb), 0.15))',
-            color: 'var(--brand-light)',
+            background:
+              "linear-gradient(to bottom right, rgba(var(--brand-primary-rgb), 0.15), rgba(var(--brand-secondary-rgb), 0.15))",
+            color: "var(--brand-light)",
           }}
         >
           {initial}
@@ -91,9 +93,9 @@ function AppCard({ app, index, onEdit, onDelete }: AppCardProps) {
               className="gap-1 text-[10px]"
               variant="outline"
               style={{
-                borderColor: 'rgba(var(--brand-primary-rgb), 0.2)',
-                backgroundColor: 'rgba(var(--brand-primary-rgb), 0.1)',
-                color: 'var(--brand-light)',
+                borderColor: "rgba(var(--brand-primary-rgb), 0.2)",
+                backgroundColor: "rgba(var(--brand-primary-rgb), 0.1)",
+                color: "var(--brand-light)",
               }}
             >
               <Table2 size={10} strokeWidth={1.5} />
@@ -109,10 +111,14 @@ function AppCard({ app, index, onEdit, onDelete }: AppCardProps) {
                   : "border-white/[0.10] bg-white/[0.05] text-[#94A3B8] hover:bg-white/[0.08]",
               )}
               variant="outline"
-              style={app.auth_email_enabled ? {
-                borderColor: 'rgba(var(--brand-secondary-rgb), 0.2)',
-                backgroundColor: 'rgba(var(--brand-secondary-rgb), 0.1)',
-              } : undefined}
+              style={
+                app.auth_email_enabled
+                  ? {
+                      borderColor: "rgba(var(--brand-secondary-rgb), 0.2)",
+                      backgroundColor: "rgba(var(--brand-secondary-rgb), 0.1)",
+                    }
+                  : undefined
+              }
             >
               {app.auth_email_enabled ? (
                 <Mail size={10} strokeWidth={1.5} />
@@ -126,9 +132,7 @@ function AppCard({ app, index, onEdit, onDelete }: AppCardProps) {
 
       {/* Bottom row: date + actions */}
       <div className="mt-3 flex items-center justify-between">
-        <p className="text-[10px] text-[#64748B] tracking-wide">
-          {createdAt}
-        </p>
+        <p className="text-[10px] text-[#64748B] tracking-wide">{createdAt}</p>
 
         <div className="flex gap-1 transition-all duration-200 opacity-0 translate-x-2 group-hover:opacity-100 group-hover:translate-x-0">
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
@@ -175,14 +179,14 @@ function EmptyState({ onCreateClick }: { onCreateClick: () => void }) {
             transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
             className="mx-auto mb-5 flex size-16 items-center justify-center rounded-[18px]"
             style={{
-              borderColor: 'rgba(var(--brand-primary-rgb), 0.2)',
-              backgroundColor: 'rgba(var(--brand-primary-rgb), 0.12)',
+              borderColor: "rgba(var(--brand-primary-rgb), 0.2)",
+              backgroundColor: "rgba(var(--brand-primary-rgb), 0.12)",
             }}
           >
             <LayoutGrid
               size={28}
               strokeWidth={1.5}
-              style={{ color: 'var(--brand-light)' }}
+              style={{ color: "var(--brand-light)" }}
             />
           </motion.div>
 
@@ -201,7 +205,8 @@ function EmptyState({ onCreateClick }: { onCreateClick: () => void }) {
               onClick={onCreateClick}
               className="gap-2 rounded-3xl px-[22px] py-2.5 text-sm font-semibold text-white border-0 hover:opacity-90"
               style={{
-                background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))',
+                background:
+                  "linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))",
               }}
             >
               Criar App
@@ -254,11 +259,12 @@ export default function AppsPage() {
       <div className="relative z-10">
         {/* Header */}
         <motion.div {...fadeUp} className="mb-9">
-          <span className="mb-3 inline-block rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em]"
+          <span
+            className="mb-3 inline-block rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em]"
             style={{
-              borderColor: 'rgba(var(--brand-primary-rgb), 0.2)',
-              backgroundColor: 'rgba(var(--brand-primary-rgb), 0.12)',
-              color: 'var(--brand-light)',
+              borderColor: "rgba(var(--brand-primary-rgb), 0.2)",
+              backgroundColor: "rgba(var(--brand-primary-rgb), 0.12)",
+              color: "var(--brand-light)",
             }}
           >
             Apps
@@ -270,7 +276,9 @@ export default function AppsPage() {
                 Seus Aplicativos
               </h2>
               <p className="text-sm text-[#94A3B8]">
-                Gerencie seus apps e APIs geradas automaticamente
+                Gerencie seus aplicativos, ao criar um novo aplicativo você terá
+                uma API REST gerada automaticamente para você usar em seus
+                projetos.
               </p>
             </div>
 
@@ -283,7 +291,8 @@ export default function AppsPage() {
                 onClick={() => navigate("/apps/new")}
                 className="gap-2 rounded-3xl px-5 py-2.5 text-sm font-semibold text-white border-0 hover:opacity-90"
                 style={{
-                  background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))',
+                  background:
+                    "linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))",
                 }}
               >
                 Criar App
