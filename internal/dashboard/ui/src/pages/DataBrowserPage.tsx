@@ -12,7 +12,6 @@ import {
   ChevronLeft,
   ChevronRight as ChevronRightIcon,
   Loader2,
-  Plus,
   Pencil,
   Trash2,
   X,
@@ -22,7 +21,6 @@ import {
 import {
   useDataBrowserApps,
   useDataBrowserQuery,
-  useCreateDataBrowserRow,
   useUpdateDataBrowserRow,
   useDeleteDataBrowserRow,
   exportDataBrowserCSV,
@@ -164,7 +162,6 @@ export default function DataBrowserPage() {
     activeFilterCount > 0 ? activeFilters : undefined,
   );
 
-  const createRow = useCreateDataBrowserRow();
   const updateRow = useUpdateDataBrowserRow();
   const deleteRow = useDeleteDataBrowserRow();
 
@@ -246,18 +243,6 @@ export default function DataBrowserPage() {
 
   // ── CRUD handlers ──
 
-  const openCreateModal = () => {
-    setEditingRow(null);
-    const initial: Record<string, string> = {};
-    for (const col of columns) {
-      if (!systemDisplayColumns.has(col.name)) {
-        initial[col.name] = "";
-      }
-    }
-    setFormValues(initial);
-    setModalOpen(true);
-  };
-
   const openEditModal = (row: Record<string, unknown>) => {
     setEditingRow(row);
     const initial: Record<string, string> = {};
@@ -315,12 +300,6 @@ export default function DataBrowserPage() {
           id: String(editingRow["id"]),
           data,
         });
-      } else {
-        await createRow.mutateAsync({
-          app: selectedTable.app,
-          table: selectedTable.table,
-          data,
-        });
       }
       closeModal();
     } catch {
@@ -348,7 +327,7 @@ export default function DataBrowserPage() {
   const totalPages = Math.max(1, Math.ceil(totalCount / limit));
   const currentPage = Math.floor(pageOffset / limit) + 1;
 
-  const isSaving = createRow.isPending || updateRow.isPending;
+  const isSaving = updateRow.isPending;
 
   return (
     <motion.div {...fadeUp} className="grid grid-cols-[240px_1fr] max-md:flex max-md:flex-col max-md:gap-3" style={{ minHeight: "100%" }}>
@@ -507,15 +486,6 @@ export default function DataBrowserPage() {
                 </span>
               </div>
               <div style={{ display: "flex", gap: 6 }}>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={openCreateModal}
-                  style={{ fontSize: 12 }}
-                >
-                  <Plus size={14} style={{ marginRight: 6 }} />
-                  Novo registro
-                </Button>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1123,7 +1093,7 @@ export default function DataBrowserPage() {
                 }}
               >
                 <span style={{ fontSize: 15, fontWeight: 600 }}>
-                  {editingRow ? "Editar registro" : "Novo registro"}
+                  Editar registro
                 </span>
                 <button
                   onClick={closeModal}
