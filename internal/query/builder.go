@@ -60,12 +60,32 @@ var systemFields = map[string]struct{}{
 	"owner_id":   {},
 }
 
+// operatorMap mapeia prefixo de operador → SQL operator.
+var operatorMap = map[string]string{
+	"eq.":   "=",
+	"ne.":   "!=",
+	"gt.":   ">",
+	"gte.":  ">=",
+	"lt.":   "<",
+	"lte.":  "<=",
+	"like.": "LIKE",
+	"ilike.": "ILIKE",
+}
+
 // BuildList constrói SELECT paginado para GET /{app}/{table}.
 //
 // Parâmetros aceitos em params:
 //   - limit: inteiro positivo (default 50, max 1000)
 //   - offset: inteiro não-negativo (default 0)
 //   - {field}=eq.{value}: filtro de igualdade; campo deve existir na tabela
+//   - {field}=ne.{value}: filtro de diferença
+//   - {field}=gt.{value}: maior que
+//   - {field}=gte.{value}: maior ou igual
+//   - {field}=lt.{value}: menor que
+//   - {field}=lte.{value}: menor ou igual
+//   - {field}=like.{value}: LIKE (case-sensitive)
+//   - {field}=ilike.{value}: ILIKE (case-insensitive)
+//   - {field}=in.{v1},{v2}: IN (múltiplos valores separados por vírgula)
 //   - order={field}.asc|{field}.desc: ordenação; campo deve existir na tabela
 func BuildList(schemaName, tableName string, table *registry.Table, params map[string]string, ownerID string) (*ListQuery, error) {
 	const defaultLimit = 50
@@ -105,16 +125,37 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 		if key == "limit" || key == "offset" || key == "order" {
 			continue
 		}
-		// Formato esperado: {field}=eq.{value}  →  params["field"] = "eq.value"
-		if !strings.HasPrefix(val, "eq.") {
-			return nil, fmt.Errorf("query: operador não suportado em filtro '%s=%s' (use eq.)", key, val)
-		}
 		if _, ok := known[key]; !ok {
 			return nil, fmt.Errorf("query: campo desconhecido no filtro: %q", key)
 		}
-		filterVal := strings.TrimPrefix(val, "eq.")
-		args = append(args, filterVal)
-		whereClauses = append(whereClauses, fmt.Sprintf("%s = $%d%s", key, len(args), pgCast(types[key])))
+
+		if strings.HasPrefix(val, "in.") {
+			// in.{v1},{v2} → IN ($1, $2) com múltiplos placeholders
+			raw := strings.TrimPrefix(val, "in.")
+			parts := strings.Split(raw, ",")
+			var placeholders []string
+			for _, p := range parts {
+				args = append(args, p)
+				placeholders = append(placeholders, fmt.Sprintf("$%d%s", len(args), pgCast(types[key])))
+			}
+			whereClauses = append(whereClauses, fmt.Sprintf("%s IN (%s)", key, strings.Join(placeholders, ", ")))
+			continue
+		}
+
+		op, found := "", false
+		for prefix, sqlOp := range operatorMap {
+			if strings.HasPrefix(val, prefix) {
+				op = sqlOp
+				filterVal := strings.TrimPrefix(val, prefix)
+				args = append(args, filterVal)
+				whereClauses = append(whereClauses, fmt.Sprintf("%s %s $%d%s", key, op, len(args), pgCast(types[key])))
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, fmt.Errorf("query: operador não suportado em filtro '%s=%s' (use eq./ne./gt./gte./lt./lte./like./ilike./in.)", key, val)
+		}
 	}
 
 	if ownerID != "" {

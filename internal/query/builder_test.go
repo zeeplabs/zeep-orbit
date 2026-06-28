@@ -96,6 +96,98 @@ func TestBuildList_WithFilters(t *testing.T) {
 	}
 }
 
+func TestBuildList_FilterOperators(t *testing.T) {
+	tbl := testTable()
+
+	tests := []struct {
+		name     string
+		params   map[string]string
+		wantSQL  string
+		wantArgs int
+	}{
+		{
+			name:     "eq",
+			params:   map[string]string{"status": "eq.paid"},
+			wantSQL:  `status = $1`,
+			wantArgs: 3,
+		},
+		{
+			name:     "ne",
+			params:   map[string]string{"status": "ne.cancelled"},
+			wantSQL:  `status != $1`,
+			wantArgs: 3,
+		},
+		{
+			name:     "gt",
+			params:   map[string]string{"amount": "gt.100"},
+			wantSQL:  `amount > $1`,
+			wantArgs: 3,
+		},
+		{
+			name:     "gte",
+			params:   map[string]string{"amount": "gte.100"},
+			wantSQL:  `amount >= $1`,
+			wantArgs: 3,
+		},
+		{
+			name:     "lt",
+			params:   map[string]string{"amount": "lt.50"},
+			wantSQL:  `amount < $1`,
+			wantArgs: 3,
+		},
+		{
+			name:     "lte",
+			params:   map[string]string{"amount": "lte.50"},
+			wantSQL:  `amount <= $1`,
+			wantArgs: 3,
+		},
+		{
+			name:     "like",
+			params:   map[string]string{"status": "like.%paid%"},
+			wantSQL:  `status LIKE $1`,
+			wantArgs: 3,
+		},
+		{
+			name:     "ilike",
+			params:   map[string]string{"status": "ilike.%Paid%"},
+			wantSQL:  `status ILIKE $1`,
+			wantArgs: 3,
+		},
+		{
+			name:     "in",
+			params:   map[string]string{"status": "in.paid,pending"},
+			wantSQL:  `status IN ($1, $2)`,
+			wantArgs: 4,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			q, err := BuildList("app_billing", "invoices", tbl, tt.params, "")
+			if err != nil {
+				t.Fatalf("erro inesperado: %v", err)
+			}
+			if !strings.Contains(q.SQL, tt.wantSQL) {
+				t.Errorf("SQL deveria conter %q, got: %q", tt.wantSQL, q.SQL)
+			}
+			if len(q.Args) != tt.wantArgs {
+				t.Errorf("esperava %d args, got %d: %v", tt.wantArgs, len(q.Args), q.Args)
+			}
+		})
+	}
+}
+
+func TestBuildList_UnknownOperator(t *testing.T) {
+	tbl := testTable()
+	params := map[string]string{
+		"status": "invalid.paid",
+	}
+	_, err := BuildList("app_billing", "invoices", tbl, params, "")
+	if err == nil {
+		t.Fatal("esperava erro para operador inválido, got nil")
+	}
+}
+
 func TestBuildList_UnknownField(t *testing.T) {
 	tbl := testTable()
 	params := map[string]string{
