@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -255,5 +256,392 @@ func TestAddColumn(t *testing.T) {
 	}
 	if !exists {
 		t.Errorf("column %q.products.price not found after Apply v2", schema)
+	}
+}
+
+func TestRenameColumn(t *testing.T) {
+	pool := testPool(t)
+	defer pool.Close()
+
+	schema := uniqueSchema("test_rename")
+	t.Cleanup(func() { dropSchema(t, pool, schema) })
+
+	prov := provisioner.New(pool)
+
+	// V1: cria tabela com coluna "label".
+	cfgV1 := &config.Config{
+		Apps: []config.AppConfig{
+			{
+				Name: schema,
+				Tables: []config.TableConfig{
+					{
+						Name:    "items",
+						Columns: []config.ColumnConfig{{Name: "label", Type: "text"}},
+					},
+				},
+			},
+		},
+	}
+	if _, err := prov.Apply(context.Background(), cfgV1); err != nil {
+		t.Fatalf("Apply v1: %v", err)
+	}
+
+	// V2: renomeia "label" → "title" via rename_from.
+	cfgV2 := &config.Config{
+		Apps: []config.AppConfig{
+			{
+				Name: schema,
+				Tables: []config.TableConfig{
+					{
+						Name: "items",
+						Columns: []config.ColumnConfig{
+							{Name: "title", Type: "text", RenameFrom: "label"},
+						},
+					},
+				},
+			},
+		},
+	}
+	r2, err := prov.Apply(context.Background(), cfgV2)
+	if err != nil {
+		t.Fatalf("Apply v2: %v", err)
+	}
+
+	if len(r2.ColumnsChanged) != 1 {
+		t.Fatalf("expected 1 column changed (rename), got %d: %v", len(r2.ColumnsChanged), r2.ColumnsChanged)
+	}
+	if !strings.Contains(r2.ColumnsChanged[0], "renamed from label") {
+		t.Errorf("change description should mention rename: %q", r2.ColumnsChanged[0])
+	}
+	if len(r2.ColumnsAdded) != 0 {
+		t.Errorf("expected 0 columns added, got %d: %v", len(r2.ColumnsAdded), r2.ColumnsAdded)
+	}
+
+	// Confirma que "label" não existe mais e "title" existe.
+	var exists bool
+	err = pool.QueryRow(context.Background(),
+		`SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND column_name = $3)`,
+		schema, "items", "label",
+	).Scan(&exists)
+	if err != nil {
+		t.Fatalf("check label: %v", err)
+	}
+	if exists {
+		t.Errorf("old column 'label' should not exist after rename")
+	}
+
+	err = pool.QueryRow(context.Background(),
+		`SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND column_name = $3)`,
+		schema, "items", "title",
+	).Scan(&exists)
+	if err != nil {
+		t.Fatalf("check title: %v", err)
+	}
+	if !exists {
+		t.Errorf("new column 'title' should exist after rename")
+	}
+
+	// Confirma que _schema_migrations tem o registro.
+	err = pool.QueryRow(context.Background(),
+		`SELECT EXISTS(SELECT 1 FROM `+schema+`."_schema_migrations" WHERE description LIKE '%rename%')`,
+	).Scan(&exists)
+	if err != nil {
+		t.Fatalf("check migration record: %v", err)
+	}
+	if !exists {
+		t.Errorf("migration record should exist for the rename")
+	}
+}
+
+func TestTypeChange(t *testing.T) {
+	pool := testPool(t)
+	defer pool.Close()
+
+	schema := uniqueSchema("test_typechg")
+	t.Cleanup(func() { dropSchema(t, pool, schema) })
+
+	prov := provisioner.New(pool)
+
+	// V1: cria tabela com coluna "qty" INTEGER.
+	cfgV1 := &config.Config{
+		Apps: []config.AppConfig{
+			{
+				Name: schema,
+				Tables: []config.TableConfig{
+					{
+						Name: "items",
+						Columns: []config.ColumnConfig{
+							{Name: "qty", Type: "integer"},
+						},
+					},
+				},
+			},
+		},
+	}
+	if _, err := prov.Apply(context.Background(), cfgV1); err != nil {
+		t.Fatalf("Apply v1: %v", err)
+	}
+
+	// V2: muda tipo INTEGER → BIGINT (widening seguro).
+	cfgV2 := &config.Config{
+		Apps: []config.AppConfig{
+			{
+				Name: schema,
+				Tables: []config.TableConfig{
+					{
+						Name: "items",
+						Columns: []config.ColumnConfig{
+							{Name: "qty", Type: "bigint"},
+						},
+					},
+				},
+			},
+		},
+	}
+	r2, err := prov.Apply(context.Background(), cfgV2)
+	if err != nil {
+		t.Fatalf("Apply v2: %v", err)
+	}
+
+	if len(r2.ColumnsChanged) != 1 {
+		t.Fatalf("expected 1 column changed (type), got %d: %v", len(r2.ColumnsChanged), r2.ColumnsChanged)
+	}
+	if !strings.Contains(r2.ColumnsChanged[0], "int4 → int8") {
+		t.Errorf("change description should mention type change: %q", r2.ColumnsChanged[0])
+	}
+
+	// Confirma que a coluna agora é BIGINT (int8).
+	var udtName string
+	err = pool.QueryRow(context.Background(),
+		`SELECT udt_name FROM information_schema.columns
+		 WHERE table_schema = $1 AND table_name = $2 AND column_name = $3`,
+		schema, "items", "qty",
+	).Scan(&udtName)
+	if err != nil {
+		t.Fatalf("check type: %v", err)
+	}
+	if udtName != "int8" {
+		t.Errorf("expected int8 (bigint), got %s", udtName)
+	}
+
+	// Confirma migration record.
+	var exists bool
+	err = pool.QueryRow(context.Background(),
+		`SELECT EXISTS(SELECT 1 FROM `+schema+`."_schema_migrations" WHERE description LIKE '%alter type%')`,
+	).Scan(&exists)
+	if err != nil {
+		t.Fatalf("check migration record: %v", err)
+	}
+	if !exists {
+		t.Errorf("migration record should exist for the type change")
+	}
+}
+
+func TestIdempotentRename(t *testing.T) {
+	pool := testPool(t)
+	defer pool.Close()
+
+	schema := uniqueSchema("test_idemrename")
+	t.Cleanup(func() { dropSchema(t, pool, schema) })
+
+	prov := provisioner.New(pool)
+
+	// V1: cria.
+	cfgV1 := &config.Config{
+		Apps: []config.AppConfig{
+			{
+				Name: schema,
+				Tables: []config.TableConfig{
+					{
+						Name:    "t",
+						Columns: []config.ColumnConfig{{Name: "a", Type: "text"}},
+					},
+				},
+			},
+		},
+	}
+	if _, err := prov.Apply(context.Background(), cfgV1); err != nil {
+		t.Fatalf("Apply v1: %v", err)
+	}
+
+	// V2: renomeia a→b.
+	cfgV2 := &config.Config{
+		Apps: []config.AppConfig{
+			{
+				Name: schema,
+				Tables: []config.TableConfig{
+					{
+						Name:    "t",
+						Columns: []config.ColumnConfig{{Name: "b", Type: "text", RenameFrom: "a"}},
+					},
+				},
+			},
+		},
+	}
+	r2, err := prov.Apply(context.Background(), cfgV2)
+	if err != nil {
+		t.Fatalf("Apply v2: %v", err)
+	}
+	if len(r2.ColumnsChanged) != 1 {
+		t.Fatalf("v2: expected 1 change, got %d", len(r2.ColumnsChanged))
+	}
+
+	// V3: mesmo config — não deve gerar mudanças.
+	r3, err := prov.Apply(context.Background(), cfgV2)
+	if err != nil {
+		t.Fatalf("Apply v3: %v", err)
+	}
+	if len(r3.ColumnsChanged) != 0 {
+		t.Errorf("v3 (idempotent): expected 0 changes, got %d: %v", len(r3.ColumnsChanged), r3.ColumnsChanged)
+	}
+	if len(r3.ColumnsAdded) != 0 {
+		t.Errorf("v3 (idempotent): expected 0 columns added, got %d", len(r3.ColumnsAdded))
+	}
+}
+
+func TestRejectUnsafeTypeChange(t *testing.T) {
+	pool := testPool(t)
+	defer pool.Close()
+
+	schema := uniqueSchema("test_unsafe")
+	t.Cleanup(func() { dropSchema(t, pool, schema) })
+
+	prov := provisioner.New(pool)
+
+	// Cria tabela com coluna boolean.
+	cfgV1 := &config.Config{
+		Apps: []config.AppConfig{
+			{
+				Name: schema,
+				Tables: []config.TableConfig{
+					{
+						Name: "t",
+						Columns: []config.ColumnConfig{
+							{Name: "active", Type: "boolean"},
+						},
+					},
+				},
+			},
+		},
+	}
+	if _, err := prov.Apply(context.Background(), cfgV1); err != nil {
+		t.Fatalf("Apply v1: %v", err)
+	}
+
+	// Tenta mudar boolean → integer (unsafe: narrowing).
+	cfgV2 := &config.Config{
+		Apps: []config.AppConfig{
+			{
+				Name: schema,
+				Tables: []config.TableConfig{
+					{
+						Name: "t",
+						Columns: []config.ColumnConfig{
+							{Name: "active", Type: "integer"},
+						},
+					},
+				},
+			},
+		},
+	}
+	_, err := prov.Apply(context.Background(), cfgV2)
+	if err == nil {
+		t.Fatal("expected error for unsafe type change (bool→int), got nil")
+	}
+	if !strings.Contains(err.Error(), "unsafe conversion") {
+		t.Errorf("error should mention 'unsafe conversion': %v", err)
+	}
+}
+
+func TestRenameThenAddColumn(t *testing.T) {
+	pool := testPool(t)
+	defer pool.Close()
+
+	schema := uniqueSchema("test_rename_add")
+	t.Cleanup(func() { dropSchema(t, pool, schema) })
+
+	prov := provisioner.New(pool)
+
+	// V1: cria tabela com coluna "oldname".
+	cfgV1 := &config.Config{
+		Apps: []config.AppConfig{
+			{
+				Name: schema,
+				Tables: []config.TableConfig{
+					{
+						Name:    "t",
+						Columns: []config.ColumnConfig{{Name: "oldname", Type: "text"}},
+					},
+				},
+			},
+		},
+	}
+	if _, err := prov.Apply(context.Background(), cfgV1); err != nil {
+		t.Fatalf("Apply v1: %v", err)
+	}
+
+	// V2: renomeia "oldname" → "newname" E adiciona "extra".
+	cfgV2 := &config.Config{
+		Apps: []config.AppConfig{
+			{
+				Name: schema,
+				Tables: []config.TableConfig{
+					{
+						Name: "t",
+						Columns: []config.ColumnConfig{
+							{Name: "newname", Type: "text", RenameFrom: "oldname"},
+							{Name: "extra", Type: "integer"},
+						},
+					},
+				},
+			},
+		},
+	}
+	r2, err := prov.Apply(context.Background(), cfgV2)
+	if err != nil {
+		t.Fatalf("Apply v2: %v", err)
+	}
+
+	if len(r2.ColumnsChanged) != 1 {
+		t.Errorf("expected 1 change (rename), got %d: %v", len(r2.ColumnsChanged), r2.ColumnsChanged)
+	}
+	if len(r2.ColumnsAdded) != 1 {
+		t.Errorf("expected 1 column added, got %d: %v", len(r2.ColumnsAdded), r2.ColumnsAdded)
+	}
+
+	// Confirma "newname" e "extra" existem.
+	var exists bool
+	err = pool.QueryRow(context.Background(),
+		`SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND column_name = $3)`,
+		schema, "t", "newname",
+	).Scan(&exists)
+	if err != nil {
+		t.Fatalf("check newname: %v", err)
+	}
+	if !exists {
+		t.Errorf("'newname' should exist after rename")
+	}
+
+	err = pool.QueryRow(context.Background(),
+		`SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND column_name = $3)`,
+		schema, "t", "extra",
+	).Scan(&exists)
+	if err != nil {
+		t.Fatalf("check extra: %v", err)
+	}
+	if !exists {
+		t.Errorf("'extra' should exist after add")
+	}
+
+	// "oldname" não deve existir.
+	err = pool.QueryRow(context.Background(),
+		`SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND column_name = $3)`,
+		schema, "t", "oldname",
+	).Scan(&exists)
+	if err != nil {
+		t.Fatalf("check oldname: %v", err)
+	}
+	if exists {
+		t.Errorf("'oldname' should not exist after rename")
 	}
 }

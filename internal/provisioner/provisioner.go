@@ -20,12 +20,14 @@ func New(pool *db.Pool) *Provisioner {
 
 // Report descreve o que foi criado ou alterado durante um Apply.
 type Report struct {
-	SchemasCreated []string
-	TablesCreated  []string
-	ColumnsAdded   []string // formato: "schema.table.column"
+	SchemasCreated  []string
+	TablesCreated   []string
+	ColumnsAdded    []string // formato: "schema.table.column"
+	ColumnsChanged  []string // formato: "schema.table.column (descrição)"
 }
 
 // Apply provisiona todos os apps: cria schemas, tabelas e adiciona colunas ausentes.
+// Também aplica migrations (renomeios e mudanças de tipo) em tabelas existentes.
 // É idempotente: pode ser chamado múltiplas vezes sem efeito colateral.
 func (p *Provisioner) Apply(ctx context.Context, cfg *config.Config) (*Report, error) {
 	report := &Report{}
@@ -59,7 +61,14 @@ func (p *Provisioner) Apply(ctx context.Context, cfg *config.Config) (*Report, e
 				continue
 			}
 
-			// Tabela já existia — verifica colunas ausentes.
+			// Tabela já existia — primeiro aplica renomeios e mudanças de tipo,
+			// depois adiciona colunas realmente novas.
+			changed, err := p.applyColumnChanges(ctx, schemaName, table.Name, table.Columns, table.RLS)
+			if err != nil {
+				return nil, fmt.Errorf("provisioner: app %q table %q apply changes: %w", app.Name, table.Name, err)
+			}
+			report.ColumnsChanged = append(report.ColumnsChanged, changed...)
+
 			added, err := p.addMissingColumns(ctx, schemaName, table.Name, table.Columns, table.RLS)
 			if err != nil {
 				return nil, fmt.Errorf("provisioner: app %q table %q add columns: %w", app.Name, table.Name, err)

@@ -164,6 +164,9 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Put("/api/config", dashH.UpdateConfig)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/data-browser/apps", dashH.ListDataBrowserApps)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/data-browser/query", dashH.DataBrowserQuery)
+		r.With(dashboard.RequireAuth(pool)).Post("/api/data-browser/row", dashH.DataBrowserCreate)
+		r.With(dashboard.RequireAuth(pool)).Put("/api/data-browser/row", dashH.DataBrowserUpdate)
+		r.With(dashboard.RequireAuth(pool)).Delete("/api/data-browser/row", dashH.DataBrowserDelete)
 		r.Handle("/*", dashboard.StaticHandler())
 	})
 

@@ -268,6 +268,63 @@ export function useDataBrowserQuery(
   })
 }
 
+export interface MutationRowInput {
+  app: string
+  table: string
+  data: Record<string, unknown>
+}
+
+export interface UpdateRowInput extends MutationRowInput {
+  id: string
+}
+
+export interface RowResponse {
+  data: Record<string, unknown>
+}
+
+export function useCreateDataBrowserRow(): UseMutationResult<RowResponse, Error, MutationRowInput> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: MutationRowInput) =>
+      apiFetch<RowResponse>('/dashboard/api/data-browser/row', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      }),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ['data-browser-query', variables.app, variables.table] })
+    },
+  })
+}
+
+export function useUpdateDataBrowserRow(): UseMutationResult<RowResponse, Error, UpdateRowInput> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: UpdateRowInput) =>
+      apiFetch<RowResponse>('/dashboard/api/data-browser/row', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      }),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ['data-browser-query', variables.app, variables.table] })
+    },
+  })
+}
+
+export function useDeleteDataBrowserRow(): UseMutationResult<void, Error, { app: string; table: string; id: string }> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ app, table, id }) =>
+      apiFetch<void>(`/dashboard/api/data-browser/row?app=${encodeURIComponent(app)}&table=${encodeURIComponent(table)}&id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ['data-browser-query', variables.app, variables.table] })
+    },
+  })
+}
+
 // ── Logs ──────────────────────────────────────────────────────────────────────
 
 export interface LogEntry {

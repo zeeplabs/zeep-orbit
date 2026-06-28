@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Database,
   Table2,
@@ -12,12 +12,26 @@ import {
   ChevronLeft,
   ChevronRight as ChevronRightIcon,
   Loader2,
+  Plus,
+  Pencil,
+  Trash2,
+  X,
 } from "lucide-react";
-import { useDataBrowserApps, useDataBrowserQuery, DataBrowserApp, DataBrowserTable } from "../lib/api";
+import {
+  useDataBrowserApps,
+  useDataBrowserQuery,
+  useCreateDataBrowserRow,
+  useUpdateDataBrowserRow,
+  useDeleteDataBrowserRow,
+  DataBrowserApp,
+  DataBrowserTable,
+} from "../lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 const ease = [0.32, 0.72, 0, 1] as const;
+
+const systemDisplayColumns = new Set(["id", "created_at", "updated_at", "owner_id"]);
 
 const fadeUp = {
   initial: { opacity: 0, y: 16 },
@@ -103,6 +117,12 @@ export default function DataBrowserPage() {
   const [limit] = useState(50);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // CRUD state
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingRow, setEditingRow] = useState<Record<string, unknown> | null>(null);
+  const [formValues, setFormValues] = useState<Record<string, string>>({});
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
   const { data: apps, isLoading: appsLoading } = useDataBrowserApps();
   const {
     data: queryResult,
@@ -116,6 +136,10 @@ export default function DataBrowserPage() {
     pageOffset,
     sortOrder,
   );
+
+  const createRow = useCreateDataBrowserRow();
+  const updateRow = useUpdateDataBrowserRow();
+  const deleteRow = useDeleteDataBrowserRow();
 
   const toggleApp = (name: string) => {
     setExpandedApps((prev) => {
@@ -156,11 +180,111 @@ export default function DataBrowserPage() {
     setIsRefreshing(false);
   };
 
+  // ── CRUD handlers ──
+
+  const openCreateModal = () => {
+    setEditingRow(null);
+    const initial: Record<string, string> = {};
+    for (const col of columns) {
+      if (!systemDisplayColumns.has(col.name)) {
+        initial[col.name] = "";
+      }
+    }
+    setFormValues(initial);
+    setModalOpen(true);
+  };
+
+  const openEditModal = (row: Record<string, unknown>) => {
+    setEditingRow(row);
+    const initial: Record<string, string> = {};
+    for (const col of columns) {
+      if (!systemDisplayColumns.has(col.name)) {
+        initial[col.name] = row[col.name] != null ? String(row[col.name]) : "";
+      }
+    }
+    setFormValues(initial);
+    setModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setEditingRow(null);
+    setFormValues({});
+  };
+
+  const handleFormChange = (colName: string, value: string) => {
+    setFormValues((prev) => ({ ...prev, [colName]: value }));
+  };
+
+  const handleSave = async () => {
+    if (!selectedTable) return;
+
+    const data: Record<string, unknown> = {};
+    for (const col of columns) {
+      if (systemDisplayColumns.has(col.name)) continue;
+      const val = formValues[col.name];
+      const colDef = columns.find((c) => c.name === col.name);
+      if (!colDef) continue;
+
+      if (val === "") {
+        if (colDef.type === "boolean") {
+          data[col.name] = false;
+        } else {
+          data[col.name] = null;
+        }
+      } else if (colDef.type === "integer" || colDef.type === "bigint") {
+        data[col.name] = parseInt(val, 10);
+      } else if (colDef.type === "decimal" || colDef.type === "numeric") {
+        data[col.name] = parseFloat(val);
+      } else if (colDef.type === "boolean") {
+        data[col.name] = val === "true";
+      } else {
+        data[col.name] = val;
+      }
+    }
+
+    try {
+      if (editingRow) {
+        await updateRow.mutateAsync({
+          app: selectedTable.app,
+          table: selectedTable.table,
+          id: String(editingRow["id"]),
+          data,
+        });
+      } else {
+        await createRow.mutateAsync({
+          app: selectedTable.app,
+          table: selectedTable.table,
+          data,
+        });
+      }
+      closeModal();
+    } catch {
+      // error toast is handled by the mutation
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!selectedTable) return;
+    try {
+      await deleteRow.mutateAsync({
+        app: selectedTable.app,
+        table: selectedTable.table,
+        id,
+      });
+      setDeleteConfirmId(null);
+    } catch {
+      setDeleteConfirmId(null);
+    }
+  };
+
   const columns = selectedTable?.columns || [];
   const data = queryResult?.data || [];
   const totalCount = queryResult?.count || 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / limit));
   const currentPage = Math.floor(pageOffset / limit) + 1;
+
+  const isSaving = createRow.isPending || updateRow.isPending;
 
   return (
     <motion.div {...fadeUp} className="grid grid-cols-[240px_1fr] max-md:flex max-md:flex-col max-md:gap-3" style={{ minHeight: "100%" }}>
@@ -318,22 +442,33 @@ export default function DataBrowserPage() {
                   {columns.length} colunas
                 </span>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleRefresh}
-                disabled={isRefreshing || queryFetching}
-                style={{ fontSize: 12 }}
-              >
-                <RefreshCw
-                  size={14}
-                  style={{
-                    marginRight: 6,
-                    animation: isRefreshing || queryFetching ? "spin 1s linear infinite" : undefined,
-                  }}
-                />
-                Atualizar
-              </Button>
+              <div style={{ display: "flex", gap: 6 }}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={openCreateModal}
+                  style={{ fontSize: 12 }}
+                >
+                  <Plus size={14} style={{ marginRight: 6 }} />
+                  Novo registro
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleRefresh}
+                  disabled={isRefreshing || queryFetching}
+                  style={{ fontSize: 12 }}
+                >
+                  <RefreshCw
+                    size={14}
+                    style={{
+                      marginRight: 6,
+                      animation: isRefreshing || queryFetching ? "spin 1s linear infinite" : undefined,
+                    }}
+                  />
+                  Atualizar
+                </Button>
+              </div>
             </div>
 
             {/* Desktop table */}
@@ -352,6 +487,18 @@ export default function DataBrowserPage() {
                         zIndex: 1,
                       }}
                     >
+                      <th
+                        style={{
+                          padding: "10px 12px",
+                          width: 80,
+                          textAlign: "center",
+                          fontWeight: 500,
+                          color: "var(--text-muted)",
+                          fontSize: 12,
+                        }}
+                      >
+                        Ações
+                      </th>
                       {columns.map((col) => (
                         <th
                           key={col.name}
@@ -395,7 +542,7 @@ export default function DataBrowserPage() {
                     {data.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={columns.length || 1}
+                          colSpan={columns.length + 1}
                           style={{
                             padding: 40,
                             textAlign: "center",
@@ -409,7 +556,7 @@ export default function DataBrowserPage() {
                     ) : (
                       data.map((row, i) => (
                         <tr
-                          key={i}
+                          key={row["id"] as string || i}
                           style={{
                             borderBottom: "1px solid rgba(255,255,255,0.04)",
                             transition: "background 0.1s",
@@ -421,6 +568,56 @@ export default function DataBrowserPage() {
                             e.currentTarget.style.background = "transparent";
                           }}
                         >
+                          <td style={{ padding: "8px 12px", textAlign: "center" }}>
+                            <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
+                              <button
+                                onClick={() => openEditModal(row)}
+                                style={{
+                                  padding: 4,
+                                  border: "none",
+                                  background: "transparent",
+                                  color: "var(--text-muted)",
+                                  cursor: "pointer",
+                                  borderRadius: 4,
+                                  transition: "all 0.15s",
+                                }}
+                                title="Editar"
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = "rgba(255,255,255,0.06)";
+                                  e.currentTarget.style.color = "var(--brand-primary)";
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = "transparent";
+                                  e.currentTarget.style.color = "var(--text-muted)";
+                                }}
+                              >
+                                <Pencil size={14} />
+                              </button>
+                              <button
+                                onClick={() => setDeleteConfirmId(String(row["id"]))}
+                                style={{
+                                  padding: 4,
+                                  border: "none",
+                                  background: "transparent",
+                                  color: "var(--text-muted)",
+                                  cursor: "pointer",
+                                  borderRadius: 4,
+                                  transition: "all 0.15s",
+                                }}
+                                title="Excluir"
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = "rgba(255,255,255,0.06)";
+                                  e.currentTarget.style.color = "#ef4444";
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = "transparent";
+                                  e.currentTarget.style.color = "var(--text-muted)";
+                                }}
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </td>
                           {columns.map((col) => {
                             const val = row[col.name];
                             return (
@@ -471,7 +668,7 @@ export default function DataBrowserPage() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {data.map((row, i) => (
                     <div
-                      key={i}
+                      key={row["id"] as string || i}
                       style={{
                         background: "rgba(255,255,255,0.03)",
                         border: "1px solid rgba(255,255,255,0.06)",
@@ -531,6 +728,56 @@ export default function DataBrowserPage() {
                           </div>
                         );
                       })}
+                      {/* Mobile action buttons */}
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 4,
+                          padding: "8px 14px",
+                          borderTop: "1px solid rgba(255,255,255,0.04)",
+                        }}
+                      >
+                        <button
+                          onClick={() => openEditModal(row)}
+                          style={{
+                            flex: 1,
+                            padding: "6px 12px",
+                            border: "1px solid rgba(255,255,255,0.1)",
+                            background: "transparent",
+                            color: "var(--text-muted)",
+                            cursor: "pointer",
+                            borderRadius: 6,
+                            fontSize: 12,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: 4,
+                          }}
+                        >
+                          <Pencil size={12} />
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => setDeleteConfirmId(String(row["id"]))}
+                          style={{
+                            flex: 1,
+                            padding: "6px 12px",
+                            border: "1px solid rgba(239,68,68,0.3)",
+                            background: "transparent",
+                            color: "#ef4444",
+                            cursor: "pointer",
+                            borderRadius: 6,
+                            fontSize: 12,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: 4,
+                          }}
+                        >
+                          <Trash2 size={12} />
+                          Excluir
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -584,6 +831,302 @@ export default function DataBrowserPage() {
           </>
         )}
       </div>
+
+      {/* ── Create/Edit Modal ── */}
+      <AnimatePresence>
+        {modalOpen && selectedTable && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 100,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "rgba(0,0,0,0.6)",
+              backdropFilter: "blur(4px)",
+              padding: 16,
+            }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) closeModal();
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ duration: 0.2, ease }}
+              style={{
+                width: "100%",
+                maxWidth: 520,
+                maxHeight: "85vh",
+                overflow: "hidden",
+                display: "flex",
+                flexDirection: "column",
+                background: "var(--bg-card, #1a1a2e)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 16,
+              }}
+            >
+              {/* Modal header */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "16px 20px",
+                  borderBottom: "1px solid rgba(255,255,255,0.06)",
+                }}
+              >
+                <span style={{ fontSize: 15, fontWeight: 600 }}>
+                  {editingRow ? "Editar registro" : "Novo registro"}
+                </span>
+                <button
+                  onClick={closeModal}
+                  style={{
+                    padding: 4,
+                    border: "none",
+                    background: "transparent",
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                    borderRadius: 6,
+                  }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Modal body */}
+              <div
+                style={{
+                  padding: "16px 20px",
+                  overflow: "auto",
+                  flex: 1,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 14,
+                }}
+              >
+                {columns
+                  .filter((col) => !systemDisplayColumns.has(col.name))
+                  .map((col) => (
+                    <div key={col.name} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      <label
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 500,
+                          color: "var(--text-muted)",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 4,
+                        }}
+                      >
+                        {col.name}
+                        <span style={{ fontSize: 10, fontFamily: "monospace", opacity: 0.4 }}>
+                          {col.type}
+                        </span>
+                      </label>
+                      {col.type === "boolean" ? (
+                        <select
+                          value={formValues[col.name] ?? ""}
+                          onChange={(e) => handleFormChange(col.name, e.target.value)}
+                          style={{
+                            padding: "8px 12px",
+                            borderRadius: 8,
+                            border: "1px solid rgba(255,255,255,0.1)",
+                            background: "rgba(255,255,255,0.03)",
+                            color: "var(--text)",
+                            fontSize: 13,
+                            fontFamily: "inherit",
+                            outline: "none",
+                          }}
+                        >
+                          <option value="">—</option>
+                          <option value="true">true</option>
+                          <option value="false">false</option>
+                        </select>
+                      ) : col.type === "jsonb" ? (
+                        <textarea
+                          value={formValues[col.name] ?? ""}
+                          onChange={(e) => handleFormChange(col.name, e.target.value)}
+                          rows={3}
+                          style={{
+                            padding: "8px 12px",
+                            borderRadius: 8,
+                            border: "1px solid rgba(255,255,255,0.1)",
+                            background: "rgba(255,255,255,0.03)",
+                            color: "var(--text)",
+                            fontSize: 13,
+                            fontFamily: "monospace",
+                            outline: "none",
+                            resize: "vertical",
+                          }}
+                        />
+                      ) : (
+                        <input
+                          type={col.type === "integer" || col.type === "bigint" || col.type === "decimal" || col.type === "numeric" ? "number" : "text"}
+                          value={formValues[col.name] ?? ""}
+                          onChange={(e) => handleFormChange(col.name, e.target.value)}
+                          placeholder={col.name}
+                          style={{
+                            padding: "8px 12px",
+                            borderRadius: 8,
+                            border: "1px solid rgba(255,255,255,0.1)",
+                            background: "rgba(255,255,255,0.03)",
+                            color: "var(--text)",
+                            fontSize: 13,
+                            fontFamily: col.type === "uuid" ? "monospace" : "inherit",
+                            outline: "none",
+                          }}
+                        />
+                      )}
+                    </div>
+                  ))}
+              </div>
+
+              {/* Modal footer */}
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: 8,
+                  padding: "12px 20px",
+                  borderTop: "1px solid rgba(255,255,255,0.06)",
+                }}
+              >
+                <Button variant="ghost" size="sm" onClick={closeModal} disabled={isSaving}>
+                  Cancelar
+                </Button>
+                <Button size="sm" onClick={handleSave} disabled={isSaving}>
+                  {isSaving ? (
+                    <>
+                      <Loader2 size={14} style={{ marginRight: 6, animation: "spin 1s linear infinite" }} />
+                      Salvando...
+                    </>
+                  ) : (
+                    "Salvar"
+                  )}
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Delete Confirmation Modal ── */}
+      <AnimatePresence>
+        {deleteConfirmId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 110,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "rgba(0,0,0,0.6)",
+              backdropFilter: "blur(4px)",
+              padding: 16,
+            }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setDeleteConfirmId(null);
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ duration: 0.2, ease }}
+              style={{
+                width: "100%",
+                maxWidth: 400,
+                background: "var(--bg-card, #1a1a2e)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 16,
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "20px 20px 0",
+                }}
+              >
+                <div
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: "50%",
+                    background: "rgba(239,68,68,0.15)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}
+                >
+                  <Trash2 size={18} style={{ color: "#ef4444" }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>
+                    Excluir registro
+                  </div>
+                  <div style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.4 }}>
+                    Tem certeza que deseja excluir este registro? Esta ação não pode ser desfeita.
+                  </div>
+                </div>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: 8,
+                  padding: "16px 20px",
+                  marginTop: 8,
+                }}
+              >
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setDeleteConfirmId(null)}
+                  disabled={deleteRow.isPending}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => handleDelete(deleteConfirmId)}
+                  disabled={deleteRow.isPending}
+                  style={{
+                    background: "#ef4444",
+                    color: "#fff",
+                    border: "none",
+                  }}
+                >
+                  {deleteRow.isPending ? (
+                    <>
+                      <Loader2 size={14} style={{ marginRight: 6, animation: "spin 1s linear infinite" }} />
+                      Excluindo...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 size={14} style={{ marginRight: 6 }} />
+                      Excluir
+                    </>
+                  )}
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <style>{`
         @keyframes spin {

@@ -855,6 +855,201 @@ func sanitizeData(rows []map[string]any) []map[string]any {
 	return rows
 }
 
+// sanitizeRow converte [16]byte em string UUID para uma única row.
+func sanitizeRow(row map[string]any) map[string]any {
+	return sanitizeData([]map[string]any{row})[0]
+}
+
+type dataBrowserMutationRequest struct {
+	App   string         `json:"app"`
+	Table string         `json:"table"`
+	ID    string         `json:"id,omitempty"`
+	Data  map[string]any `json:"data,omitempty"`
+}
+
+// DataBrowserCreate handles POST /dashboard/api/data-browser/row
+// Insere um novo registro na tabela.
+func (h *Handler) DataBrowserCreate(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	var req dataBrowserMutationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	if req.App == "" || req.Table == "" || req.Data == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "app, table, and data are required"})
+		return
+	}
+
+	ownership, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	if ownership != nil && !ownership[req.App] {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+
+	app, ok := h.reg.Get(req.App)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "app not found"})
+		return
+	}
+	table, ok := app.Tables[req.Table]
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
+		return
+	}
+
+	// OwnerID: passa o ID do usuário do dashboard se RLS estiver habilitado.
+	ownerID := ""
+	if table.RLS == "owner" || table.RLS == "enabled" {
+		ownerID = user.ID
+	}
+
+	q, err := query.BuildInsert(app.SchemaName, req.Table, table, req.Data, ownerID)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	rows, err := h.pool.Query(r.Context(), q.SQL, q.Args...)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to insert row: " + err.Error()})
+		return
+	}
+	row, err := pgx.CollectOneRow(rows, pgx.RowToMap)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to read inserted row: " + err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"data": sanitizeRow(row),
+	})
+}
+
+// DataBrowserUpdate handles PUT /dashboard/api/data-browser/row
+// Atualiza parcialmente um registro existente.
+func (h *Handler) DataBrowserUpdate(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	var req dataBrowserMutationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	if req.App == "" || req.Table == "" || req.ID == "" || req.Data == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "app, table, id, and data are required"})
+		return
+	}
+
+	ownership, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	if ownership != nil && !ownership[req.App] {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+
+	app, ok := h.reg.Get(req.App)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "app not found"})
+		return
+	}
+	table, ok := app.Tables[req.Table]
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
+		return
+	}
+
+	// Dashboard bypasses row-level RLS for update (consistent with read path).
+	q, err := query.BuildUpdate(app.SchemaName, req.Table, table, req.ID, req.Data, "")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	rows, err := h.pool.Query(r.Context(), q.SQL, q.Args...)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update row: " + err.Error()})
+		return
+	}
+	row, err := pgx.CollectOneRow(rows, pgx.RowToMap)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to read updated row: " + err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data": sanitizeRow(row),
+	})
+}
+
+// DataBrowserDelete handles DELETE /dashboard/api/data-browser/row
+// Remove um registro pelo ID.
+func (h *Handler) DataBrowserDelete(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appName := r.URL.Query().Get("app")
+	tableName := r.URL.Query().Get("table")
+	id := r.URL.Query().Get("id")
+	if appName == "" || tableName == "" || id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "app, table, and id are required"})
+		return
+	}
+
+	ownership, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	if ownership != nil && !ownership[appName] {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+
+	app, ok := h.reg.Get(appName)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "app not found"})
+		return
+	}
+	_, ok = app.Tables[tableName]
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
+		return
+	}
+
+	q := query.BuildDelete(app.SchemaName, tableName, id, "")
+	tag, err := h.pool.Exec(r.Context(), q.SQL, q.Args...)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to delete row: " + err.Error()})
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "row not found"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"success": true})
+}
+
 func parseInt(s string) (int, error) {
 	var n int
 	for _, c := range s {

@@ -35,6 +35,12 @@ No built-in user management in M1. Each app has a JWT secret. Callers generate/v
 Primary interface is `zeep` CLI, not HTTP admin API.
 **Reason:** Simpler to implement, natural fit for DevOps workflows, no auth needed for admin operations.
 
+### D-007: Programmatic pgx for schema migrations
+
+Schema migrations use programmatic DDL via `pgx`, not SQL migration files.
+**Reason:** Matches existing provisioning approach, no external migration tool dependency, migrations are auto-detected by diffing desired config vs actual information_schema state.
+**Trade-off:** No SQL-file audit trail. Mitigated by `_schema_migrations` tracking table.
+
 ---
 
 ## Blockers
@@ -45,8 +51,8 @@ None.
 
 ## Todos
 
-- [ ] Decide module name: `github.com/zeeplabs/zeep-orbit`
-- [ ] Choose PostgreSQL migration approach: pure SQL files vs. programmatic via `pgx`
+- [x] Decide module name: `github.com/zeeplabs/zeep-orbit`
+- [x] Choose PostgreSQL migration approach: pure SQL files vs. programmatic via `pgx`
 - [ ] Define filtering DSL for query params (PostgREST-compatible vs. custom)
 
 ---

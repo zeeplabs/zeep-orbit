@@ -1,3 +1,5 @@
 bin/
 .env
 *.test
+internal/dashboard/ui/node_modules/
+internal/dashboard/static/

@@ -33,11 +33,12 @@ type Table struct {
 
 // Column representa uma coluna de uma tabela.
 type Column struct {
-	Name     string
-	Type     string
-	Required bool
-	Default  string
-	Unique   bool
+	Name       string
+	Type       string
+	Required   bool
+	Default    string
+	Unique     bool
+	RenameFrom string
 }
 
 // New retorna um Registry vazio, pronto para uso.
@@ -68,6 +69,7 @@ func (r *Registry) Load(cfg *config.Config) error {
 					Required: colCfg.Required,
 					Default:  colCfg.Default,
 					Unique:   colCfg.Unique,
+					RenameFrom: colCfg.RenameFrom,
 				})
 			}
 			tables[tblCfg.Name] = &Table{
@@ -193,6 +195,7 @@ func (r *Registry) LoadFromDB(ctx context.Context, pool *db.Pool) error {
 					Required: c.Required,
 					Default:  c.Default,
 					Unique:   c.Unique,
+					RenameFrom: c.RenameFrom,
 				})
 			}
 

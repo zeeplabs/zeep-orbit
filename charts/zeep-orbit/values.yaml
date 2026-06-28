@@ -1,14 +1,93 @@
+# ── Global ──────────────────────────────────────────────
+nameOverride: ""
+fullnameOverride: ""
 replicaCount: 2
 
+# ── Image ───────────────────────────────────────────────
 image:
   repository: ghcr.io/zeeplabs/zeep-orbit
   tag: "latest"
   pullPolicy: Always
+  # digest: "sha256:abc123..."   # pin para produção imutável
+  pullSecrets: []
 
+# ── Service ─────────────────────────────────────────────
 service:
   type: ClusterIP
   port: 80
 
+# ── Ingress ─────────────────────────────────────────────
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: orbit.zeeplabs.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: zeep-orbit-tls
+      hosts:
+        - orbit.zeeplabs.com
+
+# ── Autoscaling (HPA) ───────────────────────────────────
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 75
+  targetMemoryUtilizationPercentage: 80
+
+# ── PodDisruptionBudget ─────────────────────────────────
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+  # maxUnavailable: 1
+
+# ── ServiceAccount ──────────────────────────────────────
+serviceAccount:
+  create: false
+  name: ""
+  annotations: {}
+    # eks.amazonaws.com/role-arn: arn:aws:iam::123456:role/zeep-orbit
+
+# ── Security ────────────────────────────────────────────
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  privileged: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+  seccompProfile:
+    type: RuntimeDefault
+
+# ── Topology Spread ─────────────────────────────────────
+topologySpreadConstraints: []
+  # - maxSkew: 1
+  #   topologyKey: topology.kubernetes.io/zone
+  #   whenUnsatisfiable: ScheduleAnyway
+
+# ── Node & Scheduling ───────────────────────────────────
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# ── Pod Extra ───────────────────────────────────────────
+podAnnotations: {}
+podLabels: {}
+
+# ── Resources ───────────────────────────────────────────
 resources:
   requests:
     memory: "32Mi"
@@ -17,26 +96,42 @@ resources:
     memory: "128Mi"
     cpu: "200m"
 
-# Credenciais — obrigatórias, não têm default seguro.
+# ── Probes ──────────────────────────────────────────────
+probes:
+  liveness:
+    path: /health
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    failureThreshold: 3
+  readiness:
+    path: /health
+    initialDelaySeconds: 3
+    periodSeconds: 5
+    failureThreshold: 2
+
+# ── Secrets (obrigatório) ───────────────────────────────
 secrets:
   databaseUrl: ""
   # Map de app → jwtSecret. Chave vira <APPNAME_UPPER>_JWT_SECRET no Pod.
-  # Exemplo:
-  #   apps:
-  #     billing:
-  #       jwtSecret: "gere-com-openssl-rand-base64-32"
-  #     inventory:
-  #       jwtSecret: "gere-com-openssl-rand-base64-32"
   apps: {}
+  #   billing:
+  #     jwtSecret: "..."
 
-# White-label branding
+# ── White-label branding ────────────────────────────────
 brand:
   theme: "azure"
   companyName: "Zeep Tecnologia"
 
-# Conteúdo completo do apps.yaml — define quais apps e tabelas existem.
-# ${DATABASE_URL} e ${<APP>_JWT_SECRET} são substituídos pelos env vars do Secret.
+# ── apps.yaml (config) ──────────────────────────────────
 appsConfig: |
   platform:
     database_url: ${DATABASE_URL}
   apps: []
+
+# ── Metrics ─────────────────────────────────────────────
+# Prometheus-operator ServiceMonitor
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}

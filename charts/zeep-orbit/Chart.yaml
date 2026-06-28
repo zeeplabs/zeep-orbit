@@ -2,13 +2,15 @@ apiVersion: v2
 name: zeep-orbit
 description: Schema YAML → REST API automático no PostgreSQL
 type: application
-version: 0.1.0
+version: 0.2.0
 appVersion: "latest"
+icon: https://raw.githubusercontent.com/zeeplabs/zeep-orbit/main/.github/logo.svg
 keywords:
   - baas
   - rest
   - postgresql
   - api
+  - low-code
 home: https://github.com/zeeplabs/zeep-orbit
 sources:
   - https://github.com/zeeplabs/zeep-orbit
