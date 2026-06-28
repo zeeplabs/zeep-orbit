@@ -16,6 +16,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/zeeplabs/zeep-orbit/internal/auth"
+	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/dashboard"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 	"github.com/zeeplabs/zeep-orbit/internal/docs"
@@ -169,6 +170,13 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Delete("/api/data-browser/row", dashH.DataBrowserDelete)
 		r.Handle("/*", dashboard.StaticHandler())
 	})
+
+	// Google OAuth — só ativado se GOOGLE_CLIENT_ID estiver configurado
+	if googleCfg := config.LoadGoogleOAuthConfig(); googleCfg.ClientID != "" {
+		googleH := dashboard.NewGoogleOAuthHandler(pool, googleCfg)
+		r.Get("/dashboard/api/auth/google/login", googleH.Login)
+		r.Get("/dashboard/api/auth/google/callback", googleH.Callback)
+	}
 
 	// Auth nativo por app — deve vir antes das rotas CRUD wildcard
 	ah := auth.New(pool, reg)

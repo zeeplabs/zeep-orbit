@@ -177,6 +177,7 @@ export interface BrandConfig {
   theme: string
   company_name: string
   logo_url: string
+  google_oauth_enabled: boolean
 }
 
 export function useBootstrapStatus(): UseQueryResult<BootstrapStatus> {

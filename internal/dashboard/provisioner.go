@@ -16,10 +16,14 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 		`CREATE TABLE IF NOT EXISTS zeep_system.dashboard_users (
 			id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
 			email        TEXT        UNIQUE NOT NULL,
-			password_hash TEXT       NOT NULL,
+			password_hash TEXT       NOT NULL DEFAULT '',
+			google_id    TEXT        UNIQUE,
 			role         TEXT        NOT NULL CHECK (role IN ('admin','superadmin')),
 			created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
+		`ALTER TABLE zeep_system.dashboard_users ADD COLUMN IF NOT EXISTS google_id TEXT`,
+		`CREATE INDEX IF NOT EXISTS idx_dashboard_users_google_id
+		 ON zeep_system.dashboard_users(google_id)`,
 		`CREATE TABLE IF NOT EXISTS zeep_system.sessions (
 			token      TEXT        PRIMARY KEY,
 			user_id    UUID        NOT NULL REFERENCES zeep_system.dashboard_users(id) ON DELETE CASCADE,

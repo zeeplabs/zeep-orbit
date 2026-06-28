@@ -112,6 +112,11 @@ probes:
 # ── Secrets (obrigatório) ───────────────────────────────
 secrets:
   databaseUrl: ""
+  # google:
+  #   clientId: "..."
+  #   clientSecret: "..."
+  #   redirectUrl: "https://orbit.zeeplabs.com/dashboard/api/auth/google/callback"
+  #   allowedDomains: "zeeplabs.com, zeepfy.com"
   # Map de app → jwtSecret. Chave vira <APPNAME_UPPER>_JWT_SECRET no Pod.
   apps: {}
   #   billing:

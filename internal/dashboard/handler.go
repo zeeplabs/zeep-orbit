@@ -154,9 +154,10 @@ func (h *Handler) Config(w http.ResponseWriter, r *http.Request) {
 		company = cfg.CompanyName
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{
-		"theme":        theme,
-		"company_name": company,
+	writeJSON(w, http.StatusOK, map[string]any{
+		"theme":               theme,
+		"company_name":        company,
+		"google_oauth_enabled": os.Getenv("GOOGLE_CLIENT_ID") != "",
 	})
 }
 
@@ -222,6 +223,10 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(body.Password)); err != nil {
+		if user.PasswordHash == "" {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "use Google to sign in"})
+			return
+		}
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
 		return
 	}

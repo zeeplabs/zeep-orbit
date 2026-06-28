@@ -18,6 +18,7 @@ type DashboardUser struct {
 	ID           string    `json:"id"`
 	Email        string    `json:"email"`
 	PasswordHash string    `json:"-"`
+	GoogleID     string    `json:"-"`
 	Role         string    `json:"role"`
 	CreatedAt    time.Time `json:"created_at"`
 }
@@ -26,10 +27,10 @@ type DashboardUser struct {
 func GetUserByEmail(ctx context.Context, pool *db.Pool, email string) (*DashboardUser, error) {
 	var u DashboardUser
 	err := pool.QueryRow(ctx,
-		`SELECT id, email, password_hash, role, created_at
+		`SELECT id, email, password_hash, google_id, role, created_at
 		 FROM zeep_system.dashboard_users WHERE email = $1`,
 		email,
-	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &u.CreatedAt)
+	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.GoogleID, &u.Role, &u.CreatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -37,6 +38,50 @@ func GetUserByEmail(ctx context.Context, pool *db.Pool, email string) (*Dashboar
 		return nil, fmt.Errorf("dashboard: get user: %w", err)
 	}
 	return &u, nil
+}
+
+// GetUserByGoogleID fetches a dashboard user by google_id.
+func GetUserByGoogleID(ctx context.Context, pool *db.Pool, googleID string) (*DashboardUser, error) {
+	var u DashboardUser
+	err := pool.QueryRow(ctx,
+		`SELECT id, email, password_hash, google_id, role, created_at
+		 FROM zeep_system.dashboard_users WHERE google_id = $1`,
+		googleID,
+	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.GoogleID, &u.Role, &u.CreatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("dashboard: get user by google id: %w", err)
+	}
+	return &u, nil
+}
+
+// CreateGoogleUser creates a new dashboard user with Google OAuth (no password).
+func CreateGoogleUser(ctx context.Context, pool *db.Pool, email, googleID string) (*DashboardUser, error) {
+	var u DashboardUser
+	err := pool.QueryRow(ctx,
+		`INSERT INTO zeep_system.dashboard_users (email, password_hash, google_id, role)
+		 VALUES ($1, '', $2, 'admin')
+		 RETURNING id, email, password_hash, google_id, role, created_at`,
+		email, googleID,
+	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.GoogleID, &u.Role, &u.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("dashboard: create google user: %w", err)
+	}
+	return &u, nil
+}
+
+// LinkGoogleID associates a Google ID with an existing dashboard user.
+func LinkGoogleID(ctx context.Context, pool *db.Pool, userID, googleID string) error {
+	_, err := pool.Exec(ctx,
+		`UPDATE zeep_system.dashboard_users SET google_id = $1 WHERE id = $2`,
+		googleID, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("dashboard: link google id: %w", err)
+	}
+	return nil
 }
 
 // CreateUser inserts a new dashboard user with a pre-hashed password.
@@ -187,12 +232,12 @@ func CreateSession(ctx context.Context, pool *db.Pool, token, userID string, exp
 func GetSessionUser(ctx context.Context, pool *db.Pool, token string) (*DashboardUser, error) {
 	var u DashboardUser
 	err := pool.QueryRow(ctx,
-		`SELECT u.id, u.email, u.password_hash, u.role, u.created_at
+		`SELECT u.id, u.email, u.password_hash, u.google_id, u.role, u.created_at
 		 FROM zeep_system.sessions s
 		 JOIN zeep_system.dashboard_users u ON u.id = s.user_id
 		 WHERE s.token = $1 AND s.expires_at > now()`,
 		token,
-	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &u.CreatedAt)
+	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.GoogleID, &u.Role, &u.CreatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
