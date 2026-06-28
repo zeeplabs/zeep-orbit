@@ -1025,13 +1025,7 @@ func (h *Handler) DataBrowserCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// OwnerID: passa o ID do usuário do dashboard se RLS estiver habilitado.
-	ownerID := ""
-	if table.RLS == "owner" || table.RLS == "enabled" {
-		ownerID = user.ID
-	}
-
-	q, err := query.BuildInsert(app.SchemaName, req.Table, table, req.Data, ownerID)
+	q, err := query.BuildInsert(app.SchemaName, req.Table, table, req.Data, "")
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
