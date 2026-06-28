@@ -19,7 +19,7 @@
 
   <rect width="1200" height="700" fill="url(#bg)" rx="16"/>
 
-  <text x="600" y="42" fill="#F8FAFC" font-family="system-ui,sans-serif" font-size="20" font-weight="700" text-anchor="middle">zeep-orbit — Architecture</text>
+  <text x="600" y="42" fill="#F8FAFC" font-family="system-ui,sans-serif" font-size="20" font-weight="700" text-anchor="middle">Zeep Orbit — Architecture</text>
   <text x="600" y="62" fill="#94A3B8" font-family="system-ui,sans-serif" font-size="12" text-anchor="middle">Schema-driven REST API orchestrator · One backend for all your apps</text>
 
   <!-- ENTRY POINTS -->
