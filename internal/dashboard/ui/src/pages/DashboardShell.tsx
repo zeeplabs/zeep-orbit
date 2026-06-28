@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import logoType from "@/assets/images/logo/logotype.svg";
 
 interface User {
   id: string;
@@ -50,15 +51,15 @@ export default function DashboardShell({ user }: { user: User | null }) {
   };
 
   return (
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "240px 1fr",
-          minHeight: "100vh",
-          background:
-            "radial-gradient(ellipse at 20% 50%, rgba(3,71,165,0.15) 0%, transparent 50%), radial-gradient(ellipse at 80% 20%, rgba(124,58,237,0.15) 0%, transparent 50%), var(--bg)",
-        }}
-      >
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "240px 1fr",
+        minHeight: "100vh",
+        background:
+          "radial-gradient(ellipse at 20% 50%, rgba(3,71,165,0.15) 0%, transparent 50%), radial-gradient(ellipse at 80% 20%, rgba(124,58,237,0.15) 0%, transparent 50%), var(--bg)",
+      }}
+    >
       {/* Sidebar */}
       <motion.aside
         initial={{ x: -20, opacity: 0 }}
@@ -84,29 +85,30 @@ export default function DashboardShell({ user }: { user: User | null }) {
             marginBottom: 32,
           }}
         >
-          <div
+          <img
+            src={logoType}
+            alt="Zeep Orbit"
             style={{
-              width: 32,
-              height: 32,
-              borderRadius: 10,
-              background: "rgba(3,71,165,0.15)",
-              border: "1px solid rgba(3,71,165,0.25)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 15,
-              fontWeight: 800,
-              color: "var(--accent-light)",
+              width: 42,
+              height: 42,
+              borderRadius: 8,
+              border: "1px solid rgba(255,255,255,0.10)",
+              objectFit: "cover",
             }}
-          >
-            Z
-          </div>
-          <div>
-            <p style={{ fontSize: 14, fontWeight: 700, lineHeight: 1 }}>zeep</p>
+          />
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: 16, fontWeight: 700, lineHeight: 1 }}>
+              Orbit
+            </span>
             <p
-              style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}
+              style={{
+                fontSize: 12,
+                fontWeight: 400,
+                lineHeight: 1,
+                color: "var(--text-muted)",
+              }}
             >
-              dashboard
+              BaaS Platform Manager
             </p>
           </div>
         </div>
@@ -227,12 +229,21 @@ export default function DashboardShell({ user }: { user: User | null }) {
       </main>
 
       {/* Logout confirmation dialog */}
-      <Dialog open={showLogoutDialog} onOpenChange={(open) => { if (!open) setShowLogoutDialog(false) }}>
+      <Dialog
+        open={showLogoutDialog}
+        onOpenChange={(open) => {
+          if (!open) setShowLogoutDialog(false);
+        }}
+      >
         <DialogContent className="max-w-[380px] border border-white/[0.10] bg-[#0D0D14]/60 backdrop-blur-xl rounded-2xl p-0 gap-0 shadow-[0_0_40px_rgba(3,71,165,0.10)]">
           <div className="bg-white/[0.04] shadow-[inset_0_1px_1px_rgba(255,255,255,0.10)] rounded-[calc(1rem-2px)] px-7 pb-6 pt-7">
             <DialogHeader className="mb-0">
               <div className="w-11 h-11 rounded-xl bg-white/[0.08] border border-white/[0.10] flex items-center justify-center mb-[18px]">
-                <LogOut size={18} strokeWidth={1.5} className="text-[#94A3B8]" />
+                <LogOut
+                  size={18}
+                  strokeWidth={1.5}
+                  className="text-[#94A3B8]"
+                />
               </div>
               <DialogTitle className="text-base font-bold text-[#F8FAFC] mb-2">
                 Sair do dashboard?
@@ -255,7 +266,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
                 disabled={loggingOut}
                 className="flex-1 rounded-xl bg-gradient-to-br from-[#0347A5] to-[#7C3AED] text-white font-semibold border-0 disabled:opacity-40"
               >
-                {loggingOut ? 'Saindo...' : 'Sair'}
+                {loggingOut ? "Saindo..." : "Sair"}
               </Button>
             </DialogFooter>
           </div>
