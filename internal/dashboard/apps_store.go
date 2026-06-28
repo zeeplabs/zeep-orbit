@@ -226,6 +226,36 @@ func DeleteApp(ctx context.Context, pool *db.Pool, appID, userID, role string) e
 	return nil
 }
 
+// ListOwnedAppNames returns a set of app names accessible to the user.
+// superadmin gets nil (no filter); admin gets only apps they own/are members of.
+func ListOwnedAppNames(ctx context.Context, pool *db.Pool, userID, role string) (map[string]bool, error) {
+	if role == "superadmin" {
+		return nil, nil
+	}
+
+	rows, err := pool.Query(ctx,
+		`SELECT DISTINCT a.name
+		 FROM zeep_system.apps a
+		 LEFT JOIN zeep_system.app_ownership o ON o.app_id = a.id AND o.user_id = $1
+		 WHERE a.owner_id = $1 OR o.user_id = $1`,
+		userID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("dashboard: list owned apps: %w", err)
+	}
+	defer rows.Close()
+
+	apps := make(map[string]bool)
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("dashboard: scan app name: %w", err)
+		}
+		apps[name] = true
+	}
+	return apps, rows.Err()
+}
+
 // loadAppTables fetches all tables for a given app ID from the pool (not in a transaction).
 func loadAppTables(ctx context.Context, pool *db.Pool, appID string) ([]AppTableRow, error) {
 	rows, err := pool.Query(ctx,

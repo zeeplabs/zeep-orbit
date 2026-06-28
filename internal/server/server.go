@@ -124,10 +124,11 @@ func buildLogger() (*zap.Logger, error) {
 
 // newRouter monta o chi.Mux com todas as rotas e middlewares.
 func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Logger, dashH *dashboard.Handler) *chi.Mux {
+	logBuf := dashH.Logs
 	r := chi.NewRouter()
 
 	// Middleware stack global
-	r.Use(zapRequestLogger(logger))
+	r.Use(logMiddleware(logger, logBuf))
 	r.Use(chimiddleware.Recoverer)
 
 	// Rotas sem JWT
@@ -158,7 +159,11 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Get("/api/users", dashH.ListUsers)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/users", dashH.CreateUser)
 		r.With(dashboard.RequireAuth(pool)).Delete("/api/users/{id}", dashH.DeleteUser)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/logs", dashH.ListLogs)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/logs/metrics", dashH.LogsMetrics)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/config", dashH.UpdateConfig)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/data-browser/apps", dashH.ListDataBrowserApps)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/data-browser/query", dashH.DataBrowserQuery)
 		r.Handle("/*", dashboard.StaticHandler())
 	})
 
@@ -192,8 +197,8 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 	return r
 }
 
-// zapRequestLogger é um middleware que loga cada request com zap após o handler responder.
-func zapRequestLogger(logger *zap.Logger) func(http.Handler) http.Handler {
+// logMiddleware loga cada request com zap e alimenta o ring buffer do dashboard.
+func logMiddleware(logger *zap.Logger, buf *dashboard.RingBuffer) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
@@ -211,6 +216,16 @@ func zapRequestLogger(logger *zap.Logger) func(http.Handler) http.Handler {
 				zap.Int("status", status),
 				zap.Int64("latency_ms", latency.Milliseconds()),
 			)
+
+			buf.Push(dashboard.LogEntry{
+				Timestamp: start,
+				App:       dashboard.ExtractApp(r.URL.Path),
+				Method:    method,
+				Path:      r.URL.Path,
+				Status:    status,
+				LatencyMs: latency.Milliseconds(),
+				UserAgent: r.UserAgent(),
+			})
 
 			statusStr := fmt.Sprintf("%d", status)
 			httpRequestsTotal.WithLabelValues(method, statusStr).Inc()

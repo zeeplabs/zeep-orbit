@@ -6,29 +6,39 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"regexp"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 	"github.com/zeeplabs/zeep-orbit/internal/provisioner"
+	"github.com/zeeplabs/zeep-orbit/internal/query"
 	"github.com/zeeplabs/zeep-orbit/internal/registry"
 )
 
 // Handler holds dependencies for dashboard HTTP handlers.
 type Handler struct {
-	pool *db.Pool
-	reg  *registry.Registry
-	prov *provisioner.Provisioner
+	pool  *db.Pool
+	reg   *registry.Registry
+	prov  *provisioner.Provisioner
+	Logs  *RingBuffer
 }
 
 // NewHandler creates a new Handler.
 func NewHandler(pool *db.Pool, reg *registry.Registry) *Handler {
-	return &Handler{pool: pool, reg: reg, prov: provisioner.New(pool)}
+	return &Handler{
+		pool: pool,
+		reg:  reg,
+		prov: provisioner.New(pool),
+		Logs: NewRingBuffer(2000),
+	}
 }
 
 var (
@@ -620,4 +630,238 @@ func generateToken() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
+}
+
+// ListLogs handles GET /dashboard/api/logs?app=&limit=
+func (h *Handler) ListLogs(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	appFilter := r.URL.Query().Get("app")
+	if appFilter != "" && allowedApps != nil && !allowedApps[appFilter] {
+		appFilter = "" // user doesn't own this app, ignore filter
+	}
+
+	limit := 100
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := parseInt(l); err == nil && parsed > 0 && parsed <= 500 {
+			limit = parsed
+		}
+	}
+	entries := h.Logs.Recent(limit, appFilter, allowedApps)
+	if entries == nil {
+		entries = []LogEntry{}
+	}
+	writeJSON(w, http.StatusOK, entries)
+}
+
+// LogsMetrics handles GET /dashboard/api/logs/metrics
+func (h *Handler) LogsMetrics(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, h.Logs.Metrics(allowedApps))
+}
+
+// DataBrowserTableColumn represents a column in the data browser tree.
+type DataBrowserTableColumn struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+// DataBrowserTable represents a table in the data browser tree.
+type DataBrowserTable struct {
+	Name    string                 `json:"name"`
+	Columns []DataBrowserTableColumn `json:"columns"`
+}
+
+// DataBrowserApp represents an app in the data browser tree.
+type DataBrowserApp struct {
+	Name   string             `json:"name"`
+	Tables []DataBrowserTable `json:"tables"`
+}
+
+// ListDataBrowserApps handles GET /dashboard/api/data-browser/apps
+// Returns apps with their tables from the registry, filtered by ownership.
+func (h *Handler) ListDataBrowserApps(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	apps := h.reg.Apps()
+	resp := make([]DataBrowserApp, 0, len(apps))
+	for _, app := range apps {
+		if allowedApps != nil && !allowedApps[app.Config.Name] {
+			continue
+		}
+		tables := make([]DataBrowserTable, 0, len(app.Tables))
+		for _, t := range app.Tables {
+			cols := make([]DataBrowserTableColumn, 0, len(t.Columns)+4)
+			cols = append(cols, DataBrowserTableColumn{Name: "id", Type: "uuid"})
+			for _, c := range t.Columns {
+				cols = append(cols, DataBrowserTableColumn{Name: c.Name, Type: c.Type})
+			}
+			cols = append(cols, DataBrowserTableColumn{Name: "created_at", Type: "timestamptz"})
+			cols = append(cols, DataBrowserTableColumn{Name: "updated_at", Type: "timestamptz"})
+			if t.RLS == "owner" {
+				cols = append(cols, DataBrowserTableColumn{Name: "owner_id", Type: "uuid"})
+			}
+			tables = append(tables, DataBrowserTable{Name: t.Name, Columns: cols})
+		}
+		resp = append(resp, DataBrowserApp{Name: app.Config.Name, Tables: tables})
+	}
+
+	if resp == nil {
+		resp = []DataBrowserApp{}
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// DataBrowserQuery handles GET /dashboard/api/data-browser/query
+// Executes a paginated SELECT using the existing query builder.
+func (h *Handler) DataBrowserQuery(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appName := r.URL.Query().Get("app")
+	tableName := r.URL.Query().Get("table")
+	if appName == "" || tableName == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "app and table are required"})
+		return
+	}
+
+	// Ownership check
+	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	if allowedApps != nil && !allowedApps[appName] {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+
+	app, ok := h.reg.Get(appName)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "app not found"})
+		return
+	}
+
+	table, ok := app.Tables[tableName]
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
+		return
+	}
+
+	// Parse query params
+	params := make(map[string]string)
+	for k, vals := range r.URL.Query() {
+		if k == "app" || k == "table" {
+			continue
+		}
+		if len(vals) > 0 {
+			params[k] = vals[0]
+		}
+	}
+
+	q, err := query.BuildList(app.SchemaName, tableName, table, params, "")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	ctx := r.Context()
+
+	// COUNT
+	var count int
+	filterArgs := q.Args[:len(q.Args)-2]
+	if err := h.pool.QueryRow(ctx, q.CountSQL, filterArgs...).Scan(&count); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to count rows"})
+		return
+	}
+
+	// DATA
+	rows, err := h.pool.Query(ctx, q.SQL, q.Args...)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to query rows"})
+		return
+	}
+	data, err := pgx.CollectRows(rows, pgx.RowToMap)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to collect rows"})
+		return
+	}
+	if data == nil {
+		data = []map[string]any{}
+	}
+
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit <= 0 {
+		limit = 50
+	}
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	if offset < 0 {
+		offset = 0
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data":   sanitizeData(data),
+		"count":  count,
+		"limit":  limit,
+		"offset": offset,
+	})
+}
+
+// sanitizeData converte [16]byte (UUID do pgx v5) em string UUID.
+func sanitizeData(rows []map[string]any) []map[string]any {
+	for i, row := range rows {
+		for k, v := range row {
+			if b, ok := v.([16]byte); ok {
+				row[k] = fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+					b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+			}
+		}
+		rows[i] = row
+	}
+	return rows
+}
+
+func parseInt(s string) (int, error) {
+	var n int
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return 0, nil
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n, nil
 }

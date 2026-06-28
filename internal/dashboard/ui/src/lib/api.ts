@@ -215,6 +215,101 @@ export function useBrandConfig(): UseQueryResult<BrandConfig> {
   })
 }
 
+// ── Data Browser ──────────────────────────────────────────────────────────────
+
+export interface DataBrowserColumn {
+  name: string
+  type: string
+}
+
+export interface DataBrowserTable {
+  name: string
+  columns: DataBrowserColumn[]
+}
+
+export interface DataBrowserApp {
+  name: string
+  tables: DataBrowserTable[]
+}
+
+export interface QueryResult {
+  data: Record<string, unknown>[]
+  count: number
+  limit: number
+  offset: number
+}
+
+export function useDataBrowserApps(): UseQueryResult<DataBrowserApp[]> {
+  return useQuery({
+    queryKey: ['data-browser-apps'],
+    queryFn: () => apiFetch<DataBrowserApp[]>('/dashboard/api/data-browser/apps'),
+  })
+}
+
+export function useDataBrowserQuery(
+  app: string,
+  table: string,
+  limit: number,
+  offset: number,
+  order?: string,
+): UseQueryResult<QueryResult> {
+  return useQuery({
+    queryKey: ['data-browser-query', app, table, limit, offset, order],
+    queryFn: () => {
+      const params = new URLSearchParams()
+      params.set('app', app)
+      params.set('table', table)
+      params.set('limit', String(limit))
+      params.set('offset', String(offset))
+      if (order) params.set('order', order)
+      return apiFetch<QueryResult>(`/dashboard/api/data-browser/query?${params}`)
+    },
+    enabled: Boolean(app) && Boolean(table),
+  })
+}
+
+// ── Logs ──────────────────────────────────────────────────────────────────────
+
+export interface LogEntry {
+  timestamp: string
+  app: string
+  method: string
+  path: string
+  status: number
+  latency_ms: number
+  user_agent?: string
+}
+
+export interface LogMetrics {
+  total_requests: number
+  requests_per_app: Record<string, number>
+  avg_latency_ms: number
+  errors_4xx: number
+  errors_5xx: number
+  method_breakdown: Record<string, number>
+}
+
+export function useLogs(appFilter?: string): UseQueryResult<LogEntry[]> {
+  return useQuery({
+    queryKey: ['logs', appFilter],
+    queryFn: () => {
+      const params = new URLSearchParams()
+      params.set('limit', '200')
+      if (appFilter) params.set('app', appFilter)
+      return apiFetch<LogEntry[]>(`/dashboard/api/logs?${params}`)
+    },
+    refetchInterval: 3000,
+  })
+}
+
+export function useLogMetrics(): UseQueryResult<LogMetrics> {
+  return useQuery({
+    queryKey: ['logs-metrics'],
+    queryFn: () => apiFetch<LogMetrics>('/dashboard/api/logs/metrics'),
+    refetchInterval: 5000,
+  })
+}
+
 export function useUpdateBrandConfig(): UseMutationResult<
   BrandConfig,
   Error,

@@ -27,10 +27,10 @@ function navItems(user: User | null): NavItem[] {
     { icon: Grid, label: "Apps", path: "/apps" },
     { icon: Database, label: "Data Browser", path: "/data-browser" },
     { icon: Activity, label: "Logs", path: "/logs" },
-    { icon: Settings, label: "Aparência", path: "/configuracoes" },
   ];
   if (user?.role === "superadmin") {
     items.splice(2, 0, { icon: Users, label: "Usuários", path: "/usuarios" });
+    items.push({ icon: Settings, label: "Aparência", path: "/configuracoes" });
   }
   return items;
 }
@@ -249,7 +249,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
           minHeight: "100vh",
         }}
       >
-        <div style={{ width: "100%", maxWidth: 1100, padding: 40 }}>
+        <div style={{ width: "100%", padding: 40, minWidth: 0 }}>
           <Outlet />
         </div>
       </main>

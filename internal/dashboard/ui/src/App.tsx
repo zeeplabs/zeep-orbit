@@ -8,6 +8,8 @@ import AppsPage from './pages/AppsPage'
 import AppFormPage from './pages/AppFormPage'
 import BrandSettingsPage from './pages/BrandSettingsPage'
 import UsersPage from './pages/UsersPage'
+import LogsPage from './pages/LogsPage'
+import DataBrowserPage from './pages/DataBrowserPage'
 import { useBootstrapStatus } from './lib/api'
 import { THEMES, applyTheme } from './lib/themes'
 
@@ -44,24 +46,6 @@ function useTheme() {
       })
       .catch(() => {})
   }, [])
-}
-
-function Placeholder({ label }: { label: string }) {
-  return (
-    <div
-      style={{
-        background: 'rgba(255,255,255,0.04)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: 16,
-        padding: 40,
-        textAlign: 'center',
-        color: 'var(--text-muted)',
-        fontSize: 14,
-      }}
-    >
-      {label} — em breve
-    </div>
-  )
 }
 
 function App() {
@@ -105,9 +89,9 @@ function App() {
         <Route path="/apps/new" element={<AppFormPage />} />
         <Route path="/apps/:id/edit" element={<AppFormPage />} />
         <Route path="/configuracoes" element={<BrandSettingsPage />} />
-        <Route path="/data-browser" element={<Placeholder label="Data Browser" />} />
+        <Route path="/data-browser" element={<DataBrowserPage />} />
         <Route path="/usuarios" element={<UsersPage />} />
-        <Route path="/logs" element={<Placeholder label="Logs" />} />
+        <Route path="/logs" element={<LogsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/apps" replace />} />
     </Routes>
