@@ -70,4 +70,27 @@ entries:
     urls:
     - https://github.com/zeeplabs/zeep-orbit/releases/download/zeep-orbit-0.1.1/zeep-orbit-0.1.1.tgz
     version: 0.1.1
-generated: "2026-06-28T19:15:25.173594811Z"
+  - apiVersion: v2
+    appVersion: 0.1.3
+    created: "2026-06-28T19:18:35.494058165Z"
+    description: Schema YAML → REST API automático no PostgreSQL
+    digest: 383899d6e08305f05b6cad6fc03912a6db0fdb785dabebb622a6c63431df2fe1
+    home: https://github.com/zeeplabs/zeep-orbit
+    icon: https://raw.githubusercontent.com/zeeplabs/zeep-orbit/main/.github/logo.svg
+    keywords:
+    - baas
+    - rest
+    - postgresql
+    - api
+    - low-code
+    maintainers:
+    - name: zeeplabs
+      url: https://github.com/zeeplabs
+    name: zeep-orbit
+    sources:
+    - https://github.com/zeeplabs/zeep-orbit
+    type: application
+    urls:
+    - https://github.com/zeeplabs/zeep-orbit/releases/download/zeep-orbit-0.1.0/zeep-orbit-0.1.0.tgz
+    version: 0.1.0
+generated: "2026-06-28T19:18:35.494072456Z"
