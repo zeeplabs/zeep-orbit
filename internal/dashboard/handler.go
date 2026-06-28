@@ -938,12 +938,25 @@ func (h *Handler) DataBrowserExport(w http.ResponseWriter, r *http.Request) {
 			if v == nil {
 				record[i] = ""
 			} else {
-				record[i] = fmt.Sprintf("%v", v)
+				record[i] = csvSafeCell(fmt.Sprintf("%v", v))
 			}
 		}
 		_ = cw.Write(record)
 	}
 	cw.Flush()
+}
+
+// csvSafeCell previne CSV formula injection prefixando células que iniciam
+// com caracteres interpretados por planilhas como fórmulas (=, +, -, @, tab, CR).
+func csvSafeCell(s string) string {
+	if s == "" {
+		return s
+	}
+	switch s[0] {
+	case '=', '+', '-', '@', '\t', '\r':
+		return "'" + s
+	}
+	return s
 }
 
 // sanitizeData converte [16]byte (UUID do pgx v5) em string UUID.
