@@ -1,5 +1,5 @@
 <p align="center">
-  <h1 align="center">zeep-orbit</h1>
+  <h1 align="center">Zeep Orbit</h1>
   <p align="center"><strong>One backend for all your AI-generated frontends.</strong></p>
 
   <p>
@@ -13,10 +13,10 @@
 
 ---
 
-**zeep-orbit** is an open-source, self-hosted BaaS (Backend-as-a-Service) platform. It turns a simple schema definition into instant REST APIs + PostgreSQL schemas — designed for AI-generated frontends (Claude Code, Cursor, Lovable, v0) that need a backend without building one from scratch.
+**Zeep Orbit** is an open-source, self-hosted BaaS (Backend-as-a-Service) platform. It turns a simple schema definition into instant REST APIs + PostgreSQL schemas — designed for AI-generated frontends (Claude Code, Cursor, Lovable, v0) that need a backend without building one from scratch.
 
 <p align="center">
-  <img src="docs/diagram.svg" alt="Architecture Diagram" width="800" />
+  <img src="docs/static/img/diagram.svg" alt="Architecture Diagram" width="800" />
 </p>
 
 ```yaml

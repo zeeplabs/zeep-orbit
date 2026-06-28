@@ -1,0 +1,144 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0F0F1A"/>
+      <stop offset="100%" stop-color="#1A1A2E"/>
+    </linearGradient>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#7C3AED"/>
+      <stop offset="100%" stop-color="#EC4899"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.06)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0.02)"/>
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="rgba(0,0,0,0.4)"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="700" fill="url(#bg)" rx="16"/>
+
+  <text x="600" y="42" fill="#F8FAFC" font-family="system-ui,sans-serif" font-size="20" font-weight="700" text-anchor="middle">zeep-orbit — Architecture</text>
+  <text x="600" y="62" fill="#94A3B8" font-family="system-ui,sans-serif" font-size="12" text-anchor="middle">Schema-driven REST API orchestrator · One backend for all your apps</text>
+
+  <!-- ENTRY POINTS -->
+  <text x="160" y="105" fill="#64748B" font-family="system-ui,sans-serif" font-size="10" font-weight="600" text-anchor="middle" letter-spacing="2">ENTRY POINTS</text>
+
+  <rect x="30" y="115" width="260" height="90" rx="12" fill="url(#card)" stroke="rgba(124,58,237,0.3)" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="50" y="142" fill="#A78BFA" font-family="monospace" font-size="13" font-weight="700">apps.yaml</text>
+  <text x="50" y="160" fill="#94A3B8" font-family="system-ui,sans-serif" font-size="11">Define apps, tables, columns</text>
+  <text x="50" y="176" fill="#94A3B8" font-family="system-ui,sans-serif" font-size="11">JWT secrets, auth providers</text>
+  <text x="50" y="192" fill="#64748B" font-family="system-ui,sans-serif" font-size="10">CLI: zeep serve / zeep apply</text>
+
+  <rect x="30" y="220" width="260" height="90" rx="12" fill="url(#card)" stroke="rgba(59,130,246,0.3)" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="50" y="247" fill="#60A5FA" font-family="system-ui,sans-serif" font-size="13" font-weight="700">Web Dashboard</text>
+  <text x="50" y="265" fill="#94A3B8" font-family="system-ui,sans-serif" font-size="11">React + TypeScript + Vite</text>
+  <text x="50" y="281" fill="#94A3B8" font-family="system-ui,sans-serif" font-size="11">Embedded via go:embed</text>
+  <text x="50" y="297" fill="#64748B" font-family="system-ui,sans-serif" font-size="10">/dashboard · superadmin/admin</text>
+
+  <path d="M290 170 L370 170" stroke="rgba(124,58,237,0.4)" stroke-width="2" marker-end="url(#arrowBrand)" fill="none"/>
+  <path d="M290 265 L370 200" stroke="rgba(59,130,246,0.4)" stroke-width="2" marker-end="url(#arrowAccent)" fill="none"/>
+
+  <!-- REGISTRY -->
+  <text x="490" y="105" fill="#64748B" font-family="system-ui,sans-serif" font-size="10" font-weight="600" text-anchor="middle" letter-spacing="2">REGISTRY</text>
+  <rect x="340" y="115" width="300" height="195" rx="14" fill="url(#card)" stroke="rgba(124,58,237,0.2)" stroke-width="1" filter="url(#shadow)"/>
+  <rect x="340" y="115" width="300" height="30" rx="14" fill="rgba(124,58,237,0.1)"/>
+  <text x="490" y="134" fill="#C4B5FD" font-family="system-ui,sans-serif" font-size="11" font-weight="600" text-anchor="middle">In-Memory Registry</text>
+
+  <rect x="358" y="155" width="264" height="35" rx="8" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+  <circle cx="374" cy="172" r="6" fill="#7C3AED"/>
+  <text x="386" y="176" fill="#E2E8F0" font-family="monospace" font-size="12" font-weight="600">app_billing</text>
+  <text x="500" y="176" fill="#64748B" font-family="monospace" font-size="10">invoices, payments</text>
+
+  <rect x="358" y="196" width="264" height="35" rx="8" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+  <circle cx="374" cy="213" r="6" fill="#7C3AED"/>
+  <text x="386" y="217" fill="#E2E8F0" font-family="monospace" font-size="12" font-weight="600">app_inventory</text>
+  <text x="500" y="217" fill="#64748B" font-family="monospace" font-size="10">products, movements</text>
+
+  <rect x="358" y="237" width="264" height="35" rx="8" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+  <circle cx="374" cy="254" r="6" fill="#3B82F6"/>
+  <text x="386" y="258" fill="#E2E8F0" font-family="monospace" font-size="12" font-weight="600">zeep_system</text>
+  <text x="500" y="258" fill="#64748B" font-family="monospace" font-size="10">dashboard_users, sessions</text>
+
+  <rect x="358" y="278" width="264" height="20" rx="4" fill="rgba(139,92,246,0.08)"/>
+  <text x="490" y="292" fill="#A78BFA" font-family="system-ui,sans-serif" font-size="10" text-anchor="middle">sync.RWMutex · thread-safe</text>
+
+  <path d="M640 210 L720 210" stroke="rgba(236,72,153,0.4)" stroke-width="2" marker-end="url(#arrowBrand)" fill="none"/>
+
+  <!-- HTTP SERVER -->
+  <text x="800" y="105" fill="#64748B" font-family="system-ui,sans-serif" font-size="10" font-weight="600" text-anchor="middle" letter-spacing="2">HTTP SERVER</text>
+  <rect x="700" y="115" width="200" height="195" rx="14" fill="url(#card)" stroke="rgba(236,72,153,0.2)" stroke-width="1" filter="url(#shadow)"/>
+  <rect x="700" y="115" width="200" height="30" rx="14" fill="rgba(236,72,153,0.1)"/>
+  <text x="800" y="134" fill="#F9A8D4" font-family="system-ui,sans-serif" font-size="11" font-weight="600" text-anchor="middle">chi v5 · Go 1.26+</text>
+
+  <rect x="712" y="153" width="176" height="22" rx="6" fill="rgba(255,255,255,0.04)"/>
+  <text x="724" y="168" fill="#94A3B8" font-family="monospace" font-size="10">/{app}/{table} CRUD</text>
+  <rect x="712" y="179" width="176" height="22" rx="6" fill="rgba(255,255,255,0.04)"/>
+  <text x="724" y="194" fill="#94A3B8" font-family="monospace" font-size="10">/{app}/auth/*</text>
+  <rect x="712" y="205" width="176" height="22" rx="6" fill="rgba(255,255,255,0.04)"/>
+  <text x="724" y="220" fill="#94A3B8" font-family="monospace" font-size="10">/dashboard/*</text>
+  <rect x="712" y="231" width="176" height="22" rx="6" fill="rgba(255,255,255,0.04)"/>
+  <text x="724" y="246" fill="#94A3B8" font-family="monospace" font-size="10">/docs/{app}</text>
+  <rect x="712" y="257" width="176" height="22" rx="6" fill="rgba(255,255,255,0.04)"/>
+  <text x="724" y="272" fill="#94A3B8" font-family="monospace" font-size="10">/health · /metrics</text>
+  <rect x="712" y="283" width="176" height="20" rx="4" fill="rgba(236,72,153,0.08)"/>
+  <text x="800" y="297" fill="#F9A8D4" font-family="system-ui,sans-serif" font-size="10" text-anchor="middle">JWT · Prometheus · zap</text>
+
+  <path d="M800 310 L800 370" stroke="rgba(59,130,246,0.4)" stroke-width="2" marker-end="url(#arrowAccent)" fill="none"/>
+
+  <!-- DATABASE -->
+  <text x="800" y="355" fill="#64748B" font-family="system-ui,sans-serif" font-size="10" font-weight="600" text-anchor="middle" letter-spacing="2">DATABASE</text>
+  <rect x="660" y="365" width="280" height="155" rx="14" fill="url(#card)" stroke="rgba(59,130,246,0.25)" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="660" y="365" width="280" height="30" rx="14" fill="rgba(59,130,246,0.1)"/>
+  <text x="800" y="384" fill="#93C5FD" font-family="system-ui,sans-serif" font-size="11" font-weight="600" text-anchor="middle">PostgreSQL · pgxpool</text>
+
+  <rect x="680" y="405" width="110" height="30" rx="6" fill="rgba(255,255,255,0.03)" stroke="rgba(124,58,237,0.2)" stroke-width="1"/>
+  <text x="687" y="424" fill="#A78BFA" font-family="monospace" font-size="10" font-weight="600">app_billing</text>
+  <rect x="680" y="440" width="110" height="30" rx="6" fill="rgba(255,255,255,0.03)" stroke="rgba(124,58,237,0.2)" stroke-width="1"/>
+  <text x="687" y="459" fill="#A78BFA" font-family="monospace" font-size="10" font-weight="600">app_inventory</text>
+  <rect x="680" y="475" width="110" height="30" rx="6" fill="rgba(255,255,255,0.03)" stroke="rgba(59,130,246,0.2)" stroke-width="1"/>
+  <text x="687" y="494" fill="#60A5FA" font-family="monospace" font-size="10" font-weight="600">zeep_system</text>
+
+  <rect x="810" y="405" width="110" height="55" rx="8" fill="rgba(16,185,129,0.06)" stroke="rgba(16,185,129,0.2)" stroke-width="1"/>
+  <text x="820" y="425" fill="#34D399" font-family="system-ui,sans-serif" font-size="10" font-weight="600">Auth tables</text>
+  <text x="820" y="442" fill="#94A3B8" font-family="monospace" font-size="9">_auth_users</text>
+  <text x="820" y="455" fill="#94A3B8" font-family="monospace" font-size="9">_auth_sessions</text>
+
+  <!-- KEY COMPONENTS -->
+  <rect x="30" y="555" width="1140" height="110" rx="12" fill="url(#card)" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+  <text x="50" y="580" fill="#64748B" font-family="system-ui,sans-serif" font-size="10" font-weight="600" letter-spacing="2">KEY COMPONENTS</text>
+
+  <rect x="50" y="595" width="260" height="55" rx="8" fill="rgba(255,255,255,0.03)"/>
+  <circle cx="70" cy="612" r="5" fill="#7C3AED"/>
+  <text x="84" y="615" fill="#E2E8F0" font-family="system-ui,sans-serif" font-size="11" font-weight="600">Config-driven apps</text>
+  <text x="70" y="635" fill="#94A3B8" font-family="system-ui,sans-serif" font-size="10">Schemas from YAML or Dashboard UI</text>
+  <text x="70" y="648" fill="#94A3B8" font-family="system-ui,sans-serif" font-size="10">Idempotent provisioning</text>
+
+  <rect x="330" y="595" width="260" height="55" rx="8" fill="rgba(255,255,255,0.03)"/>
+  <circle cx="350" cy="612" r="5" fill="#3B82F6"/>
+  <text x="364" y="615" fill="#E2E8F0" font-family="system-ui,sans-serif" font-size="11" font-weight="600">Auth &amp; Security</text>
+  <text x="350" y="635" fill="#94A3B8" font-family="system-ui,sans-serif" font-size="10">JWT HS256 per app · RLS</text>
+  <text x="350" y="648" fill="#94A3B8" font-family="system-ui,sans-serif" font-size="10">Email + Google OAuth providers</text>
+
+  <rect x="610" y="595" width="260" height="55" rx="8" fill="rgba(255,255,255,0.03)"/>
+  <circle cx="630" cy="612" r="5" fill="#EC4899"/>
+  <text x="644" y="615" fill="#E2E8F0" font-family="system-ui,sans-serif" font-size="11" font-weight="600">Observability</text>
+  <text x="630" y="635" fill="#94A3B8" font-family="system-ui,sans-serif" font-size="10">Prometheus metrics · zap logs</text>
+  <text x="630" y="648" fill="#94A3B8" font-family="system-ui,sans-serif" font-size="10">Real-time request logs</text>
+
+  <rect x="890" y="595" width="260" height="55" rx="8" fill="rgba(255,255,255,0.03)"/>
+  <circle cx="910" cy="612" r="5" fill="#10B981"/>
+  <text x="924" y="615" fill="#E2E8F0" font-family="system-ui,sans-serif" font-size="11" font-weight="600">Deployment</text>
+  <text x="910" y="635" fill="#94A3B8" font-family="system-ui,sans-serif" font-size="10">Docker · Helm · K8s</text>
+  <text x="910" y="648" fill="#94A3B8" font-family="system-ui,sans-serif" font-size="10">Multi-arch · &lt; 20MB image</text>
+
+  <defs>
+    <marker id="arrowBrand" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="rgba(124,58,237,0.5)"/>
+    </marker>
+    <marker id="arrowAccent" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="rgba(59,130,246,0.5)"/>
+    </marker>
+  </defs>
+</svg>
