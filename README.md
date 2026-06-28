@@ -1,6 +1,5 @@
 <p align="center">
   <img src="docs/static/img/orbit-logo.png" alt="Zeep Orbit" width="200" />
-  <h1 align="center">Zeep Orbit</h1>
   <p align="center"><strong>One backend for all your AI-generated frontends.</strong></p>
 
   <p>
