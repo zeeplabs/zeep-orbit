@@ -3,14 +3,14 @@ import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
-  title: 'zeep-orbit',
+  title: 'Zeep Orbit',
   tagline: 'One backend for all your AI-generated frontends',
   favicon: 'img/favicon.ico',
 
   url: 'https://zeeplabs.github.io',
   baseUrl: '/zeep-orbit/',
   organizationName: 'zeeplabs',
-  projectName: 'zeep-orbit',
+  projectName: 'Zeep Orbit',
   trailingSlash: false,
 
   onBrokenLinks: 'throw',
@@ -44,7 +44,7 @@ const config: Config = {
       respectPrefersColorScheme: true,
     },
     navbar: {
-      title: 'zeep-orbit',
+      title: 'Zeep Orbit',
       logo: {
         alt: 'zeep-orbit',
         src: 'img/logo.svg',

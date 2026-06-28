@@ -23,6 +23,18 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: internal/dashboard/ui/package-lock.json
+
+      - name: Build Dashboard UI
+        run: |
+          cd internal/dashboard/ui
+          npm ci
+          npm run build
+
       - run: go vet ./...
       - run: go test ./...
 
