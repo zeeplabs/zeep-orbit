@@ -1,3 +1,5 @@
+// Package docs generates OpenAPI 3.1 specifications dynamically from the
+// app registry and serves Swagger UI for each app's REST API.
 package docs
 
 import (

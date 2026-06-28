@@ -1,3 +1,5 @@
+// Package registry provides a thread-safe in-memory store for app
+// configurations loaded from YAML files or the dashboard database.
 package registry
 
 import (

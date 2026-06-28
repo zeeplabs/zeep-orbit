@@ -1,3 +1,5 @@
+// Package auth provides per-app authentication handlers (email/password
+// register and login, JWT issuance, refresh tokens, and Google OAuth).
 package auth
 
 import (

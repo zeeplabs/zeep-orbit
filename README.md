@@ -1,341 +1,281 @@
-# zeep-orbit
+<p align="center">
+  <h1 align="center">zeep-orbit</h1>
+  <p align="center"><strong>One backend for all your AI-generated frontends.</strong></p>
 
-**YAML schema → instant REST API backed by PostgreSQL.**
+  <p>
+    <a href="https://github.com/zeeplabs/zeep-orbit/actions"><img src="https://github.com/zeeplabs/zeep-orbit/actions/workflows/docker-publish.yml/badge.svg" alt="CI" /></a>
+    <a href="https://github.com/zeeplabs/zeep-orbit/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License" /></a>
+    <a href="https://go.dev/doc/devel/release"><img src="https://img.shields.io/badge/go-1.26+-00ADD8?logo=go" alt="Go" /></a>
+    <a href="https://hub.docker.com/r/zeeplabs/zeep-orbit"><img src="https://img.shields.io/docker/pulls/zeeplabs/zeep-orbit" alt="Docker Pulls" /></a>
+    <a href="https://github.com/zeeplabs/zeep-orbit/releases"><img src="https://img.shields.io/github/v/release/zeeplabs/zeep-orbit" alt="Release" /></a>
+  </p>
+</div>
 
-Define your data model in a YAML file. zeep-orbit provisions the database and serves a fully authenticated CRUD API — no migrations, no boilerplate.
+---
+
+**zeep-orbit** is an open-source, self-hosted BaaS (Backend-as-a-Service) platform. It turns a simple schema definition into instant REST APIs + PostgreSQL schemas — designed for AI-generated frontends (Claude Code, Cursor, Lovable, v0) that need a backend without building one from scratch.
+
+<p align="center">
+  <img src="docs/diagram.svg" alt="Architecture Diagram" width="800" />
+</p>
+
+```yaml
+# apps.yaml → instant APIs
+apps:
+  - name: billing
+    tables:
+      - name: invoices
+        columns:
+          - { name: amount, type: decimal, required: true }
+          - { name: status, type: text, default: "pending" }
+```
+
+```bash
+docker compose up -d
+curl -H "Authorization: Bearer $TOKEN" localhost:8080/billing/invoices
+# → {"data":[],"count":0}
+```
+
+---
+
+## ✨ Features
+
+| Feature | Description |
+|---------|-------------|
+| **Schema → REST** | Define tables in YAML or Dashboard UI → instant CRUD API |
+| **Web Dashboard** | Premium dark UI to manage apps, tables, data, users |
+| **Auth by Email** | Built-in email/password register & login per app |
+| **Google OAuth** | Sign in with Google — both dashboard and per-app |
+| **Row-Level Security** | Auto-filter data by owner (`rls: owner`) |
+| **OpenAPI Docs** | Auto-generated Swagger UI per app |
+| **Data Browser** | GUI to browse, filter, edit, export CSV, delete rows |
+| **User Management** | Manage dashboard admins and app users |
+| **Audit Logs** | Real-time request log with metrics |
+| **White-label** | Custom branding, themes, company name |
+| **Prometheus Metrics** | `zeep_http_requests_total`, latency histograms |
+| **Multi-app** | One service, N apps, isolated schemas & JWT secrets |
+| **CLI** | `zeep serve`, `zeep apply`, `zeep list`, `zeep status` |
+| **Kubernetes** | Production-grade Helm chart (HPA, PDB, ingress, IRSA) |
+
+---
+
+## 🚀 Quick start
+
+### Docker Compose
+
+```bash
+git clone https://github.com/zeeplabs/zeep-orbit
+cd zeep-orbit
+cp .env.example .env
+docker compose up -d
+```
+
+Visit **http://localhost:8080/dashboard** to access the management dashboard.
+
+### Binary
+
+```bash
+go install github.com/zeeplabs/zeep-orbit/cmd/zeep@latest
+zeep serve --config ./apps.yaml
+```
+
+### Kubernetes (Helm)
+
+```bash
+helm repo add zeeplabs https://zeeplabs.github.io/zeep-orbit
+helm install zeep-orbit zeeplabs/zeep-orbit
+```
+
+---
+
+## 🖥️ Dashboard
+
+The web dashboard is embedded in the binary and accessible at `/dashboard`. Features:
+
+- **Apps** — create, edit, delete apps with dynamic table/column management
+- **Data Browser** — browse, filter, sort, edit inline, delete, and export CSV
+- **Users** — manage dashboard admins (superadmin/admin roles)
+- **App Users** — view users registered in each app, deactivate accounts, reset sessions
+- **Logs** — real-time request log with metrics breakdown
+- **Settings** — white-label branding (themes, company name), Google OAuth configuration
+
+---
+
+## 📋 Configuration
+
+### Environment variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | ✅ | PostgreSQL connection string |
+| `DASHBOARD_BOOTSTRAP_SECRET` | ✅ | First-time admin setup secret |
+| `GOOGLE_CLIENT_ID` | ❌ | Google OAuth Client ID (for dashboard login) |
+| `GOOGLE_CLIENT_SECRET` | ❌ | Google OAuth Client Secret |
+| `GOOGLE_REDIRECT_URL` | ❌ | Google OAuth redirect URL |
+| `GOOGLE_ALLOWED_DOMAINS` | ❌ | Comma-separated allowed email domains |
+| `BRAND_THEME` | ❌ | Default theme (azure, emerald, ruby, amber, orange) |
+| `BRAND_COMPANY_NAME` | ❌ | Company name for white-label |
+| `LOG_LEVEL` | ❌ | Set `debug` for development output |
+
+### apps.yaml
 
 ```yaml
 platform:
   database_url: ${DATABASE_URL}
 
 apps:
-  - name: billing
+  - name: myapp
     auth:
-      jwt_secret: ${BILLING_JWT_SECRET}
-    tables:
-      - name: invoices
-        columns:
-          - name: amount
-            type: decimal
-            required: true
-          - name: status
-            type: text
-            required: true
-```
-
-```bash
-docker compose up -d
-curl localhost:8080/health
-# {"status":"ok","apps":1}
-```
-
----
-
-## How it works
-
-1. zeep reads your `apps.yaml`
-2. Creates PostgreSQL schemas and tables (idempotent — safe to re-run)
-3. Starts an HTTP server with one CRUD API per table
-4. Each app is protected by its own HS256 JWT secret
-
-Every table gets `id` (UUID, auto-generated), `created_at`, and `updated_at` automatically.
-
----
-
-## Quick start
-
-**Requirements:** Docker + Docker Compose
-
-```bash
-git clone https://github.com/zeeplabs/zeep-orbit
-cd zeep-orbit
-cp .env.example .env   # edit secrets
-
-docker compose up -d
-```
-
-Verify:
-
-```bash
-curl localhost:8080/health
-```
-
----
-
-## Configuration
-
-### `apps.yaml` structure
-
-```yaml
-platform:
-  database_url: ${DATABASE_URL}   # supports ${ENV_VAR} interpolation
-
-apps:
-  - name: myapp                   # lowercase, a-z0-9- only
-    auth:
-      jwt_secret: ${MY_JWT_SECRET}
+      jwt_secret: ${MYAPP_JWT_SECRET}
+      providers:
+        email: true           # enable email/password auth
     tables:
       - name: items
         columns:
-          - name: title
-            type: text
-            required: true
-          - name: published
-            type: boolean
-            default: "false"
-          - name: score
-            type: decimal
+          - { name: title, type: text, required: true }
+          - { name: score, type: decimal }
 ```
 
 ### Column types
 
-| Type | PostgreSQL |
-|------|-----------|
-| `text` | TEXT |
-| `integer` | INTEGER |
-| `bigint` | BIGINT |
-| `decimal` | DECIMAL |
-| `boolean` | BOOLEAN |
-| `uuid` | UUID |
-| `timestamptz` | TIMESTAMPTZ |
-| `jsonb` | JSONB |
+`text`, `integer`, `bigint`, `decimal`, `boolean`, `uuid`, `timestamptz`, `jsonb`
 
-### Column options
+Options: `required` (NOT NULL), `unique`, `default` (SQL expression).
 
-| Field | Description |
-|-------|-------------|
-| `required` | NOT NULL constraint |
-| `unique` | UNIQUE constraint |
-| `default` | DEFAULT value (SQL expression) |
-
-### Auto-generated columns
-
-Every table gets these automatically — do not declare them:
-
-| Column | Type | Value |
-|--------|------|-------|
-| `id` | UUID | `gen_random_uuid()` |
-| `created_at` | TIMESTAMPTZ | `now()` |
-| `updated_at` | TIMESTAMPTZ | `now()` (updated on PATCH/PUT) |
+Auto-generated columns: `id` (UUID), `created_at`, `updated_at`.
 
 ---
 
-## REST API
+## 🔐 Authentication
 
-### Authentication
+### App-level (for your end-users)
 
-All app routes require a Bearer JWT signed with the app's `jwt_secret` (HS256).
+Each app supports configurable login providers:
 
-```bash
-TOKEN=$(jwt encode --secret "$MY_JWT_SECRET" '{}')
+| Provider | Endpoint | Description |
+|----------|----------|-------------|
+| Email | `POST /{app}/auth/register` | Register with email + password |
+| Email | `POST /{app}/auth/login` | Login with email + password |
+| Google | `GET /{app}/auth/google/login` | Sign in with Google |
+| All | `GET /{app}/auth/providers` | List enabled providers |
 
-curl localhost:8080/myapp/items \
-  -H "Authorization: Bearer $TOKEN"
-```
+After authentication, you receive a JWT token signed with the app's secret.
 
-Tokens are validated per-app — a token for `billing` is rejected on `inventory` routes.
+### Dashboard (admin access)
 
-### Endpoints
+Dashboard has its own auth system (email/password or Google OAuth), separate from app auth. Two roles: `admin` and `superadmin`.
+
+---
+
+## 📡 REST API
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/{app}/{table}` | List records |
-| POST | `/{app}/{table}` | Create record |
+| GET | `/{app}/{table}` | List (paginated, filtered, sorted) |
+| POST | `/{app}/{table}` | Create |
 | GET | `/{app}/{table}/{id}` | Get by ID |
-| PUT / PATCH | `/{app}/{table}/{id}` | Update (partial) |
+| PUT/PATCH | `/{app}/{table}/{id}` | Update (partial) |
 | DELETE | `/{app}/{table}/{id}` | Delete |
-| GET | `/health` | Health check (no auth) |
-| GET | `/metrics` | Prometheus metrics (no auth) |
+| GET | `/health` | Health check |
+| GET | `/metrics` | Prometheus metrics |
+| GET | `/docs/{app}` | Swagger UI |
+| GET | `/{app}/auth/*` | Auth endpoints |
 
-### List — query parameters
-
-| Param | Example | Description |
-|-------|---------|-------------|
-| `limit` | `?limit=20` | Max records (default 50, max 1000) |
-| `offset` | `?offset=100` | Skip N records |
-| `field=eq.value` | `?status=eq.active` | Filter by equality |
-| `order` | `?order=created_at.desc` | Sort (`asc` or `desc`) |
-
-### Response format
-
-**List:**
-```json
-{
-  "data": [...],
-  "count": 42,
-  "limit": 50,
-  "offset": 0
-}
-```
-
-**Single record:**
-```json
-{
-  "id": "018e4c72-...",
-  "title": "Hello",
-  "created_at": "2026-01-01T00:00:00Z",
-  "updated_at": "2026-01-01T00:00:00Z"
-}
-```
-
-**Error:**
-```json
-{ "error": "not found" }
-```
-
-### Example — full CRUD
-
-```bash
-BASE="localhost:8080/billing/invoices"
-AUTH="-H \"Authorization: Bearer $TOKEN\""
-
-# Create
-curl -X POST "$BASE" $AUTH \
-  -H "Content-Type: application/json" \
-  -d '{"amount": 150.00, "status": "pending"}'
-# 201 + record
-
-# List
-curl "$BASE?status=eq.pending" $AUTH
-# 200 + {"data":[...],"count":1,...}
-
-# Get
-curl "$BASE/018e4c72-..." $AUTH
-# 200 + record
-
-# Update
-curl -X PATCH "$BASE/018e4c72-..." $AUTH \
-  -d '{"status": "paid"}'
-# 200 + updated record
-
-# Delete
-curl -X DELETE "$BASE/018e4c72-..." $AUTH
-# 204
-```
+Query params for list: `?limit=`, `?offset=`, `?field=eq.value`, `?order=field.asc`
 
 ---
 
-## CLI reference
+## 🔧 CLI
 
 ```
-zeep [command] [flags]
-
 Commands:
   serve    Load config, provision database, start HTTP server
-  apply    Provision database schemas and tables, print report
+  apply    Provision schemas and tables, print report
   list     Print apps, tables, and their API URLs
   status   Check if the server is running
-
-Global flags:
-  --config string   Config file path (default "./apps.yaml")
-  --db string       Override DATABASE_URL from config
-  --port int        HTTP server port (default 8080)
 ```
 
-### `zeep serve`
-
-Starts the full stack: provision → registry → HTTP server. Handles SIGINT/SIGTERM with a 30-second graceful shutdown.
-
+Example:
 ```bash
 zeep serve --config ./apps.yaml --port 8080
-```
-
-### `zeep apply`
-
-Idempotent provisioning. Safe to run multiple times.
-
-```bash
-zeep apply
-# ✓ Created schema billing
-# ✓ Created table billing.invoices
-
-zeep apply   # second run
-#   No changes
-```
-
-### `zeep list`
-
-Inspect config without a database connection.
-
-```bash
-zeep list
-# billing
-#   invoices → http://localhost:8080/billing/invoices
-#   payments → http://localhost:8080/billing/payments
-```
-
-### `zeep status`
-
-```bash
-zeep status
-# Status: ok
-# Apps: 2
+zeep apply                   # idempotent provisioning
+zeep list                    # inspect all apps and tables
 ```
 
 ---
 
-## Observability
+## 📊 Observability
 
-### Health check
-
-```
-GET /health → {"status":"ok","apps":2}
-```
-
-### Prometheus metrics
-
-```
-GET /metrics
-```
-
-| Metric | Type | Description |
-|--------|------|-------------|
-| `zeep_http_requests_total` | Counter | Total requests by method and status |
-| `zeep_http_request_duration_seconds` | Histogram | Request latency by method |
-| `zeep_active_apps` | Gauge | Number of loaded apps |
-
-### Structured logging
-
-JSON logs via `zap`. Set `LOG_LEVEL=debug` for development output.
+- **Prometheus metrics** at `/metrics`: request count, latency, active apps
+- **Structured JSON logging** via `zap` (set `LOG_LEVEL=debug`)
+- **Dashboard logs** with real-time ring buffer, metrics, and app-level filtering
 
 ---
 
-## Development
+## 🐳 Deployment
 
-**Requirements:** Go 1.26+, PostgreSQL 14+
+### Docker
 
 ```bash
-# Build
-make build
+docker pull ghcr.io/zeeplabs/zeep-orbit:latest
+docker run -e DATABASE_URL=... -p 8080:8080 ghcr.io/zeeplabs/zeep-orbit
+```
 
-# Run tests (unit only — no DB required)
-make test
+### Kubernetes (Helm)
 
-# Run all tests including integration
+```bash
+helm repo add zeeplabs https://zeeplabs.github.io/zeep-orbit
+helm install zeep-orbit zeeplabs/zeep-orbit \
+  --set secrets.databaseUrl=postgres://... \
+  --set 'secrets.apps.myapp.jwtSecret=...'
+```
+
+The Helm chart includes: HPA, PDB, Ingress, ServiceMonitor, PodDisruptionBudget, IRSA-ready ServiceAccount, and configurable resource limits.
+
+---
+
+## 🛠️ Development
+
+```bash
+git clone https://github.com/zeeplabs/zeep-orbit
+make build        # builds Go binary + dashboard UI
+make test         # unit tests (no DB required)
+make lint         # go vet
+make run          # go run ./cmd/zeep
+```
+
+Integration tests require PostgreSQL:
+```bash
 TEST_DATABASE_URL=postgres://user:pass@localhost/testdb go test ./...
-
-# Lint
-make lint
-
-# Run locally
-DATABASE_URL=postgres://... BILLING_JWT_SECRET=secret zeep serve
 ```
 
 ### Project structure
 
 ```
-cmd/zeep/          CLI entrypoint (cobra)
+cmd/zeep/              CLI entrypoint
 internal/
-  config/          YAML loader + validation
-  db/              pgxpool client
-  provisioner/     Schema/table provisioning
-  registry/        Thread-safe app registry
-  query/           SQL query builder (injection-safe)
-  server/          HTTP handlers, JWT middleware, router
+  auth/                Auth handlers (register, login, Google OAuth)
+  config/              YAML config loader + validation
+  crypto/              AES-256-GCM encryption
+  dashboard/           Web dashboard backend + React UI
+  db/                  pgxpool client
+  docs/                OpenAPI spec generator
+  provisioner/         Schema/table provisioning
+  query/               SQL query builder (injection-safe)
+  registry/            Thread-safe in-memory app registry
+  server/              HTTP router, handlers, middleware
+charts/                Helm chart
+k8s/                   Kustomize manifests
 ```
 
 ---
 
-## License
+## 🤝 Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). All contributions welcome — bug fixes, features, docs, tests.
+
+---
+
+## 📄 License
 
 MIT — see [LICENSE](LICENSE).

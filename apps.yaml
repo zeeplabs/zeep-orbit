@@ -1,7 +1,16 @@
+# zeep-orbit example configuration
+#
+# Usage:
+#   zeep serve --config apps.yaml
+#   zeep apply --config apps.yaml
+#
+# Environment variables are interpolated with ${VAR_NAME} syntax.
+
 platform:
   database_url: ${DATABASE_URL}
 
 apps:
+  # ─── App com autenticação por email + RLS ───────────────────────────
   - name: billing
     auth:
       jwt_secret: ${BILLING_JWT_SECRET}
@@ -9,57 +18,32 @@ apps:
         email: true
     tables:
       - name: invoices
+        rls: owner                                    # cada usuário vê só os próprios registros
         columns:
-          - name: amount
-            type: decimal
-            required: true
-          - name: status
-            type: text
-            required: true
-          - name: tenant
-            type: uuid
-            required: true
+          - { name: amount,  type: decimal, required: true }
+          - { name: status,  type: text,   default: "pending" }
+          - { name: due_date, type: timestamptz }
       - name: payments
         columns:
-          - name: amount
-            type: decimal
-            required: true
-          - name: method
-            type: text
-            required: true
-          - name: invoice
-            type: uuid
-            required: true
-          - name: paid
-            type: timestamptz
+          - { name: amount,  type: decimal, required: true }
+          - { name: method,  type: text,    required: true }
+          - { name: invoice, type: uuid,    required: true }
 
+  # ─── App sem autenticação de usuários (apenas JWT fixo) ─────────────
   - name: inventory
     auth:
       jwt_secret: ${INVENTORY_JWT_SECRET}
       providers:
-        email: true
+        email: false
     tables:
       - name: products
         columns:
-          - name: sku
-            type: text
-            required: true
-          - name: name
-            type: text
-            required: true
-          - name: unit
-            type: text
-            required: true
+          - { name: sku,  type: text, required: true, unique: true }
+          - { name: name, type: text, required: true }
+          - { name: unit, type: text, default: "un" }
       - name: movements
         columns:
-          - name: product
-            type: uuid
-            required: true
-          - name: quantity
-            type: integer
-            required: true
-          - name: type
-            type: text
-            required: true
-          - name: reference
-            type: text
+          - { name: product,  type: uuid,   required: true }
+          - { name: quantity, type: integer, required: true }
+          - { name: type,     type: text,    required: true }
+          - { name: reference, type: text }

@@ -1,3 +1,5 @@
+// Package crypto provides AES-256-GCM encryption and decryption for
+// sensitive data at rest (OAuth client secrets stored in the database).
 package crypto
 
 import (

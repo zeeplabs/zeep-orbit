@@ -1,3 +1,5 @@
+// Package dashboard implements the web dashboard backend (HTTP handlers),
+// database stores, and embedded React frontend for managing zeep-orbit apps.
 package dashboard
 
 import (

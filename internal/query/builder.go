@@ -1,3 +1,6 @@
+// Package query builds parameterized SQL statements (SELECT, INSERT, UPDATE,
+// DELETE) from typed column configurations. All queries use pgx parameter
+// placeholders to prevent SQL injection.
 package query
 
 import (

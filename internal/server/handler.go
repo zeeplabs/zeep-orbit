@@ -1,3 +1,5 @@
+// Package server implements the HTTP server, router, middleware, and
+// request handlers for the zeep-orbit REST API and embedded dashboard.
 package server
 
 import (

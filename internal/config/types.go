@@ -1,3 +1,5 @@
+// Package config implements YAML configuration loading, validation, and
+// environment variable interpolation for zeep-orbit apps and platform settings.
 package config
 
 type Config struct {

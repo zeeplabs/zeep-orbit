@@ -1,3 +1,6 @@
+// Package provisioner manages PostgreSQL schema and table provisioning.
+// It creates app-specific schemas, auth tables, and CRUD tables idempotently
+// and handles column migrations (add, rename, type change) safely.
 package provisioner
 
 import (

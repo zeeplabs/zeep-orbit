@@ -1,3 +1,11 @@
+// zeep-orbit — Open-source BaaS platform.
+//
+// Usage:
+//
+//	zeep serve --config apps.yaml
+//	zeep apply --config apps.yaml
+//	zeep list
+//	zeep status
 package main
 
 import (

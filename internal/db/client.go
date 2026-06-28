@@ -1,3 +1,5 @@
+// Package db provides a pgxpool-based PostgreSQL client with connection
+// pooling, startup health checks, and a thin Pool wrapper for dashboard queries.
 package db
 
 import (
