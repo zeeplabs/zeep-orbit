@@ -1,4 +1,4 @@
-.PHONY: build build-go test lint run dashboard-build helm-lint helm-template helm-dry-run test-e2e
+.PHONY: build build-go test lint run dashboard-build helm-lint helm-template helm-dry-run test-e2e docs-build
 
 dashboard-build:
 	cd internal/dashboard/ui && npm install && npm run build
@@ -14,6 +14,9 @@ test:
 
 test-e2e:
 	cd internal/dashboard/ui && npx playwright test
+
+docs-build:
+	cd docs && npm run build
 
 lint:
 	go vet ./...

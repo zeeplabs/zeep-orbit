@@ -5,3 +5,6 @@ bin/
 test-local/
 internal/dashboard/ui/node_modules/
 internal/dashboard/static/
+docs/node_modules/
+docs/build/
+docs/.docusaurus/
