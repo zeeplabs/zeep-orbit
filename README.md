@@ -279,3 +279,15 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). All contributions welcome — bug fixes,
 ## 📄 License
 
 MIT — see [LICENSE](LICENSE).
+
+---
+
+## 🏢 About Zeep Tecnologia
+
+zeep-orbit was created by [Zeep Tecnologia](https://zeeptech.com.br) to solve a real pain we saw everywhere: small businesses, entrepreneurs, and indie developers using AI tools (Claude Code, Cursor, Lovable, v0) to build frontends in minutes — but getting stuck when they need a backend.
+
+Spin up a database, write migrations, deploy an API, manage auth, handle secrets — it kills the momentum. And the alternative (Supabase, Firebase) sends your data outside your infrastructure.
+
+zeep-orbit is our answer: **one binary, your PostgreSQL, infinite apps.** Deploy inside your own infra, connect any frontend, move fast without the backend overhead.
+
+We build open-source infrastructure for the AI era. [Join us](https://github.com/zeeplabs/zeep-orbit/discussions).
