@@ -10,6 +10,7 @@ import BrandSettingsPage from './pages/BrandSettingsPage'
 import UsersPage from './pages/UsersPage'
 import LogsPage from './pages/LogsPage'
 import DataBrowserPage from './pages/DataBrowserPage'
+import AppUsersPage from './pages/AppUsersPage'
 import { useBootstrapStatus } from './lib/api'
 import { THEMES, applyTheme } from './lib/themes'
 
@@ -88,6 +89,7 @@ function App() {
         <Route path="/apps" element={<AppsPage />} />
         <Route path="/apps/new" element={<AppFormPage />} />
         <Route path="/apps/:id/edit" element={<AppFormPage />} />
+        <Route path="/apps/:id/users" element={<AppUsersPage />} />
         <Route path="/configuracoes" element={<BrandSettingsPage />} />
         <Route path="/data-browser" element={<DataBrowserPage />} />
         <Route path="/usuarios" element={<UsersPage />} />

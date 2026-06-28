@@ -15,13 +15,14 @@ import (
 // AppRow represents a row from zeep_system.apps, optionally with its tables.
 // JWTSecret is omitted from JSON when empty (list responses never populate it).
 type AppRow struct {
-	ID               string        `json:"id"`
-	Name             string        `json:"name"`
-	JWTSecret        string        `json:"jwt_secret,omitempty"`
-	AuthEmailEnabled bool          `json:"auth_email_enabled"`
-	OwnerID          string        `json:"owner_id"`
-	CreatedAt        time.Time     `json:"created_at"`
-	Tables           []AppTableRow `json:"tables"`
+	ID               string          `json:"id"`
+	Name             string          `json:"name"`
+	JWTSecret        string          `json:"jwt_secret,omitempty"`
+	AuthEmailEnabled bool            `json:"auth_email_enabled"`
+	AuthProviders    json.RawMessage `json:"auth_providers,omitempty"`
+	OwnerID          string          `json:"owner_id"`
+	CreatedAt        time.Time       `json:"created_at"`
+	Tables           []AppTableRow   `json:"tables"`
 }
 
 // AppTableRow represents a row from zeep_system.app_tables.
@@ -42,13 +43,13 @@ func ListApps(ctx context.Context, pool *db.Pool, userID, role string) ([]*AppRo
 
 	if role == "superadmin" {
 		rows, err = pool.Query(ctx,
-			`SELECT id, name, auth_email_enabled, owner_id, created_at
+			`SELECT id, name, auth_email_enabled, COALESCE(auth_providers, '{}'), owner_id, created_at
 			 FROM zeep_system.apps
 			 ORDER BY created_at DESC`,
 		)
 	} else {
 		rows, err = pool.Query(ctx,
-			`SELECT DISTINCT a.id, a.name, a.auth_email_enabled, a.owner_id, a.created_at
+			`SELECT DISTINCT a.id, a.name, a.auth_email_enabled, COALESCE(a.auth_providers, '{}'), a.owner_id, a.created_at
 			 FROM zeep_system.apps a
 			 LEFT JOIN zeep_system.app_ownership o ON o.app_id = a.id AND o.user_id = $1
 			 WHERE a.owner_id = $1 OR o.user_id = $1
@@ -64,8 +65,12 @@ func ListApps(ctx context.Context, pool *db.Pool, userID, role string) ([]*AppRo
 	var apps []*AppRow
 	for rows.Next() {
 		var a AppRow
-		if err := rows.Scan(&a.ID, &a.Name, &a.AuthEmailEnabled, &a.OwnerID, &a.CreatedAt); err != nil {
+		var providersJSON []byte
+		if err := rows.Scan(&a.ID, &a.Name, &a.AuthEmailEnabled, &providersJSON, &a.OwnerID, &a.CreatedAt); err != nil {
 			return nil, fmt.Errorf("dashboard: list apps scan: %w", err)
+		}
+		if len(providersJSON) > 0 {
+			a.AuthProviders = providersJSON
 		}
 		apps = append(apps, &a)
 	}
@@ -97,9 +102,9 @@ func CreateApp(ctx context.Context, pool *db.Pool, name, ownerID string, authEma
 	err = tx.QueryRow(ctx,
 		`INSERT INTO zeep_system.apps (name, owner_id, auth_email_enabled)
 		 VALUES ($1, $2, $3)
-		 RETURNING id, name, jwt_secret, auth_email_enabled, owner_id, created_at`,
+		 RETURNING id, name, jwt_secret, auth_email_enabled, COALESCE(auth_providers, '{}'), owner_id, created_at`,
 		name, ownerID, authEmail,
-	).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.OwnerID, &app.CreatedAt)
+	).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.AuthProviders, &app.OwnerID, &app.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: create app insert: %w", err)
 	}
@@ -131,18 +136,18 @@ func GetApp(ctx context.Context, pool *db.Pool, appID, userID, role string) (*Ap
 
 	if role == "superadmin" {
 		err = pool.QueryRow(ctx,
-			`SELECT id, name, jwt_secret, auth_email_enabled, owner_id, created_at
+			`SELECT id, name, jwt_secret, auth_email_enabled, COALESCE(auth_providers, '{}'), owner_id, created_at
 			 FROM zeep_system.apps WHERE id = $1`,
 			appID,
-		).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.OwnerID, &app.CreatedAt)
+		).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.AuthProviders, &app.OwnerID, &app.CreatedAt)
 	} else {
 		err = pool.QueryRow(ctx,
-			`SELECT DISTINCT a.id, a.name, a.jwt_secret, a.auth_email_enabled, a.owner_id, a.created_at
+			`SELECT DISTINCT a.id, a.name, a.jwt_secret, a.auth_email_enabled, COALESCE(a.auth_providers, '{}'), a.owner_id, a.created_at
 			 FROM zeep_system.apps a
 			 LEFT JOIN zeep_system.app_ownership o ON o.app_id = a.id AND o.user_id = $2
 			 WHERE a.id = $1 AND (a.owner_id = $2 OR o.user_id = $2)`,
 			appID, userID,
-		).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.OwnerID, &app.CreatedAt)
+		).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.AuthProviders, &app.OwnerID, &app.CreatedAt)
 	}
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -179,9 +184,9 @@ func UpdateApp(ctx context.Context, pool *db.Pool, appID, userID, role string, a
 		`UPDATE zeep_system.apps
 		 SET auth_email_enabled = $2
 		 WHERE id = $1
-		 RETURNING id, name, jwt_secret, auth_email_enabled, owner_id, created_at`,
+		 RETURNING id, name, jwt_secret, auth_email_enabled, COALESCE(auth_providers, '{}'), owner_id, created_at`,
 		appID, authEmail,
-	).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.OwnerID, &app.CreatedAt)
+	).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.AuthProviders, &app.OwnerID, &app.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: update app: %w", err)
 	}

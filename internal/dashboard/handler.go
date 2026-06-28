@@ -161,10 +161,13 @@ func (h *Handler) Config(w http.ResponseWriter, r *http.Request) {
 		company = cfg.CompanyName
 	}
 
+	// Check Google OAuth config from DB (with env var fallback)
+	googleProv, _ := GetAuthProvider(r.Context(), h.pool, "google")
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"theme":               theme,
 		"company_name":        company,
-		"google_oauth_enabled": os.Getenv("GOOGLE_CLIENT_ID") != "",
+		"google_oauth_enabled": googleProv.Enabled,
 	})
 }
 
@@ -205,6 +208,89 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, cfg)
+}
+
+// ListAuthProviders handles GET /dashboard/api/config/auth/providers
+// Lists all configured auth providers. Requires superadmin.
+func (h *Handler) ListAuthProviders(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	if user.Role != "superadmin" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+
+	reveal := r.URL.Query().Get("reveal") == "true"
+	providers, err := ListAuthProviders(r.Context(), h.pool, reveal)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, providers)
+}
+
+// GetAuthProvider handles GET /dashboard/api/config/auth/providers/{provider}
+// Returns a single provider's config. Requires superadmin.
+func (h *Handler) GetAuthProvider(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	if user.Role != "superadmin" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+
+	provider := chi.URLParam(r, "provider")
+	reveal := r.URL.Query().Get("reveal") == "true"
+
+	resp, err := GetAuthProvider(r.Context(), h.pool, provider)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	if !reveal {
+		resp.Config = stripSecretFromConfig(provider, resp.Config)
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// UpsertAuthProvider handles PUT /dashboard/api/config/auth/providers/{provider}
+// Creates or updates a provider's config. Requires superadmin. Encrypts config JSON.
+func (h *Handler) UpsertAuthProvider(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	if user.Role != "superadmin" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+
+	provider := chi.URLParam(r, "provider")
+
+	r.Body = http.MaxBytesReader(w, r.Body, 8192)
+	var body authProviderUpsertInput
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	result, err := UpsertAuthProvider(r.Context(), h.pool, provider, &body)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update provider"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
 }
 
 // Login handles POST /dashboard/api/login
@@ -568,9 +654,10 @@ func (h *Handler) ListApps(w http.ResponseWriter, r *http.Request) {
 
 // appRequestBody is the JSON body for create/update app requests.
 type appRequestBody struct {
-	Name             string        `json:"name"`
-	AuthEmailEnabled bool          `json:"auth_email_enabled"`
-	Tables           []AppTableRow `json:"tables"`
+	Name             string          `json:"name"`
+	AuthEmailEnabled bool            `json:"auth_email_enabled"`
+	Tables           []AppTableRow   `json:"tables"`
+	AuthProviders    json.RawMessage `json:"auth_providers,omitempty"`
 }
 
 // CreateApp handles POST /dashboard/api/apps
@@ -596,6 +683,15 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 		return
+	}
+
+	// Save auth providers if provided
+	if len(body.AuthProviders) > 0 {
+		if err := UpdateAppAuthProvidersRaw(r.Context(), h.pool, app.ID, body.AuthProviders); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save auth providers"})
+			return
+		}
+		app.AuthProviders = body.AuthProviders
 	}
 
 	cfg := buildAppConfig(app)
@@ -662,6 +758,15 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 		return
+	}
+
+	// Save auth providers if provided
+	if len(body.AuthProviders) > 0 {
+		if err := UpdateAppAuthProvidersRaw(r.Context(), h.pool, app.ID, body.AuthProviders); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save auth providers"})
+			return
+		}
+		app.AuthProviders = body.AuthProviders
 	}
 
 	cfg := buildAppConfig(app)
@@ -751,10 +856,17 @@ func appRowToRegistryApp(app *AppRow) *registry.App {
 			Columns: cols,
 		}
 	}
+
+	var authProviders map[string]any
+	if len(app.AuthProviders) > 0 {
+		json.Unmarshal(app.AuthProviders, &authProviders)
+	}
+
 	return &registry.App{
-		Config:     buildAppConfig(app),
-		SchemaName: app.Name,
-		Tables:     tables,
+		Config:        buildAppConfig(app),
+		SchemaName:    app.Name,
+		Tables:        tables,
+		AuthProviders: authProviders,
 	}
 }
 

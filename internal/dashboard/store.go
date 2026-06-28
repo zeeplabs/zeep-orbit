@@ -193,6 +193,21 @@ func GetUser(ctx context.Context, pool *db.Pool, id string) (*DashboardUser, err
 	return &u, nil
 }
 
+// UpdatePassword updates the password hash for a dashboard user.
+func UpdatePassword(ctx context.Context, pool *db.Pool, userID, passwordHash string) error {
+	tag, err := pool.Exec(ctx,
+		`UPDATE zeep_system.dashboard_users SET password_hash = $1 WHERE id = $2`,
+		passwordHash, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("dashboard: update password: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // DeleteUser removes a dashboard user by ID.
 func DeleteUser(ctx context.Context, pool *db.Pool, id string) error {
 	tag, err := pool.Exec(ctx,

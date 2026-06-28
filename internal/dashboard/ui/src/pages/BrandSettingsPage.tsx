@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Palette, Save } from "lucide-react";
+import { Palette, Save, Eye, EyeOff, CheckCircle, Loader2, Globe } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { THEMES, BrandTheme, applyTheme } from "../lib/themes";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { Switch } from "@/components/ui/switch";
 
 const EASE = [0.32, 0.72, 0, 1] as const;
 
@@ -205,6 +206,17 @@ export default function BrandSettingsPage() {
           )}
         </div>
       </div>
+
+      {/* ── Google OAuth Config ── */}
+      <div className="mt-10">
+        <span className="mb-3 inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em]"
+          style={{ borderColor: 'rgba(var(--brand-primary-rgb), 0.2)', backgroundColor: 'rgba(var(--brand-primary-rgb), 0.12)', color: 'var(--brand-light)' }}
+        >
+          <Globe size={12} strokeWidth={1.5} />
+          Google OAuth
+        </span>
+        <GoogleAuthProviderCard />
+      </div>
     </motion.div>
   );
 }
@@ -258,5 +270,125 @@ function ThemeCard({
         )}
       </div>
     </button>
+  );
+}
+
+function GoogleAuthProviderCard() {
+  const [config, setConfig] = useState<{
+    enabled: boolean;
+    config: { client_id?: string; client_secret?: string; redirect_url?: string; allowed_domains?: string[] };
+    config_set: boolean;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [messageType, setMessageType] = useState<"success" | "error">("success");
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [redirectUrl, setRedirectUrl] = useState("");
+  const [allowedDomains, setAllowedDomains] = useState("");
+  const [enabled, setEnabled] = useState(false);
+  const [showSecret, setShowSecret] = useState(false);
+
+  useEffect(() => {
+    fetch("/dashboard/api/config/auth/providers/google?reveal=true", { credentials: "include" })
+      .then((r) => r.json())
+      .then((d) => {
+        setConfig(d);
+        setEnabled(d.enabled);
+        setClientId(d.config?.client_id || "");
+        setClientSecret("");
+        setRedirectUrl(d.config?.redirect_url || "");
+        setAllowedDomains((d.config?.allowed_domains || []).join(", "));
+      })
+      .catch(() => setMessage("Erro ao carregar config"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setMessage(null);
+    try {
+      const configBody: Record<string, unknown> = {};
+      if (clientId) configBody.client_id = clientId;
+      if (clientSecret) configBody.client_secret = clientSecret;
+      if (redirectUrl) configBody.redirect_url = redirectUrl;
+      if (allowedDomains) configBody.allowed_domains = allowedDomains.split(",").map((d) => d.trim()).filter(Boolean);
+
+      const res = await fetch("/dashboard/api/config/auth/providers/google", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled, config: Object.keys(configBody).length > 0 ? configBody : undefined }),
+      });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error || "Erro ao salvar"); }
+      const result = await res.json();
+      setConfig(result as typeof config);
+      setClientSecret("");
+      setMessage("Configuração salva com sucesso");
+      setMessageType("success");
+    } catch (err) {
+      setMessage((err as Error).message);
+      setMessageType("error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <p className="text-[13px] text-[#94A3B8]">Carregando...</p>;
+
+  const inputClass = "h-10 rounded-md border border-white/[0.10] bg-white/[0.06] text-[13px] text-[#F8FAFC] placeholder:text-[#64748B] outline-none brand-focus w-full";
+
+  return (
+    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6 mt-4">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <span className="text-[15px] font-bold text-[#F8FAFC]">Google</span>
+          <p className="text-[12px] text-[#94A3B8] mt-0.5">Login via Google (credenciais criptografadas AES-256-GCM)</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-[12px] text-[#94A3B8]">Ativo</span>
+          <Switch checked={enabled} onCheckedChange={setEnabled} />
+        </div>
+      </div>
+
+      {enabled && (
+        <div className="flex flex-col gap-4 max-w-lg">
+          <div>
+            <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">Client ID</label>
+            <Input value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder="Google OAuth Client ID" className={inputClass} />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">Client Secret</label>
+            <div className="relative">
+              <Input type={showSecret ? "text" : "password"} value={clientSecret} onChange={(e) => setClientSecret(e.target.value)}
+                placeholder={config?.config_set ? "•••••••• (vazio = mantém atual)" : "Client Secret"} className={inputClass + " pr-10"} />
+              <button type="button" onClick={() => setShowSecret(!showSecret)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#F8FAFC] bg-none border-none cursor-pointer">
+                {showSecret ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">Redirect URL</label>
+            <Input value={redirectUrl} onChange={(e) => setRedirectUrl(e.target.value)}
+              placeholder="https://orbit.zeeplabs.com/dashboard/api/auth/google/callback" className={inputClass} />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">Domínios permitidos</label>
+            <Input value={allowedDomains} onChange={(e) => setAllowedDomains(e.target.value)} placeholder="zeeplabs.com, zeepfly.com" className={inputClass} />
+            <p className="mt-1 text-[11px] text-[#64748B]">Separados por vírgula. Vazio = qualquer domínio.</p>
+          </div>
+        </div>
+      )}
+
+      {message && <p className={`mt-4 text-[12px] ${messageType === "success" ? "text-green-400" : "text-red-400"}`}>{message}</p>}
+
+      <Button onClick={handleSave} disabled={saving}
+        className="mt-5 gap-2 rounded-xl border-0 text-white font-semibold disabled:opacity-40"
+        style={{ background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))' }}>
+        {saving ? <><Loader2 size={14} className="animate-spin" /> Salvando...</> : <><Save size={14} /> Salvar</>}
+      </Button>
+    </div>
   );
 }

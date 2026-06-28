@@ -167,6 +167,103 @@ export function useDeleteUser(): UseMutationResult<void, Error, string> {
   })
 }
 
+// ── App Users ──────────────────────────────────────────────────────────────────
+
+export interface AppUserSummary {
+  id: string
+  email: string
+  provider: string
+  active: boolean
+  last_sign_in_at: string | null
+  created_at: string
+}
+
+export interface AppUserProviderCount {
+  provider: string
+  count: number
+}
+
+export interface AppUserListResponse {
+  data: AppUserSummary[]
+  total: number
+  limit: number
+  offset: number
+  providerCounts: AppUserProviderCount[]
+}
+
+export function useAppUsers(
+  appId: string,
+  search?: string,
+  limit?: number,
+  offset?: number,
+): UseQueryResult<AppUserListResponse> {
+  return useQuery({
+    queryKey: ['app-users', appId, search, limit, offset],
+    queryFn: () => {
+      const params = new URLSearchParams()
+      if (search) params.set('search', search)
+      if (limit) params.set('limit', String(limit))
+      if (offset) params.set('offset', String(offset))
+      const qs = params.toString()
+      return apiFetch<AppUserListResponse>(
+        `/dashboard/api/apps/${appId}/users${qs ? '?' + qs : ''}`,
+      )
+    },
+    enabled: Boolean(appId),
+  })
+}
+
+export function useDeactivateAppUser(): UseMutationResult<
+  { message: string },
+  Error,
+  { appId: string; userId: string }
+> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ appId, userId }) =>
+      apiFetch(`/dashboard/api/apps/${appId}/users/${userId}/deactivate`, {
+        method: 'PUT',
+      }),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ['app-users', variables.appId] })
+    },
+  })
+}
+
+export function useActivateAppUser(): UseMutationResult<
+  { message: string },
+  Error,
+  { appId: string; userId: string }
+> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ appId, userId }) =>
+      apiFetch(`/dashboard/api/apps/${appId}/users/${userId}/activate`, {
+        method: 'PUT',
+      }),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ['app-users', variables.appId] })
+    },
+  })
+}
+
+export function useResetAppUserSessions(): UseMutationResult<
+  { message: string },
+  Error,
+  { appId: string; userId: string }
+> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ appId, userId }) =>
+      apiFetch(`/dashboard/api/apps/${appId}/users/${userId}/reset-sessions`, {
+        method: 'POST',
+      }),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ['app-users', variables.appId] })
+    },
+  })
+}
+
 // ── Bootstrap / Config ──────────────────────────────────────────────────────────
 
 export interface BootstrapStatus {
@@ -397,6 +494,49 @@ export function useLogMetrics(): UseQueryResult<LogMetrics> {
     queryKey: ['logs-metrics'],
     queryFn: () => apiFetch<LogMetrics>('/dashboard/api/logs/metrics'),
     refetchInterval: 10000,
+  })
+}
+
+// ── Password Change ────────────────────────────────────────────────────────────
+
+export interface ChangeMyPasswordInput {
+  current_password: string
+  new_password: string
+  confirm_password: string
+}
+
+export interface ChangeUserPasswordInput {
+  new_password: string
+  confirm_password: string
+}
+
+export function useChangeMyPassword(): UseMutationResult<
+  { message: string },
+  Error,
+  ChangeMyPasswordInput
+> {
+  return useMutation({
+    mutationFn: (input) =>
+      apiFetch('/dashboard/api/me/password', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      }),
+  })
+}
+
+export function useChangeUserPassword(): UseMutationResult<
+  { message: string },
+  Error,
+  { userId: string } & ChangeUserPasswordInput
+> {
+  return useMutation({
+    mutationFn: ({ userId, ...input }) =>
+      apiFetch(`/dashboard/api/users/${userId}/password`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      }),
   })
 }
 

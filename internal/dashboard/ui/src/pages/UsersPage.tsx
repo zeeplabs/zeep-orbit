@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Trash2, Mail, Shield, ShieldAlert, Users } from "lucide-react";
+import { Plus, Trash2, Mail, Shield, ShieldAlert, Users, Lock } from "lucide-react";
+import ChangePasswordModal from "./ChangePasswordModal";
 import { useUsers, useCreateUser, useDeleteUser, UserDef } from "../lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -258,6 +259,7 @@ export default function UsersPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<UserDef | null>(null);
   const [deleteError, setDeleteError] = useState("");
+  const [passwordTarget, setPasswordTarget] = useState<UserDef | null>(null);
 
   async function handleConfirmDelete() {
     if (!deleteTarget) return;
@@ -433,6 +435,15 @@ export default function UsersPage() {
                               <Button
                                 variant="outline"
                                 size="icon"
+                                onClick={() => { setPasswordTarget(u); }}
+                                title="Trocar senha"
+                                className="size-7 rounded-lg border-white/[0.10] bg-white/[0.04] text-[#94A3B8] opacity-0 transition-opacity group-hover:opacity-100 hover:bg-white/[0.08] hover:text-[#F8FAFC] mr-1"
+                              >
+                                <Lock size={12} strokeWidth={1.5} />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="icon"
                                 onClick={() => { setDeleteTarget(u); setDeleteError(""); }}
                                 title="Remover usuário"
                                 className="size-7 rounded-lg border-red-500/20 bg-red-500/[0.06] text-red-400 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-400"
@@ -480,15 +491,26 @@ export default function UsersPage() {
                         </div>
                       </div>
                       {currentUser && u.id !== currentUser.id && (
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={() => { setDeleteTarget(u); setDeleteError(""); }}
-                          title="Remover usuário"
-                          className="size-8 rounded-xl border-red-500/20 bg-red-500/[0.06] text-red-400 hover:bg-red-500/10 hover:text-red-400"
-                        >
-                          <Trash2 size={14} strokeWidth={1.5} />
-                        </Button>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => { setPasswordTarget(u); }}
+                            title="Trocar senha"
+                            className="size-8 rounded-xl border-white/[0.10] bg-white/[0.04] text-[#94A3B8] hover:bg-white/[0.08] hover:text-[#F8FAFC]"
+                          >
+                            <Lock size={14} strokeWidth={1.5} />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => { setDeleteTarget(u); setDeleteError(""); }}
+                            title="Remover usuário"
+                            className="size-8 rounded-xl border-red-500/20 bg-red-500/[0.06] text-red-400 hover:bg-red-500/10 hover:text-red-400"
+                          >
+                            <Trash2 size={14} strokeWidth={1.5} />
+                          </Button>
+                        </div>
                       )}
                     </div>
                     <div>{roleBadge(u.role)}</div>
@@ -514,6 +536,13 @@ export default function UsersPage() {
         error={deleteError}
         onConfirm={handleConfirmDelete}
         onCancel={handleCloseDelete}
+      />
+
+      <ChangePasswordModal
+        open={Boolean(passwordTarget)}
+        onClose={() => setPasswordTarget(null)}
+        targetUserId={passwordTarget?.id}
+        targetEmail={passwordTarget?.email}
       />
     </>
   );

@@ -8,6 +8,8 @@ import {
   ChevronDown,
   ChevronUp,
   Table2,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import {
   useCreateApp,
@@ -79,6 +81,12 @@ export default function AppFormPage() {
 
   const [appName, setAppName] = useState("");
   const [authEmail, setAuthEmail] = useState(false);
+  const [googleEnabled, setGoogleEnabled] = useState(false);
+  const [googleClientId, setGoogleClientId] = useState("");
+  const [googleClientSecret, setGoogleClientSecret] = useState("");
+  const [googleRedirectUrl, setGoogleRedirectUrl] = useState("");
+  const [googleAllowedDomains, setGoogleAllowedDomains] = useState("");
+  const [showGoogleSecret, setShowGoogleSecret] = useState(false);
   const [tables, setTables] = useState<TableDef[]>([]);
   const [collapsedTables, setCollapsedTables] = useState<Set<number>>(
     new Set(),
@@ -95,6 +103,15 @@ export default function AppFormPage() {
     if (editTarget) {
       setAppName(editTarget.name);
       setAuthEmail(editTarget.auth_email_enabled);
+      // Load Google provider config
+      const providers = (editTarget as any).auth_providers;
+      if (providers?.google?.enabled) {
+        setGoogleEnabled(true);
+        setGoogleClientId(providers.google.client_id || "");
+        setGoogleClientSecret("");
+        setGoogleRedirectUrl(providers.google.redirect_url || "");
+        setGoogleAllowedDomains((providers.google.allowed_domains || []).join(", "));
+      }
       setTables(
         editTarget.tables.map((t) => ({
           ...t,
@@ -104,6 +121,11 @@ export default function AppFormPage() {
     } else if (!isEdit) {
       setAppName("");
       setAuthEmail(false);
+      setGoogleEnabled(false);
+      setGoogleClientId("");
+      setGoogleClientSecret("");
+      setGoogleRedirectUrl("");
+      setGoogleAllowedDomains("");
       setTables([]);
       setCollapsedTables(new Set());
     }
@@ -199,13 +221,26 @@ export default function AppFormPage() {
     if (!validate()) return;
     setSubmitError(null);
 
-    const payload = { name: appName, auth_email_enabled: authEmail, tables };
+    const payload: Record<string, unknown> = { name: appName, auth_email_enabled: authEmail, tables };
+
+    if (googleEnabled) {
+      const domains = googleAllowedDomains.split(",").map((d) => d.trim()).filter(Boolean);
+      payload.auth_providers = {
+        google: {
+          enabled: true,
+          client_id: googleClientId,
+          client_secret: googleClientSecret,
+          redirect_url: googleRedirectUrl || `/${appName}/auth/google/callback`,
+          ...(domains.length > 0 ? { allowed_domains: domains } : {}),
+        },
+      };
+    }
 
     try {
       if (isEdit && editTarget) {
-        await updateApp.mutateAsync({ id: editTarget.id, ...payload });
+        await updateApp.mutateAsync({ id: editTarget.id, ...payload } as any);
       } else {
-        await createApp.mutateAsync(payload);
+        await createApp.mutateAsync(payload as any);
       }
       navigate("/apps");
     } catch (err) {
@@ -311,6 +346,76 @@ export default function AppFormPage() {
                 onCheckedChange={setAuthEmail}
                 className="shrink-0"
               />
+            </div>
+          </div>
+
+          {/* ── Auth Providers ── */}
+          <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-5 flex flex-col gap-4">
+            <h3 className="text-[13px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+              Provedores de Login
+            </h3>
+
+            {/* Email */}
+            <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-0.5">
+                <p className="text-sm font-semibold text-[#F8FAFC]">E-mail</p>
+                <p className="text-xs text-[#94A3B8]">Registro e login via email/senha</p>
+              </div>
+              <Switch checked={authEmail} onCheckedChange={setAuthEmail} className="shrink-0" />
+            </div>
+
+            <div className="border-t border-white/[0.06]" />
+
+            {/* Google */}
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-0.5">
+                  <p className="text-sm font-semibold text-[#F8FAFC]">Google</p>
+                  <p className="text-xs text-[#94A3B8]">Login via conta Google</p>
+                </div>
+                <Switch checked={googleEnabled} onCheckedChange={setGoogleEnabled} className="shrink-0" />
+              </div>
+              {googleEnabled && (
+                <div className="flex flex-col gap-3 pl-0 border-t border-white/[0.06] pt-3 mt-1">
+                  <div>
+                    <Label className="text-[12px] font-medium text-[#94A3B8]">Client ID</Label>
+                    <Input value={googleClientId} onChange={(e) => setGoogleClientId(e.target.value)}
+                      placeholder="Google OAuth Client ID"
+                      className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus mt-1" />
+                  </div>
+                  <div>
+                    <Label className="text-[12px] font-medium text-[#94A3B8]">Client Secret</Label>
+                    <div className="relative mt-1">
+                      <Input type={showGoogleSecret ? "text" : "password"} value={googleClientSecret}
+                        onChange={(e) => setGoogleClientSecret(e.target.value)}
+                        placeholder="Client Secret"
+                        className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus w-full pr-10" />
+                      <button type="button" onClick={() => setShowGoogleSecret(!showGoogleSecret)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#F8FAFC] bg-transparent border-none cursor-pointer">
+                        {showGoogleSecret ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-[12px] font-medium text-[#94A3B8]">Redirect URL</Label>
+                    <Input value={googleRedirectUrl} onChange={(e) => setGoogleRedirectUrl(e.target.value)}
+                      placeholder={`https://seu-dominio.com/${appName || "meu_app"}/auth/google/callback`}
+                      className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus mt-1" />
+                    <p className="text-[11px] text-[#64748B] mt-1">
+                      Configure este URL no Google Cloud Console
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-[12px] font-medium text-[#94A3B8]">Domínios permitidos</Label>
+                    <Input value={googleAllowedDomains} onChange={(e) => setGoogleAllowedDomains(e.target.value)}
+                      placeholder="zeeplabs.com, zeepfly.com"
+                      className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus mt-1" />
+                    <p className="text-[11px] text-[#64748B] mt-1">
+                      Separados por vírgula. Vazio = qualquer domínio.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

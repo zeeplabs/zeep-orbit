@@ -9,6 +9,7 @@ import {
   Mail,
   MailX,
   LayoutGrid,
+  Users,
 } from "lucide-react";
 import { useApps, useDeleteApp, AppDef } from "../lib/api";
 import DeleteConfirmDialog from "../components/DeleteConfirmDialog";
@@ -50,7 +51,7 @@ interface AppCardProps {
   onDelete: (app: AppDef) => void;
 }
 
-function AppCard({ app, index, onEdit, onDelete }: AppCardProps) {
+function AppCard({ app, index, onEdit, onDelete, onUsers }: AppCardProps & { onUsers: (app: AppDef) => void }) {
   const createdAt = new Date(app.created_at).toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "short",
@@ -135,6 +136,18 @@ function AppCard({ app, index, onEdit, onDelete }: AppCardProps) {
         <p className="text-[10px] text-[#64748B] tracking-wide">{createdAt}</p>
 
         <div className="flex gap-1 transition-all duration-200 opacity-0 translate-x-2 group-hover:opacity-100 group-hover:translate-x-0">
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => onUsers(app)}
+              title="Usuários"
+              className="size-7 rounded-lg border-white/[0.10] bg-white/[0.04] text-[#94A3B8] hover:bg-white/[0.08] hover:text-white"
+            >
+              <Users size={12} strokeWidth={1.5} />
+            </Button>
+          </motion.div>
+
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
             <Button
               variant="outline"
@@ -242,6 +255,10 @@ export default function AppsPage() {
 
   function handleEdit(app: AppDef) {
     navigate(`/apps/${app.id}/edit`);
+  }
+
+  function handleUsers(app: AppDef) {
+    navigate(`/apps/${app.id}/users`);
   }
 
   async function handleConfirmDelete() {
@@ -356,6 +373,7 @@ export default function AppsPage() {
                   index={i}
                   onEdit={handleEdit}
                   onDelete={setDeleteTarget}
+                  onUsers={handleUsers}
                 />
               ))}
             </motion.div>

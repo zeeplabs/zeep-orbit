@@ -42,6 +42,7 @@ export default function LoginPage() {
         setError(data.error || "Invalid credentials");
         return;
       }
+      qc.clear();
       qc.invalidateQueries({ queryKey: ["me"] });
     } catch {
       setError("Connection error");

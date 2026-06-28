@@ -55,11 +55,20 @@ func (p *Provisioner) provisionAuthTables(ctx context.Context, schema string) ([
 	return created, nil
 }
 
+// EnsureAuthUserColumns adds any missing columns to _auth_users for a given schema.
+// Safe to call on every request — only applies ALTER TABLE IF NOT EXISTS.
+func (p *Provisioner) EnsureAuthUserColumns(ctx context.Context, schema string) error {
+	return p.addMissingAuthUserColumns(ctx, schema)
+}
+
 func (p *Provisioner) addMissingAuthUserColumns(ctx context.Context, schema string) error {
 	alters := []string{
 		fmt.Sprintf(`ALTER TABLE %q."_auth_users" ADD COLUMN IF NOT EXISTS "phone"              TEXT`, schema),
 		fmt.Sprintf(`ALTER TABLE %q."_auth_users" ADD COLUMN IF NOT EXISTS "email_confirmed_at" TIMESTAMPTZ`, schema),
 		fmt.Sprintf(`ALTER TABLE %q."_auth_users" ADD COLUMN IF NOT EXISTS "last_sign_in_at"    TIMESTAMPTZ`, schema),
+		fmt.Sprintf(`ALTER TABLE %q."_auth_users" ADD COLUMN IF NOT EXISTS "active"             BOOLEAN NOT NULL DEFAULT true`, schema),
+		fmt.Sprintf(`ALTER TABLE %q."_auth_users" ADD COLUMN IF NOT EXISTS "provider"           TEXT NOT NULL DEFAULT 'email'`, schema),
+		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS %q ON %q."_auth_users" ("email")`, schema+"_auth_users_email_idx", schema),
 	}
 	for _, sql := range alters {
 		if _, err := p.pool.Exec(ctx, sql); err != nil {

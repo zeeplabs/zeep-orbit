@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Navigate, NavLink, Outlet } from "react-router-dom";
 import { motion } from "framer-motion";
-import { LogOut, Grid, Database, Users, Activity, Settings, User } from "lucide-react";
+import { LogOut, Grid, Database, Users, Activity, Settings, User, Lock } from "lucide-react";
+import ChangePasswordModal from "./ChangePasswordModal";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import {
   Dialog,
@@ -30,7 +31,7 @@ function navItems(user: User | null): NavItem[] {
   ];
   if (user?.role === "superadmin") {
     items.splice(2, 0, { icon: Users, label: "Usuários", path: "/usuarios" });
-    items.push({ icon: Settings, label: "Aparência", path: "/configuracoes" });
+    items.push({ icon: Settings, label: "Configurações", path: "/configuracoes" });
   }
   return items;
 }
@@ -103,6 +104,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   const { data: brandConfig } = useQuery({
     queryKey: ["brand-config"],
@@ -124,7 +126,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
         method: "POST",
         credentials: "include",
       });
-      qc.invalidateQueries({ queryKey: ["me"] });
+      qc.clear();
     } finally {
       setLoggingOut(false);
       setShowLogoutDialog(false);
@@ -283,6 +285,26 @@ export default function DashboardShell({ user }: { user: User | null }) {
             </p>
           </div>
           <button
+            onClick={() => setShowChangePassword(true)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "8px 12px",
+              borderRadius: 10,
+              border: "none",
+              background: "transparent",
+              color: "var(--text-muted)",
+              cursor: "pointer",
+              fontSize: 13,
+              width: "100%",
+              fontFamily: "inherit",
+              transition: "color 0.15s",
+            }}
+          >
+            <Lock size={14} strokeWidth={1.5} /> Trocar senha
+          </button>
+          <button
             onClick={() => setShowLogoutDialog(true)}
             style={{
               display: "flex",
@@ -356,6 +378,27 @@ export default function DashboardShell({ user }: { user: User | null }) {
               <button
                 onClick={() => {
                   setShowUserMenu(false);
+                  setShowChangePassword(true);
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "10px 16px",
+                  width: "100%",
+                  border: "none",
+                  background: "transparent",
+                  color: "var(--text-muted)",
+                  fontSize: 14,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                <Lock size={16} strokeWidth={1.5} /> Trocar senha
+              </button>
+              <button
+                onClick={() => {
+                  setShowUserMenu(false);
                   setShowLogoutDialog(true);
                 }}
                 style={{
@@ -426,6 +469,11 @@ export default function DashboardShell({ user }: { user: User | null }) {
           </div>
         </DialogContent>
       </Dialog>
+
+      <ChangePasswordModal
+        open={showChangePassword}
+        onClose={() => setShowChangePassword(false)}
+      />
     </div>
   );
 }

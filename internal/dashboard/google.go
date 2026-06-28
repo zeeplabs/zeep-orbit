@@ -25,26 +25,67 @@ type googleState struct {
 }
 
 // GoogleOAuthHandler handles Google Sign-In for the dashboard.
+// Config is loaded lazily from DB (with env var fallback) on first request.
 type GoogleOAuthHandler struct {
 	pool       *db.Pool
-	cfg        *config.GoogleOAuthConfig
 	states     map[string]*googleState
 	statesMu   sync.Mutex
 	httpClient *http.Client
 }
 
 // NewGoogleOAuthHandler creates a new GoogleOAuthHandler.
+// cfg can be nil — config is loaded lazily from DB.
 func NewGoogleOAuthHandler(pool *db.Pool, cfg *config.GoogleOAuthConfig) *GoogleOAuthHandler {
 	return &GoogleOAuthHandler{
 		pool:       pool,
-		cfg:        cfg,
 		states:     make(map[string]*googleState),
 		httpClient: &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
+// loadConfig returns the active Google OAuth config from DB (or env vars).
+func (h *GoogleOAuthHandler) loadConfig(ctx context.Context) *config.GoogleOAuthConfig {
+	resp, err := GetAuthProvider(ctx, h.pool, "google")
+	if err != nil || !resp.Enabled || resp.Config == nil || string(resp.Config) == "{}" {
+		return config.LoadGoogleOAuthConfig()
+	}
+
+	var cfg struct {
+		ClientID       string   `json:"client_id"`
+		ClientSecret   string   `json:"client_secret"`
+		RedirectURL    string   `json:"redirect_url"`
+		AllowedDomains []string `json:"allowed_domains"`
+	}
+	if err := json.Unmarshal(resp.Config, &cfg); err != nil {
+		return config.LoadGoogleOAuthConfig()
+	}
+
+	if cfg.ClientID == "" {
+		return config.LoadGoogleOAuthConfig()
+	}
+
+	return &config.GoogleOAuthConfig{
+		ClientID:       cfg.ClientID,
+		ClientSecret:   cfg.ClientSecret,
+		RedirectURL:    cfg.RedirectURL,
+		AllowedDomains: cfg.AllowedDomains,
+	}
+}
+
+// isEnabled returns true if Google OAuth is configured.
+func (h *GoogleOAuthHandler) isEnabled(ctx context.Context) bool {
+	cfg := h.loadConfig(ctx)
+	return cfg.ClientID != ""
+}
+
 // Login redirects the user to Google's OAuth consent screen.
 func (h *GoogleOAuthHandler) Login(w http.ResponseWriter, r *http.Request) {
+	cfg := h.loadConfig(r.Context())
+	if cfg.ClientID == "" {
+		http.Error(w, "Google OAuth is not configured", http.StatusServiceUnavailable)
+		return
+	}
+
 	state, err := h.generateState()
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -52,8 +93,8 @@ func (h *GoogleOAuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	v := url.Values{}
-	v.Set("client_id", h.cfg.ClientID)
-	v.Set("redirect_uri", h.cfg.RedirectURL)
+	v.Set("client_id", cfg.ClientID)
+	v.Set("redirect_uri", cfg.RedirectURL)
 	v.Set("response_type", "code")
 	v.Set("scope", "openid email profile")
 	v.Set("state", state)
@@ -65,6 +106,12 @@ func (h *GoogleOAuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 // Callback handles the OAuth redirect from Google.
 func (h *GoogleOAuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
+	cfg := h.loadConfig(r.Context())
+	if cfg.ClientID == "" {
+		h.callbackErrorPage(w, "Google OAuth is not configured")
+		return
+	}
+
 	code := r.URL.Query().Get("code")
 	state := r.URL.Query().Get("state")
 	errorParam := r.URL.Query().Get("error")
@@ -84,7 +131,7 @@ func (h *GoogleOAuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := h.exchangeCode(r.Context(), code)
+	token, err := h.exchangeCode(r.Context(), code, cfg)
 	if err != nil {
 		h.callbackErrorPage(w, "Falha na autenticação com Google. Tente novamente.")
 		return
@@ -96,7 +143,7 @@ func (h *GoogleOAuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.verifyDomain(email) {
+	if !h.verifyDomain(email, cfg.AllowedDomains) {
 		h.callbackErrorPage(w, "Seu email não pertence a um domínio autorizado. Contacte o administrador.")
 		return
 	}
@@ -186,12 +233,12 @@ type googleUserInfo struct {
 	Name  string `json:"name"`
 }
 
-func (h *GoogleOAuthHandler) exchangeCode(ctx context.Context, code string) (*googleTokenResponse, error) {
+func (h *GoogleOAuthHandler) exchangeCode(ctx context.Context, code string, cfg *config.GoogleOAuthConfig) (*googleTokenResponse, error) {
 	v := url.Values{}
 	v.Set("code", code)
-	v.Set("client_id", h.cfg.ClientID)
-	v.Set("client_secret", h.cfg.ClientSecret)
-	v.Set("redirect_uri", h.cfg.RedirectURL)
+	v.Set("client_id", cfg.ClientID)
+	v.Set("client_secret", cfg.ClientSecret)
+	v.Set("redirect_uri", cfg.RedirectURL)
 	v.Set("grant_type", "authorization_code")
 
 	req, err := http.NewRequestWithContext(ctx, "POST", "https://oauth2.googleapis.com/token", strings.NewReader(v.Encode()))
@@ -246,8 +293,8 @@ func extractGoogleInfo(tr *googleTokenResponse) (email, googleID string) {
 	return info.Email, info.Sub
 }
 
-func (h *GoogleOAuthHandler) verifyDomain(email string) bool {
-	if len(h.cfg.AllowedDomains) == 0 {
+func (h *GoogleOAuthHandler) verifyDomain(email string, allowedDomains []string) bool {
+	if len(allowedDomains) == 0 {
 		return true
 	}
 	at := strings.LastIndex(email, "@")
@@ -255,7 +302,7 @@ func (h *GoogleOAuthHandler) verifyDomain(email string) bool {
 		return false
 	}
 	domain := email[at+1:]
-	for _, allowed := range h.cfg.AllowedDomains {
+	for _, allowed := range allowedDomains {
 		if strings.EqualFold(domain, allowed) {
 			return true
 		}

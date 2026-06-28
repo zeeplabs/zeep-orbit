@@ -74,7 +74,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	schema := app.SchemaName
 	var userID string
 	err = h.pool.QueryRow(r.Context(),
-		fmt.Sprintf(`INSERT INTO %q."_auth_users" (email, phone, password_hash, name) VALUES ($1, $2, $3, $4) RETURNING id`, schema),
+		fmt.Sprintf(`INSERT INTO %q."_auth_users" (email, phone, password_hash, name, provider) VALUES ($1, $2, $3, $4, 'email') RETURNING id`, schema),
 		body.Email, body.Phone, string(hash), body.Name,
 	).Scan(&userID)
 	if err != nil {
@@ -114,16 +114,22 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	schema := app.SchemaName
 	var userID, passwordHash string
+	var active bool
 	err := h.pool.QueryRow(r.Context(),
-		fmt.Sprintf(`SELECT id, password_hash FROM %q."_auth_users" WHERE email = $1`, schema),
+		fmt.Sprintf(`SELECT id, password_hash, active FROM %q."_auth_users" WHERE email = $1`, schema),
 		body.Email,
-	).Scan(&userID, &passwordHash)
+	).Scan(&userID, &passwordHash, &active)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, http.StatusUnauthorized, "invalid credentials")
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "failed to query user")
+		return
+	}
+
+	if !active {
+		writeError(w, http.StatusForbidden, "account is deactivated")
 		return
 	}
 

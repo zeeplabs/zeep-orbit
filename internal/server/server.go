@@ -16,7 +16,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/zeeplabs/zeep-orbit/internal/auth"
-	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/dashboard"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 	"github.com/zeeplabs/zeep-orbit/internal/docs"
@@ -152,42 +151,56 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(authLimiter.Middleware).Post("/api/login", dashH.Login)
 		r.Post("/api/logout", dashH.Logout)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/me", dashH.Me)
+		r.With(dashboard.RequireAuth(pool)).Put("/api/me/password", dashH.ChangeMyPassword)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/apps", dashH.ListApps)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/apps", dashH.CreateApp)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/apps/{id}", dashH.GetApp)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/apps/{id}", dashH.UpdateApp)
 		r.With(dashboard.RequireAuth(pool)).Delete("/api/apps/{id}", dashH.DeleteApp)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/apps/{id}/users", dashH.ListAppUsers)
+		r.With(dashboard.RequireAuth(pool)).Put("/api/apps/{id}/users/{userId}/deactivate", dashH.DeactivateAppUser)
+		r.With(dashboard.RequireAuth(pool)).Put("/api/apps/{id}/users/{userId}/activate", dashH.ActivateAppUser)
+		r.With(dashboard.RequireAuth(pool)).Post("/api/apps/{id}/users/{userId}/reset-sessions", dashH.ResetAppUserSessions)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/users", dashH.ListUsers)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/users", dashH.CreateUser)
 		r.With(dashboard.RequireAuth(pool)).Delete("/api/users/{id}", dashH.DeleteUser)
+		r.With(dashboard.RequireAuth(pool)).Put("/api/users/{id}/password", dashH.ChangeUserPassword)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/logs", dashH.ListLogs)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/logs/metrics", dashH.LogsMetrics)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/config", dashH.UpdateConfig)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/config/auth/providers", dashH.ListAuthProviders)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/config/auth/providers/{provider}", dashH.GetAuthProvider)
+		r.With(dashboard.RequireAuth(pool)).Put("/api/config/auth/providers/{provider}", dashH.UpsertAuthProvider)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/data-browser/apps", dashH.ListDataBrowserApps)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/data-browser/query", dashH.DataBrowserQuery)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/data-browser/export", dashH.DataBrowserExport)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/data-browser/row", dashH.DataBrowserCreate)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/data-browser/row", dashH.DataBrowserUpdate)
 		r.With(dashboard.RequireAuth(pool)).Delete("/api/data-browser/row", dashH.DataBrowserDelete)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/apps/{id}/auth/providers", dashH.ListAppProviders)
+		r.With(dashboard.RequireAuth(pool)).Put("/api/apps/{id}/auth/providers", dashH.UpdateAppProviders)
 		r.Handle("/*", dashboard.StaticHandler())
 	})
 
-	// Google OAuth — só ativado se GOOGLE_CLIENT_ID estiver configurado
-	if googleCfg := config.LoadGoogleOAuthConfig(); googleCfg.ClientID != "" {
-		googleH := dashboard.NewGoogleOAuthHandler(pool, googleCfg)
-		r.Get("/dashboard/api/auth/google/login", googleH.Login)
-		r.Get("/dashboard/api/auth/google/callback", googleH.Callback)
-	}
+	// Google OAuth — rotas sempre montadas, config pode vir do DB ou env vars
+	// O handler carrega a config lazymente de GetGoogleOAuthConfig()
+	googleH := dashboard.NewGoogleOAuthHandler(pool, nil)
+	r.Get("/dashboard/api/auth/google/login", googleH.Login)
+	r.Get("/dashboard/api/auth/google/callback", googleH.Callback)
 
 	// Auth nativo por app — deve vir antes das rotas CRUD wildcard
 	ah := auth.New(pool, reg)
+	appGoogleH := auth.NewAppGoogleHandler(pool, reg)
 	r.Route("/{app}/auth", func(r chi.Router) {
+		r.Get("/providers", appGoogleH.ListProviders)
 		r.With(ah.RateLimit).Post("/register", ah.Register)
 		r.With(ah.RateLimit).Post("/login", ah.Login)
 		r.Post("/refresh", ah.Refresh)
 		r.With(AuthJWTMiddleware(reg)).Post("/logout", ah.Logout)
 		r.With(AuthJWTMiddleware(reg)).Get("/me", ah.Me)
 		r.With(AuthJWTMiddleware(reg)).Put("/me", ah.UpdateMe)
+		r.Get("/google/login", appGoogleH.Login)
+		r.Get("/google/callback", appGoogleH.Callback)
 	})
 
 	// Rotas com JWT — grupo /{app}/{table}

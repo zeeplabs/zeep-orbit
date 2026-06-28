@@ -38,6 +38,7 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			auth_email_enabled BOOLEAN     NOT NULL DEFAULT true,
 			created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
+		`ALTER TABLE zeep_system.apps ADD COLUMN IF NOT EXISTS auth_providers JSONB NOT NULL DEFAULT '{}'`,
 		`CREATE TABLE IF NOT EXISTS zeep_system.app_tables (
 			id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
 			app_id     UUID        NOT NULL REFERENCES zeep_system.apps(id) ON DELETE CASCADE,
@@ -59,10 +60,14 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			logo_url     TEXT        NOT NULL DEFAULT '',
 			updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
-		// Ensure only one row via a unique constraint on a constant expression.
-		// This lets callers use INSERT ... ON CONFLICT with a known conflict target.
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_brand_config_singleton
 		 ON zeep_system.brand_config ((TRUE))`,
+		`CREATE TABLE IF NOT EXISTS zeep_system.auth_providers (
+			provider         TEXT        PRIMARY KEY,
+			enabled          BOOLEAN    NOT NULL DEFAULT false,
+			config_encrypted TEXT       NOT NULL DEFAULT '',
+			updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
 	}
 
 	for _, stmt := range stmts {

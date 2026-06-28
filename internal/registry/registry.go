@@ -19,9 +19,10 @@ type Registry struct {
 
 // App representa uma aplicação com seu esquema e tabelas.
 type App struct {
-	Config     config.AppConfig
-	SchemaName string // "app_{name}"
-	Tables     map[string]*Table
+	Config        config.AppConfig
+	SchemaName    string // "app_{name}"
+	Tables        map[string]*Table
+	AuthProviders map[string]any // from zeep_system.apps.auth_providers
 }
 
 // Table representa uma tabela dentro de um app.
@@ -137,10 +138,11 @@ func (r *Registry) LoadFromDB(ctx context.Context, pool *db.Pool) error {
 		name             string
 		jwtSecret        string
 		authEmailEnabled bool
+		authProviders    []byte
 	}
 
 	rows, err := pool.Query(ctx,
-		`SELECT id, name, jwt_secret, auth_email_enabled FROM zeep_system.apps ORDER BY name`,
+		`SELECT id, name, jwt_secret, auth_email_enabled, COALESCE(auth_providers, '{}') FROM zeep_system.apps ORDER BY name`,
 	)
 	if err != nil {
 		return fmt.Errorf("registry: load from db: query apps: %w", err)
@@ -150,9 +152,11 @@ func (r *Registry) LoadFromDB(ctx context.Context, pool *db.Pool) error {
 	var appRows []appRow
 	for rows.Next() {
 		var a appRow
-		if err := rows.Scan(&a.id, &a.name, &a.jwtSecret, &a.authEmailEnabled); err != nil {
+		var providersJSON []byte
+		if err := rows.Scan(&a.id, &a.name, &a.jwtSecret, &a.authEmailEnabled, &providersJSON); err != nil {
 			return fmt.Errorf("registry: load from db: scan app: %w", err)
 		}
+		a.authProviders = providersJSON
 		appRows = append(appRows, a)
 	}
 	if err := rows.Err(); err != nil {
@@ -207,6 +211,11 @@ func (r *Registry) LoadFromDB(ctx context.Context, pool *db.Pool) error {
 			return fmt.Errorf("registry: load from db: table rows: %w", err)
 		}
 
+		var authProviders map[string]any
+		if len(a.authProviders) > 0 {
+			json.Unmarshal(a.authProviders, &authProviders)
+		}
+
 		newApps[a.name] = &App{
 			Config: config.AppConfig{
 				Name: a.name,
@@ -216,8 +225,9 @@ func (r *Registry) LoadFromDB(ctx context.Context, pool *db.Pool) error {
 				},
 				Tables: tableCfgs,
 			},
-			SchemaName: a.name,
-			Tables:     tables,
+			SchemaName:    a.name,
+			Tables:        tables,
+			AuthProviders: authProviders,
 		}
 	}
 
