@@ -101,8 +101,8 @@ function CreateSuperadminStep({ onSuccess }: { onSuccess: () => void }) {
     e.preventDefault();
     setValidationError("");
 
-    if (password.length < 12) {
-      setValidationError("A senha deve ter no mínimo 12 caracteres.");
+    if (password.length < 8) {
+      setValidationError("A senha deve ter no mínimo 8 caracteres.");
       return;
     }
     if (password !== confirmPassword) {
@@ -166,7 +166,7 @@ function CreateSuperadminStep({ onSuccess }: { onSuccess: () => void }) {
           </Label>
           <Input
             type="password"
-            placeholder="Mínimo 12 caracteres"
+            placeholder="Mínimo 8 caracteres"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required

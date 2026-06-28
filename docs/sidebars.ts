@@ -7,6 +7,7 @@ const sidebars: SidebarsConfig = {
     'configuration',
     'dashboard/overview',
     'dashboard/apps',
+    'deployment',
     'api/crud',
   ],
 };

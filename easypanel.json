@@ -1,0 +1,72 @@
+{
+  "name": "Zeep Orbit",
+  "description": "Open-source BaaS - schema definitions into instant REST APIs + PostgreSQL",
+  "logo": "https://raw.githubusercontent.com/zeeplabs/zeep-orbit/main/docs/static/img/orbit-logo.png",
+  "documentation": "https://github.com/zeeplabs/zeep-orbit",
+  "services": [
+    {
+      "name": "zeep-orbit",
+      "image": "ghcr.io/zeeplabs/zeep-orbit:latest",
+      "port": 8080,
+      "environments": [
+        {
+          "name": "DATABASE_URL",
+          "description": "PostgreSQL connection string",
+          "value": "postgres://user:pass@postgres:5432/zeep"
+        },
+        {
+          "name": "DASHBOARD_BOOTSTRAP_SECRET",
+          "description": "Secret key for first-time admin setup",
+          "value": ""
+        },
+        {
+          "name": "GOOGLE_CLIENT_ID",
+          "description": "Google OAuth Client ID (optional)",
+          "optional": true
+        },
+        {
+          "name": "GOOGLE_CLIENT_SECRET",
+          "description": "Google OAuth Client Secret (optional)",
+          "optional": true
+        },
+        {
+          "name": "GOOGLE_REDIRECT_URL",
+          "description": "Google OAuth redirect URL (optional)",
+          "optional": true,
+          "value": "https://seu-dominio.com/dashboard/api/auth/google/callback"
+        },
+        {
+          "name": "BRAND_THEME",
+          "description": "Dashboard theme (azure, emerald, ruby, amber, orange)",
+          "optional": true,
+          "value": "azure"
+        },
+        {
+          "name": "BRAND_COMPANY_NAME",
+          "description": "Company name for white-label",
+          "optional": true,
+          "value": "Minha Empresa"
+        }
+      ]
+    },
+    {
+      "name": "postgres",
+      "image": "postgres:16-alpine",
+      "port": 5432,
+      "environments": [
+        {
+          "name": "POSTGRES_USER",
+          "value": "zeep"
+        },
+        {
+          "name": "POSTGRES_PASSWORD",
+          "value": ""
+        },
+        {
+          "name": "POSTGRES_DB",
+          "value": "zeep"
+        }
+      ]
+    }
+  ]
+}

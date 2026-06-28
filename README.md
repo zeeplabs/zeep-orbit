@@ -74,6 +74,8 @@ docker run -d \
   ghcr.io/zeeplabs/zeep-orbit:latest
 ```
 
+> **Nota:** Se o PostgreSQL estiver rodando na máquina host (não em outro container), use `host.docker.internal` no lugar de `localhost` na `DATABASE_URL`.
+
 Then visit **http://localhost:8080/dashboard** to complete the first-time setup.
 
 ### Docker Compose
