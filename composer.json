@@ -1,0 +1,15 @@
+{
+    "name": "zeeplabs/orbit-client",
+    "description": "PHP client for Zeep Orbit — auto-generated REST APIs for your apps",
+    "type": "library",
+    "autoload": {
+        "psr-4": {
+            "Zeeplabs\\Orbit\\": "clients/php/src/"
+        }
+    },
+    "require": {
+        "php": ">=8.1",
+        "ext-curl": "*",
+        "ext-json": "*"
+    }
+}
