@@ -28,6 +28,8 @@ export interface AppDef {
   jwt_secret: string
   auth_email_enabled: boolean
   owner_id: string
+  owner_email?: string
+  owner_name?: string
   created_at: string
   tables: TableDef[]
 }
@@ -115,12 +117,14 @@ export function useDeleteApp(): UseMutationResult<void, Error, string> {
 export interface UserDef {
   id: string
   email: string
+  name?: string
   role: string
   created_at: string
 }
 
 export interface CreateUserInput {
   email: string
+  name?: string
   password: string
   role: string
 }
@@ -282,7 +286,7 @@ export function useBootstrapStatus(): UseQueryResult<BootstrapStatus> {
 export function useBootstrap(): UseMutationResult<
   { message: string; email: string },
   Error,
-  { secret: string; email: string; password: string }
+  { secret: string; email: string; name: string; password: string }
 > {
   const qc = useQueryClient()
   return useMutation({

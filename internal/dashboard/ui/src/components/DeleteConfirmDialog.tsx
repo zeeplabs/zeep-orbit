@@ -1,3 +1,4 @@
+import { useTranslation, Trans } from 'react-i18next'
 import { AlertTriangle } from 'lucide-react'
 import {
   Dialog,
@@ -18,6 +19,7 @@ interface Props {
 }
 
 export default function DeleteConfirmDialog({ open, appName, loading, onConfirm, onCancel }: Props) {
+  const { t } = useTranslation()
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) onCancel() }}>
       <DialogContent className="max-w-[420px] border border-white/[0.10] bg-[#0D0D14]/60 backdrop-blur-xl rounded-2xl p-0 gap-0 [&>button]:text-[#94A3B8] [&>button]:hover:text-[#F8FAFC] [&>button]:hover:bg-white/[0.08]"
@@ -32,12 +34,11 @@ export default function DeleteConfirmDialog({ open, appName, loading, onConfirm,
             </div>
 
             <DialogTitle className="text-base font-bold text-[#F8FAFC] mb-2">
-              Deletar app &ldquo;{appName}&rdquo;?
+              {t("apps.deleteTitle")}
             </DialogTitle>
 
             <DialogDescription className="text-[13px] text-[#94A3B8] leading-relaxed mb-6">
-              Esta ação remove o app do dashboard. As tabelas no banco{' '}
-              <strong className="text-[#F8FAFC]">NÃO serão deletadas</strong>.
+              <Trans i18nKey="apps.deleteDesc" values={{ name: appName }} />
             </DialogDescription>
           </DialogHeader>
 
@@ -48,14 +49,14 @@ export default function DeleteConfirmDialog({ open, appName, loading, onConfirm,
               disabled={loading}
               className="flex-1 rounded-xl border-white/[0.10] bg-white/[0.06] text-[#94A3B8] hover:bg-white/[0.10] hover:text-[#F8FAFC] hover:border-white/[0.10] font-medium"
             >
-              Cancelar
+              {t("apps.deleteCancel")}
             </Button>
             <Button
               onClick={onConfirm}
               disabled={loading}
               className="flex-1 rounded-xl bg-red-500 hover:bg-red-600 text-white font-semibold border-0 disabled:bg-red-500/40"
             >
-              {loading ? 'Deletando...' : 'Deletar'}
+              {loading ? t("apps.deleting") : t("apps.deleteConfirm")}
             </Button>
           </DialogFooter>
         </div>

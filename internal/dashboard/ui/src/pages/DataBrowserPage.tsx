@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Database,
@@ -118,6 +119,7 @@ function EmptyState({ message }: { message: string }) {
 }
 
 export default function DataBrowserPage() {
+  const { t } = useTranslation();
   const [expandedApps, setExpandedApps] = useState<Set<string>>(new Set());
   const [selectedTable, setSelectedTable] = useState<{
     app: string;
@@ -460,7 +462,7 @@ export default function DataBrowserPage() {
         }}
       >
         {!selectedTable ? (
-          <EmptyState message="Selecione uma tabela na árvore ao lado" />
+          <EmptyState message={t("dataBrowser.emptySelect")} />
         ) : (
           <>
             {/* Header */}
@@ -571,7 +573,7 @@ export default function DataBrowserPage() {
                       minWidth: 130,
                     }}
                   >
-                    <option value="">Coluna...</option>
+                    <option value="">Column...</option>
                     {columns.map((col) => (
                       <option key={col.name} value={col.name}>{col.name}</option>
                     ))}
@@ -789,7 +791,7 @@ export default function DataBrowserPage() {
                                   borderRadius: 4,
                                   transition: "all 0.15s",
                                 }}
-                                title="Editar"
+                                title={t("dataBrowser.edit")}
                                 onMouseEnter={(e) => {
                                   e.currentTarget.style.background = "rgba(255,255,255,0.06)";
                                   e.currentTarget.style.color = "var(--brand-primary)";
@@ -812,7 +814,7 @@ export default function DataBrowserPage() {
                                   borderRadius: 4,
                                   transition: "all 0.15s",
                                 }}
-                                title="Excluir"
+                                title={t("dataBrowser.delete")}
                                 onMouseEnter={(e) => {
                                   e.currentTarget.style.background = "rgba(255,255,255,0.06)";
                                   e.currentTarget.style.color = "#ef4444";
@@ -1212,10 +1214,10 @@ export default function DataBrowserPage() {
                   {isSaving ? (
                     <>
                       <Loader2 size={14} style={{ marginRight: 6, animation: "spin 1s linear infinite" }} />
-                      Salvando...
+                      Saving...
                     </>
                   ) : (
-                    "Salvar"
+                    t("dataBrowser.save")
                   )}
                 </Button>
               </div>

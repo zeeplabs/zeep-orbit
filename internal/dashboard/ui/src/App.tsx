@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { Navigate, Routes, Route } from 'react-router-dom'
 import LoginPage from './pages/LoginPage'
 import DashboardShell from './pages/DashboardShell'
@@ -16,6 +17,7 @@ import { useBootstrapStatus } from './lib/api'
 import { THEMES, applyTheme } from './lib/themes'
 
 function LoadingScreen() {
+  const { t } = useTranslation()
   return (
     <div
       style={{
@@ -32,7 +34,7 @@ function LoadingScreen() {
           fontFamily: 'Plus Jakarta Sans, sans-serif',
         }}
       >
-        Carregando...
+        {t("app.loading")}
       </div>
     </div>
   )

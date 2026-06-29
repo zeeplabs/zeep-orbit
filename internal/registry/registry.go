@@ -22,6 +22,8 @@ type App struct {
 	SchemaName    string
 	Tables        map[string]*Table
 	AuthProviders map[string]any
+	StorageConfig *config.StorageConfig
+	RateLimit     *config.RateLimitConfig
 }
 
 // Table representa uma tabela dentro de um app.
@@ -126,32 +128,36 @@ func (r *Registry) Apps() []*App {
 
 // Replaces any existing state. Safe to call on startup.
 func (r *Registry) LoadFromDB(ctx context.Context, pool *db.Pool) error {
-	type appRow struct {
-		id               string
-		name             string
-		jwtSecret        string
-		authEmailEnabled bool
-		authProviders    []byte
-	}
+		type appRow struct {
+			id               string
+			name             string
+			jwtSecret        string
+			authEmailEnabled bool
+			authProviders    []byte
+			storageConfig    []byte
+			rateLimitConfig  []byte
+		}
 
-	rows, err := pool.Query(ctx,
-		`SELECT id, name, jwt_secret, auth_email_enabled, COALESCE(auth_providers, '{}') FROM zeep_system.apps ORDER BY name`,
-	)
+		rows, err := pool.Query(ctx,
+			`SELECT id, name, jwt_secret, auth_email_enabled, COALESCE(auth_providers, '{}'), COALESCE(storage_config, '{}'), COALESCE(rate_limit_config, '{}') FROM zeep_system.apps ORDER BY name`,
+		)
 	if err != nil {
 		return fmt.Errorf("registry: load from db: query apps: %w", err)
 	}
 	defer rows.Close()
 
-	var appRows []appRow
-	for rows.Next() {
-		var a appRow
-		var providersJSON []byte
-		if err := rows.Scan(&a.id, &a.name, &a.jwtSecret, &a.authEmailEnabled, &providersJSON); err != nil {
-			return fmt.Errorf("registry: load from db: scan app: %w", err)
+		var appRows []appRow
+		for rows.Next() {
+			var a appRow
+			var providersJSON, storageJSON, rateLimitJSON []byte
+			if err := rows.Scan(&a.id, &a.name, &a.jwtSecret, &a.authEmailEnabled, &providersJSON, &storageJSON, &rateLimitJSON); err != nil {
+				return fmt.Errorf("registry: load from db: scan app: %w", err)
+			}
+			a.authProviders = providersJSON
+			a.storageConfig = storageJSON
+			a.rateLimitConfig = rateLimitJSON
+			appRows = append(appRows, a)
 		}
-		a.authProviders = providersJSON
-		appRows = append(appRows, a)
-	}
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("registry: load from db: rows: %w", err)
 	}
@@ -209,6 +215,22 @@ func (r *Registry) LoadFromDB(ctx context.Context, pool *db.Pool) error {
 			json.Unmarshal(a.authProviders, &authProviders)
 		}
 
+		var storageCfg *config.StorageConfig
+		if len(a.storageConfig) > 0 && string(a.storageConfig) != "{}" {
+			var sc config.StorageConfig
+			if err := json.Unmarshal(a.storageConfig, &sc); err == nil && sc.Bucket != "" {
+				storageCfg = &sc
+			}
+		}
+
+		var rateLimitCfg *config.RateLimitConfig
+		if len(a.rateLimitConfig) > 0 && string(a.rateLimitConfig) != "{}" {
+			var rc config.RateLimitConfig
+			if err := json.Unmarshal(a.rateLimitConfig, &rc); err == nil && rc.Enabled {
+				rateLimitCfg = &rc
+			}
+		}
+
 		newApps[a.name] = &App{
 			Config: config.AppConfig{
 				Name: a.name,
@@ -221,6 +243,8 @@ func (r *Registry) LoadFromDB(ctx context.Context, pool *db.Pool) error {
 			SchemaName:    a.name,
 			Tables:        tables,
 			AuthProviders: authProviders,
+			StorageConfig: storageCfg,
+			RateLimit:     rateLimitCfg,
 		}
 	}
 

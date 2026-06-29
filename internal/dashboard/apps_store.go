@@ -10,18 +10,23 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
+	"github.com/zeeplabs/zeep-orbit/internal/storage"
 )
 
 // JWTSecret is omitted from JSON when empty (list responses never populate it).
 type AppRow struct {
-	ID               string          `json:"id"`
-	Name             string          `json:"name"`
-	JWTSecret        string          `json:"jwt_secret,omitempty"`
-	AuthEmailEnabled bool            `json:"auth_email_enabled"`
-	AuthProviders    json.RawMessage `json:"auth_providers,omitempty"`
-	OwnerID          string          `json:"owner_id"`
-	CreatedAt        time.Time       `json:"created_at"`
-	Tables           []AppTableRow   `json:"tables"`
+	ID               string                   `json:"id"`
+	Name             string                   `json:"name"`
+	JWTSecret        string                   `json:"jwt_secret,omitempty"`
+	AuthEmailEnabled bool                     `json:"auth_email_enabled"`
+	AuthProviders    json.RawMessage          `json:"auth_providers,omitempty"`
+	StorageConfig    *storage.StorageConfig   `json:"storage_config,omitempty"`
+	RateLimit        *config.RateLimitConfig  `json:"rate_limit,omitempty"`
+	OwnerID          string                   `json:"owner_id"`
+	OwnerEmail       string                   `json:"owner_email,omitempty"`
+	OwnerName        string                   `json:"owner_name,omitempty"`
+	CreatedAt        time.Time                `json:"created_at"`
+	Tables           []AppTableRow            `json:"tables"`
 }
 
 // AppTableRow represents a row from zeep_system.app_tables.
@@ -41,14 +46,16 @@ func ListApps(ctx context.Context, pool *db.Pool, userID, role string) ([]*AppRo
 
 	if role == "superadmin" {
 		rows, err = pool.Query(ctx,
-			`SELECT id, name, auth_email_enabled, COALESCE(auth_providers, '{}'), owner_id, created_at
-			 FROM zeep_system.apps
-			 ORDER BY created_at DESC`,
+			`SELECT a.id, a.name, a.auth_email_enabled, COALESCE(a.auth_providers, '{}'), COALESCE(a.storage_config, '{}'), COALESCE(a.rate_limit_config, '{}'), a.owner_id, COALESCE(u.email, ''), COALESCE(u.name, ''), a.created_at
+			 FROM zeep_system.apps a
+			 LEFT JOIN zeep_system.dashboard_users u ON u.id = a.owner_id
+			 ORDER BY a.created_at DESC`,
 		)
 	} else {
 		rows, err = pool.Query(ctx,
-			`SELECT DISTINCT a.id, a.name, a.auth_email_enabled, COALESCE(a.auth_providers, '{}'), a.owner_id, a.created_at
+			`SELECT DISTINCT a.id, a.name, a.auth_email_enabled, COALESCE(a.auth_providers, '{}'), COALESCE(a.storage_config, '{}'), COALESCE(a.rate_limit_config, '{}'), a.owner_id, COALESCE(u.email, ''), COALESCE(u.name, ''), a.created_at
 			 FROM zeep_system.apps a
+			 LEFT JOIN zeep_system.dashboard_users u ON u.id = a.owner_id
 			 LEFT JOIN zeep_system.app_ownership o ON o.app_id = a.id AND o.user_id = $1
 			 WHERE a.owner_id = $1 OR o.user_id = $1
 			 ORDER BY a.created_at DESC`,
@@ -63,12 +70,24 @@ func ListApps(ctx context.Context, pool *db.Pool, userID, role string) ([]*AppRo
 	var apps []*AppRow
 	for rows.Next() {
 		var a AppRow
-		var providersJSON []byte
-		if err := rows.Scan(&a.ID, &a.Name, &a.AuthEmailEnabled, &providersJSON, &a.OwnerID, &a.CreatedAt); err != nil {
+		var providersJSON, storageJSON, rateLimitJSON []byte
+		if err := rows.Scan(&a.ID, &a.Name, &a.AuthEmailEnabled, &providersJSON, &storageJSON, &rateLimitJSON, &a.OwnerID, &a.OwnerEmail, &a.OwnerName, &a.CreatedAt); err != nil {
 			return nil, fmt.Errorf("dashboard: list apps scan: %w", err)
 		}
 		if len(providersJSON) > 0 {
 			a.AuthProviders = providersJSON
+		}
+		if len(storageJSON) > 0 && string(storageJSON) != "{}" {
+			var sc storage.StorageConfig
+			if err := json.Unmarshal(storageJSON, &sc); err == nil && sc.Bucket != "" {
+				a.StorageConfig = &sc
+			}
+		}
+		if len(rateLimitJSON) > 0 && string(rateLimitJSON) != "{}" {
+			var rc config.RateLimitConfig
+			if json.Unmarshal(rateLimitJSON, &rc) == nil && rc.Enabled {
+				a.RateLimit = &rc
+			}
 		}
 		apps = append(apps, &a)
 	}
@@ -96,12 +115,25 @@ func CreateApp(ctx context.Context, pool *db.Pool, name, ownerID string, authEma
 	defer tx.Rollback(ctx) //nolint:errcheck
 
 	var app AppRow
+	var storageJSON, rateLimitJSONCreate []byte
 	err = tx.QueryRow(ctx,
 		`INSERT INTO zeep_system.apps (name, owner_id, auth_email_enabled)
 		 VALUES ($1, $2, $3)
-		 RETURNING id, name, jwt_secret, auth_email_enabled, COALESCE(auth_providers, '{}'), owner_id, created_at`,
+		 RETURNING id, name, jwt_secret, auth_email_enabled, COALESCE(auth_providers, '{}'), COALESCE(storage_config, '{}'), COALESCE(rate_limit_config, '{}'), owner_id, created_at`,
 		name, ownerID, authEmail,
-	).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.AuthProviders, &app.OwnerID, &app.CreatedAt)
+	).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.AuthProviders, &storageJSON, &rateLimitJSONCreate, &app.OwnerID, &app.CreatedAt)
+	if len(storageJSON) > 0 && string(storageJSON) != "{}" {
+		var sc storage.StorageConfig
+		if json.Unmarshal(storageJSON, &sc) == nil && sc.Bucket != "" {
+			app.StorageConfig = &sc
+		}
+	}
+	if len(rateLimitJSONCreate) > 0 && string(rateLimitJSONCreate) != "{}" {
+		var rc config.RateLimitConfig
+		if json.Unmarshal(rateLimitJSONCreate, &rc) == nil && rc.Enabled {
+			app.RateLimit = &rc
+		}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: create app insert: %w", err)
 	}
@@ -130,20 +162,33 @@ func GetApp(ctx context.Context, pool *db.Pool, appID, userID, role string) (*Ap
 	var app AppRow
 	var err error
 
+	var storageJSON, rateLimitJSONGet []byte
 	if role == "superadmin" {
 		err = pool.QueryRow(ctx,
-			`SELECT id, name, jwt_secret, auth_email_enabled, COALESCE(auth_providers, '{}'), owner_id, created_at
+			`SELECT id, name, jwt_secret, auth_email_enabled, COALESCE(auth_providers, '{}'), COALESCE(storage_config, '{}'), COALESCE(rate_limit_config, '{}'), owner_id, created_at
 			 FROM zeep_system.apps WHERE id = $1`,
 			appID,
-		).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.AuthProviders, &app.OwnerID, &app.CreatedAt)
+		).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.AuthProviders, &storageJSON, &rateLimitJSONGet, &app.OwnerID, &app.CreatedAt)
 	} else {
 		err = pool.QueryRow(ctx,
-			`SELECT DISTINCT a.id, a.name, a.jwt_secret, a.auth_email_enabled, COALESCE(a.auth_providers, '{}'), a.owner_id, a.created_at
+			`SELECT DISTINCT a.id, a.name, a.jwt_secret, a.auth_email_enabled, COALESCE(a.auth_providers, '{}'), COALESCE(a.storage_config, '{}'), COALESCE(a.rate_limit_config, '{}'), a.owner_id, a.created_at
 			 FROM zeep_system.apps a
 			 LEFT JOIN zeep_system.app_ownership o ON o.app_id = a.id AND o.user_id = $2
 			 WHERE a.id = $1 AND (a.owner_id = $2 OR o.user_id = $2)`,
 			appID, userID,
-		).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.AuthProviders, &app.OwnerID, &app.CreatedAt)
+		).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.AuthProviders, &storageJSON, &rateLimitJSONGet, &app.OwnerID, &app.CreatedAt)
+	}
+	if len(storageJSON) > 0 && string(storageJSON) != "{}" {
+		var sc storage.StorageConfig
+		if json.Unmarshal(storageJSON, &sc) == nil && sc.Bucket != "" {
+			app.StorageConfig = &sc
+		}
+	}
+	if len(rateLimitJSONGet) > 0 && string(rateLimitJSONGet) != "{}" {
+		var rc config.RateLimitConfig
+		if json.Unmarshal(rateLimitJSONGet, &rc) == nil && rc.Enabled {
+			app.RateLimit = &rc
+		}
 	}
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -174,13 +219,26 @@ func UpdateApp(ctx context.Context, pool *db.Pool, appID, userID, role string, a
 	defer tx.Rollback(ctx) //nolint:errcheck
 
 	var app AppRow
+	var storageJSON, rateLimitJSONUpd []byte
 	err = tx.QueryRow(ctx,
 		`UPDATE zeep_system.apps
 		 SET auth_email_enabled = $2
 		 WHERE id = $1
-		 RETURNING id, name, jwt_secret, auth_email_enabled, COALESCE(auth_providers, '{}'), owner_id, created_at`,
+		 RETURNING id, name, jwt_secret, auth_email_enabled, COALESCE(auth_providers, '{}'), COALESCE(storage_config, '{}'), COALESCE(rate_limit_config, '{}'), owner_id, created_at`,
 		appID, authEmail,
-	).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.AuthProviders, &app.OwnerID, &app.CreatedAt)
+	).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.AuthProviders, &storageJSON, &rateLimitJSONUpd, &app.OwnerID, &app.CreatedAt)
+	if len(storageJSON) > 0 && string(storageJSON) != "{}" {
+		var sc storage.StorageConfig
+		if json.Unmarshal(storageJSON, &sc) == nil && sc.Bucket != "" {
+			app.StorageConfig = &sc
+		}
+	}
+	if len(rateLimitJSONUpd) > 0 && string(rateLimitJSONUpd) != "{}" {
+		var rc config.RateLimitConfig
+		if json.Unmarshal(rateLimitJSONUpd, &rc) == nil && rc.Enabled {
+			app.RateLimit = &rc
+		}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: update app: %w", err)
 	}
@@ -215,6 +273,36 @@ func DeleteApp(ctx context.Context, pool *db.Pool, appID, userID, role string) e
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound
+	}
+	return nil
+}
+
+func UpdateAppRateLimitConfig(ctx context.Context, pool *db.Pool, appID string, cfg *config.RateLimitConfig) error {
+	jsonCfg, err := json.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("dashboard: marshal rate limit config: %w", err)
+	}
+	_, err = pool.Exec(ctx,
+		`UPDATE zeep_system.apps SET rate_limit_config = $1 WHERE id = $2`,
+		jsonCfg, appID,
+	)
+	if err != nil {
+		return fmt.Errorf("dashboard: update rate limit config: %w", err)
+	}
+	return nil
+}
+
+func UpdateAppStorageConfig(ctx context.Context, pool *db.Pool, appID string, cfg *storage.StorageConfig) error {
+	jsonCfg, err := json.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("dashboard: marshal storage config: %w", err)
+	}
+	_, err = pool.Exec(ctx,
+		`UPDATE zeep_system.apps SET storage_config = $1 WHERE id = $2`,
+		jsonCfg, appID,
+	)
+	if err != nil {
+		return fmt.Errorf("dashboard: update storage config: %w", err)
 	}
 	return nil
 }

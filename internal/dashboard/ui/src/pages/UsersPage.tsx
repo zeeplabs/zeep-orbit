@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation, Trans } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Trash2, Mail, Shield, ShieldAlert, Users, Lock } from "lucide-react";
 import ChangePasswordModal from "./ChangePasswordModal";
@@ -49,7 +50,8 @@ function formatDate(iso: string) {
   });
 }
 
-function roleBadge(role: string) {
+function RoleBadge({ role }: { role: string }) {
+  const { t } = useTranslation();
   const isSuper = role === "superadmin";
   return (
     <Badge
@@ -65,7 +67,7 @@ function roleBadge(role: string) {
       ) : (
         <Shield size={11} strokeWidth={1.5} />
       )}
-      {isSuper ? "Superadmin" : "Admin"}
+      {isSuper ? t("users.roleSuperadmin") : t("users.roleAdmin")}
     </Badge>
   );
 }
@@ -76,8 +78,10 @@ interface CreateUserModalProps {
 }
 
 function CreateUserModal({ open, onClose }: CreateUserModalProps) {
+  const { t } = useTranslation();
   const createUser = useCreateUser();
   const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("admin");
   const [error, setError] = useState("");
@@ -85,8 +89,9 @@ function CreateUserModal({ open, onClose }: CreateUserModalProps) {
   async function handleSubmit() {
     setError("");
     try {
-      await createUser.mutateAsync({ email, password, role });
+      await createUser.mutateAsync({ email, name, password, role });
       setEmail("");
+      setName("");
       setPassword("");
       setRole("admin");
       onClose();
@@ -106,21 +111,21 @@ function CreateUserModal({ open, onClose }: CreateUserModalProps) {
               <Users size={18} strokeWidth={1.5} className="text-[#94A3B8]" />
             </div>
             <DialogTitle className="text-base font-bold text-[#F8FAFC] mb-2">
-              Novo Usuário
+              {t("users.createTitle")}
             </DialogTitle>
             <DialogDescription className="text-[13px] text-[#94A3B8] leading-relaxed mb-6">
-              Crie um novo usuário para acessar o dashboard.
+              {t("users.createDesc")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col gap-4">
             <div>
               <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">
-                Email
+                {t("users.email")}
               </label>
               <Input
                 type="email"
-                placeholder="usuario@exemplo.com"
+                placeholder={t("users.email")}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="h-10 rounded-md border-white/[0.10] bg-white/[0.06] text-[13px] text-[#F8FAFC] placeholder:text-[#64748B]"
@@ -129,11 +134,24 @@ function CreateUserModal({ open, onClose }: CreateUserModalProps) {
 
             <div>
               <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">
-                Senha
+                {t("users.name")}
+              </label>
+              <Input
+                type="text"
+                placeholder={t("users.namePlaceholder")}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="h-10 rounded-md border-white/[0.10] bg-white/[0.06] text-[13px] text-[#F8FAFC] placeholder:text-[#64748B]"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">
+                {t("users.password")}
               </label>
               <Input
                 type="password"
-                placeholder="Mínimo 8 caracteres"
+                placeholder={t("users.passwordHint")}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="h-10 rounded-md border-white/[0.10] bg-white/[0.06] text-[13px] text-[#F8FAFC] placeholder:text-[#64748B]"
@@ -142,15 +160,15 @@ function CreateUserModal({ open, onClose }: CreateUserModalProps) {
 
             <div>
               <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">
-                Permissão
+                {t("users.role")}
               </label>
               <Select value={role} onValueChange={setRole}>
                 <SelectTrigger className="h-10 rounded-md border-white/[0.10] bg-white/[0.06] text-[13px] text-[#F8FAFC]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="border-white/[0.10] bg-[#0D0D14]/95 backdrop-blur-xl">
-                  <SelectItem value="admin" className="text-[13px] text-[#F8FAFC]">Admin</SelectItem>
-                  <SelectItem value="superadmin" className="text-[13px] text-[#F8FAFC]">Superadmin</SelectItem>
+                  <SelectItem value="admin" className="text-[13px] text-[#F8FAFC]">{t("users.roleAdmin")}</SelectItem>
+                  <SelectItem value="superadmin" className="text-[13px] text-[#F8FAFC]">{t("users.roleSuperadmin")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -167,7 +185,7 @@ function CreateUserModal({ open, onClose }: CreateUserModalProps) {
               disabled={createUser.isPending}
               className="flex-1 rounded-xl border-white/[0.10] bg-white/[0.06] text-[#94A3B8] hover:bg-white/[0.10] hover:text-[#F8FAFC] font-medium"
             >
-              Cancelar
+              {t("users.cancel")}
             </Button>
             <Button
               onClick={handleSubmit}
@@ -177,7 +195,7 @@ function CreateUserModal({ open, onClose }: CreateUserModalProps) {
                 background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))',
               }}
             >
-              {createUser.isPending ? "Criando..." : "Criar"}
+              {createUser.isPending ? t("users.creating") : t("users.createBtn")}
             </Button>
           </DialogFooter>
         </div>
@@ -196,6 +214,7 @@ interface DeleteUserDialogProps {
 }
 
 function DeleteUserDialog({ open, user, loading, error, onConfirm, onCancel }: DeleteUserDialogProps) {
+  const { t } = useTranslation();
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) onCancel(); }}>
       <DialogContent className="max-w-[420px] border border-white/[0.10] bg-[#0D0D14]/60 backdrop-blur-xl rounded-2xl p-0 gap-0 [&>button]:text-[#94A3B8] [&>button]:hover:text-[#F8FAFC] [&>button]:hover:bg-white/[0.08]"
@@ -207,10 +226,10 @@ function DeleteUserDialog({ open, user, loading, error, onConfirm, onCancel }: D
               <Trash2 size={18} strokeWidth={1.5} className="text-red-500" />
             </div>
             <DialogTitle className="text-base font-bold text-[#F8FAFC] mb-2">
-              Remover usuário?
+              {t("users.deleteTitle")}
             </DialogTitle>
             <DialogDescription className="text-[13px] text-[#94A3B8] leading-relaxed mb-6">
-              O usuário <strong className="text-[#F8FAFC]">{user?.email}</strong> perderá acesso ao dashboard. Esta ação não pode ser desfeita.
+              <Trans i18nKey="users.deleteDesc" values={{ email: user?.email }} />
             </DialogDescription>
           </DialogHeader>
 
@@ -225,14 +244,14 @@ function DeleteUserDialog({ open, user, loading, error, onConfirm, onCancel }: D
               disabled={loading}
               className="flex-1 rounded-xl border-white/[0.10] bg-white/[0.06] text-[#94A3B8] hover:bg-white/[0.10] hover:text-[#F8FAFC] font-medium"
             >
-              Cancelar
+              {t("users.deleteCancel")}
             </Button>
             <Button
               onClick={onConfirm}
               disabled={loading}
               className="flex-1 rounded-xl bg-red-500 hover:bg-red-600 text-white font-semibold border-0 disabled:bg-red-500/40"
             >
-              {loading ? "Removendo..." : "Remover"}
+              {loading ? t("users.deleting") : t("users.deleteConfirm")}
             </Button>
           </DialogFooter>
         </div>
@@ -242,6 +261,7 @@ function DeleteUserDialog({ open, user, loading, error, onConfirm, onCancel }: D
 }
 
 export default function UsersPage() {
+  const { t } = useTranslation();
   const { data: users, isLoading, error } = useUsers();
   const deleteUser = useDeleteUser();
 
@@ -250,7 +270,7 @@ export default function UsersPage() {
     queryFn: async () => {
       const res = await fetch("/dashboard/api/me", { credentials: "include" });
       if (!res.ok) return null;
-      return res.json() as Promise<{ id: string; email: string; role: string }>;
+      return res.json() as Promise<{ id: string; email: string; name: string; role: string; language: string }>;
     },
     retry: false,
     staleTime: 30000,
@@ -291,16 +311,16 @@ export default function UsersPage() {
             }}
           >
             <Users size={12} strokeWidth={1.5} />
-            Usuários
+            {t("nav.users")}
           </span>
 
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
               <h2 className="mb-1.5 text-[28px] font-extrabold leading-tight">
-                Gerenciar Usuários
+                {t("users.title")}
               </h2>
               <p className="text-sm text-[#94A3B8]">
-                Administre quem tem acesso ao dashboard da plataforma
+                {t("users.subtitle")}
               </p>
             </div>
 
@@ -316,7 +336,7 @@ export default function UsersPage() {
                   background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))',
                 }}
               >
-                Novo Usuário
+                {t("users.create")}
                 <span className="flex size-6 items-center justify-center rounded-full bg-white/[0.12]">
                   <Plus size={12} strokeWidth={2} />
                 </span>
@@ -348,7 +368,7 @@ export default function UsersPage() {
               animate={{ opacity: 1 }}
               className="rounded-2xl border border-red-500/[0.18] bg-red-500/[0.06] px-6 py-5 text-sm text-red-400"
             >
-              Erro ao carregar usuários: {(error as Error).message}
+              {t("users.error")}: {(error as Error).message}
             </motion.div>
           )}
 
@@ -361,7 +381,7 @@ export default function UsersPage() {
             >
               <div className="text-center">
                 <Users size={32} strokeWidth={1} className="mx-auto mb-3 text-[#64748B]" />
-                <p className="text-sm text-[#94A3B8]">Nenhum usuário encontrado</p>
+                <p className="text-sm text-[#94A3B8]">{t("users.empty")}</p>
               </div>
             </motion.div>
           )}
@@ -378,18 +398,18 @@ export default function UsersPage() {
               >
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-white/[0.06]">
+                  <tr className="border-b border-white/[0.06]">
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">
+                      User
+                    </th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">
+                      Role
+                    </th>
                       <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">
-                        Email
-                      </th>
-                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">
-                        Permissão
-                      </th>
-                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">
-                        Criado em
+                        Created
                       </th>
                       <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">
-                        Ações
+                        Actions
                       </th>
                     </tr>
                   </thead>
@@ -411,17 +431,22 @@ export default function UsersPage() {
                                 color: 'var(--brand-light)',
                               }}
                             >
-                              {u.email.charAt(0).toUpperCase()}
+                              {(u.name || u.email).charAt(0).toUpperCase()}
                             </div>
-                            <div className="flex items-center gap-2">
-                              <Mail size={12} strokeWidth={1.5} className="text-[#64748B]" />
+                            <div className="flex flex-col">
                               <span className="text-[13px] font-medium text-[#F8FAFC]">
-                                {u.email}
+                                {u.name || u.email}
                               </span>
+                              {u.name && (
+                                <span className="text-[11px] text-[#64748B] flex items-center gap-1">
+                                  <Mail size={10} strokeWidth={1.5} />
+                                  {u.email}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </td>
-                        <td className="px-4 py-3.5">{roleBadge(u.role)}</td>
+                        <td className="px-4 py-3.5"><RoleBadge role={u.role} /></td>
                         <td className="px-4 py-3.5 text-[12px] text-[#64748B]">
                           {formatDate(u.created_at)}
                         </td>
@@ -436,8 +461,8 @@ export default function UsersPage() {
                                 variant="outline"
                                 size="icon"
                                 onClick={() => { setPasswordTarget(u); }}
-                                title="Trocar senha"
-                                className="size-7 rounded-lg border-white/[0.10] bg-white/[0.04] text-[#94A3B8] opacity-0 transition-opacity group-hover:opacity-100 hover:bg-white/[0.08] hover:text-[#F8FAFC] mr-1"
+                                title={t("users.changePassword")}
+                                  className="size-7 rounded-lg border-white/[0.10] bg-white/[0.04] text-[#94A3B8] opacity-0 transition-opacity group-hover:opacity-100 hover:bg-white/[0.08] hover:text-[#F8FAFC] mr-1"
                               >
                                 <Lock size={12} strokeWidth={1.5} />
                               </Button>
@@ -445,7 +470,7 @@ export default function UsersPage() {
                                 variant="outline"
                                 size="icon"
                                 onClick={() => { setDeleteTarget(u); setDeleteError(""); }}
-                                title="Remover usuário"
+                                title={t("apps.delete")}
                                 className="size-7 rounded-lg border-red-500/20 bg-red-500/[0.06] text-red-400 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-400"
                               >
                                 <Trash2 size={12} strokeWidth={1.5} />
@@ -483,10 +508,11 @@ export default function UsersPage() {
                             color: 'var(--brand-light)',
                           }}
                         >
-                          {u.email.charAt(0).toUpperCase()}
+                          {(u.name || u.email).charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <p className="text-[13px] font-medium text-[#F8FAFC]">{u.email}</p>
+                          <p className="text-[13px] font-medium text-[#F8FAFC]">{u.name || u.email}</p>
+                          {u.name && <p className="text-[11px] text-[#64748B] mt-0.5">{u.email}</p>}
                           <p className="text-[11px] text-[#64748B] mt-0.5">{formatDate(u.created_at)}</p>
                         </div>
                       </div>
@@ -496,16 +522,16 @@ export default function UsersPage() {
                             variant="outline"
                             size="icon"
                             onClick={() => { setPasswordTarget(u); }}
-                            title="Trocar senha"
-                            className="size-8 rounded-xl border-white/[0.10] bg-white/[0.04] text-[#94A3B8] hover:bg-white/[0.08] hover:text-[#F8FAFC]"
-                          >
-                            <Lock size={14} strokeWidth={1.5} />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            onClick={() => { setDeleteTarget(u); setDeleteError(""); }}
-                            title="Remover usuário"
+                            title={t("users.changePassword")}
+                                  className="size-8 rounded-xl border-white/[0.10] bg-white/[0.04] text-[#94A3B8] hover:bg-white/[0.08] hover:text-[#F8FAFC]"
+                                >
+                                  <Lock size={14} strokeWidth={1.5} />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  onClick={() => { setDeleteTarget(u); setDeleteError(""); }}
+                                  title={t("apps.delete")}
                             className="size-8 rounded-xl border-red-500/20 bg-red-500/[0.06] text-red-400 hover:bg-red-500/10 hover:text-red-400"
                           >
                             <Trash2 size={14} strokeWidth={1.5} />
@@ -513,7 +539,7 @@ export default function UsersPage() {
                         </div>
                       )}
                     </div>
-                    <div>{roleBadge(u.role)}</div>
+                    <div><RoleBadge role={u.role} /></div>
                   </motion.div>
                 ))}
               </motion.div>

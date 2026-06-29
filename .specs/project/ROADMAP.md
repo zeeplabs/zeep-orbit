@@ -52,6 +52,14 @@ Features:
 
 ---
 
+## M5 — i18n
+
+- [ ] pt-BR + en for the entire dashboard UI
+- [ ] Language switcher in sidebar/user menu
+- [ ] Locale persisted in session/user config
+
+---
+
 ## Deferred
 
 - GraphQL auto-generation

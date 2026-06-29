@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
 import { Users, Search, X, ShieldOff, RefreshCw, CheckCircle, ArrowLeft, Loader2 } from "lucide-react";
 import {
@@ -45,6 +46,7 @@ function formatDateTime(iso: string | null) {
 }
 
 export default function AppUsersPage() {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -130,7 +132,7 @@ export default function AppUsersPage() {
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#64748B]" />
           <Input
             type="text"
-            placeholder="Buscar por email..."
+            placeholder={t("appUsers.search")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
@@ -194,7 +196,7 @@ export default function AppUsersPage() {
             <div className="text-center">
               <Users size={32} strokeWidth={1} className="mx-auto mb-3 text-[#64748B]" />
               <p className="text-sm text-[#94A3B8]">
-                {debouncedSearch ? "Nenhum usuário encontrado para esta busca" : "Nenhum usuário registrado neste app"}
+                {debouncedSearch ? t("appUsers.emptySearch") : t("appUsers.empty")}
               </p>
             </div>
           </motion.div>
@@ -245,11 +247,11 @@ export default function AppUsersPage() {
                         <td className="px-4 py-3.5">
                           {u.active ? (
                             <Badge variant="outline" className="text-[11px] border-green-500/20 bg-green-500/[0.08] text-green-400">
-                              Ativo
+                              {t("appUsers.active")}
                             </Badge>
                           ) : (
                             <Badge variant="outline" className="text-[11px] border-red-500/20 bg-red-500/[0.08] text-red-400">
-                              Inativo
+                              {t("appUsers.inactive")}
                             </Badge>
                           )}
                         </td>
@@ -267,18 +269,18 @@ export default function AppUsersPage() {
                                 size="icon"
                                 onClick={() => deactivate.mutate({ appId: id!, userId: u.id })}
                                 disabled={deactivate.isPending}
-                                title="Desativar conta"
-                                className="size-7 rounded-lg border-orange-500/20 bg-orange-500/[0.06] text-orange-400 hover:bg-orange-500/10 hover:text-orange-400"
+                                title={t("appUsers.deactivateTitle")}
+                                className="size-7 rounded-lg border-amber-500/20 bg-amber-500/[0.08] text-amber-400 hover:bg-amber-500/[0.14] transition-colors"
                               >
-                                {isDeactivating ? <Loader2 size={12} className="animate-spin" /> : <ShieldOff size={12} />}
+                                <ShieldOff size={12} strokeWidth={1.5} />
                               </Button>
-                            ) : (
+                            ) : null}
+                            {!u.active && (
                               <Button
                                 variant="outline"
                                 size="icon"
                                 onClick={() => activate.mutate({ appId: id!, userId: u.id })}
-                                disabled={activate.isPending}
-                                title="Reativar conta"
+                                title={t("appUsers.activateTitle")}
                                 className="size-7 rounded-lg border-green-500/20 bg-green-500/[0.06] text-green-400 hover:bg-green-500/10 hover:text-green-400"
                               >
                                 {isActivating ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={12} />}
@@ -289,7 +291,7 @@ export default function AppUsersPage() {
                               size="icon"
                               onClick={() => resetSessions.mutate({ appId: id!, userId: u.id })}
                               disabled={resetSessions.isPending}
-                              title="Resetar sessões"
+                              title={t("appUsers.resetTitle")}
                               className="size-7 rounded-lg border-white/[0.10] bg-white/[0.04] text-[#94A3B8] hover:bg-white/[0.08] hover:text-[#F8FAFC]"
                             >
                               {isResetting ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}

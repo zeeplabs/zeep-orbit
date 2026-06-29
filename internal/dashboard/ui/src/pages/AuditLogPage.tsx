@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
 import {
   Shield,
@@ -58,6 +59,7 @@ function SkeletonRow() {
 export default function AuditLogPage() {
   const [actionFilter, setActionFilter] = useState("");
   const [userFilter, setUserFilter] = useState("");
+  const { t } = useTranslation();
   const [page, setPage] = useState(0);
   const limit = 50;
   const { data, isLoading, error } = useAuditLog(
@@ -95,16 +97,16 @@ export default function AuditLogPage() {
           }}
         >
           <Shield size={12} strokeWidth={1.5} />
-          Auditoria
+          {t("nav.audit")}
         </span>
 
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h2 className="mb-1.5 text-[28px] max-md:text-[22px] font-extrabold leading-tight">
-              Log de Auditoria
+              {t("audit.title")}
             </h2>
             <p className="text-sm max-md:text-[13px] text-[#94A3B8]">
-              Histórico de todas as ações realizadas no dashboard
+              {t("audit.subtitle")}
             </p>
           </div>
 
@@ -114,7 +116,7 @@ export default function AuditLogPage() {
               onChange={(e) => { setActionFilter(e.target.value); setPage(0); }}
               className="h-9 rounded-xl border border-white/[0.10] bg-white/[0.06] px-3 text-[12px] text-[#F8FAFC] outline-none appearance-none cursor-pointer"
             >
-              <option value="" className="bg-[#0D0D14]">Todas ações</option>
+              <option value="" className="bg-[#0D0D14]">{t("audit.filterAction")}</option>
               {actions.filter(Boolean).map((a) => (
                 <option key={a} value={a} className="bg-[#0D0D14]">
                   {auditActionLabel(a)}
@@ -129,7 +131,7 @@ export default function AuditLogPage() {
                 onChange={(e) => { setUserFilter(e.target.value); setPage(0); }}
                 className="h-9 rounded-xl border border-white/[0.10] bg-white/[0.06] pl-9 pr-3 text-[12px] text-[#F8FAFC] outline-none appearance-none cursor-pointer"
               >
-                <option value="" className="bg-[#0D0D14]">Todos usuários</option>
+                <option value="" className="bg-[#0D0D14]">{t("audit.filterUser")}</option>
                 {userOptions.map((u) => (
                   <option key={u.id} value={u.id} className="bg-[#0D0D14]">
                     {u.email}
@@ -154,7 +156,7 @@ export default function AuditLogPage() {
 
         {!isLoading && error && (
           <div className="px-6 py-5 text-sm text-red-400">
-            Erro ao carregar auditoria: {(error as Error).message}
+            {t("audit.error")}: {(error as Error).message}
           </div>
         )}
 
@@ -162,9 +164,9 @@ export default function AuditLogPage() {
           <div className="flex items-center justify-center px-6 py-16">
             <div className="text-center">
               <Shield size={40} strokeWidth={1} className="mx-auto mb-3 text-[#64748B]" />
-              <p className="text-sm text-[#94A3B8]">Nenhum registro de auditoria</p>
+              <p className="text-sm text-[#94A3B8]">{t("audit.empty")}</p>
               <p className="mt-1 text-[12px] text-[#64748B]">
-                As ações do dashboard aparecerão aqui
+                {t("audit.emptyDesc")}
               </p>
             </div>
           </div>
@@ -176,19 +178,19 @@ export default function AuditLogPage() {
               <thead>
                 <tr className="border-b border-white/[0.06]">
                   <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B] w-[140px]">
-                    Data/Hora
+                    {t("audit.date")}
                   </th>
                   <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B] w-[140px]">
-                    Ação
+                    {t("audit.action")}
                   </th>
                   <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B] w-[200px]">
-                    Usuário
+                    {t("audit.user")}
                   </th>
                   <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B] w-[160px]">
-                    Recurso
+                    {t("audit.resource")}
                   </th>
                   <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B] w-[120px]">
-                    IP
+                    {t("audit.ip")}
                   </th>
                 </tr>
               </thead>
@@ -260,7 +262,7 @@ export default function AuditLogPage() {
       {data && totalPages > 1 && (
         <div className="mt-4 flex items-center justify-between">
           <span className="text-[12px] text-[#64748B]">
-            {data.total} registro{data.total !== 1 ? "s" : ""}
+            {t("audit.total", { count: data.total })}
           </span>
           <div className="flex items-center gap-2">
             <button

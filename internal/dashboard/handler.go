@@ -22,6 +22,7 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/provisioner"
 	"github.com/zeeplabs/zeep-orbit/internal/query"
 	"github.com/zeeplabs/zeep-orbit/internal/registry"
+	"github.com/zeeplabs/zeep-orbit/internal/storage"
 )
 
 // Handler holds dependencies for dashboard HTTP handlers.
@@ -89,6 +90,7 @@ func (h *Handler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1024)
 	var body struct {
 		Secret   string `json:"secret"`
+		Name     string `json:"name"`
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
@@ -113,7 +115,7 @@ func (h *Handler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	created, err := BootstrapFirstSuperadmin(r.Context(), h.pool, body.Email, string(hash))
+	created, err := BootstrapFirstSuperadmin(r.Context(), h.pool, body.Email, body.Name, string(hash))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 		return
@@ -350,9 +352,11 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"user": map[string]string{
-			"id":    user.ID,
-			"email": user.Email,
-			"role":  user.Role,
+			"id":       user.ID,
+			"email":    user.Email,
+			"name":     user.Name,
+			"role":     user.Role,
+			"language": user.Language,
 		},
 	})
 	h.audit(r.Context(), user.ID, user.Email, "user.login", "session", "", user.Email, nil, r.RemoteAddr)
@@ -387,9 +391,11 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{
-		"id":    user.ID,
-		"email": user.Email,
-		"role":  user.Role,
+		"id":       user.ID,
+		"email":    user.Email,
+		"name":     user.Name,
+		"role":     user.Role,
+		"language": user.Language,
 	})
 }
 
@@ -558,6 +564,7 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)
 	var body struct {
 		Email    string `json:"email"`
+		Name     string `json:"name"`
 		Password string `json:"password"`
 		Role     string `json:"role"`
 	}
@@ -585,7 +592,7 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newUser, err := CreateUser(r.Context(), h.pool, body.Email, string(hash), body.Role)
+	newUser, err := CreateUser(r.Context(), h.pool, body.Email, body.Name, string(hash), body.Role)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 		return
@@ -594,6 +601,7 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]string{
 		"id":    newUser.ID,
 		"email": newUser.Email,
+		"name":  newUser.Name,
 		"role":  newUser.Role,
 	})
 	h.audit(r.Context(), user.ID, user.Email, "user.create", "user", newUser.ID, newUser.Email, nil, r.RemoteAddr)
@@ -651,10 +659,12 @@ func (h *Handler) ListApps(w http.ResponseWriter, r *http.Request) {
 
 // appRequestBody is the JSON body for create/update app requests.
 type appRequestBody struct {
-	Name             string          `json:"name"`
-	AuthEmailEnabled bool            `json:"auth_email_enabled"`
-	Tables           []AppTableRow   `json:"tables"`
-	AuthProviders    json.RawMessage `json:"auth_providers,omitempty"`
+	Name             string                    `json:"name"`
+	AuthEmailEnabled bool                      `json:"auth_email_enabled"`
+	Tables           []AppTableRow             `json:"tables"`
+	AuthProviders    json.RawMessage           `json:"auth_providers,omitempty"`
+	StorageConfig    *storage.StorageConfig    `json:"storage_config,omitempty"`
+	RateLimit        *config.RateLimitConfig   `json:"rate_limit,omitempty"`
 }
 
 // CreateApp handles POST /dashboard/api/apps
@@ -690,6 +700,14 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 		app.AuthProviders = body.AuthProviders
 	}
 
+	if body.StorageConfig != nil && body.StorageConfig.Bucket != "" {
+		if err := UpdateAppStorageConfig(r.Context(), h.pool, app.ID, body.StorageConfig); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save storage config"})
+			return
+		}
+		app.StorageConfig = body.StorageConfig
+	}
+
 	cfg := buildAppConfig(app)
 	if _, err := h.prov.Apply(r.Context(), &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "provisioning failed: " + err.Error()})
@@ -698,6 +716,7 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 
 	h.reg.Register(appRowToRegistryApp(app))
 
+	app.JWTSecret = ""
 	writeJSON(w, http.StatusCreated, app)
 	meta, _ := json.Marshal(map[string]any{"tables": body.Tables})
 	h.audit(r.Context(), user.ID, user.Email, "app.create", "app", app.ID, app.Name, meta, r.RemoteAddr)
@@ -766,6 +785,22 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 		app.AuthProviders = body.AuthProviders
 	}
 
+	if body.StorageConfig != nil && body.StorageConfig.Bucket != "" {
+		if err := UpdateAppStorageConfig(r.Context(), h.pool, app.ID, body.StorageConfig); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save storage config"})
+			return
+		}
+		app.StorageConfig = body.StorageConfig
+	}
+
+	if body.RateLimit != nil {
+		if err := UpdateAppRateLimitConfig(r.Context(), h.pool, app.ID, body.RateLimit); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save rate limit config"})
+			return
+		}
+		app.RateLimit = body.RateLimit
+	}
+
 	cfg := buildAppConfig(app)
 	if _, err := h.prov.Apply(r.Context(), &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "provisioning failed: " + err.Error()})
@@ -825,7 +860,7 @@ func buildAppConfig(app *AppRow) config.AppConfig {
 			Columns: t.Columns,
 		})
 	}
-	return config.AppConfig{
+	ac := config.AppConfig{
 		Name: app.Name,
 		Auth: config.AuthConfig{
 			JWTSecret: app.JWTSecret,
@@ -833,6 +868,22 @@ func buildAppConfig(app *AppRow) config.AppConfig {
 		},
 		Tables: tables,
 	}
+	if app.StorageConfig != nil {
+		ac.Storage = &config.StorageConfig{
+			Bucket:          app.StorageConfig.Bucket,
+			Region:          app.StorageConfig.Region,
+			Endpoint:        app.StorageConfig.Endpoint,
+			AccessKeyID:     app.StorageConfig.AccessKeyID,
+			SecretAccessKey: app.StorageConfig.SecretAccessKey,
+		}
+	}
+	if app.RateLimit != nil {
+		ac.RateLimit = &config.RateLimitConfig{
+			Enabled:           app.RateLimit.Enabled,
+			RequestsPerMinute: app.RateLimit.RequestsPerMinute,
+		}
+	}
+	return ac
 }
 
 // appRowToRegistryApp converts an AppRow into a *registry.App.
@@ -861,17 +912,67 @@ func appRowToRegistryApp(app *AppRow) *registry.App {
 		json.Unmarshal(app.AuthProviders, &authProviders)
 	}
 
+	var sc *config.StorageConfig
+	if app.StorageConfig != nil {
+		sc = &config.StorageConfig{
+			Bucket:          app.StorageConfig.Bucket,
+			Region:          app.StorageConfig.Region,
+			Endpoint:        app.StorageConfig.Endpoint,
+			AccessKeyID:     app.StorageConfig.AccessKeyID,
+			SecretAccessKey: app.StorageConfig.SecretAccessKey,
+		}
+	}
+
+	var rl *config.RateLimitConfig
+	if app.RateLimit != nil {
+		rl = &config.RateLimitConfig{
+			Enabled:           app.RateLimit.Enabled,
+			RequestsPerMinute: app.RateLimit.RequestsPerMinute,
+		}
+	}
+
 	return &registry.App{
 		Config:        buildAppConfig(app),
 		SchemaName:    app.Name,
 		Tables:        tables,
 		AuthProviders: authProviders,
+		StorageConfig: sc,
+		RateLimit:     rl,
 	}
 }
 
 func (h *Handler) audit(ctx context.Context, userID, userEmail, action, resourceType, resourceID, resourceName string, metadata json.RawMessage, ip string) {
 	if err := InsertAuditLog(ctx, h.pool, userID, userEmail, action, resourceType, resourceID, resourceName, metadata, ip); err != nil {
 	}
+}
+
+// SetLanguage handles PUT /dashboard/api/me/language
+func (h *Handler) SetLanguage(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 128)
+	var body struct {
+		Language string `json:"language"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if body.Language != "pt-BR" && body.Language != "en" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "language must be 'pt-BR' or 'en'"})
+		return
+	}
+
+	if err := SetUserLanguage(r.Context(), h.pool, user.ID, body.Language); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"language": body.Language})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

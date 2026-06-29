@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Eye, EyeOff } from "lucide-react";
@@ -8,6 +9,7 @@ import logo from "@/assets/images/logo/logo.svg";
 import pkg from "../../package.json";
 
 export default function LoginPage() {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -79,10 +81,10 @@ export default function LoginPage() {
             className="size-42 max-md:size-32 object-contain mb-3"
           />
           <h1 className="text-lg font-bold text-[#F8FAFC]">
-            BaaS Platform Manager
+            {t("login.title")}
           </h1>
           <p className="text-[13px] text-[#94A3B8] mt-0.5">
-            Access your account
+            {t("login.title")}
           </p>
         </div>
 

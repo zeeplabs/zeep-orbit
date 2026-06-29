@@ -49,6 +49,14 @@ func (p *Provisioner) Apply(ctx context.Context, cfg *config.Config) (*Report, e
 			report.TablesCreated = append(report.TablesCreated, authCreated...)
 		}
 
+		if app.Storage != nil && app.Storage.Bucket != "" {
+			storageCreated, err := p.provisionStorageTables(ctx, schemaName)
+			if err != nil {
+				return nil, fmt.Errorf("provisioner: app %q storage tables: %w", app.Name, err)
+			}
+			report.TablesCreated = append(report.TablesCreated, storageCreated...)
+		}
+
 		for _, table := range app.Tables {
 			tableCreated, err := p.createTable(ctx, schemaName, table.Name, table.Columns, table.RLS)
 			if err != nil {

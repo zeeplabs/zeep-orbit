@@ -10,9 +10,24 @@ type PlatformConfig struct {
 }
 
 type AppConfig struct {
-	Name   string        `yaml:"name"`
-	Auth   AuthConfig    `yaml:"auth"`
-	Tables []TableConfig `yaml:"tables"`
+	Name       string           `yaml:"name"`
+	Auth       AuthConfig       `yaml:"auth"`
+	Tables     []TableConfig    `yaml:"tables"`
+	Storage    *StorageConfig   `yaml:"storage,omitempty" json:"storage,omitempty"`
+	RateLimit  *RateLimitConfig `yaml:"rate_limit,omitempty" json:"rate_limit,omitempty"`
+}
+
+type RateLimitConfig struct {
+	Enabled            bool `json:"enabled" yaml:"enabled"`
+	RequestsPerMinute  int  `json:"requests_per_minute" yaml:"requests_per_minute"`
+}
+
+type StorageConfig struct {
+	Bucket          string `json:"bucket" yaml:"bucket"`
+	Region          string `json:"region" yaml:"region"`
+	Endpoint        string `json:"endpoint" yaml:"endpoint"`
+	AccessKeyID     string `json:"access_key_id" yaml:"access_key_id"`
+	SecretAccessKey string `json:"secret_access_key,omitempty" yaml:"secret_access_key,omitempty"`
 }
 
 type AuthConfig struct {

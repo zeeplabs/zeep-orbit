@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Navigate, NavLink, Outlet } from "react-router-dom";
 import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import {
   LogOut,
   Grid,
@@ -11,9 +12,11 @@ import {
   Settings,
   User,
   Lock,
+  Globe,
 } from "lucide-react";
 import ChangePasswordModal from "./ChangePasswordModal";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { setLanguage } from "../lib/i18n";
 import {
   Dialog,
   DialogContent,
@@ -28,23 +31,25 @@ import logoType from "@/assets/images/logo/logotype.svg";
 interface User {
   id: string;
   email: string;
+  name?: string;
   role: string;
+  language?: string;
 }
 
 type NavItem = { icon: typeof Grid; label: string; path: string };
 
-function navItems(user: User | null): NavItem[] {
+function navItems(user: User | null, t: (k: string) => string): NavItem[] {
   const items: NavItem[] = [
-    { icon: Grid, label: "Apps", path: "/apps" },
-    { icon: Database, label: "Data Browser", path: "/data-browser" },
-    { icon: Activity, label: "Logs", path: "/logs" },
+    { icon: Grid, label: t("nav.apps"), path: "/apps" },
+    { icon: Database, label: t("nav.dataBrowser"), path: "/data-browser" },
+    { icon: Activity, label: t("nav.logs"), path: "/logs" },
   ];
   if (user?.role === "superadmin") {
-    items.splice(2, 0, { icon: Users, label: "Usuários", path: "/usuarios" });
-    items.splice(3, 0, { icon: Shield, label: "Auditoria", path: "/auditoria" });
+    items.splice(2, 0, { icon: Users, label: t("nav.users"), path: "/usuarios" });
+    items.splice(3, 0, { icon: Shield, label: t("nav.audit"), path: "/auditoria" });
     items.push({
       icon: Settings,
-      label: "Configurações",
+      label: t("nav.settings"),
       path: "/configuracoes",
     });
   }
@@ -60,6 +65,7 @@ function BottomBar({
   user: User;
   onUserClick: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <nav
       className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around"
@@ -118,7 +124,7 @@ function BottomBar({
         }}
       >
         <User size={21} strokeWidth={1.5} />
-        <span style={{ fontSize: 10, lineHeight: 1 }}>Conta</span>
+        <span style={{ fontSize: 10, lineHeight: 1 }}>{t("nav.account")}</span>
       </button>
     </nav>
   );
@@ -126,10 +132,12 @@ function BottomBar({
 
 export default function DashboardShell({ user }: { user: User | null }) {
   const qc = useQueryClient();
+  const { t, i18n } = useTranslation();
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const [showLanguageMenu, setShowLanguageMenu] = useState(false);
 
   const { data: brandConfig } = useQuery({
     queryKey: ["brand-config"],
@@ -140,7 +148,26 @@ export default function DashboardShell({ user }: { user: User | null }) {
     staleTime: 30000,
   });
 
-  const companyName = brandConfig?.company_name || "Orbit";
+  const companyName = brandConfig?.company_name || t("app.title");
+
+  useEffect(() => {
+    if (user?.language && user.language !== i18n.language) {
+      setLanguage(user.language);
+    }
+  }, [user?.language]);
+
+  async function saveLanguage(lang: string) {
+    setLanguage(lang);
+    setShowLanguageMenu(false);
+    try {
+      await fetch("/dashboard/api/me/language", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ language: lang }),
+      });
+    } catch {}
+  }
 
   if (!user) return <Navigate to="/login" replace />;
 
@@ -157,7 +184,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
     }
   };
 
-  const items = navItems(user);
+  const items = navItems(user, t);
 
   return (
     <div
@@ -224,7 +251,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
                 color: "var(--text-muted)",
               }}
             >
-              BaaS Platform Manager
+              {t("app.subtitle")}
             </p>
           </div>
         </div>
@@ -302,7 +329,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
                 textOverflow: "ellipsis",
               }}
             >
-              {user.email}
+              {(user as any).name || user.email}
             </p>
             <p
               style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}
@@ -328,8 +355,70 @@ export default function DashboardShell({ user }: { user: User | null }) {
               transition: "color 0.15s",
             }}
           >
-            <Lock size={14} strokeWidth={1.5} /> Trocar senha
+            <Lock size={14} strokeWidth={1.5} /> {t("nav.changePassword")}
           </button>
+          <button
+            onClick={() => setShowLanguageMenu(!showLanguageMenu)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "8px 12px",
+              borderRadius: 10,
+              border: "none",
+              background: "transparent",
+              color: "var(--text-muted)",
+              cursor: "pointer",
+              fontSize: 13,
+              width: "100%",
+              fontFamily: "inherit",
+              transition: "color 0.15s",
+            }}
+          >
+            <Globe size={14} strokeWidth={1.5} /> {i18n.language === "pt-BR" ? "Português" : "English"}
+          </button>
+          {showLanguageMenu && (
+            <div style={{ paddingLeft: 12 }}>
+              <button
+                onClick={() => { saveLanguage("pt-BR"); }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "6px 12px",
+                  borderRadius: 8,
+                  border: "none",
+                  background: i18n.language === "pt-BR" ? "rgba(var(--brand-primary-rgb), 0.12)" : "transparent",
+                  color: i18n.language === "pt-BR" ? "var(--text)" : "var(--text-muted)",
+                  cursor: "pointer",
+                  fontSize: 13,
+                  width: "100%",
+                  fontFamily: "inherit",
+                }}
+              >
+                {t("language.ptBR")}
+              </button>
+              <button
+                onClick={() => { saveLanguage("en"); }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "6px 12px",
+                  borderRadius: 8,
+                  border: "none",
+                  background: i18n.language === "en" ? "rgba(var(--brand-primary-rgb), 0.12)" : "transparent",
+                  color: i18n.language === "en" ? "var(--text)" : "var(--text-muted)",
+                  cursor: "pointer",
+                  fontSize: 13,
+                  width: "100%",
+                  fontFamily: "inherit",
+                }}
+              >
+                {t("language.en")}
+              </button>
+            </div>
+          )}
           <button
             onClick={() => setShowLogoutDialog(true)}
             style={{
@@ -348,7 +437,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
               transition: "color 0.15s",
             }}
           >
-            <LogOut size={14} strokeWidth={1.5} /> Sair
+            <LogOut size={14} strokeWidth={1.5} /> {t("nav.logout")}
           </button>
         </div>
       </motion.aside>
@@ -401,7 +490,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
             }}
           >
             <div style={{ padding: "0 16px", marginBottom: 12 }}>
-              <p style={{ fontSize: 14, fontWeight: 600 }}>{user.email}</p>
+              <p style={{ fontSize: 14, fontWeight: 600 }}>{(user as any).name || user.email}</p>
               <p
                 style={{
                   fontSize: 12,
@@ -437,7 +526,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
                   fontFamily: "inherit",
                 }}
               >
-                <Lock size={16} strokeWidth={1.5} /> Trocar senha
+                <Lock size={16} strokeWidth={1.5} /> {t("nav.changePassword")}
               </button>
               <button
                 onClick={() => {
@@ -458,7 +547,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
                   fontFamily: "inherit",
                 }}
               >
-                <LogOut size={16} strokeWidth={1.5} /> Sair
+                <LogOut size={16} strokeWidth={1.5} /> {t("nav.logout")}
               </button>
             </div>
           </div>
@@ -486,10 +575,10 @@ export default function DashboardShell({ user }: { user: User | null }) {
                 />
               </div>
               <DialogTitle className="text-base font-bold text-[#F8FAFC] mb-2">
-                Sair do dashboard?
+                {t("nav.logoutConfirm")}
               </DialogTitle>
               <DialogDescription className="text-[13px] text-[#94A3B8] leading-relaxed mb-6">
-                Você será desconectado e precisará fazer login novamente.
+                {t("nav.logoutDesc")}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="flex flex-row gap-2.5 sm:flex-row sm:justify-start sm:space-x-0">
@@ -499,7 +588,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
                 disabled={loggingOut}
                 className="flex-1 rounded-xl border-white/[0.10] bg-white/[0.06] text-[#94A3B8] hover:bg-white/[0.10] hover:text-[#F8FAFC] font-medium"
               >
-                Cancelar
+                {t("nav.logoutCancel")}
               </Button>
               <Button
                 onClick={handleLogout}
@@ -510,7 +599,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
                     "linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))",
                 }}
               >
-                {loggingOut ? "Saindo..." : "Sair"}
+                {loggingOut ? t("nav.loggingOut") : t("nav.logoutConfirmBtn")}
               </Button>
             </DialogFooter>
           </div>

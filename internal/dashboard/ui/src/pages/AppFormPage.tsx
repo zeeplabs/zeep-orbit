@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
@@ -31,6 +32,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 
 
 const COLUMN_TYPES = [
@@ -69,9 +76,16 @@ function validateName(name: string): string | null {
 
 
 export default function AppFormPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { id } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = searchParams.get("tab") || "database";
   const isEdit = Boolean(id);
+
+  const setTab = (value: string) => {
+    setSearchParams({ tab: value }, { replace: true });
+  };
 
   const { data: apps } = useApps();
   const editTarget = isEdit && apps ? apps.find((a) => a.id === id) : null;
@@ -84,6 +98,15 @@ export default function AppFormPage() {
   const [googleRedirectUrl, setGoogleRedirectUrl] = useState("");
   const [googleAllowedDomains, setGoogleAllowedDomains] = useState("");
   const [showGoogleSecret, setShowGoogleSecret] = useState(false);
+  const [storageEnabled, setStorageEnabled] = useState(false);
+  const [storageBucket, setStorageBucket] = useState("");
+  const [storageRegion, setStorageRegion] = useState("");
+  const [storageEndpoint, setStorageEndpoint] = useState("");
+  const [storageAccessKey, setStorageAccessKey] = useState("");
+  const [storageSecretKey, setStorageSecretKey] = useState("");
+  const [showStorageSecret, setShowStorageSecret] = useState(false);
+  const [rateLimitEnabled, setRateLimitEnabled] = useState(false);
+  const [rateLimitRPM, setRateLimitRPM] = useState(60);
   const [tables, setTables] = useState<TableDef[]>([]);
   const [collapsedTables, setCollapsedTables] = useState<Set<number>>(
     new Set(),
@@ -107,6 +130,20 @@ export default function AppFormPage() {
         setGoogleRedirectUrl(providers.google.redirect_url || "");
         setGoogleAllowedDomains((providers.google.allowed_domains || []).join(", "));
       }
+      const sc = (editTarget as any).storage_config;
+      if (sc?.bucket) {
+        setStorageEnabled(true);
+        setStorageBucket(sc.bucket || "");
+        setStorageRegion(sc.region || "");
+        setStorageEndpoint(sc.endpoint || "");
+        setStorageAccessKey(sc.access_key_id || "");
+        setStorageSecretKey("");
+      }
+      const rl = (editTarget as any).rate_limit;
+      if (rl?.enabled) {
+        setRateLimitEnabled(true);
+        setRateLimitRPM(rl.requests_per_minute || 60);
+      }
       setTables(
         editTarget.tables.map((t) => ({
           ...t,
@@ -121,6 +158,14 @@ export default function AppFormPage() {
       setGoogleClientSecret("");
       setGoogleRedirectUrl("");
       setGoogleAllowedDomains("");
+      setStorageEnabled(false);
+      setStorageBucket("");
+      setStorageRegion("");
+      setStorageEndpoint("");
+      setStorageAccessKey("");
+      setStorageSecretKey("");
+      setRateLimitEnabled(false);
+      setRateLimitRPM(60);
       setTables([]);
       setCollapsedTables(new Set());
     }
@@ -194,12 +239,12 @@ export default function AppFormPage() {
 
     tables.forEach((table, ti) => {
       if (!table.name.trim())
-        errs[`table_${ti}_name`] = "Nome da tabela obrigatório";
+        errs[`table_${ti}_name`] = t("appForm.tableNameRequired");
       if (table.columns.length === 0)
-        errs[`table_${ti}_cols`] = "Pelo menos 1 coluna";
+        errs[`table_${ti}_cols`] = t("appForm.tableMinColumns");
       table.columns.forEach((col, ci) => {
-        if (!col.name.trim()) errs[`col_${ti}_${ci}_name`] = "Nome obrigatório";
-        if (!col.type) errs[`col_${ti}_${ci}_type`] = "Tipo obrigatório";
+        if (!col.name.trim()) errs[`col_${ti}_${ci}_name`] = t("appForm.colNameRequired");
+        if (!col.type) errs[`col_${ti}_${ci}_type`] = t("appForm.colTypeRequired");
       });
     });
 
@@ -228,6 +273,23 @@ export default function AppFormPage() {
       };
     }
 
+    if (storageEnabled && storageBucket && storageRegion && storageEndpoint && storageAccessKey && storageSecretKey) {
+      payload.storage_config = {
+        bucket: storageBucket,
+        region: storageRegion,
+        endpoint: storageEndpoint,
+        access_key_id: storageAccessKey,
+        secret_access_key: storageSecretKey,
+      };
+    }
+
+    if (rateLimitEnabled) {
+      payload.rate_limit = {
+        enabled: true,
+        requests_per_minute: rateLimitRPM,
+      };
+    }
+
     try {
       if (isEdit && editTarget) {
         await updateApp.mutateAsync({ id: editTarget.id, ...payload } as any);
@@ -236,7 +298,7 @@ export default function AppFormPage() {
       }
       navigate("/apps");
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Erro inesperado");
+      setSubmitError(err instanceof Error ? err.message : t("appForm.unexpectedError"));
     }
   }
 
@@ -266,13 +328,13 @@ export default function AppFormPage() {
             color: 'var(--brand-light)',
           }}
         >
-          {isEdit ? "EDITAR APP" : "NOVO APP"}
+          {isEdit ? t("appForm.editBadge") : t("appForm.newBadge")}
         </span>
         <h2 className="text-[22px] font-extrabold text-[#F8FAFC]">
           {isEdit
             ? editTarget
               ? `Editar "${editTarget.name}"`
-              : "App não encontrado"
+              : t("appForm.notFound")
             : "Criar Aplicativo"}
         </h2>
         <p className="mt-1 text-sm text-[#94A3B8]">
@@ -284,39 +346,64 @@ export default function AppFormPage() {
 
       {isEdit && !editTarget ? (
         <div className="rounded-2xl border border-red-500/[0.18] bg-red-500/[0.06] px-6 py-5 text-sm text-red-400">
-          App não encontrado.
+          {t("appForm.notFound")}
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-          {/* ── Basic Info Card ── */}
-          <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-5 flex flex-col gap-5">
-            {/* App name */}
-            <div className="flex flex-col gap-2">
-              <Label className="text-[13px] font-semibold text-[#94A3B8]">
-                Nome do App
-              </Label>
-              <Input
-                value={appName}
-                onChange={(e) =>
-                  setAppName(
-                    e.target.value.toLowerCase().replace(/[\s-]+/g, "_"),
-                  )
-                }
-                placeholder="meu_app"
-                className={cn(
-                  "h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus",
-                  errors["appName"] &&
-                    "border-red-500/50",
-                )}
-              />
-              {errors["appName"] && (
-                <p className="text-xs text-red-400">{errors["appName"]}</p>
-              )}
-              <p className="text-[11px] text-[#94A3B8]">
-                Apenas minúsculas, números e underscore. Máx 32 chars, começando
-                com letra.
-              </p>
-            </div>
+          <Tabs value={tab} onValueChange={setTab} className="w-full">
+            <TabsList className="w-full justify-start gap-1 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-1.5 mb-2 h-auto">
+              <TabsTrigger value="database"
+                className="rounded-xl px-4 py-2 text-[13px] font-semibold text-[#94A3B8] data-[state=active]:bg-white/[0.08] data-[state=active]:text-[#F8FAFC] data-[state=active]:shadow-none"
+              >
+                Banco de Dados
+              </TabsTrigger>
+              <TabsTrigger value="auth"
+                className="rounded-xl px-4 py-2 text-[13px] font-semibold text-[#94A3B8] data-[state=active]:bg-white/[0.08] data-[state=active]:text-[#F8FAFC] data-[state=active]:shadow-none"
+              >
+                Provedores de Login
+              </TabsTrigger>
+              <TabsTrigger value="storage"
+                className="rounded-xl px-4 py-2 text-[13px] font-semibold text-[#94A3B8] data-[state=active]:bg-white/[0.08] data-[state=active]:text-[#F8FAFC] data-[state=active]:shadow-none"
+              >
+                Storage (S3)
+              </TabsTrigger>
+              <TabsTrigger value="api"
+                className="rounded-xl px-4 py-2 text-[13px] font-semibold text-[#94A3B8] data-[state=active]:bg-white/[0.08] data-[state=active]:text-[#F8FAFC] data-[state=active]:shadow-none"
+              >
+                API
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="database" className="mt-0 flex flex-col gap-6">
+              {/* ── Basic Info Card ── */}
+              <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-5 flex flex-col gap-5">
+                {/* App name */}
+                <div className="flex flex-col gap-2">
+                  <Label className="text-[13px] font-semibold text-[#94A3B8]">
+                    Nome do App
+                  </Label>
+                  <Input
+                    value={appName}
+                    onChange={(e) =>
+                      setAppName(
+                        e.target.value.toLowerCase().replace(/[\s-]+/g, "_"),
+                      )
+                    }
+                    placeholder="meu_app"
+                    className={cn(
+                      "h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus",
+                      errors["appName"] &&
+                        "border-red-500/50",
+                    )}
+                  />
+                  {errors["appName"] && (
+                    <p className="text-xs text-red-400">{errors["appName"]}</p>
+                  )}
+                  <p className="text-[11px] text-[#94A3B8]">
+                    Apenas minúsculas, números e underscore. Máx 32 chars, começando
+                    com letra.
+                  </p>
+                </div>
 
             {/* Divider */}
             <div className="border-t border-white/[0.06]" />
@@ -338,80 +425,11 @@ export default function AppFormPage() {
                 className="shrink-0"
               />
             </div>
+
           </div>
 
-          {/* ── Auth Providers ── */}
-          <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-5 flex flex-col gap-4">
-            <h3 className="text-[13px] font-semibold text-[#94A3B8] uppercase tracking-wider">
-              Provedores de Login
-            </h3>
-
-            {/* Email */}
-            <div className="flex items-center justify-between">
-              <div className="flex flex-col gap-0.5">
-                <p className="text-sm font-semibold text-[#F8FAFC]">E-mail</p>
-                <p className="text-xs text-[#94A3B8]">Registro e login via email/senha</p>
-              </div>
-              <Switch checked={authEmail} onCheckedChange={setAuthEmail} className="shrink-0" />
-            </div>
-
-            <div className="border-t border-white/[0.06]" />
-
-            {/* Google */}
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <div className="flex flex-col gap-0.5">
-                  <p className="text-sm font-semibold text-[#F8FAFC]">Google</p>
-                  <p className="text-xs text-[#94A3B8]">Login via conta Google</p>
-                </div>
-                <Switch checked={googleEnabled} onCheckedChange={setGoogleEnabled} className="shrink-0" />
-              </div>
-              {googleEnabled && (
-                <div className="flex flex-col gap-3 pl-0 border-t border-white/[0.06] pt-3 mt-1">
-                  <div>
-                    <Label className="text-[12px] font-medium text-[#94A3B8]">Client ID</Label>
-                    <Input value={googleClientId} onChange={(e) => setGoogleClientId(e.target.value)}
-                      placeholder="Google OAuth Client ID"
-                      className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus mt-1" />
-                  </div>
-                  <div>
-                    <Label className="text-[12px] font-medium text-[#94A3B8]">Client Secret</Label>
-                    <div className="relative mt-1">
-                      <Input type={showGoogleSecret ? "text" : "password"} value={googleClientSecret}
-                        onChange={(e) => setGoogleClientSecret(e.target.value)}
-                        placeholder="Client Secret"
-                        className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus w-full pr-10" />
-                      <button type="button" onClick={() => setShowGoogleSecret(!showGoogleSecret)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#F8FAFC] bg-transparent border-none cursor-pointer">
-                        {showGoogleSecret ? <EyeOff size={16} /> : <Eye size={16} />}
-                      </button>
-                    </div>
-                  </div>
-                  <div>
-                    <Label className="text-[12px] font-medium text-[#94A3B8]">Redirect URL</Label>
-                    <Input value={googleRedirectUrl} onChange={(e) => setGoogleRedirectUrl(e.target.value)}
-                      placeholder={`https://seu-dominio.com/${appName || "meu_app"}/auth/google/callback`}
-                      className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus mt-1" />
-                    <p className="text-[11px] text-[#64748B] mt-1">
-                      Configure este URL no Google Cloud Console
-                    </p>
-                  </div>
-                  <div>
-                    <Label className="text-[12px] font-medium text-[#94A3B8]">Domínios permitidos</Label>
-                    <Input value={googleAllowedDomains} onChange={(e) => setGoogleAllowedDomains(e.target.value)}
-                      placeholder="zeeplabs.com, zeepfly.com"
-                      className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus mt-1" />
-                    <p className="text-[11px] text-[#64748B] mt-1">
-                      Separados por vírgula. Vazio = qualquer domínio.
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* ── Tables Section ── */}
-          <div className="flex flex-col gap-4">
+              {/* ── Tables Section ── */}
+              <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="h-6 w-1 rounded-full"
@@ -682,6 +700,178 @@ export default function AppFormPage() {
               })}
             </div>
           </div>
+            </TabsContent>
+
+            <TabsContent value="auth" className="mt-0">
+              <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-5 flex flex-col gap-4">
+                <h3 className="text-[13px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                  Provedores de Login
+                </h3>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-0.5">
+                    <p className="text-sm font-semibold text-[#F8FAFC]">E-mail</p>
+                    <p className="text-xs text-[#94A3B8]">Registro e login via email/senha</p>
+                  </div>
+                  <Switch checked={authEmail} onCheckedChange={setAuthEmail} className="shrink-0" />
+                </div>
+
+                <div className="border-t border-white/[0.06]" />
+
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-0.5">
+                      <p className="text-sm font-semibold text-[#F8FAFC]">Google</p>
+                      <p className="text-xs text-[#94A3B8]">Login via conta Google</p>
+                    </div>
+                    <Switch checked={googleEnabled} onCheckedChange={setGoogleEnabled} className="shrink-0" />
+                  </div>
+                  {googleEnabled && (
+                    <div className="flex flex-col gap-3 border-t border-white/[0.06] pt-3">
+                      <div>
+                        <Label className="text-[12px] font-medium text-[#94A3B8]">Client ID</Label>
+                        <Input value={googleClientId} onChange={(e) => setGoogleClientId(e.target.value)}
+                          placeholder="Google OAuth Client ID"
+                          className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus mt-1" />
+                      </div>
+                      <div>
+                        <Label className="text-[12px] font-medium text-[#94A3B8]">Client Secret</Label>
+                        <div className="relative mt-1">
+                          <Input type={showGoogleSecret ? "text" : "password"} value={googleClientSecret}
+                            onChange={(e) => setGoogleClientSecret(e.target.value)}
+                            placeholder="Client Secret"
+                            className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus w-full pr-10" />
+                          <button type="button" onClick={() => setShowGoogleSecret(!showGoogleSecret)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#F8FAFC] bg-transparent border-none cursor-pointer">
+                            {showGoogleSecret ? <EyeOff size={16} /> : <Eye size={16} />}
+                          </button>
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-[12px] font-medium text-[#94A3B8]">Redirect URL</Label>
+                        <Input value={googleRedirectUrl} onChange={(e) => setGoogleRedirectUrl(e.target.value)}
+                          placeholder={`https://seu-dominio.com/${appName || "meu_app"}/auth/google/callback`}
+                          className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus mt-1" />
+                        <p className="text-[11px] text-[#64748B] mt-1">
+                          Configure este URL no Google Cloud Console
+                        </p>
+                      </div>
+                      <div>
+                        <Label className="text-[12px] font-medium text-[#94A3B8]">Domínios permitidos</Label>
+                        <Input value={googleAllowedDomains} onChange={(e) => setGoogleAllowedDomains(e.target.value)}
+                          placeholder="zeeplabs.com, zeepfly.com"
+                          className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus mt-1" />
+                        <p className="text-[11px] text-[#64748B] mt-1">
+                          Separados por vírgula. Vazio = qualquer domínio.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="storage" className="mt-0">
+              <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-5 flex flex-col gap-4">
+                <h3 className="text-[13px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                  Storage (S3)
+                </h3>
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-0.5">
+                    <p className="text-sm font-semibold text-[#F8FAFC]">Ativar S3</p>
+                    <p className="text-xs text-[#94A3B8]">
+                      Conecte um bucket S3-compatible (DO Spaces, Magalu, AWS, MinIO)
+                    </p>
+                  </div>
+                  <Switch checked={storageEnabled} onCheckedChange={setStorageEnabled} className="shrink-0" />
+                </div>
+                {storageEnabled && (
+                  <div className="flex flex-col gap-3 border-t border-white/[0.06] pt-3">
+                    <div>
+                      <Label className="text-[12px] font-medium text-[#94A3B8]">Bucket</Label>
+                      <Input value={storageBucket} onChange={(e) => setStorageBucket(e.target.value)}
+                        placeholder="meu-bucket"
+                        className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-[12px] font-medium text-[#94A3B8]">Região</Label>
+                      <Input value={storageRegion} onChange={(e) => setStorageRegion(e.target.value)}
+                        placeholder="us-east-1"
+                        className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-[12px] font-medium text-[#94A3B8]">Endpoint</Label>
+                      <Input value={storageEndpoint} onChange={(e) => setStorageEndpoint(e.target.value)}
+                        placeholder="https://nyc3.digitaloceanspaces.com"
+                        className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-[12px] font-medium text-[#94A3B8]">Access Key ID</Label>
+                      <Input value={storageAccessKey} onChange={(e) => setStorageAccessKey(e.target.value)}
+                        placeholder="DO00XXXXXXXXXXXX"
+                        className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-[12px] font-medium text-[#94A3B8]">Secret Access Key</Label>
+                      <div className="relative mt-1">
+                        <Input type={showStorageSecret ? "text" : "password"} value={storageSecretKey}
+                          onChange={(e) => setStorageSecretKey(e.target.value)}
+                          placeholder="Secret Key"
+                          className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus w-full pr-10" />
+                        <button type="button" onClick={() => setShowStorageSecret(!showStorageSecret)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#F8FAFC] bg-transparent border-none cursor-pointer">
+                          {showStorageSecret ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-[#94A3B8]">
+                      Os arquivos ficarão disponíveis em <code className="text-[#B3D1FF]">/{appName || "meu_app"}/files/*</code> via API.
+                    </p>
+                  </div>
+                )}
+              </div>
+             </TabsContent>
+
+            <TabsContent value="api" className="mt-0">
+              <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-5 flex flex-col gap-4">
+                <h3 className="text-[13px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                  API
+                </h3>
+
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-0.5">
+                      <p className="text-sm font-semibold text-[#F8FAFC]">
+                        Rate Limit
+                      </p>
+                      <p className="text-xs text-[#94A3B8]">
+                        Limitar requisições por minuto por IP para este app
+                      </p>
+                    </div>
+                    <Switch checked={rateLimitEnabled} onCheckedChange={setRateLimitEnabled} className="shrink-0" />
+                  </div>
+                  {rateLimitEnabled && (
+                    <div className="flex flex-col gap-2 border-t border-white/[0.06] pt-3">
+                      <Label className="text-[12px] font-medium text-[#94A3B8]">
+                        Requests per minute
+                      </Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={10000}
+                        value={rateLimitRPM}
+                        onChange={(e) => setRateLimitRPM(parseInt(e.target.value) || 60)}
+                        className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus w-32"
+                      />
+                      <p className="text-[11px] text-[#94A3B8]">
+                        Máximo de requisições por IP a cada 60 segundos
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
 
           {/* Submit error */}
           {submitError && (

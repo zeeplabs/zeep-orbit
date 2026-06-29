@@ -17,9 +17,11 @@ var ErrNotFound = errors.New("not found")
 type DashboardUser struct {
 	ID           string    `json:"id"`
 	Email        string    `json:"email"`
+	Name         string    `json:"name,omitempty"`
 	PasswordHash string    `json:"-"`
 	GoogleID     string    `json:"-"`
 	Role         string    `json:"role"`
+	Language     string    `json:"language,omitempty"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 
@@ -27,10 +29,10 @@ type DashboardUser struct {
 func GetUserByEmail(ctx context.Context, pool *db.Pool, email string) (*DashboardUser, error) {
 	var u DashboardUser
 	err := pool.QueryRow(ctx,
-		`SELECT id, email, password_hash, COALESCE(google_id, ''), role, created_at
+		`SELECT id, email, COALESCE(name, ''), password_hash, COALESCE(google_id, ''), role, COALESCE(language, 'en'), created_at
 		 FROM zeep_system.dashboard_users WHERE email = $1`,
 		email,
-	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.GoogleID, &u.Role, &u.CreatedAt)
+	).Scan(&u.ID, &u.Email, &u.Name, &u.PasswordHash, &u.GoogleID, &u.Role, &u.Language, &u.CreatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -44,10 +46,10 @@ func GetUserByEmail(ctx context.Context, pool *db.Pool, email string) (*Dashboar
 func GetUserByGoogleID(ctx context.Context, pool *db.Pool, googleID string) (*DashboardUser, error) {
 	var u DashboardUser
 	err := pool.QueryRow(ctx,
-		`SELECT id, email, password_hash, COALESCE(google_id, ''), role, created_at
+		`SELECT id, email, COALESCE(name, ''), password_hash, COALESCE(google_id, ''), role, COALESCE(language, 'en'), created_at
 		 FROM zeep_system.dashboard_users WHERE google_id = $1`,
 		googleID,
-	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.GoogleID, &u.Role, &u.CreatedAt)
+	).Scan(&u.ID, &u.Email, &u.Name, &u.PasswordHash, &u.GoogleID, &u.Role, &u.Language, &u.CreatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -63,9 +65,9 @@ func CreateGoogleUser(ctx context.Context, pool *db.Pool, email, googleID string
 	err := pool.QueryRow(ctx,
 		`INSERT INTO zeep_system.dashboard_users (email, password_hash, google_id, role)
 		 VALUES ($1, '', $2, 'admin')
-		 RETURNING id, email, password_hash, google_id, role, created_at`,
+		 RETURNING id, email, COALESCE(name, ''), password_hash, google_id, role, COALESCE(language, 'en'), created_at`,
 		email, googleID,
-	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.GoogleID, &u.Role, &u.CreatedAt)
+	).Scan(&u.ID, &u.Email, &u.Name, &u.PasswordHash, &u.GoogleID, &u.Role, &u.Language, &u.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: create google user: %w", err)
 	}
@@ -85,14 +87,14 @@ func LinkGoogleID(ctx context.Context, pool *db.Pool, userID, googleID string) e
 }
 
 // CreateUser inserts a new dashboard user with a pre-hashed password.
-func CreateUser(ctx context.Context, pool *db.Pool, email, passwordHash, role string) (*DashboardUser, error) {
+func CreateUser(ctx context.Context, pool *db.Pool, email, name, passwordHash, role string) (*DashboardUser, error) {
 	var u DashboardUser
 	err := pool.QueryRow(ctx,
-		`INSERT INTO zeep_system.dashboard_users (email, password_hash, role)
-		 VALUES ($1, $2, $3)
-		 RETURNING id, email, password_hash, role, created_at`,
-		email, passwordHash, role,
-	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &u.CreatedAt)
+		`INSERT INTO zeep_system.dashboard_users (email, name, password_hash, role)
+		 VALUES ($1, $2, $3, $4)
+		 RETURNING id, email, COALESCE(name, ''), password_hash, role, 'en', created_at`,
+		email, name, passwordHash, role,
+	).Scan(&u.ID, &u.Email, &u.Name, &u.PasswordHash, &u.Role, &u.Language, &u.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: create user: %w", err)
 	}
@@ -122,7 +124,7 @@ func IsBootstrapped(ctx context.Context, pool *db.Pool) (bool, error) {
 }
 
 // users already exist.
-func BootstrapFirstSuperadmin(ctx context.Context, pool *db.Pool, email, passwordHash string) (bool, error) {
+func BootstrapFirstSuperadmin(ctx context.Context, pool *db.Pool, email, name, passwordHash string) (bool, error) {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("dashboard: bootstrap begin: %w", err)
@@ -142,8 +144,8 @@ func BootstrapFirstSuperadmin(ctx context.Context, pool *db.Pool, email, passwor
 	}
 
 	if _, err := tx.Exec(ctx,
-		`INSERT INTO zeep_system.dashboard_users (email, password_hash, role) VALUES ($1, $2, 'superadmin')`,
-		email, passwordHash,
+		`INSERT INTO zeep_system.dashboard_users (email, name, password_hash, role) VALUES ($1, $2, $3, 'superadmin')`,
+		email, name, passwordHash,
 	); err != nil {
 		return false, fmt.Errorf("dashboard: bootstrap insert: %w", err)
 	}
@@ -154,7 +156,7 @@ func BootstrapFirstSuperadmin(ctx context.Context, pool *db.Pool, email, passwor
 // ListUsers returns all dashboard users (password hash excluded from results).
 func ListUsers(ctx context.Context, pool *db.Pool) ([]*DashboardUser, error) {
 	rows, err := pool.Query(ctx,
-		`SELECT id, email, role, created_at
+		`SELECT id, email, COALESCE(name, ''), role, COALESCE(language, 'en'), created_at
 		 FROM zeep_system.dashboard_users
 		 ORDER BY created_at DESC`,
 	)
@@ -166,7 +168,7 @@ func ListUsers(ctx context.Context, pool *db.Pool) ([]*DashboardUser, error) {
 	var users []*DashboardUser
 	for rows.Next() {
 		var u DashboardUser
-		if err := rows.Scan(&u.ID, &u.Email, &u.Role, &u.CreatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Language, &u.CreatedAt); err != nil {
 			return nil, fmt.Errorf("dashboard: list users scan: %w", err)
 		}
 		users = append(users, &u)
@@ -178,10 +180,10 @@ func ListUsers(ctx context.Context, pool *db.Pool) ([]*DashboardUser, error) {
 func GetUser(ctx context.Context, pool *db.Pool, id string) (*DashboardUser, error) {
 	var u DashboardUser
 	err := pool.QueryRow(ctx,
-		`SELECT id, email, role, created_at
+		`SELECT id, email, COALESCE(name, ''), role, COALESCE(language, 'en'), created_at
 		 FROM zeep_system.dashboard_users WHERE id = $1`,
 		id,
-	).Scan(&u.ID, &u.Email, &u.Role, &u.CreatedAt)
+	).Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Language, &u.CreatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -245,12 +247,12 @@ func CreateSession(ctx context.Context, pool *db.Pool, token, userID string, exp
 func GetSessionUser(ctx context.Context, pool *db.Pool, token string) (*DashboardUser, error) {
 	var u DashboardUser
 	err := pool.QueryRow(ctx,
-		`SELECT u.id, u.email, u.password_hash, COALESCE(u.google_id, ''), u.role, u.created_at
+		`SELECT u.id, u.email, COALESCE(u.name, ''), u.password_hash, COALESCE(u.google_id, ''), u.role, COALESCE(u.language, 'en'), u.created_at
 		 FROM zeep_system.sessions s
 		 JOIN zeep_system.dashboard_users u ON u.id = s.user_id
 		 WHERE s.token = $1 AND s.expires_at > now()`,
 		token,
-	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.GoogleID, &u.Role, &u.CreatedAt)
+	).Scan(&u.ID, &u.Email, &u.Name, &u.PasswordHash, &u.GoogleID, &u.Role, &u.Language, &u.CreatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -258,6 +260,18 @@ func GetSessionUser(ctx context.Context, pool *db.Pool, token string) (*Dashboar
 		return nil, fmt.Errorf("dashboard: get session user: %w", err)
 	}
 	return &u, nil
+}
+
+// SetUserLanguage updates the language preference for a user.
+func SetUserLanguage(ctx context.Context, pool *db.Pool, userID, language string) error {
+	_, err := pool.Exec(ctx,
+		`UPDATE zeep_system.dashboard_users SET language = $1 WHERE id = $2`,
+		language, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("dashboard: set language: %w", err)
+	}
+	return nil
 }
 
 // DeleteSession removes a session by token.

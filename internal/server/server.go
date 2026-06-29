@@ -153,6 +153,7 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.Post("/api/logout", dashH.Logout)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/me", dashH.Me)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/me/password", dashH.ChangeMyPassword)
+		r.With(dashboard.RequireAuth(pool)).Put("/api/me/language", dashH.SetLanguage)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/apps", dashH.ListApps)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/apps", dashH.CreateApp)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/apps/{id}", dashH.GetApp)
@@ -202,13 +203,29 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.Get("/google/callback", appGoogleH.Callback)
 	})
 
+	appLimiter := NewAppRateLimiter()
+	appRateLimit := RateLimitMiddleware(appLimiter, reg)
+
+	r.Route("/{app}/files", func(r chi.Router) {
+		r.Use(appRateLimit)
+		r.Use(JWTMiddleware(reg))
+		r.Post("/", h.HandleFileUpload)
+		r.Get("/", h.HandleFileList)
+		r.Get("/{id}", h.HandleFileGet)
+		r.Get("/{id}/download", h.HandleFileDownload)
+		r.Delete("/{id}", h.HandleFileDelete)
+		r.Get("/{id}/url", h.HandleFileSignedURL)
+	})
+
 	r.Route("/{app}/{table}", func(r chi.Router) {
+		r.Use(appRateLimit)
 		r.Use(JWTMiddleware(reg))
 		r.Get("/", h.HandleList)
 		r.Post("/", h.HandleCreate)
 	})
 
 	r.Route("/{app}/{table}/{id}", func(r chi.Router) {
+		r.Use(appRateLimit)
 		r.Use(JWTMiddleware(reg))
 		r.Get("/", h.HandleGetByID)
 		r.Put("/", h.HandleUpdate)

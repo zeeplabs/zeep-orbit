@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { useBootstrap } from "../lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,6 +60,7 @@ function StepDots({ current }: { current: Step }) {
 }
 
 function WelcomeStep({ onNext }: { onNext: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="text-center">
       <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 text-[28px]"
@@ -69,11 +71,10 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
         ⚡
       </div>
       <h1 className="text-[26px] font-bold mb-3 tracking-tight leading-tight text-[#F8FAFC]">
-        Bem-vindo ao ZeepCore
+        {t("onboarding.welcome")}
       </h1>
       <p className="text-[#94A3B8] text-sm leading-relaxed mb-10 max-w-[340px] mx-auto">
-        Sua plataforma Backend As A Service está pronta para ser configurada.
-        Vamos criar o administrador para liberar acesso ao dashboard.
+        {t("onboarding.welcomeDesc")}
       </p>
       <Button
         onClick={onNext}
@@ -82,15 +83,17 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
           background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))',
         }}
       >
-        Começar configuração
+        {t("onboarding.start")}
       </Button>
     </div>
   );
 }
 
 function CreateSuperadminStep({ onSuccess }: { onSuccess: () => void }) {
+  const { t } = useTranslation();
   const [secret, setSecret] = useState("");
   const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [validationError, setValidationError] = useState("");
@@ -102,16 +105,16 @@ function CreateSuperadminStep({ onSuccess }: { onSuccess: () => void }) {
     setValidationError("");
 
     if (password.length < 8) {
-      setValidationError("A senha deve ter no mínimo 8 caracteres.");
+      setValidationError(t("onboarding.passwordMin"));
       return;
     }
     if (password !== confirmPassword) {
-      setValidationError("As senhas não coincidem.");
+      setValidationError(t("onboarding.passwordMismatch"));
       return;
     }
 
     bootstrap.mutate(
-      { secret, email, password },
+      { secret, email, name, password },
       {
         onSuccess: () => onSuccess(),
         onError: (err) => setValidationError(err.message),
@@ -125,16 +128,15 @@ function CreateSuperadminStep({ onSuccess }: { onSuccess: () => void }) {
   return (
     <div>
       <h2 className="text-xl font-bold mb-1.5 tracking-tight text-[#F8FAFC]">
-        Criar superadmin
+        {t("onboarding.createAdmin")}
       </h2>
       <p className="text-[#94A3B8] text-[13px] mb-7 leading-relaxed">
-        Informe o secret de bootstrap e as credenciais da conta de
-        administrador.
+        {t("onboarding.adminDesc")}
       </p>
       <form onSubmit={handleSubmit} className="flex flex-col gap-[18px]">
         <div className="flex flex-col gap-1.5">
           <Label className="text-[11px] font-semibold text-white/50 uppercase tracking-[0.06em]">
-            Bootstrap Secret
+            {t("onboarding.bootstrapSecret")}
           </Label>
           <Input
             type="password"
@@ -148,7 +150,7 @@ function CreateSuperadminStep({ onSuccess }: { onSuccess: () => void }) {
         </div>
         <div className="flex flex-col gap-1.5">
           <Label className="text-[11px] font-semibold text-white/50 uppercase tracking-[0.06em]">
-            Email
+            {t("onboarding.email")}
           </Label>
           <Input
             type="email"
@@ -162,11 +164,24 @@ function CreateSuperadminStep({ onSuccess }: { onSuccess: () => void }) {
         </div>
         <div className="flex flex-col gap-1.5">
           <Label className="text-[11px] font-semibold text-white/50 uppercase tracking-[0.06em]">
-            Senha
+            {t("onboarding.name")}
+          </Label>
+          <Input
+            type="text"
+            placeholder={t("onboarding.name")}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoComplete="name"
+            className="bg-white/[0.06] border-white/10 text-[#F8FAFC] placeholder:text-white/30 rounded-lg h-auto px-4 py-3 text-sm brand-focus"
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-[11px] font-semibold text-white/50 uppercase tracking-[0.06em]">
+            {t("onboarding.password")}
           </Label>
           <Input
             type="password"
-            placeholder="Mínimo 8 caracteres"
+            placeholder={t("onboarding.passwordHint")}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
@@ -176,11 +191,11 @@ function CreateSuperadminStep({ onSuccess }: { onSuccess: () => void }) {
         </div>
         <div className="flex flex-col gap-1.5">
           <Label className="text-[11px] font-semibold text-white/50 uppercase tracking-[0.06em]">
-            Confirmar Senha
+            {t("onboarding.confirmPassword")}
           </Label>
           <Input
             type="password"
-            placeholder="Repita a senha"
+            placeholder={t("onboarding.confirmPassword")}
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             required
@@ -201,7 +216,7 @@ function CreateSuperadminStep({ onSuccess }: { onSuccess: () => void }) {
             background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))',
           }}
         >
-          {bootstrap.isPending ? "Criando conta..." : "Criar superadmin"}
+          {bootstrap.isPending ? t("onboarding.submitting") : t("onboarding.submit")}
         </Button>
       </form>
     </div>
@@ -209,17 +224,17 @@ function CreateSuperadminStep({ onSuccess }: { onSuccess: () => void }) {
 }
 
 function DoneStep({ onComplete }: { onComplete: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="text-center">
       <div className="w-16 h-16 rounded-full bg-green-500/15 border border-green-500/30 flex items-center justify-center mx-auto mb-6 text-[28px]">
         ✓
       </div>
       <h2 className="text-[22px] font-bold mb-2.5 tracking-tight text-white">
-        Tudo pronto!
+        {t("onboarding.done")}
       </h2>
       <p className="text-[#94A3B8] text-sm leading-relaxed mb-9">
-        O superadmin foi criado com sucesso. Agora você pode entrar no dashboard
-        com as credenciais configuradas.
+        {t("onboarding.doneDesc")}
       </p>
       <Button
         onClick={onComplete}
@@ -228,7 +243,7 @@ function DoneStep({ onComplete }: { onComplete: () => void }) {
           background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))',
         }}
       >
-        Ir para o login
+        {t("onboarding.goLogin")}
       </Button>
     </div>
   );

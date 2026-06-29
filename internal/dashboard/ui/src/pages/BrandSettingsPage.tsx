@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { Palette, Save, Eye, EyeOff, CheckCircle, Loader2, Globe } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { THEMES, BrandTheme, applyTheme } from "../lib/themes";
@@ -18,6 +19,7 @@ interface BrandConfig {
 }
 
 export default function BrandSettingsPage() {
+  const { t } = useTranslation();
   const [config, setConfig] = useState<BrandConfig | null>(null);
   const [companyName, setCompanyName] = useState("");
   const [selectedTheme, setSelectedTheme] = useState("azure");
@@ -85,11 +87,11 @@ export default function BrandSettingsPage() {
             color: "var(--brand-light)",
           }}
         >
-          CONFIGURAÇÕES
+          {t("nav.settings")}
         </span>
-        <h2 className="text-[22px] font-extrabold text-[#F8FAFC]">Aparência</h2>
+        <h2 className="text-[22px] font-extrabold text-[#F8FAFC]">{t("brand.title")}</h2>
         <p className="mt-1 text-sm text-[#94A3B8]">
-          Personalize as cores e nome da plataforma
+          {t("brand.subtitle")}
         </p>
       </div>
 
@@ -98,7 +100,7 @@ export default function BrandSettingsPage() {
         <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-5 flex flex-col gap-4">
           <div className="flex flex-col gap-2">
             <Label className="text-[13px] font-semibold text-[#94A3B8]">
-              Nome da Empresa
+              {t("brand.companyName")}
             </Label>
             <Input
               value={companyName}
@@ -107,7 +109,7 @@ export default function BrandSettingsPage() {
               className="bg-white/[0.05] border-white/[0.10] rounded-md text-[#F8FAFC] placeholder:text-white/30 brand-focus h-10"
             />
             <p className="text-[11px] text-[#94A3B8]">
-              Exibido no sidebar e outras áreas do dashboard.
+              {t("brand.subtitle")}
             </p>
           </div>
         </div>
@@ -117,7 +119,7 @@ export default function BrandSettingsPage() {
           <div className="flex items-center gap-2">
             <Palette size={16} strokeWidth={1.5} className="text-[#94A3B8]" />
             <Label className="text-[13px] font-semibold text-[#94A3B8]">
-              Tema de Cores
+              {t("brand.theme")}
             </Label>
           </div>
 
@@ -189,7 +191,7 @@ export default function BrandSettingsPage() {
             }}
           >
             <Save size={14} strokeWidth={1.5} />
-            {saving ? "Salvando..." : "Salvar"}
+            {saving ? t("brand.saving") : t("brand.save")}
           </Button>
 
           {message && (
@@ -274,6 +276,7 @@ function ThemeCard({
 }
 
 function GoogleAuthProviderCard() {
+  const { t } = useTranslation();
   const [config, setConfig] = useState<{
     enabled: boolean;
     config: { client_id?: string; client_secret?: string; redirect_url?: string; allowed_domains?: string[] };
@@ -335,7 +338,7 @@ function GoogleAuthProviderCard() {
     }
   };
 
-  if (loading) return <p className="text-[13px] text-[#94A3B8]">Carregando...</p>;
+  if (loading) return <p className="text-[13px] text-[#94A3B8]">{t("app.loading")}</p>;
 
   const inputClass = "h-10 rounded-md border border-white/[0.10] bg-white/[0.06] text-[13px] text-[#F8FAFC] placeholder:text-[#64748B] outline-none brand-focus w-full";
 
@@ -387,7 +390,7 @@ function GoogleAuthProviderCard() {
       <Button onClick={handleSave} disabled={saving}
         className="mt-5 gap-2 rounded-xl border-0 text-white font-semibold disabled:opacity-40"
         style={{ background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))' }}>
-        {saving ? <><Loader2 size={14} className="animate-spin" /> Salvando...</> : <><Save size={14} /> Salvar</>}
+        {saving ? <><Loader2 size={14} className="animate-spin" /> {t("brand.saving")}</> : <><Save size={14} /> {t("brand.save")}</>}
       </Button>
     </div>
   );

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Activity,
@@ -129,6 +130,7 @@ function MetricCard({ icon, label, value, sub, accent }: MetricCardProps) {
 }
 
 export default function LogsPage() {
+  const { t } = useTranslation();
   const [appFilter, setAppFilter] = useState("");
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -168,16 +170,16 @@ export default function LogsPage() {
           }}
         >
           <Activity size={12} strokeWidth={1.5} />
-          Logs
+          {t("nav.logs")}
         </span>
 
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h2 className="mb-1.5 text-[28px] max-md:text-[22px] font-extrabold leading-tight">
-              Monitoramento
+              {t("logs.title")}
             </h2>
             <p className="text-sm max-md:text-[13px] text-[#94A3B8]">
-              Requisições em tempo real e métricas agregadas da plataforma
+              {t("logs.subtitle")}
             </p>
           </div>
 
@@ -197,15 +199,15 @@ export default function LogsPage() {
             <button
               onClick={() => setAutoRefresh((v) => !v)}
               className="h-9 px-3 rounded-xl border border-white/[0.10] bg-white/[0.06] text-[12px] text-[#94A3B8] hover:text-[#F8FAFC] transition-colors cursor-pointer whitespace-nowrap"
-              title={autoRefresh ? "Desativar auto refresh" : "Ativar auto refresh"}
+              title={autoRefresh ? t("logs.refreshOff") : t("logs.refreshOn")}
             >
-              {autoRefresh ? "Auto" : "Manual"}
+              {autoRefresh ? t("logs.modeAuto") : t("logs.modeManual")}
             </button>
 
             <button
               onClick={handleManualRefresh}
               className="h-9 w-9 flex items-center justify-center rounded-xl border border-white/[0.10] bg-white/[0.06] text-[#94A3B8] hover:text-[#F8FAFC] transition-colors cursor-pointer"
-              title="Atualizar agora"
+              title={t("logs.refresh")}
             >
               <RefreshCw size={14} />
             </button>
@@ -215,7 +217,7 @@ export default function LogsPage() {
               onChange={(e) => setAppFilter(e.target.value)}
               className="h-9 rounded-xl border border-white/[0.10] bg-white/[0.06] px-3 text-[12px] text-[#F8FAFC] outline-none appearance-none cursor-pointer max-md:flex-1"
             >
-              <option value="" className="bg-[#0D0D14]">Todos os apps</option>
+              <option value="" className="bg-[#0D0D14]">{t("logs.filterAll")}</option>
               {apps?.map((a) => (
                 <option key={a.id} value={a.name} className="bg-[#0D0D14]">
                   {a.name}
@@ -230,30 +232,30 @@ export default function LogsPage() {
       <div className="mb-8 max-md:mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <MetricCard
           icon={<BarChart3 size={15} strokeWidth={1.5} />}
-          label="Requisições (1min)"
+          label={t("logs.totalReqs")}
           value={metrics?.total_requests ?? "-"}
-          sub="Total no último minuto"
+          sub={t("logs.totalSub")}
           accent="var(--brand-primary)"
         />
         <MetricCard
           icon={<Clock size={15} strokeWidth={1.5} />}
-          label="Latência Média"
+          label={t("logs.avgLatency")}
           value={metrics?.avg_latency_ms != null ? `${metrics.avg_latency_ms}ms` : "-"}
-          sub="Média do último minuto"
+          sub={t("logs.avgLatencySub")}
           accent="#06B6D4"
         />
         <MetricCard
           icon={<AlertTriangle size={15} strokeWidth={1.5} />}
-          label="Erros 4xx"
+          label={t("logs.errors4xx")}
           value={metrics?.errors_4xx ?? "-"}
-          sub="No último minuto"
+          sub={t("logs.errors4xxSub")}
           accent="#F59E0B"
         />
         <MetricCard
           icon={<XCircle size={15} strokeWidth={1.5} />}
-          label="Erros 5xx"
+          label={t("logs.errors5xx")}
           value={metrics?.errors_5xx ?? "-"}
-          sub="No último minuto"
+          sub={t("logs.errors5xxSub")}
           accent="#EF4444"
         />
       </div>
@@ -266,7 +268,7 @@ export default function LogsPage() {
           className="mb-8 max-md:mb-5 flex flex-wrap items-center gap-2"
         >
           <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">
-            Métodos:
+            {t("logs.methods")}
           </span>
           {Object.entries(metrics.method_breakdown).map(([method, count]) => (
             <Badge
@@ -281,7 +283,7 @@ export default function LogsPage() {
           {metrics.requests_per_app && Object.keys(metrics.requests_per_app).length > 0 && (
             <>
               <span className="ml-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">
-                Apps:
+                {t("logs.apps")}:
               </span>
               {Object.entries(metrics.requests_per_app).map(([app, count]) => (
                 <Badge
@@ -324,7 +326,7 @@ export default function LogsPage() {
               animate={{ opacity: 1 }}
               className="px-6 py-5 text-sm text-red-400"
             >
-              Erro ao carregar logs: {(error as Error).message}
+              {t("logs.error")}: {(error as Error).message}
             </motion.div>
           )}
 
@@ -337,9 +339,9 @@ export default function LogsPage() {
             >
               <div className="text-center">
                 <Activity size={32} strokeWidth={1} className="mx-auto mb-3 text-[#64748B]" />
-                <p className="text-sm text-[#94A3B8]">Nenhuma requisição registrada</p>
+                <p className="text-sm text-[#94A3B8]">{t("logs.empty")}</p>
                 <p className="mt-1 text-[12px] text-[#64748B]">
-                  As requisições aparecerão aqui em tempo real
+                  {t("logs.emptyDesc")}
                 </p>
               </div>
             </motion.div>

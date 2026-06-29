@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { Lock, Loader2, Eye, EyeOff, CheckCircle } from "lucide-react";
 import { useChangeMyPassword, useChangeUserPassword } from "../lib/api";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ interface ChangePasswordModalProps {
 const ease = [0.32, 0.72, 0, 1] as const;
 
 export default function ChangePasswordModal({ open, onClose, targetUserId, targetEmail }: ChangePasswordModalProps) {
+  const { t } = useTranslation();
   const isSuperAdminAction = Boolean(targetUserId);
   const changeMyPassword = useChangeMyPassword();
   const changeUserPassword = useChangeUserPassword();
@@ -45,19 +47,19 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
     setError("");
 
     if (!newPassword) {
-      setError("Nova senha é obrigatória");
+      setError(t("changePassword.minLength"));
       return;
     }
     if (newPassword.length < 8) {
-      setError("Nova senha deve ter no mínimo 8 caracteres");
+      setError(t("changePassword.minLength"));
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError("Nova senha e confirmação não conferem");
+      setError(t("changePassword.mismatch"));
       return;
     }
     if (!isSuperAdminAction && !currentPassword) {
-      setError("Senha atual é obrigatória");
+      setError("Current password is required");
       return;
     }
 
@@ -135,12 +137,12 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
                 <Lock size={18} style={{ color: "var(--brand-primary)" }} />
               </div>
               <h2 style={{ fontSize: 16, fontWeight: 700, margin: "0 0 4px" }}>
-                {isSuperAdminAction ? `Trocar senha de ${targetEmail}` : "Alterar senha"}
+                {t("changePassword.title")}
               </h2>
               <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 20px", lineHeight: 1.4 }}>
                 {isSuperAdminAction
-                  ? "Defina uma nova senha para este usuário."
-                  : "Informe sua senha atual e a nova senha desejada."}
+                  ? t("changePassword.title")
+                  : t("changePassword.title")}
               </p>
             </div>
 
@@ -157,7 +159,7 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
                 >
                   <CheckCircle size={40} style={{ color: "#22c55e" }} />
                   <p style={{ fontSize: 14, fontWeight: 600, color: "#F8FAFC" }}>
-                    Senha alterada com sucesso
+                    {t("changePassword.title")}
                   </p>
                 </div>
                 <Button

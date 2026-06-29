@@ -21,6 +21,8 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
 		`ALTER TABLE zeep_system.dashboard_users ADD COLUMN IF NOT EXISTS google_id TEXT`,
+		`ALTER TABLE zeep_system.dashboard_users ADD COLUMN IF NOT EXISTS name TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE zeep_system.dashboard_users ADD COLUMN IF NOT EXISTS language TEXT NOT NULL DEFAULT 'en'`,
 		`CREATE INDEX IF NOT EXISTS idx_dashboard_users_google_id
 		 ON zeep_system.dashboard_users(google_id)`,
 		`CREATE TABLE IF NOT EXISTS zeep_system.sessions (
@@ -38,6 +40,8 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
 		`ALTER TABLE zeep_system.apps ADD COLUMN IF NOT EXISTS auth_providers JSONB NOT NULL DEFAULT '{}'`,
+		`ALTER TABLE zeep_system.apps ADD COLUMN IF NOT EXISTS storage_config JSONB NOT NULL DEFAULT '{}'`,
+		`ALTER TABLE zeep_system.apps ADD COLUMN IF NOT EXISTS rate_limit_config JSONB NOT NULL DEFAULT '{}'`,
 		`CREATE TABLE IF NOT EXISTS zeep_system.app_tables (
 			id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
 			app_id     UUID        NOT NULL REFERENCES zeep_system.apps(id) ON DELETE CASCADE,

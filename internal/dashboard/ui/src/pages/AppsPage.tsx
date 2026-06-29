@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus,
@@ -10,6 +12,7 @@ import {
   MailX,
   LayoutGrid,
   Users,
+  User,
 } from "lucide-react";
 import { useApps, useDeleteApp, AppDef } from "../lib/api";
 import DeleteConfirmDialog from "../components/DeleteConfirmDialog";
@@ -44,11 +47,14 @@ function SkeletonCard() {
 interface AppCardProps {
   app: AppDef;
   index: number;
+  isSuperadmin?: boolean;
   onEdit: (app: AppDef) => void;
   onDelete: (app: AppDef) => void;
+  onUsers: (app: AppDef) => void;
 }
 
-function AppCard({ app, index, onEdit, onDelete, onUsers }: AppCardProps & { onUsers: (app: AppDef) => void }) {
+function AppCard({ app, index, isSuperadmin, onEdit, onDelete, onUsers }: AppCardProps) {
+  const { t } = useTranslation();
   const createdAt = new Date(app.created_at).toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "short",
@@ -98,7 +104,7 @@ function AppCard({ app, index, onEdit, onDelete, onUsers }: AppCardProps & { onU
             >
               <Table2 size={10} strokeWidth={1.5} />
               {app.tables?.length ?? 0}{" "}
-              {app.tables?.length === 1 ? "tabela" : "tabelas"}
+              {t("apps.table", { count: app.tables?.length ?? 0 })}
             </Badge>
 
             <Badge
@@ -128,9 +134,17 @@ function AppCard({ app, index, onEdit, onDelete, onUsers }: AppCardProps & { onU
         </div>
       </div>
 
-      {/* Bottom row: date + actions */}
+      {/* Bottom row: owner + date + actions */}
       <div className="mt-3 flex items-center justify-between">
-        <p className="text-[10px] text-[#64748B] tracking-wide">{createdAt}</p>
+        <div className="flex items-center gap-2 min-w-0">
+          {isSuperadmin && (app.owner_name || app.owner_email) && (
+            <span className="flex items-center gap-1 text-[10px] text-[#64748B] truncate">
+              <User size={10} strokeWidth={1.5} className="shrink-0" />
+              <span className="truncate">{app.owner_name || app.owner_email}</span>
+            </span>
+          )}
+          <p className="text-[10px] text-[#64748B] tracking-wide shrink-0">{createdAt}</p>
+        </div>
 
         <div className="flex gap-1 transition-all duration-200 opacity-0 translate-x-2 group-hover:opacity-100 group-hover:translate-x-0">
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
@@ -176,6 +190,7 @@ function AppCard({ app, index, onEdit, onDelete, onUsers }: AppCardProps & { onU
 
 
 function EmptyState({ onCreateClick }: { onCreateClick: () => void }) {
+  const { t } = useTranslation();
   return (
     <motion.div
       {...fadeUp}
@@ -199,10 +214,9 @@ function EmptyState({ onCreateClick }: { onCreateClick: () => void }) {
             />
           </motion.div>
 
-          <h3 className="mb-2 text-base font-bold">Nenhum app criado</h3>
+          <h3 className="mb-2 text-base font-bold">{t("apps.emptyTitle")}</h3>
           <p className="mb-6 text-[13px] leading-relaxed text-[#94A3B8]">
-            Crie seu primeiro app para gerar APIs automaticamente e gerenciar
-            seus dados.
+            {t("apps.emptyDesc")}
           </p>
 
           <motion.div
@@ -218,7 +232,7 @@ function EmptyState({ onCreateClick }: { onCreateClick: () => void }) {
                   "linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))",
               }}
             >
-              Criar App
+              {t("apps.create")}
               <span className="flex size-[22px] items-center justify-center rounded-full bg-white/[0.15]">
                 <Plus size={12} strokeWidth={2} />
               </span>
@@ -232,18 +246,30 @@ function EmptyState({ onCreateClick }: { onCreateClick: () => void }) {
 
 
 function ErrorState({ message }: { message: string }) {
+  const { t } = useTranslation();
   return (
     <div className="rounded-2xl border border-red-500/[0.18] bg-red-500/[0.06] px-6 py-5 text-sm text-red-400">
-      Erro ao carregar apps: {message}
+      {t("apps.error")}: {message}
     </div>
   );
 }
 
 
 export default function AppsPage() {
+  const { t } = useTranslation();
   const { data: apps, isLoading, error } = useApps();
   const deleteApp = useDeleteApp();
   const navigate = useNavigate();
+  const { data: me } = useQuery({
+    queryKey: ['me'],
+    queryFn: async () => {
+      const res = await fetch('/dashboard/api/me', { credentials: 'include' })
+      if (!res.ok) return null
+      return res.json() as Promise<{ id: string; email: string; name: string; role: string; language: string }>
+    },
+    retry: false,
+  })
+  const isSuperadmin = me?.role === 'superadmin'
 
   const [deleteTarget, setDeleteTarget] = useState<AppDef | null>(null);
 
@@ -283,12 +309,10 @@ export default function AppsPage() {
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
               <h2 className="mb-1.5 text-[28px] font-extrabold leading-tight">
-                Seus Aplicativos
+                {t("apps.title")}
               </h2>
               <p className="text-sm text-[#94A3B8]">
-                Gerencie seus aplicativos, ao criar um novo aplicativo você terá
-                uma API REST gerada automaticamente para você usar em seus
-                projetos.
+                {t("apps.subtitle")}
               </p>
             </div>
 
@@ -305,7 +329,7 @@ export default function AppsPage() {
                     "linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))",
                 }}
               >
-                Criar App
+                {t("apps.create")}
                 <span className="flex size-6 items-center justify-center rounded-full bg-white/[0.12]">
                   <Plus size={12} strokeWidth={2} />
                 </span>
@@ -364,6 +388,7 @@ export default function AppsPage() {
                   key={app.id}
                   app={app}
                   index={i}
+                  isSuperadmin={isSuperadmin}
                   onEdit={handleEdit}
                   onDelete={setDeleteTarget}
                   onUsers={handleUsers}
