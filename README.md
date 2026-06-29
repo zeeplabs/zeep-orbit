@@ -50,12 +50,16 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/billing/invoices
 | **OpenAPI Docs**       | Auto-generated Swagger UI per app                        |
 | **Data Browser**       | GUI to browse, filter, edit, export CSV, delete rows     |
 | **User Management**    | Manage dashboard admins and app users                    |
-| **Audit Logs**         | Real-time request log with metrics                       |
+| **Audit Logs**         | Action history with filters (who did what, when, IP)     |
+| **File Storage**       | Per-app S3-compatible storage (DO Spaces, AWS, MinIO)    |
+| **Rate Limiting**      | Per-app, per-IP sliding window (configurable RPM)         |
 | **White-label**        | Custom branding, themes, company name                    |
 | **Prometheus Metrics** | `zeep_http_requests_total`, latency histograms           |
 | **Multi-app**          | One service, N apps, isolated schemas & JWT secrets      |
 | **CLI**                | `zeep serve`, `zeep apply`, `zeep list`, `zeep status`   |
 | **Kubernetes**         | Production-grade Helm chart (HPA, PDB, ingress, IRSA)    |
+| **SDK Clients**        | TypeScript, Go, Python, Rust, Java, PHP                  |
+| **i18n**               | Dashboard in pt-BR / English, language switcher          |
 
 ---
 
@@ -168,7 +172,9 @@ The web dashboard is embedded in the binary and accessible at `/dashboard`. Feat
 - **Users** — manage dashboard admins (superadmin/admin roles)
 - **App Users** — view users registered in each app, deactivate accounts, reset sessions
 - **Logs** — real-time request log with metrics breakdown
+- **Audit** — action history with user, action type, resource, IP, and pagination
 - **Settings** — white-label branding (themes, company name), Google OAuth configuration
+- **i18n** — dashboard available in pt-BR and English, language switcher in sidebar
 
 ---
 
@@ -251,8 +257,69 @@ Dashboard has its own auth system (email/password or Google OAuth), separate fro
 | GET       | `/metrics`            | Prometheus metrics                 |
 | GET       | `/docs/{app}`         | Swagger UI                         |
 | GET       | `/{app}/auth/*`       | Auth endpoints                     |
+| POST      | `/{app}/files`        | Upload file (multipart)            |
+| GET       | `/{app}/files`        | List files                         |
+| GET       | `/{app}/files/{id}`   | Get file metadata                  |
+| GET       | `/{app}/files/{id}/download` | Download file (302 → signed URL) |
+| GET       | `/{app}/files/{id}/url` | Get signed URL with TTL          |
+| DELETE    | `/{app}/files/{id}`   | Delete file                        |
 
 Query params for list: `?limit=`, `?offset=`, `?field=eq.value`, `?order=field.asc`
+
+---
+
+## 📦 SDK Clients
+
+Official clients for all major languages. Same API across all:
+
+```typescript
+// TypeScript
+import { OrbitClient } from '@zeeptech/orbit-client'
+const orbit = new OrbitClient({ baseURL, app: 'myapp', jwt })
+const rows = await orbit.table('invoices').findMany({ limit: 10 })
+```
+
+```go
+// Go
+import "github.com/zeeplabs/orbit-go"
+client := orbit.New(orbit.ClientConfig{BaseURL, "myapp", jwt})
+rows, err := client.Table("invoices").FindMany(ctx, &orbit.FindManyParams{Limit: 10})
+```
+
+```python
+# Python
+from zeeplabs_orbit_client import OrbitClient, ClientConfig
+orbit = OrbitClient(ClientConfig(baseURL, "myapp", jwt))
+rows = orbit.table("invoices").find_many(limit=10)
+```
+
+```rust
+// Rust
+use orbit_client::OrbitClient;
+let orbit = OrbitClient::new(cfg);
+let rows = orbit.table("invoices").find_many(Some(10), None, None, None).await?;
+```
+
+```java
+// Java
+OrbitClient orbit = new OrbitClient(new ClientConfig(baseURL, "myapp", jwt));
+ListResponse resp = orbit.table("invoices").findMany(10, 0, null, null);
+```
+
+```php
+// PHP
+$orbit = new Zeeplabs\Orbit\OrbitClient($baseURL, 'myapp', $jwt);
+$rows = $orbit->table('invoices')->findMany(limit: 10);
+```
+
+| Language | Package | Path |
+|---|---|---|
+| TypeScript | `@zeeptech/orbit-client` | `clients/typescript/` |
+| Go | `github.com/zeeplabs/orbit-go` | `clients/go/` |
+| Python | `zeeplabs-orbit-client` | `clients/python/` |
+| Rust | `orbit-client` | `clients/rust/` |
+| Java | `com.zeeplabs:orbit-client` | `clients/java/` |
+| PHP | `zeeplabs/orbit-client` | `clients/php/` |
 
 ---
 
@@ -339,6 +406,7 @@ internal/
   server/              HTTP router, handlers, middleware
 charts/                Helm chart
 k8s/                   Kustomize manifests
+clients/               SDK clients (TS, Go, Python, Rust, Java, PHP)
 ```
 
 ---

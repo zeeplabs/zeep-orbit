@@ -55,11 +55,77 @@ Pushing the tag triggers:
 
 The Helm chart version is automatically set from the git tag (e.g. `v0.1.3` → chart `0.1.3`).
 
-## 6. Verify
+## 6. Publish SDK Clients
+
+Publish updated client packages after each release:
+
+### TypeScript (`@zeeptech/orbit-client`)
+
+```bash
+# Update version in clients/typescript/package.json
+npm version patch  # or minor / major
+
+# Build + publish
+cd clients/typescript
+npm run build
+npm publish --access public
+```
+
+Required: npm token with 2FA bypass enabled at https://www.npmjs.com/settings/zeeptech/tokens
+
+### Go (`github.com/zeeplabs/orbit-go`)
+
+```bash
+# Tag the Go module
+cd clients/go
+git tag clients/go/v0.1.0
+git push origin clients/go/v0.1.0
+```
+
+Go modules are published by tag — no build step needed.
+
+### Python (`zeeplabs-orbit-client`)
+
+```bash
+cd clients/python
+python3 -m pip install --upgrade build twine
+python3 -m build
+python3 -m twine upload dist/*
+```
+
+### Rust (`orbit-client`)
+
+```bash
+cd clients/rust
+cargo login        # one-time: set crates.io token
+cargo publish      # reads version from Cargo.toml
+```
+
+### Java (`com.zeeplabs:orbit-client`)
+
+```bash
+cd clients/java
+# Update version in pom.xml
+mvn deploy         # requires Maven Central / Sonatype credentials
+```
+
+### PHP (`zeeplabs/orbit-client`)
+
+```bash
+cd clients/php
+# Update version in composer.json
+# Publish to Packagist via GitHub webhook or manual push
+```
+
+## 7. Verify
 
 - [ ] Docker image: `docker pull ghcr.io/zeeplabs/zeep-orbit:v0.1.3`
 - [ ] GitHub Release: https://github.com/zeeplabs/zeep-orbit/releases
 - [ ] Helm chart: `helm repo update zeeplabs && helm search repo zeeplabs/zeep-orbit --versions`
+- [ ] npm: `npm view @zeeptech/orbit-client versions`
+- [ ] Go: `go list -m github.com/zeeplabs/orbit-go@latest`
+- [ ] PyPI: `pip install zeeplabs-orbit-client==0.1.0`
+- [ ] crates.io: `cargo search orbit-client`
 
 ## Checklist
 
@@ -69,3 +135,4 @@ The Helm chart version is automatically set from the git tag (e.g. `v0.1.3` → 
 - [ ] CI workflows passed
 - [ ] Docker pull works
 - [ ] Helm install works
+- [ ] SDK clients published (TS / Go / Python / Rust / Java / PHP)

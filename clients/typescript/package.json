@@ -1,5 +1,5 @@
 {
-  "name": "@zeeplabs/orbit-client",
+  "name": "@zeeptech/orbit-client",
   "version": "0.1.0",
   "description": "TypeScript client for Zeep Orbit — auto-generated REST APIs for your apps",
   "main": "dist/index.js",

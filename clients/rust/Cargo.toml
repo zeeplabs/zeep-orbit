@@ -1,8 +1,14 @@
 [package]
-name = "orbit-client"
-version = "0.1.0"
+name = "zeep-orbit-client"
+version = "0.1.1"
 edition = "2021"
-description = "Rust client for Zeep Orbit"
+description = "Rust client for Zeep Orbit — auto-generated REST APIs for your apps"
+license = "MIT"
+repository = "https://github.com/zeeplabs/zeep-orbit"
+homepage = "https://github.com/zeeplabs/zeep-orbit"
+keywords = ["zeep", "orbit", "baas", "api-client", "rest"]
+categories = ["api-bindings", "web-programming"]
+readme = "README.md"
 
 [dependencies]
 reqwest = { version = "0.12", features = ["json", "multipart"] }

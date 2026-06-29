@@ -31,5 +31,10 @@ apps:
 - Row-Level Security (`rls: owner`)
 - Auto-generated OpenAPI/Swagger docs
 - Prometheus metrics + structured logging
+- Audit log (who did what, when, IP)
+- File storage per app (S3-compatible)
+- Rate limiting per app (configurable RPM)
+- Dashboard in pt-BR and English (i18n)
+- SDK clients: TypeScript, Go, Python, Rust, Java, PHP
 - Docker Compose / Kubernetes (Helm)
 - Multi-app — one service, N isolated schemas

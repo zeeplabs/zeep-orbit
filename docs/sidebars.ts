@@ -9,6 +9,9 @@ const sidebars: SidebarsConfig = {
     'dashboard/apps',
     'deployment',
     'api/crud',
+    'api/files',
+    'api/rate-limiting',
+    'clients',
   ],
 };
 

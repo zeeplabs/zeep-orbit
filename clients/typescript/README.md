@@ -3,13 +3,13 @@
 TypeScript client for [Zeep Orbit](https://github.com/zeeplabs/zeep-orbit).
 
 ```bash
-npm install @zeeplabs/orbit-client
+npm install @zeeptech/orbit-client
 ```
 
 ## Usage
 
 ```typescript
-import { OrbitClient } from '@zeeplabs/orbit-client'
+import { OrbitClient } from '@zeeptech/orbit-client'
 
 const orbit = new OrbitClient({
   baseURL: 'https://orbit.zeeplabs.com',

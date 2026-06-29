@@ -13,6 +13,12 @@ All app routes require a Bearer JWT signed with the app's `jwt_secret` (HS256).
 | GET | `/{app}/{table}/{id}` | Get by ID |
 | PUT/PATCH | `/{app}/{table}/{id}` | Update (partial) |
 | DELETE | `/{app}/{table}/{id}` | Delete |
+| POST | `/{app}/files` | Upload file (multipart) |
+| GET | `/{app}/files` | List files |
+| GET | `/{app}/files/{id}` | Get file metadata |
+| GET | `/{app}/files/{id}/download` | Download file (302 → signed URL) |
+| GET | `/{app}/files/{id}/url` | Get signed URL |
+| DELETE | `/{app}/files/{id}` | Delete file |
 
 ## Example
 
