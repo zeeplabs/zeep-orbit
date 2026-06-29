@@ -373,6 +373,30 @@ The Helm chart includes: HPA, PDB, Ingress, ServiceMonitor, PodDisruptionBudget,
 
 ---
 
+## 🗺️ Roadmap
+
+| Milestone | Status | Features |
+|---|---|---|
+| **M1 — MVP Core** | 🟢 Done | Schema → REST, CLI, Docker Compose |
+| **M2 — Dashboard** | 🟢 Done | App CRUD, Data Browser, Logs, Users, Auth, White-label |
+| **M3 — Governance** | 🔵 In progress | ✅ Audit Log · ⬜ RBAC · ⬜ SSO |
+| **M4 — Storage & Events** | 🔵 In progress | ✅ S3/File Storage · ⬜ Webhooks · ⬜ Event Bus |
+| **M5 — i18n** | 🟢 Done | pt-BR / English, language switcher |
+| **M6 — SDKs** | 🟢 Done | TS, Go, Python, Rust, Java, PHP clients |
+
+### Deferred / Backlog
+
+- Sign in with Apple (per-app)
+- TypeScript SDK code generator (`@zeeptech/orbit-generate`)
+- MCP server for zeep-orbit
+- GraphQL auto-generation
+- Realtime subscriptions (WebSockets)
+- Edge functions
+- Schema change approval workflow
+- Marketplace of app templates
+
+---
+
 ## 🛠️ Development
 
 ```bash
