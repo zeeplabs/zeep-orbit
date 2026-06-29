@@ -13,6 +13,7 @@ import {
   LayoutGrid,
   Users,
   User,
+  BookOpen,
 } from "lucide-react";
 import { useApps, useDeleteApp, AppDef } from "../lib/api";
 import DeleteConfirmDialog from "../components/DeleteConfirmDialog";
@@ -73,9 +74,8 @@ function AppCard({ app, index, isSuperadmin, onEdit, onDelete, onUsers }: AppCar
       {/* Gradient accent bar on hover */}
       <div className="absolute left-5 right-5 top-0 h-[2px] rounded-full brand-accent-bar opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
 
-      {/* Avatar + name + badges */}
-      <div className="flex items-start gap-3.5">
-        {/* Initial */}
+      {/* Line 1: avatar + name + badges + date */}
+      <div className="flex items-center gap-3.5">
         <div
           className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.06] text-[15px] font-extrabold"
           style={{
@@ -87,55 +87,45 @@ function AppCard({ app, index, isSuperadmin, onEdit, onDelete, onUsers }: AppCar
           {initial}
         </div>
 
-        <div className="min-w-0 flex-1">
-          <h3 className="mb-1.5 truncate text-sm font-bold text-[#F8FAFC]">
-            {app.name}
-          </h3>
-
-          <div className="flex flex-wrap gap-1.5">
-            <Badge
-              className="gap-1 text-[10px]"
-              variant="outline"
-              style={{
-                borderColor: "rgba(var(--brand-primary-rgb), 0.2)",
-                backgroundColor: "rgba(var(--brand-primary-rgb), 0.1)",
-                color: "var(--brand-light)",
-              }}
-            >
-              <Table2 size={10} strokeWidth={1.5} />
-              {app.tables?.length ?? 0}{" "}
-              {t("apps.table", { count: app.tables?.length ?? 0 })}
-            </Badge>
-
-            <Badge
-              className={cn(
-                "gap-1 text-[10px]",
-                app.auth_email_enabled
-                  ? "text-purple-300 hover:bg-white/[0.08]"
-                  : "border-white/[0.10] bg-white/[0.05] text-[#94A3B8] hover:bg-white/[0.08]",
-              )}
-              variant="outline"
-              style={
-                app.auth_email_enabled
-                  ? {
-                      borderColor: "rgba(var(--brand-secondary-rgb), 0.2)",
-                      backgroundColor: "rgba(var(--brand-secondary-rgb), 0.1)",
-                    }
-                  : undefined
-              }
-            >
-              {app.auth_email_enabled ? (
-                <Mail size={10} strokeWidth={1.5} />
-              ) : (
-                <MailX size={10} strokeWidth={1.5} />
-              )}
-            </Badge>
+        <div className="min-w-0 flex-1 flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className="truncate text-sm font-bold text-[#F8FAFC]">
+              {app.name}
+            </h3>
+            <div className="flex flex-wrap gap-1.5 mt-1">
+              <Badge
+                className="gap-1 text-[10px]"
+                variant="outline"
+                style={{
+                  borderColor: "rgba(var(--brand-primary-rgb), 0.2)",
+                  backgroundColor: "rgba(var(--brand-primary-rgb), 0.1)",
+                  color: "var(--brand-light)",
+                }}
+              >
+                <Table2 size={10} strokeWidth={1.5} />
+                {app.tables?.length ?? 0}{" "}
+                {t("apps.table", { count: app.tables?.length ?? 0 })}
+              </Badge>
+              <Badge
+                className={cn(
+                  "gap-1 text-[10px]",
+                  app.auth_email_enabled
+                    ? "text-purple-300 hover:bg-white/[0.08]"
+                    : "border-white/[0.10] bg-white/[0.05] text-[#94A3B8] hover:bg-white/[0.08]",
+                )}
+                variant="outline"
+                style={app.auth_email_enabled ? { borderColor: "rgba(var(--brand-secondary-rgb), 0.2)", backgroundColor: "rgba(var(--brand-secondary-rgb), 0.1)" } : undefined}
+              >
+                {app.auth_email_enabled ? <Mail size={10} strokeWidth={1.5} /> : <MailX size={10} strokeWidth={1.5} />}
+              </Badge>
+            </div>
           </div>
+          <span className="text-[10px] text-[#64748B] tracking-wide shrink-0 whitespace-nowrap">{createdAt}</span>
         </div>
       </div>
 
-      {/* Bottom row: owner + date + actions */}
-      <div className="mt-3 flex items-center justify-between">
+      {/* Line 2: owner + actions */}
+      <div className="mt-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           {isSuperadmin && (app.owner_name || app.owner_email) && (
             <span className="flex items-center gap-1 text-[10px] text-[#64748B] truncate">
@@ -143,10 +133,9 @@ function AppCard({ app, index, isSuperadmin, onEdit, onDelete, onUsers }: AppCar
               <span className="truncate">{app.owner_name || app.owner_email}</span>
             </span>
           )}
-          <p className="text-[10px] text-[#64748B] tracking-wide shrink-0">{createdAt}</p>
         </div>
 
-        <div className="flex gap-1 transition-all duration-200 opacity-0 translate-x-2 group-hover:opacity-100 group-hover:translate-x-0">
+        <div className="flex gap-1">
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
             <Button
               variant="outline"
@@ -156,6 +145,18 @@ function AppCard({ app, index, isSuperadmin, onEdit, onDelete, onUsers }: AppCar
               className="size-7 rounded-lg border-white/[0.10] bg-white/[0.04] text-[#94A3B8] hover:bg-white/[0.08] hover:text-white"
             >
               <Users size={12} strokeWidth={1.5} />
+            </Button>
+          </motion.div>
+
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => window.open(`/docs/${app.name}`, '_blank')}
+              title="API Docs (Swagger)"
+              className="size-7 rounded-lg border-white/[0.10] bg-white/[0.04] text-[#94A3B8] hover:bg-white/[0.08] hover:text-white"
+            >
+              <BookOpen size={12} strokeWidth={1.5} />
             </Button>
           </motion.div>
 

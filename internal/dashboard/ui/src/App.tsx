@@ -11,6 +11,7 @@ import BrandSettingsPage from './pages/BrandSettingsPage'
 import UsersPage from './pages/UsersPage'
 import LogsPage from './pages/LogsPage'
 import AuditLogPage from './pages/AuditLogPage'
+import SdkPage from './pages/SdkPage'
 import DataBrowserPage from './pages/DataBrowserPage'
 import AppUsersPage from './pages/AppUsersPage'
 import { useBootstrapStatus } from './lib/api'
@@ -98,6 +99,7 @@ function App() {
         <Route path="/usuarios" element={<UsersPage />} />
         <Route path="/logs" element={<LogsPage />} />
         <Route path="/auditoria" element={<AuditLogPage />} />
+        <Route path="/sdks" element={<SdkPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/apps" replace />} />
     </Routes>

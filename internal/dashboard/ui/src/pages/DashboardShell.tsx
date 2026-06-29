@@ -9,10 +9,11 @@ import {
   Users,
   Activity,
   Shield,
+  Code2,
+  Globe,
   Settings,
   User,
   Lock,
-  Globe,
 } from "lucide-react";
 import ChangePasswordModal from "./ChangePasswordModal";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -42,6 +43,7 @@ function navItems(user: User | null, t: (k: string) => string): NavItem[] {
   const items: NavItem[] = [
     { icon: Grid, label: t("nav.apps"), path: "/apps" },
     { icon: Database, label: t("nav.dataBrowser"), path: "/data-browser" },
+    { icon: Code2, label: "SDKs", path: "/sdks" },
     { icon: Activity, label: t("nav.logs"), path: "/logs" },
   ];
   if (user?.role === "superadmin") {

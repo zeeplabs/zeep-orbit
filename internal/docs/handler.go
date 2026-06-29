@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/zeeplabs/zeep-orbit/internal/registry"
@@ -50,7 +51,11 @@ func (h *Handler) HandleUI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(swaggerHTML)
+	html := swaggerHTML
+	if appName != "" {
+		html = []byte(strings.Replace(string(swaggerHTML), "__APP_NAME__", appName, 1))
+	}
+	w.Write(html)
 }
 
 // HandleSpec serves GET /docs/{app}/openapi.json — OpenAPI spec for that specific app.
