@@ -1,0 +1,22 @@
+{
+  "name": "@zeeplabs/orbit-client",
+  "version": "0.1.0",
+  "description": "TypeScript client for Zeep Orbit — auto-generated REST APIs for your apps",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts --clean",
+    "prepublishOnly": "npm run build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": ["zeep", "orbit", "baas", "api-client", "rest"],
+  "license": "MIT",
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}
