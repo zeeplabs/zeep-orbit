@@ -1,6 +1,7 @@
 {
     "name": "zeeplabs/orbit-client",
     "description": "PHP client for Zeep Orbit — auto-generated REST APIs for your apps",
+    "readme": "README-PHP.md",
     "type": "library",
     "autoload": {
         "psr-4": {
