@@ -1,0 +1,10 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zeeplabs-orbit-client"
+version = "0.1.0"
+description = "Python client for Zeep Orbit — auto-generated REST APIs for your apps"
+requires-python = ">=3.9"
+dependencies = []
