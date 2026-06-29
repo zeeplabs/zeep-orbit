@@ -6,7 +6,6 @@ import {
   UseMutationResult,
 } from '@tanstack/react-query'
 
-// ── Types ──────────────────────────────────────────────────────────────────────
 
 export interface ColumnDef {
   name: string
@@ -39,7 +38,6 @@ export interface CreateAppInput {
   tables: TableDef[]
 }
 
-// ── Fetchers ───────────────────────────────────────────────────────────────────
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, { credentials: 'include', ...init })
@@ -49,7 +47,6 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
       const body = await res.json()
       message = body.error ?? body.message ?? message
     } catch {
-      // ignore parse errors
     }
     throw new Error(message)
   }
@@ -57,7 +54,6 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>
 }
 
-// ── Hooks ──────────────────────────────────────────────────────────────────────
 
 export function useApps(): UseQueryResult<AppDef[]> {
   return useQuery({
@@ -115,7 +111,6 @@ export function useDeleteApp(): UseMutationResult<void, Error, string> {
   })
 }
 
-// ── Users ──────────────────────────────────────────────────────────────────────
 
 export interface UserDef {
   id: string
@@ -167,7 +162,6 @@ export function useDeleteUser(): UseMutationResult<void, Error, string> {
   })
 }
 
-// ── App Users ──────────────────────────────────────────────────────────────────
 
 export interface AppUserSummary {
   id: string
@@ -264,7 +258,6 @@ export function useResetAppUserSessions(): UseMutationResult<
   })
 }
 
-// ── Bootstrap / Config ──────────────────────────────────────────────────────────
 
 export interface BootstrapStatus {
   bootstrapped: boolean
@@ -313,7 +306,6 @@ export function useBrandConfig(): UseQueryResult<BrandConfig> {
   })
 }
 
-// ── Data Browser ──────────────────────────────────────────────────────────────
 
 export interface DataBrowserColumn {
   name: string
@@ -455,16 +447,20 @@ export function useDeleteDataBrowserRow(): UseMutationResult<void, Error, { app:
   })
 }
 
-// ── Logs ──────────────────────────────────────────────────────────────────────
 
 export interface LogEntry {
   timestamp: string
   app: string
   method: string
   path: string
+  query?: string
   status: number
   latency_ms: number
   user_agent?: string
+  remote_addr?: string
+  req_body?: string
+  res_body?: string
+  content_type?: string
 }
 
 export interface LogMetrics {
@@ -476,7 +472,7 @@ export interface LogMetrics {
   method_breakdown: Record<string, number>
 }
 
-export function useLogs(appFilter?: string): UseQueryResult<LogEntry[]> {
+export function useLogs(appFilter?: string, autoRefresh = true): UseQueryResult<LogEntry[]> {
   return useQuery({
     queryKey: ['logs', appFilter],
     queryFn: () => {
@@ -485,19 +481,18 @@ export function useLogs(appFilter?: string): UseQueryResult<LogEntry[]> {
       if (appFilter) params.set('app', appFilter)
       return apiFetch<LogEntry[]>(`/dashboard/api/logs?${params}`)
     },
-    refetchInterval: 10000,
+    refetchInterval: autoRefresh ? 10000 : false,
   })
 }
 
-export function useLogMetrics(): UseQueryResult<LogMetrics> {
+export function useLogMetrics(autoRefresh = true): UseQueryResult<LogMetrics> {
   return useQuery({
     queryKey: ['logs-metrics'],
     queryFn: () => apiFetch<LogMetrics>('/dashboard/api/logs/metrics'),
-    refetchInterval: 10000,
+    refetchInterval: autoRefresh ? 10000 : false,
   })
 }
 
-// ── Password Change ────────────────────────────────────────────────────────────
 
 export interface ChangeMyPasswordInput {
   current_password: string
@@ -537,6 +532,69 @@ export function useChangeUserPassword(): UseMutationResult<
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
       }),
+  })
+}
+
+export interface AuditEntry {
+  id: string
+  user_id: string
+  user_email: string
+  action: string
+  resource_type: string
+  resource_id?: string
+  resource_name?: string
+  metadata?: Record<string, unknown>
+  ip_address?: string
+  created_at: string
+}
+
+export interface AuditLogResponse {
+  data: AuditEntry[]
+  total: number
+  limit: number
+  offset: number
+}
+
+const ACTION_LABELS: Record<string, string> = {
+  'app.create': 'App Criado',
+  'app.update': 'App Atualizado',
+  'app.delete': 'App Excluído',
+  'user.create': 'Usuário Criado',
+  'user.delete': 'Usuário Excluído',
+  'user.login': 'Login',
+  'user.logout': 'Logout',
+  'user.password.change': 'Senha Alterada',
+  'config.update': 'Config. Alterada',
+  'auth.provider.update': 'Provider Auth',
+  'app.user.deactivate': 'Usuário App Desat.',
+  'app.user.activate': 'Usuário App Ativ.',
+  'app.user.sessions.reset': 'Sessões Reset.',
+  'data.create': 'Registro Criado',
+  'data.update': 'Registro Atualizado',
+  'data.delete': 'Registro Excluído',
+  'bootstrap.complete': 'Bootstrap',
+}
+
+export function auditActionLabel(action: string): string {
+  return ACTION_LABELS[action] || action
+}
+
+export function useAuditLog(
+  limit = 50,
+  offset = 0,
+  action?: string,
+  userId?: string,
+): UseQueryResult<AuditLogResponse> {
+  return useQuery({
+    queryKey: ['audit-log', limit, offset, action, userId],
+    queryFn: () => {
+      const params = new URLSearchParams()
+      params.set('limit', String(limit))
+      params.set('offset', String(offset))
+      if (action) params.set('action', action)
+      if (userId) params.set('user', userId)
+      return apiFetch<AuditLogResponse>(`/dashboard/api/audit-log?${params}`)
+    },
   })
 }
 

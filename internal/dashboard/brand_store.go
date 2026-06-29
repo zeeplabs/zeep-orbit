@@ -17,7 +17,6 @@ type BrandConfig struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-// GetBrandConfig returns the brand config from the DB.
 // Returns nil if no row exists yet.
 func GetBrandConfig(ctx context.Context, pool *db.Pool) (*BrandConfig, error) {
 	var c BrandConfig

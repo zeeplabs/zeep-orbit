@@ -44,7 +44,6 @@ func NewAppGoogleHandler(pool *db.Pool, reg *registry.Registry) *AppGoogleHandle
 	}
 }
 
-// ListProviders handles GET /{app}/auth/providers
 // Returns the list of enabled auth providers for this app (without secrets).
 func (h *AppGoogleHandler) ListProviders(w http.ResponseWriter, r *http.Request) {
 	appName := chi.URLParam(r, "app")
@@ -179,7 +178,6 @@ func (h *AppGoogleHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check allowed domains
 	if !h.checkAllowedDomain(email, app) {
 		http.Error(w, "Email domain not allowed", http.StatusForbidden)
 		return
@@ -292,7 +290,6 @@ func extractAppGoogleInfo(tr *appGoogleTokenResponse) (email, googleID string) {
 	return info.Email, info.Sub
 }
 
-// checkAllowedDomain verifies if the email domain is in the app's allowed_domains list.
 // If the list is empty, all domains are allowed.
 func (h *AppGoogleHandler) checkAllowedDomain(email string, app *registry.App) bool {
 	if app.AuthProviders == nil {
@@ -347,13 +344,11 @@ func (h *AppGoogleHandler) findOrCreateAppUser(ctx context.Context, schema, emai
 		return "", err
 	}
 
-	// Check by email
 	err = h.pool.QueryRow(ctx,
 		fmt.Sprintf(`SELECT id FROM %q."_auth_users" WHERE email = $1`, schema),
 		email,
 	).Scan(&userID)
 	if err == nil {
-		// Link google_id to existing user
 		_, err = h.pool.Exec(ctx,
 			fmt.Sprintf(`UPDATE %q."_auth_users" SET google_id = $1, last_sign_in_at = now() WHERE id = $2`, schema),
 			googleID, userID,
@@ -361,7 +356,6 @@ func (h *AppGoogleHandler) findOrCreateAppUser(ctx context.Context, schema, emai
 		return userID, err
 	}
 
-	// Create new user
 	err = h.pool.QueryRow(ctx,
 		fmt.Sprintf(`INSERT INTO %q."_auth_users" (email, password_hash, provider, google_id) VALUES ($1, '', 'google', $2) RETURNING id`, schema),
 		email, googleID,

@@ -152,8 +152,6 @@ func decodeJSON(t *testing.T, body *bytes.Buffer) map[string]any {
 }
 
 // ----------------------------------------------------------------------------
-// AC: POST /{app}/auth/register creates user and returns JWT
-// ----------------------------------------------------------------------------
 
 func TestRegisterReturns201WithToken(t *testing.T) {
 	router := buildAuthRouter()
@@ -211,8 +209,6 @@ func TestRegisterMissingFields400(t *testing.T) {
 }
 
 // ----------------------------------------------------------------------------
-// AC: POST /{app}/auth/login validates credentials and returns JWT + refresh
-// ----------------------------------------------------------------------------
 
 func TestLoginReturnsTokenAndRefresh(t *testing.T) {
 	router := buildAuthRouter()
@@ -263,8 +259,6 @@ func TestLoginWrongPassword401(t *testing.T) {
 	}
 }
 
-// ----------------------------------------------------------------------------
-// AC: POST /{app}/auth/refresh rotates refresh token and emits new JWT
 // ----------------------------------------------------------------------------
 
 func TestRefreshRotatesToken(t *testing.T) {
@@ -321,8 +315,6 @@ func TestRefreshInvalidToken401(t *testing.T) {
 }
 
 // ----------------------------------------------------------------------------
-// AC: Token inválido em endpoint de dados retorna 401
-// ----------------------------------------------------------------------------
 
 func TestInvalidJWTReturns401(t *testing.T) {
 	r := chi.NewRouter()
@@ -341,8 +333,6 @@ func TestInvalidJWTReturns401(t *testing.T) {
 }
 
 // ----------------------------------------------------------------------------
-// AC: Apps sem providers.email não expõem endpoints auth
-// ----------------------------------------------------------------------------
 
 func TestNoEmailProviderReturns404(t *testing.T) {
 	noAuthReg := registry.New()
@@ -351,7 +341,6 @@ func TestNoEmailProviderReturns404(t *testing.T) {
 			{
 				Name: "noauth",
 				Auth: config.AuthConfig{JWTSecret: "s"},
-				// Providers.Email == false (zero value)
 			},
 		},
 	})
@@ -376,8 +365,6 @@ func TestNoEmailProviderReturns404(t *testing.T) {
 }
 
 // ----------------------------------------------------------------------------
-// AC: tabelas _auth_* não aparecem como tabelas CRUD nem no registry
-// ----------------------------------------------------------------------------
 
 func TestAuthTablesNotExposedAsCRUD(t *testing.T) {
 	app, _ := testReg.Get(testApp)
@@ -390,8 +377,6 @@ func TestAuthTablesNotExposedAsCRUD(t *testing.T) {
 }
 
 // ----------------------------------------------------------------------------
-// AC: GET /{app}/auth/me returns current user
-// ----------------------------------------------------------------------------
 
 func TestMeReturnsUser(t *testing.T) {
 	router := buildAuthRouter()
@@ -401,7 +386,6 @@ func TestMeReturnsUser(t *testing.T) {
 		"email": "me@test.com", "password": "pass", "name": "Me User",
 	}))
 	regReq.Header.Set("Content-Type", "application/json")
-	// unique RemoteAddr: all tests share the same rate limiter; prior tests exhaust the 10 req/min quota on the default IP
 	regReq.RemoteAddr = "10.0.0.99:1234"
 	router.ServeHTTP(regRec, regReq)
 

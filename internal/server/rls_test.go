@@ -12,7 +12,7 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/auth"
 )
 
-// buildRLSRouter monta um chi.Router com JWTMiddleware real (injeta AuthUser).
+// buildRLSRouter creates a chi.Router with real JWTMiddleware (injects AuthUser).
 func buildRLSRouter(h *Handler) http.Handler {
 	r := chi.NewRouter()
 	r.Route("/{app}/{table}", func(r chi.Router) {
@@ -30,7 +30,7 @@ func buildRLSRouter(h *Handler) http.Handler {
 	return r
 }
 
-// insertRLSUser insere um usuário em _auth_users e retorna o UUID gerado.
+// insertRLSUser inserts a user into _auth_users and returns the generated UUID.
 func insertRLSUser(t *testing.T, email string) string {
 	t.Helper()
 	ctx := context.Background()

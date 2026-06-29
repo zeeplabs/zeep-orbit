@@ -19,12 +19,12 @@ type Handler struct {
 	reg *registry.Registry
 }
 
-// NewHandler cria Handler com registry injetado.
+// NewHandler creates a Handler with the injected registry.
 func NewHandler(reg *registry.Registry) *Handler {
 	return &Handler{reg: reg}
 }
 
-// HandleIndex serve GET /docs/ — lista todos os apps com links para a doc de cada um.
+// HandleIndex serves GET /docs/ — lists all apps with links to their docs.
 func (h *Handler) HandleIndex(w http.ResponseWriter, r *http.Request) {
 	apps := h.reg.Apps()
 	sort.Slice(apps, func(i, j int) bool {
@@ -42,7 +42,7 @@ func (h *Handler) HandleIndex(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, `</ul></body></html>`)
 }
 
-// HandleUI serve GET /docs/{app} — Swagger UI para o app especificado.
+// HandleUI serves GET /docs/{app} — Swagger UI for the specified app.
 func (h *Handler) HandleUI(w http.ResponseWriter, r *http.Request) {
 	appName := chi.URLParam(r, "app")
 	if _, ok := h.reg.Get(appName); !ok {
@@ -53,7 +53,7 @@ func (h *Handler) HandleUI(w http.ResponseWriter, r *http.Request) {
 	w.Write(swaggerHTML)
 }
 
-// HandleSpec serve GET /docs/{app}/openapi.json — spec OpenAPI só daquele app.
+// HandleSpec serves GET /docs/{app}/openapi.json — OpenAPI spec for that specific app.
 func (h *Handler) HandleSpec(w http.ResponseWriter, r *http.Request) {
 	appName := chi.URLParam(r, "app")
 	app, ok := h.reg.Get(appName)

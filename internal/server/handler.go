@@ -1,5 +1,3 @@
-// Package server implements the HTTP server, router, middleware, and
-// request handlers for the zeep-orbit REST API and embedded dashboard.
 package server
 
 import (
@@ -16,20 +14,18 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/registry"
 )
 
-// Handler encapsula as dependências dos CRUD handlers HTTP.
+// Handler holds dependencies for CRUD HTTP handlers.
 type Handler struct {
 	pool *db.Pool
 	reg  *registry.Registry
 }
 
-// NewHandler cria um Handler com pool e registry injetados.
+// NewHandler creates a Handler with injected pool and registry.
 func NewHandler(pool *db.Pool, reg *registry.Registry) *Handler {
 	return &Handler{pool: pool, reg: reg}
 }
 
-// resolveOwner retorna o ownerID quando a tabela exige RLS do tipo "owner".
-// Retorna ok=true (com ownerID vazio) quando a tabela não tem RLS.
-// Retorna ok=false quando RLS é "owner" mas não há usuário autenticado no contexto.
+// Returns ok=false when RLS is "owner" but no authenticated user is in context.
 func resolveOwner(ctx context.Context, table *registry.Table) (ownerID string, ok bool) {
 	if table.RLS != "owner" {
 		return "", true
@@ -41,7 +37,6 @@ func resolveOwner(ctx context.Context, table *registry.Table) (ownerID string, o
 	return user.ID, true
 }
 
-// HandleList implementa GET /{app}/{table}.
 // Response: {"data": [...], "count": N, "limit": L, "offset": O}
 func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 	app, ok := AppFromContext(r.Context())
@@ -64,7 +59,6 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Converter query params para map[string]string
 	params := make(map[string]string)
 	for k, vals := range r.URL.Query() {
 		if len(vals) > 0 {
@@ -82,15 +76,12 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 
 	// COUNT
 	var count int
-	// CountSQL usa apenas os filtros (sem LIMIT/OFFSET), então passamos só os args de filtro
-	// Os últimos 2 args de q.Args são limit e offset — CountSQL não usa placeholders para eles
 	filterArgs := q.Args[:len(q.Args)-2]
 	if err := h.pool.QueryRow(ctx, q.CountSQL, filterArgs...).Scan(&count); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to count rows")
 		return
 	}
 
-	// DATA
 	rows, err := h.pool.Query(ctx, q.SQL, q.Args...)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to query rows")
@@ -105,7 +96,6 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 		data = []map[string]any{}
 	}
 
-	// Extrair limit e offset dos args (últimas 2 posições)
 	limit := q.Args[len(q.Args)-2]
 	offset := q.Args[len(q.Args)-1]
 
@@ -165,8 +155,7 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, sanitizeRow(row))
 }
 
-// HandleGetByID implementa GET /{app}/{table}/{id}.
-// 404 {"error":"not found"} se não existe.
+// 404 {"error":"not found"} if not found.
 func (h *Handler) HandleGetByID(w http.ResponseWriter, r *http.Request) {
 	app, ok := AppFromContext(r.Context())
 	if !ok {
@@ -209,8 +198,7 @@ func (h *Handler) HandleGetByID(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, sanitizeRow(row))
 }
 
-// HandleUpdate implementa PATCH /{app}/{table}/{id} (parcial).
-// 404 se não existe.
+// 404 if not found.
 func (h *Handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 	app, ok := AppFromContext(r.Context())
 	if !ok {
@@ -263,8 +251,7 @@ func (h *Handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, sanitizeRow(row))
 }
 
-// HandleDelete implementa DELETE /{app}/{table}/{id} → 204 No Content.
-// 404 se não existe.
+// 404 if not found.
 func (h *Handler) HandleDelete(w http.ResponseWriter, r *http.Request) {
 	app, ok := AppFromContext(r.Context())
 	if !ok {

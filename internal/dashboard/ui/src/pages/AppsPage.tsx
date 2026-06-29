@@ -17,7 +17,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-// ── Animation presets ──────────────────────────────────────────────────────────
 
 const ease = [0.32, 0.72, 0, 1] as const;
 
@@ -27,7 +26,6 @@ const fadeUp = {
   transition: { duration: 0.6, ease },
 };
 
-// ── Skeleton card ──────────────────────────────────────────────────────────────
 
 function SkeletonCard() {
   return (
@@ -42,7 +40,6 @@ function SkeletonCard() {
   );
 }
 
-// ── App card ───────────────────────────────────────────────────────────────────
 
 interface AppCardProps {
   app: AppDef;
@@ -177,7 +174,6 @@ function AppCard({ app, index, onEdit, onDelete, onUsers }: AppCardProps & { onU
   );
 }
 
-// ── Empty state ────────────────────────────────────────────────────────────────
 
 function EmptyState({ onCreateClick }: { onCreateClick: () => void }) {
   return (
@@ -234,7 +230,6 @@ function EmptyState({ onCreateClick }: { onCreateClick: () => void }) {
   );
 }
 
-// ── Error state ────────────────────────────────────────────────────────────────
 
 function ErrorState({ message }: { message: string }) {
   return (
@@ -244,7 +239,6 @@ function ErrorState({ message }: { message: string }) {
   );
 }
 
-// ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function AppsPage() {
   const { data: apps, isLoading, error } = useApps();
@@ -267,7 +261,6 @@ export default function AppsPage() {
       await deleteApp.mutateAsync(deleteTarget.id);
       setDeleteTarget(null);
     } catch {
-      // error surfaces via deleteApp.error if needed
     }
   }
 

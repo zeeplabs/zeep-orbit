@@ -12,7 +12,6 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
 
-// AppRow represents a row from zeep_system.apps, optionally with its tables.
 // JWTSecret is omitted from JSON when empty (list responses never populate it).
 type AppRow struct {
 	ID               string          `json:"id"`
@@ -33,7 +32,6 @@ type AppTableRow struct {
 	Columns []config.ColumnConfig `json:"columns"`
 }
 
-// ListApps returns apps visible to the given user.
 // superadmin → all apps; admin → only apps owned by userID or listed in app_ownership.
 func ListApps(ctx context.Context, pool *db.Pool, userID, role string) ([]*AppRow, error) {
 	var (
@@ -89,7 +87,6 @@ func ListApps(ctx context.Context, pool *db.Pool, userID, role string) ([]*AppRo
 	return apps, nil
 }
 
-// CreateApp inserts into zeep_system.apps + app_tables, adds app_ownership for owner.
 // Returns the created AppRow with ID and CreatedAt populated.
 func CreateApp(ctx context.Context, pool *db.Pool, name, ownerID string, authEmail bool, tables []AppTableRow) (*AppRow, error) {
 	tx, err := pool.Begin(ctx)
@@ -128,7 +125,6 @@ func CreateApp(ctx context.Context, pool *db.Pool, name, ownerID string, authEma
 	return &app, nil
 }
 
-// GetApp returns a single app by ID.
 // admin can only access apps they own or are members of; superadmin accesses any.
 func GetApp(ctx context.Context, pool *db.Pool, appID, userID, role string) (*AppRow, error) {
 	var app AppRow
@@ -164,10 +160,8 @@ func GetApp(ctx context.Context, pool *db.Pool, appID, userID, role string) (*Ap
 	return &app, nil
 }
 
-// UpdateApp replaces app_tables (delete + reinsert) and updates the apps row.
 // Ownership check is the same as GetApp.
 func UpdateApp(ctx context.Context, pool *db.Pool, appID, userID, role string, authEmail bool, tables []AppTableRow) (*AppRow, error) {
-	// Verify access first.
 	existing, err := GetApp(ctx, pool, appID, userID, role)
 	if err != nil {
 		return nil, err
@@ -191,7 +185,6 @@ func UpdateApp(ctx context.Context, pool *db.Pool, appID, userID, role string, a
 		return nil, fmt.Errorf("dashboard: update app: %w", err)
 	}
 
-	// Delete existing tables and reinsert.
 	if _, err := tx.Exec(ctx, `DELETE FROM zeep_system.app_tables WHERE app_id = $1`, appID); err != nil {
 		return nil, fmt.Errorf("dashboard: update app delete tables: %w", err)
 	}
@@ -201,7 +194,6 @@ func UpdateApp(ctx context.Context, pool *db.Pool, appID, userID, role string, a
 		return nil, err
 	}
 
-	// Suppress unused variable warning — existing is used for access check above.
 	_ = existing
 
 	if err := tx.Commit(ctx); err != nil {
@@ -211,12 +203,8 @@ func UpdateApp(ctx context.Context, pool *db.Pool, appID, userID, role string, a
 	return &app, nil
 }
 
-// DeleteApp removes an app from zeep_system.apps.
-// Cascades to app_tables and app_ownership via FK constraints.
-// Does NOT drop the Postgres schema/tables for the app.
 // Ownership check is the same as GetApp.
 func DeleteApp(ctx context.Context, pool *db.Pool, appID, userID, role string) error {
-	// Verify access.
 	if _, err := GetApp(ctx, pool, appID, userID, role); err != nil {
 		return err
 	}
@@ -231,7 +219,6 @@ func DeleteApp(ctx context.Context, pool *db.Pool, appID, userID, role string) e
 	return nil
 }
 
-// ListOwnedAppNames returns a set of app names accessible to the user.
 // superadmin gets nil (no filter); admin gets only apps they own/are members of.
 func ListOwnedAppNames(ctx context.Context, pool *db.Pool, userID, role string) (map[string]bool, error) {
 	if role == "superadmin" {

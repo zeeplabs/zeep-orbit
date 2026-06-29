@@ -21,7 +21,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-// ── Constants ──────────────────────────────────────────────────────────────────
 
 const COLUMN_TYPES = [
   "text",
@@ -48,7 +47,6 @@ const emptyTable = (): TableDef => ({
   columns: [emptyColumn()],
 });
 
-// ── Validation ─────────────────────────────────────────────────────────────────
 
 function validateName(name: string): string | null {
   if (!name.trim()) return "Nome obrigatório";
@@ -58,7 +56,6 @@ function validateName(name: string): string | null {
   return null;
 }
 
-// ── Component ──────────────────────────────────────────────────────────────────
 
 interface Props {
   open: boolean;
@@ -82,7 +79,6 @@ export default function CreateAppModal({ open, editTarget, onClose }: Props) {
   const updateApp = useUpdateApp();
   const isMutating = createApp.isPending || updateApp.isPending;
 
-  // Populate form when editing
   useEffect(() => {
     if (open && editTarget) {
       setAppName(editTarget.name);
@@ -103,7 +99,6 @@ export default function CreateAppModal({ open, editTarget, onClose }: Props) {
     setSubmitError(null);
   }, [open, editTarget]);
 
-  // ── Table helpers ────────────────────────────────────────────────────────────
 
   const addTable = () => {
     setTables((prev) => [...prev, emptyTable()]);
@@ -163,7 +158,6 @@ export default function CreateAppModal({ open, editTarget, onClose }: Props) {
     );
   };
 
-  // ── Validate ─────────────────────────────────────────────────────────────────
 
   function validate(): boolean {
     const errs: Record<string, string> = {};
@@ -186,7 +180,6 @@ export default function CreateAppModal({ open, editTarget, onClose }: Props) {
     return Object.keys(errs).length === 0;
   }
 
-  // ── Submit ───────────────────────────────────────────────────────────────────
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -207,7 +200,6 @@ export default function CreateAppModal({ open, editTarget, onClose }: Props) {
     }
   }
 
-  // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
     <AnimatePresence>

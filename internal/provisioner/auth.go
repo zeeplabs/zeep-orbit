@@ -5,7 +5,6 @@ import (
 	"fmt"
 )
 
-// provisionAuthTables creates _auth_users and _auth_sessions within the app schema.
 // Idempotent — safe to call on every startup.
 func (p *Provisioner) provisionAuthTables(ctx context.Context, schema string) ([]string, error) {
 	var created []string
@@ -31,7 +30,6 @@ func (p *Provisioner) provisionAuthTables(ctx context.Context, schema string) ([
 		created = append(created, schema+"._auth_users")
 	}
 
-	// Ensure new columns exist on pre-existing tables (idempotent).
 	if err := p.addMissingAuthUserColumns(ctx, schema); err != nil {
 		return nil, err
 	}
@@ -55,7 +53,6 @@ func (p *Provisioner) provisionAuthTables(ctx context.Context, schema string) ([
 	return created, nil
 }
 
-// EnsureAuthUserColumns adds any missing columns to _auth_users for a given schema.
 // Safe to call on every request — only applies ALTER TABLE IF NOT EXISTS.
 func (p *Provisioner) EnsureAuthUserColumns(ctx context.Context, schema string) error {
 	return p.addMissingAuthUserColumns(ctx, schema)

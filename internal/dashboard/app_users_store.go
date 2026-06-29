@@ -10,7 +10,6 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
 
-// isPgRelationNotFound returns true if the error is a PostgreSQL "relation does not exist" (42P01)
 // or "undefined column" (42703) error, meaning the _auth_users table or columns don't exist.
 func isPgRelationNotFound(err error) bool {
 	var pgErr *pgconn.PgError
@@ -36,7 +35,6 @@ type AppUserProviderCount struct {
 	Count    int    `json:"count"`
 }
 
-// ListAppUsers returns paginated users for an app schema, with optional email search.
 // schema is the app's schema name (e.g. "app_billing").
 func ListAppUsers(ctx context.Context, pool *db.Pool, schema, search string, limit, offset int) ([]*AppUserSummary, int, error) {
 	var countArgs []any

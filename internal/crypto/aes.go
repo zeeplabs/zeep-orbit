@@ -1,5 +1,3 @@
-// Package crypto provides AES-256-GCM encryption and decryption for
-// sensitive data at rest (OAuth client secrets stored in the database).
 package crypto
 
 import (
@@ -13,14 +11,12 @@ import (
 	"os"
 )
 
-// encryptionKey returns the key used for encrypting sensitive data at rest.
 // Falls back to DASHBOARD_BOOTSTRAP_SECRET if GOOGLE_OAUTH_ENCRYPTION_KEY is not set.
 func encryptionKey() []byte {
 	key := os.Getenv("GOOGLE_OAUTH_ENCRYPTION_KEY")
 	if key == "" {
 		key = os.Getenv("DASHBOARD_BOOTSTRAP_SECRET")
 	}
-	// Ensure 32 bytes for AES-256 by hashing or padding.
 	if len(key) >= 32 {
 		return []byte(key[:32])
 	}

@@ -7,7 +7,6 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
 
-// ProvisionZeepSystem creates zeep_system schema and all required tables.
 // Idempotent — safe to call on every startup.
 func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 	stmts := []string{
@@ -68,6 +67,21 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			config_encrypted TEXT       NOT NULL DEFAULT '',
 			updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
+		`CREATE TABLE IF NOT EXISTS zeep_system.audit_log (
+			id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+			user_id        UUID        NOT NULL REFERENCES zeep_system.dashboard_users(id),
+			user_email     TEXT        NOT NULL,
+			action         TEXT        NOT NULL,
+			resource_type  TEXT        NOT NULL,
+			resource_id    TEXT,
+			resource_name  TEXT,
+			metadata       JSONB       NOT NULL DEFAULT '{}',
+			ip_address     TEXT,
+			created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON zeep_system.audit_log(created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_audit_log_action ON zeep_system.audit_log(action)`,
+		`CREATE INDEX IF NOT EXISTS idx_audit_log_user_id ON zeep_system.audit_log(user_id)`,
 	}
 
 	for _, stmt := range stmts {

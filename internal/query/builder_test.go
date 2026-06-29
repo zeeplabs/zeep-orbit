@@ -31,12 +31,10 @@ func TestBuildList_Basic(t *testing.T) {
 		t.Fatalf("esperava nil error, got: %v", err)
 	}
 
-	// SQL deve conter SELECT * e LIMIT/OFFSET
 	if !strings.Contains(q.SQL, "SELECT * FROM app_billing.invoices") {
 		t.Errorf("SQL inesperado: %q", q.SQL)
 	}
 
-	// Últimos dois args devem ser limit=50 e offset=0
 	if len(q.Args) != 2 {
 		t.Fatalf("esperava 2 args (limit, offset), got %d", len(q.Args))
 	}
@@ -47,7 +45,6 @@ func TestBuildList_Basic(t *testing.T) {
 		t.Errorf("offset esperado 0, got %v", q.Args[1])
 	}
 
-	// CountSQL não deve ter LIMIT/OFFSET
 	if strings.Contains(q.CountSQL, "LIMIT") || strings.Contains(q.CountSQL, "OFFSET") {
 		t.Errorf("CountSQL não deve conter LIMIT/OFFSET: %q", q.CountSQL)
 	}
@@ -76,7 +73,6 @@ func TestBuildList_WithFilters(t *testing.T) {
 		t.Errorf("SQL deveria conter ORDER BY amount DESC: %q", q.SQL)
 	}
 
-	// Args: 1 filtro + limit + offset = 3
 	if len(q.Args) != 3 {
 		t.Fatalf("esperava 3 args, got %d: %v", len(q.Args), q.Args)
 	}
@@ -87,7 +83,6 @@ func TestBuildList_WithFilters(t *testing.T) {
 		t.Errorf("offset esperado 5, got %v", q.Args[2])
 	}
 
-	// CountSQL deve ter o filtro mas não LIMIT/OFFSET
 	if !strings.Contains(q.CountSQL, "WHERE") {
 		t.Errorf("CountSQL deveria conter WHERE: %q", q.CountSQL)
 	}
@@ -222,7 +217,6 @@ func TestBuildList_LimitClamp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("erro inesperado: %v", err)
 	}
-	// Limit deve ter sido clampado para 1000
 	if q.Args[0] != 1000 {
 		t.Errorf("limit esperado 1000 (clamp), got %v", q.Args[0])
 	}
@@ -247,7 +241,6 @@ func TestBuildInsert_Valid(t *testing.T) {
 	if !strings.Contains(q.SQL, "RETURNING *") {
 		t.Errorf("SQL deveria conter RETURNING *: %q", q.SQL)
 	}
-	// Deve ter 3 args (amount, status, customer_id — em ordem das colunas da tabela)
 	if len(q.Args) != 3 {
 		t.Errorf("esperava 3 args, got %d: %v", len(q.Args), q.Args)
 	}
@@ -255,7 +248,6 @@ func TestBuildInsert_Valid(t *testing.T) {
 
 func TestBuildInsert_Required(t *testing.T) {
 	tbl := testTable()
-	// Falta customer_id que é required
 	body := map[string]any{
 		"amount": "50.00",
 	}
@@ -271,7 +263,7 @@ func TestBuildInsert_Required(t *testing.T) {
 func TestBuildInsert_RequiredNull(t *testing.T) {
 	tbl := testTable()
 	body := map[string]any{
-		"amount":      nil, // presente mas null
+		"amount":      nil,
 		"customer_id": "uuid-xyz",
 	}
 	_, err := BuildInsert("app_billing", "invoices", tbl, body, "")
@@ -312,8 +304,6 @@ func TestBuildInsert_StripsSystemFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("erro inesperado: %v", err)
 	}
-	// id, created_at e updated_at não devem aparecer na lista de colunas do INSERT.
-	// Extraímos a substring entre "(" e ")" da cláusula de colunas.
 	colStart := strings.Index(q.SQL, "(")
 	colEnd := strings.Index(q.SQL, ")")
 	if colStart == -1 || colEnd == -1 {
@@ -321,14 +311,12 @@ func TestBuildInsert_StripsSystemFields(t *testing.T) {
 	}
 	colList := q.SQL[colStart+1 : colEnd]
 	for _, sys := range []string{"id", "created_at", "updated_at"} {
-		// Verifica se o sistema field aparece como coluna completa (vírgula ou borda)
 		for _, col := range strings.Split(colList, ", ") {
 			if strings.TrimSpace(col) == sys {
 				t.Errorf("system field %q não deveria aparecer nas colunas do INSERT: %q", sys, colList)
 			}
 		}
 	}
-	// Args não devem conter os valores de system fields
 	for _, arg := range q.Args {
 		if arg == "should-be-ignored" || arg == "2024-01-01" {
 			t.Errorf("valor de system field encontrado nos args: %v", arg)
@@ -359,7 +347,6 @@ func TestBuildUpdate_Valid(t *testing.T) {
 	if !strings.Contains(q.SQL, "RETURNING *") {
 		t.Errorf("SQL deveria conter RETURNING *: %q", q.SQL)
 	}
-	// Args: status + id (updated_at não usa placeholder)
 	if len(q.Args) != 2 {
 		t.Fatalf("esperava 2 args, got %d: %v", len(q.Args), q.Args)
 	}
@@ -395,7 +382,6 @@ func TestBuildUpdate_SystemFieldsStripped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("erro inesperado: %v", err)
 	}
-	// id e created_at não devem aparecer como SET clause
 	if strings.Contains(q.SQL, "id =") && !strings.Contains(q.SQL, "WHERE id =") {
 		t.Errorf("'id' não deveria aparecer no SET: %q", q.SQL)
 	}

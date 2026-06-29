@@ -24,7 +24,6 @@ type googleState struct {
 	expiresAt time.Time
 }
 
-// GoogleOAuthHandler handles Google Sign-In for the dashboard.
 // Config is loaded lazily from DB (with env var fallback) on first request.
 type GoogleOAuthHandler struct {
 	pool       *db.Pool
@@ -33,7 +32,6 @@ type GoogleOAuthHandler struct {
 	httpClient *http.Client
 }
 
-// NewGoogleOAuthHandler creates a new GoogleOAuthHandler.
 // cfg can be nil — config is loaded lazily from DB.
 func NewGoogleOAuthHandler(pool *db.Pool, cfg *config.GoogleOAuthConfig) *GoogleOAuthHandler {
 	return &GoogleOAuthHandler{

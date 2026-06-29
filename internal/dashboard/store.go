@@ -121,8 +121,6 @@ func IsBootstrapped(ctx context.Context, pool *db.Pool) (bool, error) {
 	return n > 0, nil
 }
 
-// BootstrapFirstSuperadmin atomically inserts the first superadmin using an exclusive
-// table lock to prevent TOCTOU races. Returns (true, nil) on creation, (false, nil) if
 // users already exist.
 func BootstrapFirstSuperadmin(ctx context.Context, pool *db.Pool, email, passwordHash string) (bool, error) {
 	tx, err := pool.Begin(ctx)

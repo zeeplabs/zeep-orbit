@@ -9,7 +9,6 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 )
 
-// safeTypeConversions defines which udt_name conversions are safe (widening only).
 // Key = source type, value = allowed target types.
 var safeTypeConversions = map[string][]string{
 	"int4":        {"int8", "numeric", "text"},
@@ -22,7 +21,7 @@ var safeTypeConversions = map[string][]string{
 	"jsonb":       {"text"},
 }
 
-// pgTypeToUDT converte o output de pgType() para udt_name do information_schema.
+// pgTypeToUDT converts the output of pgType() to udt_name from information_schema.
 func pgTypeToUDT(ddlType string) string {
 	switch ddlType {
 	case "INTEGER":
@@ -46,7 +45,6 @@ func pgTypeToUDT(ddlType string) string {
 	}
 }
 
-// ensureMigrationTable cria a tabela _schema_migrations no schema do app.
 // Idempotente.
 func (p *Provisioner) ensureMigrationTable(ctx context.Context, schemaName string) error {
 	sql := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %q."_schema_migrations" (
@@ -60,7 +58,7 @@ func (p *Provisioner) ensureMigrationTable(ctx context.Context, schemaName strin
 	return err
 }
 
-// isMigrationApplied checa se uma migration_id já foi executada.
+// isMigrationApplied checks if a migration_id has already been executed.
 func (p *Provisioner) isMigrationApplied(ctx context.Context, schemaName, migrationID string) (bool, error) {
 	var exists bool
 	err := p.pool.QueryRow(ctx,
@@ -79,7 +77,7 @@ func (p *Provisioner) recordMigration(ctx context.Context, schemaName, migration
 	return err
 }
 
-// migrationID gera um identificador único para uma migration baseado nos inputs.
+// migrationID generates a unique identifier for a migration based on inputs.
 func migrationID(parts ...string) string {
 	h := sha256.Sum256([]byte(strings.Join(parts, "|")))
 	return fmt.Sprintf("%x", h[:8])
@@ -91,10 +89,10 @@ func (p *Provisioner) applyRename(ctx context.Context, schemaName, tableName str
 		return "", nil
 	}
 	if _, exists := existing[col.Name]; exists {
-		return "", nil // coluna já existe com o nome novo
+		return "", nil
 	}
 	if _, exists := existing[col.RenameFrom]; !exists {
-		return "", nil // coluna antiga não existe
+		return "", nil
 	}
 
 	sql := fmt.Sprintf(`ALTER TABLE %q.%q RENAME COLUMN %q TO %q`,
@@ -115,8 +113,7 @@ func (p *Provisioner) applyRename(ctx context.Context, schemaName, tableName str
 	return fmt.Sprintf("%s.%s.%s (renamed from %s)", schemaName, tableName, col.Name, col.RenameFrom), nil
 }
 
-// applyTypeChange altera o tipo de uma coluna se o tipo desejado diferir do atual.
-// Só permite conversões seguras (widening) conforme safeTypeConversions.
+// Only allows safe (widening) conversions as per safeTypeConversions.
 func (p *Provisioner) applyTypeChange(ctx context.Context, schemaName, tableName string, col config.ColumnConfig, existing map[string]string) (string, error) {
 	if systemColumnNames[col.Name] {
 		return "", nil
@@ -124,12 +121,12 @@ func (p *Provisioner) applyTypeChange(ctx context.Context, schemaName, tableName
 
 	currentType, exists := existing[col.Name]
 	if !exists {
-		return "", nil // coluna não existe (vai ser adicionada por addMissingColumns)
+		return "", nil
 	}
 
 	desiredType := pgTypeToUDT(pgType(col.Type))
 	if currentType == desiredType {
-		return "", nil // tipo já é o desejado
+		return "", nil
 	}
 
 	safeTargets, ok := safeTypeConversions[currentType]
@@ -138,8 +135,6 @@ func (p *Provisioner) applyTypeChange(ctx context.Context, schemaName, tableName
 			col.Name, currentType, desiredType, currentType)
 	}
 
-	// Se currentType == desiredType, já retornamos acima.
-	// Se desiredType está em safeTargets ou já é o mesmo, é seguro.
 	isSafe := false
 	for _, t := range safeTargets {
 		if t == desiredType {

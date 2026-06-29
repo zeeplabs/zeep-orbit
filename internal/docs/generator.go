@@ -1,5 +1,3 @@
-// Package docs generates OpenAPI 3.1 specifications dynamically from the
-// app registry and serves Swagger UI for each app's REST API.
 package docs
 
 import (
@@ -86,12 +84,12 @@ type securityScheme struct {
 	BearerFormat string `json:"bearerFormat"`
 }
 
-// Generate constrói spec OpenAPI 3.0 com todos os apps do registry.
+// Generate builds an OpenAPI 3.0 spec with all apps from the registry.
 func Generate(apps []*registry.App) *Spec {
 	return generate(apps)
 }
 
-// GenerateForApp constrói spec OpenAPI 3.0 filtrada para um único app.
+// GenerateForApp builds an OpenAPI 3.0 spec filtered to a single app.
 func GenerateForApp(app *registry.App) *Spec {
 	return generate([]*registry.App{app})
 }

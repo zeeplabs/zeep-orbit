@@ -7,7 +7,7 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 )
 
-// buildConfig é um helper que monta um config.Config com N apps simples.
+// buildConfig is a helper that creates a config.Config with N simple apps.
 func buildConfig(apps ...config.AppConfig) *config.Config {
 	return &config.Config{Apps: apps}
 }
@@ -82,7 +82,6 @@ func TestGetTable(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 
-	// tabela existente
 	tbl, ok := r.GetTable("myapp", "users")
 	if !ok {
 		t.Fatal("GetTable(\"myapp\", \"users\"): esperado true, obteve false")
@@ -94,13 +93,11 @@ func TestGetTable(t *testing.T) {
 		t.Errorf("users: esperado 3 colunas, obteve %d", len(tbl.Columns))
 	}
 
-	// tabela inexistente dentro de app existente
 	_, ok = r.GetTable("myapp", "nope")
 	if ok {
 		t.Error("GetTable(\"myapp\", \"nope\"): esperado false, obteve true")
 	}
 
-	// app inexistente
 	_, ok = r.GetTable("ghost", "users")
 	if ok {
 		t.Error("GetTable(\"ghost\", \"users\"): esperado false, obteve true")
@@ -139,7 +136,6 @@ func TestConcurrentReads(t *testing.T) {
 func TestLoadReplace(t *testing.T) {
 	r := New()
 
-	// primeira carga: app "first"
 	if err := r.Load(buildConfig(sampleApp("first"))); err != nil {
 		t.Fatalf("Load 1: %v", err)
 	}
@@ -147,7 +143,6 @@ func TestLoadReplace(t *testing.T) {
 		t.Fatal("após Load 1: \"first\" deveria existir")
 	}
 
-	// segunda carga: somente app "second" — deve substituir o estado anterior
 	if err := r.Load(buildConfig(sampleApp("second"))); err != nil {
 		t.Fatalf("Load 2: %v", err)
 	}

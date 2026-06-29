@@ -16,8 +16,6 @@ import (
 )
 
 // ----------------------------------------------------------------------------
-// Setup de integração
-// ----------------------------------------------------------------------------
 
 const testSchema = "testhandler"
 const testTable = "items"
@@ -36,7 +34,6 @@ var (
 func TestMain(m *testing.M) {
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
-		// Sem banco configurado: pula todos os testes de integração.
 		os.Exit(0)
 	}
 
@@ -48,7 +45,6 @@ func TestMain(m *testing.M) {
 	}
 	defer testPool.Close()
 
-	// Cria schema e tabela de teste (CRUD sem RLS).
 	setup := []string{
 		"DROP SCHEMA IF EXISTS " + testSchema + " CASCADE",
 		"CREATE SCHEMA " + testSchema,
@@ -66,7 +62,6 @@ func TestMain(m *testing.M) {
 		}
 	}
 
-	// Cria schema e tabelas para testes de RLS.
 	rlsSetup := []string{
 		"DROP SCHEMA IF EXISTS " + rlsSchema + " CASCADE",
 		"CREATE SCHEMA " + rlsSchema,
@@ -96,7 +91,6 @@ func TestMain(m *testing.M) {
 		}
 	}
 
-	// Monta registry em memória (sem apps.yaml).
 	testReg = registry.New()
 	_ = testReg.Load(&config.Config{
 		Apps: []config.AppConfig{
@@ -134,19 +128,14 @@ func TestMain(m *testing.M) {
 
 	code := m.Run()
 
-	// Cleanup
 	_, _ = testPool.Exec(ctx, "DROP SCHEMA IF EXISTS "+testSchema+" CASCADE")
 	_, _ = testPool.Exec(ctx, "DROP SCHEMA IF EXISTS "+rlsSchema+" CASCADE")
 
 	os.Exit(code)
 }
 
-// ----------------------------------------------------------------------------
-// Helpers de teste
-// ----------------------------------------------------------------------------
 
-// buildHandlerRouter monta um chi.Router com o Handler para os testes CRUD.
-// A rota não usa JWTMiddleware: injeta o app diretamente no contexto.
+// The route does not use JWTMiddleware: it injects the app directly into context.
 func buildHandlerRouter(h *Handler) http.Handler {
 	app, _ := testReg.Get("testhandler")
 
@@ -173,8 +162,6 @@ func jsonBody(v any) *bytes.Buffer {
 	return bytes.NewBuffer(b)
 }
 
-// ----------------------------------------------------------------------------
-// Testes CRUD
 // ----------------------------------------------------------------------------
 
 func TestHandlerCRUD(t *testing.T) {
@@ -291,7 +278,6 @@ func TestHandlerCRUD(t *testing.T) {
 		if row["value"] != "updated" {
 			t.Fatalf("value esperado 'updated', obtido %v", row["value"])
 		}
-		// name não deve ter mudado
 		if row["name"] != "foo" {
 			t.Fatalf("name não deveria mudar, obtido %v", row["name"])
 		}
@@ -325,8 +311,6 @@ func TestHandlerCRUD(t *testing.T) {
 }
 
 // ----------------------------------------------------------------------------
-// Testes de Health
-// ----------------------------------------------------------------------------
 
 func TestHandlerHealth(t *testing.T) {
 	h := NewHandler(testPool, testReg)
@@ -353,8 +337,6 @@ func TestHandlerHealth(t *testing.T) {
 	}
 }
 
-// ----------------------------------------------------------------------------
-// Testes de erros de request (não precisam de banco)
 // ----------------------------------------------------------------------------
 
 func TestHandlerCreateInvalidBody(t *testing.T) {

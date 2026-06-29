@@ -9,7 +9,7 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/registry"
 )
 
-// newTestServer cria um Server com registry vazio e pool nil, sem Start().
+// newTestServer creates a Server with empty registry and nil pool, without Start().
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
 	reg := registry.New()

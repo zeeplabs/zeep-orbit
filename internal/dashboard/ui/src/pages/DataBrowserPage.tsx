@@ -135,7 +135,6 @@ export default function DataBrowserPage() {
   const [draftValue, setDraftValue] = useState("");
   const [isExporting, setIsExporting] = useState(false);
 
-  // CRUD state
   const [modalOpen, setModalOpen] = useState(false);
   const [editingRow, setEditingRow] = useState<Record<string, unknown> | null>(null);
   const [formValues, setFormValues] = useState<Record<string, string>>({});
@@ -241,7 +240,6 @@ export default function DataBrowserPage() {
     setIsRefreshing(false);
   };
 
-  // ── CRUD handlers ──
 
   const openEditModal = (row: Record<string, unknown>) => {
     setEditingRow(row);
@@ -303,7 +301,6 @@ export default function DataBrowserPage() {
       }
       closeModal();
     } catch {
-      // error toast is handled by the mutation
     }
   };
 

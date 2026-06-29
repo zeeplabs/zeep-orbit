@@ -31,7 +31,7 @@ func testPool(t *testing.T) *db.Pool {
 	return pool
 }
 
-// uniqueSchema gera um nome de schema único por teste para evitar colisões.
+// uniqueSchema generates a unique schema name per test to avoid collisions.
 func uniqueSchema(prefix string) string {
 	return fmt.Sprintf("%s_%d", prefix, time.Now().UnixNano())
 }
@@ -118,7 +118,6 @@ func TestCreateTable(t *testing.T) {
 		t.Errorf("expected TablesCreated=[%q], got %v", expectedTable, report.TablesCreated)
 	}
 
-	// Confirma colunas de sistema via information_schema.
 	systemCols := []string{"id", "created_at", "updated_at"}
 	for _, col := range systemCols {
 		var exists bool
@@ -161,7 +160,6 @@ func TestIdempotent(t *testing.T) {
 		},
 	}
 
-	// Primeira chamada — cria tudo.
 	r1, err := prov.Apply(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("Apply #1: %v", err)
@@ -173,7 +171,6 @@ func TestIdempotent(t *testing.T) {
 		t.Errorf("Apply #1: expected 1 table created, got %d", len(r1.TablesCreated))
 	}
 
-	// Segunda chamada — nada deve ser criado ou alterado.
 	r2, err := prov.Apply(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("Apply #2: %v", err)
@@ -198,7 +195,6 @@ func TestAddColumn(t *testing.T) {
 
 	prov := provisioner.New(pool)
 
-	// Primeiro Apply: cria schema e tabela com 1 coluna.
 	cfgV1 := &config.Config{
 		Apps: []config.AppConfig{
 			{
@@ -216,7 +212,6 @@ func TestAddColumn(t *testing.T) {
 		t.Fatalf("Apply v1: %v", err)
 	}
 
-	// Segundo Apply: adiciona nova coluna "price".
 	cfgV2 := &config.Config{
 		Apps: []config.AppConfig{
 			{
@@ -268,7 +263,6 @@ func TestRenameColumn(t *testing.T) {
 
 	prov := provisioner.New(pool)
 
-	// V1: cria tabela com coluna "label".
 	cfgV1 := &config.Config{
 		Apps: []config.AppConfig{
 			{
@@ -286,7 +280,6 @@ func TestRenameColumn(t *testing.T) {
 		t.Fatalf("Apply v1: %v", err)
 	}
 
-	// V2: renomeia "label" → "title" via rename_from.
 	cfgV2 := &config.Config{
 		Apps: []config.AppConfig{
 			{
@@ -317,7 +310,7 @@ func TestRenameColumn(t *testing.T) {
 		t.Errorf("expected 0 columns added, got %d: %v", len(r2.ColumnsAdded), r2.ColumnsAdded)
 	}
 
-	// Confirma que "label" não existe mais e "title" existe.
+	// Confirms "label" no longer exists and "title" exists.
 	var exists bool
 	err = pool.QueryRow(context.Background(),
 		`SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND column_name = $3)`,
@@ -341,7 +334,6 @@ func TestRenameColumn(t *testing.T) {
 		t.Errorf("new column 'title' should exist after rename")
 	}
 
-	// Confirma que _schema_migrations tem o registro.
 	err = pool.QueryRow(context.Background(),
 		`SELECT EXISTS(SELECT 1 FROM `+schema+`."_schema_migrations" WHERE description LIKE '%rename%')`,
 	).Scan(&exists)
@@ -362,7 +354,6 @@ func TestTypeChange(t *testing.T) {
 
 	prov := provisioner.New(pool)
 
-	// V1: cria tabela com coluna "qty" INTEGER.
 	cfgV1 := &config.Config{
 		Apps: []config.AppConfig{
 			{
@@ -382,7 +373,6 @@ func TestTypeChange(t *testing.T) {
 		t.Fatalf("Apply v1: %v", err)
 	}
 
-	// V2: muda tipo INTEGER → BIGINT (widening seguro).
 	cfgV2 := &config.Config{
 		Apps: []config.AppConfig{
 			{
@@ -410,7 +400,7 @@ func TestTypeChange(t *testing.T) {
 		t.Errorf("change description should mention type change: %q", r2.ColumnsChanged[0])
 	}
 
-	// Confirma que a coluna agora é BIGINT (int8).
+	// Confirms the column is now BIGINT (int8).
 	var udtName string
 	err = pool.QueryRow(context.Background(),
 		`SELECT udt_name FROM information_schema.columns
@@ -446,7 +436,6 @@ func TestIdempotentRename(t *testing.T) {
 
 	prov := provisioner.New(pool)
 
-	// V1: cria.
 	cfgV1 := &config.Config{
 		Apps: []config.AppConfig{
 			{
@@ -464,7 +453,6 @@ func TestIdempotentRename(t *testing.T) {
 		t.Fatalf("Apply v1: %v", err)
 	}
 
-	// V2: renomeia a→b.
 	cfgV2 := &config.Config{
 		Apps: []config.AppConfig{
 			{
@@ -486,7 +474,6 @@ func TestIdempotentRename(t *testing.T) {
 		t.Fatalf("v2: expected 1 change, got %d", len(r2.ColumnsChanged))
 	}
 
-	// V3: mesmo config — não deve gerar mudanças.
 	r3, err := prov.Apply(context.Background(), cfgV2)
 	if err != nil {
 		t.Fatalf("Apply v3: %v", err)
@@ -508,7 +495,6 @@ func TestRejectUnsafeTypeChange(t *testing.T) {
 
 	prov := provisioner.New(pool)
 
-	// Cria tabela com coluna boolean.
 	cfgV1 := &config.Config{
 		Apps: []config.AppConfig{
 			{
@@ -528,7 +514,6 @@ func TestRejectUnsafeTypeChange(t *testing.T) {
 		t.Fatalf("Apply v1: %v", err)
 	}
 
-	// Tenta mudar boolean → integer (unsafe: narrowing).
 	cfgV2 := &config.Config{
 		Apps: []config.AppConfig{
 			{
@@ -562,7 +547,6 @@ func TestRenameThenAddColumn(t *testing.T) {
 
 	prov := provisioner.New(pool)
 
-	// V1: cria tabela com coluna "oldname".
 	cfgV1 := &config.Config{
 		Apps: []config.AppConfig{
 			{
@@ -580,7 +564,6 @@ func TestRenameThenAddColumn(t *testing.T) {
 		t.Fatalf("Apply v1: %v", err)
 	}
 
-	// V2: renomeia "oldname" → "newname" E adiciona "extra".
 	cfgV2 := &config.Config{
 		Apps: []config.AppConfig{
 			{
@@ -633,7 +616,6 @@ func TestRenameThenAddColumn(t *testing.T) {
 		t.Errorf("'extra' should exist after add")
 	}
 
-	// "oldname" não deve existir.
 	err = pool.QueryRow(context.Background(),
 		`SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND column_name = $3)`,
 		schema, "t", "oldname",

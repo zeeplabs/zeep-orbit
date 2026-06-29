@@ -16,7 +16,7 @@ import (
 type AuthProviderRow struct {
 	Provider   string    `json:"provider"`
 	Enabled    bool      `json:"enabled"`
-	ConfigJSON string    `json:"-"`              // encrypted at rest, decrypted in memory
+	ConfigJSON string    `json:"-"`
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
@@ -26,25 +26,24 @@ type GoogleProviderConfig struct {
 	ClientSecret   string          `json:"client_secret,omitempty"`
 	ClientSecretSet bool           `json:"client_secret_set,omitempty"`
 	RedirectURL    string          `json:"redirect_url"`
-	AllowedDomains json.RawMessage `json:"allowed_domains,omitempty"` // []string
+	AllowedDomains json.RawMessage `json:"allowed_domains,omitempty"`
 }
 
 // AuthProviderResponse is the API response for a provider.
 type AuthProviderResponse struct {
 	Provider    string          `json:"provider"`
 	Enabled     bool            `json:"enabled"`
-	Config      json.RawMessage `json:"config,omitempty"`       // decrypted on GET with ?reveal=true
-	ConfigSet   bool            `json:"config_set"`              // true if config_encrypted is non-empty
+	Config      json.RawMessage `json:"config,omitempty"`
+	ConfigSet   bool            `json:"config_set"`
 	UpdatedAt   time.Time       `json:"updated_at"`
 }
 
 // authProviderUpsertInput is the JSON body for upserting a provider.
 type authProviderUpsertInput struct {
 	Enabled bool            `json:"enabled"`
-	Config  json.RawMessage `json:"config,omitempty"` // provider-specific config JSON
+	Config  json.RawMessage `json:"config,omitempty"`
 }
 
-// GetAuthProvider returns a single provider config.
 // If no row exists, returns empty provider with env var fallback for "google".
 func GetAuthProvider(ctx context.Context, pool *db.Pool, provider string) (*AuthProviderResponse, error) {
 	row := &AuthProviderRow{Provider: provider}
@@ -54,7 +53,6 @@ func GetAuthProvider(ctx context.Context, pool *db.Pool, provider string) (*Auth
 		provider,
 	).Scan(&row.Provider, &row.Enabled, &row.ConfigJSON, &row.UpdatedAt)
 	if err != nil {
-		// No row yet — check env var fallback for google
 		if provider == "google" {
 			return googleFallbackConfig(), nil
 		}
@@ -88,13 +86,11 @@ func ListAuthProviders(ctx context.Context, pool *db.Pool, reveal bool) ([]*Auth
 		}
 		resp := decryptProviderRow(&r)
 		if !reveal {
-			// Strip secrets for non-reveal requests
 			resp.Config = stripSecretFromConfig(r.Provider, resp.Config)
 		}
 		results = append(results, resp)
 	}
 
-	// Always include google with env var fallback if not in DB
 	hasGoogle := false
 	for _, r := range results {
 		if r.Provider == "google" {
@@ -118,12 +114,10 @@ func ListAuthProviders(ctx context.Context, pool *db.Pool, reveal bool) ([]*Auth
 	return results, nil
 }
 
-// UpsertAuthProvider inserts or updates a provider config.
 // Config JSON is encrypted before storing.
 func UpsertAuthProvider(ctx context.Context, pool *db.Pool, provider string, input *authProviderUpsertInput) (*AuthProviderResponse, error) {
 	encrypted := ""
 	if len(input.Config) > 0 && string(input.Config) != "{}" {
-		// Merge with existing config if some fields are empty
 		existing, _ := GetAuthProvider(ctx, pool, provider)
 		fullConfig := mergeProviderConfig(provider, input.Config, existing)
 

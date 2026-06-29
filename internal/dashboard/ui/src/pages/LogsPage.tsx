@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -10,6 +10,8 @@ import {
   XCircle,
   RefreshCw,
   Filter,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { useLogs, useLogMetrics, useApps, LogEntry } from "../lib/api";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +30,14 @@ function formatTime(iso: string) {
     minute: "2-digit",
     second: "2-digit",
   });
+}
+
+function formatBody(body: string): string {
+  try {
+    return JSON.stringify(JSON.parse(body), null, 2)
+  } catch {
+    return body
+  }
 }
 
 function statusBadge(status: number) {
@@ -120,9 +130,30 @@ function MetricCard({ icon, label, value, sub, accent }: MetricCardProps) {
 
 export default function LogsPage() {
   const [appFilter, setAppFilter] = useState("");
-  const { data: logs, isLoading, error } = useLogs(appFilter || undefined);
-  const { data: metrics } = useLogMetrics();
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [countdown, setCountdown] = useState(10);
+  const { data: logs, isLoading, error, refetch } = useLogs(appFilter || undefined, autoRefresh);
+  const { data: metrics } = useLogMetrics(autoRefresh);
   const { data: apps } = useApps();
+
+  useEffect(() => {
+    if (!autoRefresh) return
+    setCountdown(10)
+    const interval = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          return 10
+        }
+        return prev - 1
+      })
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [autoRefresh, logs])
+
+  const handleManualRefresh = () => {
+    refetch()
+  }
 
   return (
     <div className="relative z-10">
@@ -151,17 +182,33 @@ export default function LogsPage() {
           </div>
 
           <div className="flex items-center gap-3 max-md:w-full">
-            {metrics && (
+            {metrics && autoRefresh && (
               <div className="flex items-center gap-1.5 rounded-full border border-emerald-500/[0.20] bg-emerald-500/[0.08] px-3 py-1 shrink-0">
                 <span className="relative flex size-2">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
                   <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
                 </span>
                 <span className="text-[11px] font-medium text-emerald-400">
-                  Ao vivo
+                  {countdown}s
                 </span>
               </div>
             )}
+
+            <button
+              onClick={() => setAutoRefresh((v) => !v)}
+              className="h-9 px-3 rounded-xl border border-white/[0.10] bg-white/[0.06] text-[12px] text-[#94A3B8] hover:text-[#F8FAFC] transition-colors cursor-pointer whitespace-nowrap"
+              title={autoRefresh ? "Desativar auto refresh" : "Ativar auto refresh"}
+            >
+              {autoRefresh ? "Auto" : "Manual"}
+            </button>
+
+            <button
+              onClick={handleManualRefresh}
+              className="h-9 w-9 flex items-center justify-center rounded-xl border border-white/[0.10] bg-white/[0.06] text-[#94A3B8] hover:text-[#F8FAFC] transition-colors cursor-pointer"
+              title="Atualizar agora"
+            >
+              <RefreshCw size={14} />
+            </button>
 
             <select
               value={appFilter}
@@ -317,8 +364,9 @@ export default function LogsPage() {
                       <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B] w-[60px]">
                         Método
                       </th>
+                      <th className="px-2 py-3 w-8"></th>
                       <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">
-                        Path
+                        Status
                       </th>
                       <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B] w-[64px]">
                         App
@@ -333,13 +381,22 @@ export default function LogsPage() {
                   </thead>
                   <tbody>
                     {logs.map((entry: LogEntry, i: number) => (
+                      <>
                       <motion.tr
                         key={`${entry.timestamp}-${i}`}
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{ delay: Math.min(i * 0.02, 0.3) }}
-                        className="group border-b border-white/[0.04] last:border-0 hover:bg-white/[0.03]"
+                        className="group border-b border-white/[0.04] last:border-0 hover:bg-white/[0.03] cursor-pointer"
+                        onClick={() => setExpandedRow(expandedRow === `${entry.timestamp}-${i}` ? null : `${entry.timestamp}-${i}`)}
                       >
+                        <td className="px-2 py-2.5 w-8">
+                          {expandedRow === `${entry.timestamp}-${i}` ? (
+                            <ChevronUp size={14} className="text-[#64748B]" />
+                          ) : (
+                            <ChevronDown size={14} className="text-[#64748B]" />
+                          )}
+                        </td>
                         <td className="px-4 py-2.5">{statusBadge(entry.status)}</td>
                         <td className="px-4 py-2.5">{methodBadge(entry.method)}</td>
                         <td className="px-4 py-2.5">
@@ -369,7 +426,44 @@ export default function LogsPage() {
                             {formatTime(entry.timestamp)}
                           </span>
                         </td>
-                      </motion.tr>
+                        </motion.tr>
+                      {expandedRow === `${entry.timestamp}-${i}` && (
+                        <tr key={`det-${i}`}>
+                          <td colSpan={7} className="px-6 py-4 bg-white/[0.02] border-b border-white/[0.04]">
+                            <div className="grid grid-cols-2 gap-4 text-[12px]">
+                              <div>
+                                <p className="text-[10px] font-semibold uppercase tracking-wider text-[#64748B] mb-1">Query</p>
+                                <code className="text-[#94A3B8] break-all">{entry.query || "—"}</code>
+                              </div>
+                              <div>
+                                <p className="text-[10px] font-semibold uppercase tracking-wider text-[#64748B] mb-1">Content-Type</p>
+                                <code className="text-[#94A3B8]">{entry.content_type || "—"}</code>
+                              </div>
+                              <div>
+                                <p className="text-[10px] font-semibold uppercase tracking-wider text-[#64748B] mb-1">Remote Addr</p>
+                                <code className="text-[#94A3B8]">{entry.remote_addr || "—"}</code>
+                              </div>
+                              <div>
+                                <p className="text-[10px] font-semibold uppercase tracking-wider text-[#64748B] mb-1">User-Agent</p>
+                                <code className="text-[#94A3B8] truncate block max-w-[300px]">{entry.user_agent || "—"}</code>
+                              </div>
+                              {entry.req_body && (
+                                <div className="col-span-2">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[#64748B] mb-1">Request Body</p>
+                                  <pre className="text-[#A78BFA] bg-black/20 rounded-lg p-3 overflow-x-auto max-h-[200px] text-[11px] leading-relaxed">{formatBody(entry.req_body)}</pre>
+                                </div>
+                              )}
+                              {entry.res_body && (
+                                <div className="col-span-2">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[#64748B] mb-1">Response Body</p>
+                                  <pre className="text-[#34D399] bg-black/20 rounded-lg p-3 overflow-x-auto max-h-[200px] text-[11px] leading-relaxed">{formatBody(entry.res_body)}</pre>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      </>
                     ))}
                   </tbody>
                 </table>

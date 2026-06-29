@@ -9,6 +9,7 @@ import AppFormPage from './pages/AppFormPage'
 import BrandSettingsPage from './pages/BrandSettingsPage'
 import UsersPage from './pages/UsersPage'
 import LogsPage from './pages/LogsPage'
+import AuditLogPage from './pages/AuditLogPage'
 import DataBrowserPage from './pages/DataBrowserPage'
 import AppUsersPage from './pages/AppUsersPage'
 import { useBootstrapStatus } from './lib/api'
@@ -94,6 +95,7 @@ function App() {
         <Route path="/data-browser" element={<DataBrowserPage />} />
         <Route path="/usuarios" element={<UsersPage />} />
         <Route path="/logs" element={<LogsPage />} />
+        <Route path="/auditoria" element={<AuditLogPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/apps" replace />} />
     </Routes>

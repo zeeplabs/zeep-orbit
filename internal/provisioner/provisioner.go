@@ -1,6 +1,3 @@
-// Package provisioner manages PostgreSQL schema and table provisioning.
-// It creates app-specific schemas, auth tables, and CRUD tables idempotently
-// and handles column migrations (add, rename, type change) safely.
 package provisioner
 
 import (
@@ -11,27 +8,25 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
 
-// Provisioner aplica schemas e tabelas para todos os apps definidos no config.
+// Provisioner applies schemas and tables for all apps defined in the config.
 type Provisioner struct {
 	pool *db.Pool
 }
 
-// New cria um Provisioner vinculado ao pool de conexões fornecido.
+// New creates a Provisioner linked to the provided connection pool.
 func New(pool *db.Pool) *Provisioner {
 	return &Provisioner{pool: pool}
 }
 
-// Report descreve o que foi criado ou alterado durante um Apply.
+// Report describes what was created or changed during an Apply.
 type Report struct {
 	SchemasCreated  []string
 	TablesCreated   []string
-	ColumnsAdded    []string // formato: "schema.table.column"
-	ColumnsChanged  []string // formato: "schema.table.column (descrição)"
+	ColumnsAdded    []string
+	ColumnsChanged  []string
 }
 
-// Apply provisiona todos os apps: cria schemas, tabelas e adiciona colunas ausentes.
-// Também aplica migrations (renomeios e mudanças de tipo) em tabelas existentes.
-// É idempotente: pode ser chamado múltiplas vezes sem efeito colateral.
+// Idempotent: safe to call multiple times with no side effects.
 func (p *Provisioner) Apply(ctx context.Context, cfg *config.Config) (*Report, error) {
 	report := &Report{}
 
@@ -64,8 +59,6 @@ func (p *Provisioner) Apply(ctx context.Context, cfg *config.Config) (*Report, e
 				continue
 			}
 
-			// Tabela já existia — primeiro aplica renomeios e mudanças de tipo,
-			// depois adiciona colunas realmente novas.
 			changed, err := p.applyColumnChanges(ctx, schemaName, table.Name, table.Columns, table.RLS)
 			if err != nil {
 				return nil, fmt.Errorf("provisioner: app %q table %q apply changes: %w", app.Name, table.Name, err)

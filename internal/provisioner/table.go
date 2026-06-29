@@ -8,8 +8,7 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 )
 
-// systemColumnNames são colunas adicionadas automaticamente pelo provisionador
-// e não devem ser definidas pelo usuário.
+// and should not be defined by the user.
 var systemColumnNames = map[string]bool{
 	"id":         true,
 	"created_at": true,
@@ -41,8 +40,7 @@ func pgType(t string) string {
 	}
 }
 
-// columnDDL constrói a definição DDL de uma coluna a partir do config.
-// Aspas simples no valor do DEFAULT são escapadas dobrando-as ('').
+// Single quotes in DEFAULT value are escaped by doubling them ('').
 func columnDDL(col config.ColumnConfig) string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("%q %s", col.Name, pgType(col.Type)))
@@ -61,9 +59,7 @@ func columnDDL(col config.ColumnConfig) string {
 	return sb.String()
 }
 
-// createTable executa CREATE TABLE IF NOT EXISTS com colunas de sistema (id, created_at,
-// updated_at) e as colunas definidas no config.
-// Retorna true se a tabela foi criada (não existia), false se já existia.
+// Returns true if the table was created (did not exist), false if it already existed.
 func (p *Provisioner) createTable(ctx context.Context, schemaName, tableName string, cols []config.ColumnConfig, rls string) (bool, error) {
 	var exists bool
 	err := p.pool.QueryRow(ctx,
@@ -113,11 +109,8 @@ func (p *Provisioner) createTable(ctx context.Context, schemaName, tableName str
 	return true, nil
 }
 
-// addMissingColumns inspeciona information_schema e executa ALTER TABLE ADD COLUMN IF NOT EXISTS
-// para cada coluna do config que não existe ainda na tabela.
 // Retorna a lista de colunas adicionadas no formato "schema.table.column".
 func (p *Provisioner) addMissingColumns(ctx context.Context, schemaName, tableName string, cols []config.ColumnConfig, rls string) ([]string, error) {
-	// Busca colunas existentes de uma vez.
 	rows, err := p.pool.Query(ctx,
 		`SELECT column_name FROM information_schema.columns
 		 WHERE table_schema = $1 AND table_name = $2`,
@@ -200,18 +193,12 @@ func (p *Provisioner) fetchExistingColumns(ctx context.Context, schemaName, tabl
 	return cols, rows.Err()
 }
 
-// applyColumnChanges aplica alterações estruturais em colunas existentes:
-// renomeios (via rename_from) e mudanças de tipo (widening-safe).
-// Deve ser chamada ANTES de addMissingColumns para que colunas renomeadas
-// não sejam adicionadas como novas.
-// Retorna lista de mudanças no formato "schema.table.column (descrição)".
+// Returns a list of changes in "schema.table.column (description)" format.
 func (p *Provisioner) applyColumnChanges(ctx context.Context, schemaName, tableName string, cols []config.ColumnConfig, rls string) ([]string, error) {
-	// Garante que a tabela de tracking existe.
 	if err := p.ensureMigrationTable(ctx, schemaName); err != nil {
 		return nil, fmt.Errorf("apply changes: ensure migration table: %w", err)
 	}
 
-	// Estado atual das colunas.
 	existing, err := p.fetchExistingColumns(ctx, schemaName, tableName)
 	if err != nil {
 		return nil, err
@@ -219,7 +206,6 @@ func (p *Provisioner) applyColumnChanges(ctx context.Context, schemaName, tableN
 
 	var changes []string
 
-	// 1. Renomeios (precisa vir antes dos type changes porque altera o nome da coluna).
 	for _, col := range cols {
 		if col.RenameFrom == "" {
 			continue
@@ -240,13 +226,11 @@ func (p *Provisioner) applyColumnChanges(ctx context.Context, schemaName, tableN
 		}
 	}
 
-	// Re-fetch após renomeios para que type changes vejam os nomes corretos.
 	existing, err = p.fetchExistingColumns(ctx, schemaName, tableName)
 	if err != nil {
 		return nil, err
 	}
 
-	// 2. Mudanças de tipo.
 	for _, col := range cols {
 		result, err := p.applyTypeChange(ctx, schemaName, tableName, col, existing)
 		if err != nil {

@@ -22,7 +22,6 @@ func UserFromContext(ctx context.Context) (*DashboardUser, bool) {
 	return u, ok
 }
 
-// RequireAuth validates the zeep_session cookie and injects DashboardUser into context.
 // Returns 401 JSON if missing, invalid, or expired.
 func RequireAuth(pool *db.Pool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

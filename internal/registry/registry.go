@@ -1,5 +1,3 @@
-// Package registry provides a thread-safe in-memory store for app
-// configurations loaded from YAML files or the dashboard database.
 package registry
 
 import (
@@ -12,19 +10,18 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
 
-// Registry mantém o mapa de apps carregados em memória.
-// Todas as operações de leitura e escrita são protegidas por RWMutex.
+// All read and write operations are protected by RWMutex.
 type Registry struct {
 	mu   sync.RWMutex
 	apps map[string]*App
 }
 
-// App representa uma aplicação com seu esquema e tabelas.
+// App represents an application with its schema and tables.
 type App struct {
 	Config        config.AppConfig
-	SchemaName    string // "app_{name}"
+	SchemaName    string
 	Tables        map[string]*Table
-	AuthProviders map[string]any // from zeep_system.apps.auth_providers
+	AuthProviders map[string]any
 }
 
 // Table representa uma tabela dentro de um app.
@@ -51,8 +48,6 @@ func New() *Registry {
 	}
 }
 
-// Load popula o registry a partir de cfg.
-// Substitui completamente o estado anterior (re-load seguro).
 // Retorna erro se algum app tiver Name vazio.
 func (r *Registry) Load(cfg *config.Config) error {
 	newApps := make(map[string]*App, len(cfg.Apps))
@@ -96,7 +91,6 @@ func (r *Registry) Load(cfg *config.Config) error {
 	return nil
 }
 
-// Get retorna o App pelo nome (case-sensitive).
 // O segundo valor indica se o app foi encontrado.
 func (r *Registry) Get(appName string) (*App, bool) {
 	r.mu.RLock()
@@ -105,8 +99,7 @@ func (r *Registry) Get(appName string) (*App, bool) {
 	return app, ok
 }
 
-// GetTable retorna a Table dentro de um App.
-// Retorna (nil, false) se o app ou a tabela não existir.
+// Returns (nil, false) if the app or table does not exist.
 func (r *Registry) GetTable(appName, tableName string) (*Table, bool) {
 	r.mu.RLock()
 	app, ok := r.apps[appName]
@@ -120,8 +113,7 @@ func (r *Registry) GetTable(appName, tableName string) (*Table, bool) {
 	return tbl, ok
 }
 
-// Apps retorna uma lista com todos os apps carregados.
-// Retorna uma cópia da slice sem expor o mapa interno.
+// Returns a copy of the slice without exposing the internal map.
 func (r *Registry) Apps() []*App {
 	r.mu.RLock()
 	result := make([]*App, 0, len(r.apps))
@@ -132,7 +124,6 @@ func (r *Registry) Apps() []*App {
 	return result
 }
 
-// LoadFromDB populates the registry from zeep_system DB tables.
 // Replaces any existing state. Safe to call on startup.
 func (r *Registry) LoadFromDB(ctx context.Context, pool *db.Pool) error {
 	type appRow struct {

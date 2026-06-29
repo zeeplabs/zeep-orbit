@@ -31,7 +31,6 @@ func GetAppAuthProviders(ctx context.Context, pool *db.Pool, appID, userID, role
 
 // UpdateAppAuthProviders updates the auth_providers JSONB for an app.
 func UpdateAppAuthProviders(ctx context.Context, pool *db.Pool, appID, userID, role string, providers json.RawMessage) error {
-	// Verify access
 	if _, err := GetApp(ctx, pool, appID, userID, role); err != nil {
 		return err
 	}

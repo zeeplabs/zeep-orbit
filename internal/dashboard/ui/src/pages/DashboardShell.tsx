@@ -1,7 +1,17 @@
 import { useState } from "react";
-import { Navigate, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Navigate, NavLink, Outlet } from "react-router-dom";
 import { motion } from "framer-motion";
-import { LogOut, Grid, Database, Users, Activity, Settings, User, Lock } from "lucide-react";
+import {
+  LogOut,
+  Grid,
+  Database,
+  Users,
+  Activity,
+  Shield,
+  Settings,
+  User,
+  Lock,
+} from "lucide-react";
 import ChangePasswordModal from "./ChangePasswordModal";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import {
@@ -31,12 +41,25 @@ function navItems(user: User | null): NavItem[] {
   ];
   if (user?.role === "superadmin") {
     items.splice(2, 0, { icon: Users, label: "Usuários", path: "/usuarios" });
-    items.push({ icon: Settings, label: "Configurações", path: "/configuracoes" });
+    items.splice(3, 0, { icon: Shield, label: "Auditoria", path: "/auditoria" });
+    items.push({
+      icon: Settings,
+      label: "Configurações",
+      path: "/configuracoes",
+    });
   }
   return items;
 }
 
-function BottomBar({ items, user, onUserClick }: { items: NavItem[]; user: User; onUserClick: () => void }) {
+function BottomBar({
+  items,
+  user,
+  onUserClick,
+}: {
+  items: NavItem[];
+  user: User;
+  onUserClick: () => void;
+}) {
   return (
     <nav
       className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around"
@@ -67,7 +90,9 @@ function BottomBar({ items, user, onUserClick }: { items: NavItem[]; user: User;
           {({ isActive }) => (
             <>
               <Icon size={21} strokeWidth={isActive ? 2 : 1.5} />
-              <span style={{ fontSize: 10, lineHeight: 1, whiteSpace: "nowrap" }}>
+              <span
+                style={{ fontSize: 10, lineHeight: 1, whiteSpace: "nowrap" }}
+              >
                 {label}
               </span>
             </>
@@ -101,7 +126,6 @@ function BottomBar({ items, user, onUserClick }: { items: NavItem[]; user: User;
 
 export default function DashboardShell({ user }: { user: User | null }) {
   const qc = useQueryClient();
-  const navigate = useNavigate();
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -128,10 +152,8 @@ export default function DashboardShell({ user }: { user: User | null }) {
         credentials: "include",
       });
       qc.clear();
-      navigate("/login");
+      window.location.href = "/dashboard/login";
     } finally {
-      setLoggingOut(false);
-      setShowLogoutDialog(false);
     }
   };
 
@@ -184,9 +206,9 @@ export default function DashboardShell({ user }: { user: User | null }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <span
               style={{
-              fontSize: 16,
-              fontWeight: 700,
-              lineHeight: 1.3,
+                fontSize: 16,
+                fontWeight: 700,
+                lineHeight: 1.3,
                 overflow: "hidden",
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
@@ -223,7 +245,9 @@ export default function DashboardShell({ user }: { user: User | null }) {
                 padding: "9px 12px",
                 borderRadius: 10,
                 border: "none",
-                background: isActive ? "rgba(var(--brand-primary-rgb), 0.12)" : "transparent",
+                background: isActive
+                  ? "rgba(var(--brand-primary-rgb), 0.12)"
+                  : "transparent",
                 color: isActive ? "var(--text)" : "var(--text-muted)",
                 cursor: "pointer",
                 fontSize: 14,
@@ -347,7 +371,11 @@ export default function DashboardShell({ user }: { user: User | null }) {
       </main>
 
       {/* Mobile bottom bar */}
-      <BottomBar items={items} user={user} onUserClick={() => setShowUserMenu(prev => !prev)} />
+      <BottomBar
+        items={items}
+        user={user}
+        onUserClick={() => setShowUserMenu((prev) => !prev)}
+      />
 
       {/* Mobile user menu popover */}
       {showUserMenu && (
@@ -374,9 +402,22 @@ export default function DashboardShell({ user }: { user: User | null }) {
           >
             <div style={{ padding: "0 16px", marginBottom: 12 }}>
               <p style={{ fontSize: 14, fontWeight: 600 }}>{user.email}</p>
-              <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{user.role}</p>
+              <p
+                style={{
+                  fontSize: 12,
+                  color: "var(--text-muted)",
+                  marginTop: 2,
+                }}
+              >
+                {user.role}
+              </p>
             </div>
-            <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 8 }}>
+            <div
+              style={{
+                borderTop: "1px solid rgba(255,255,255,0.06)",
+                paddingTop: 8,
+              }}
+            >
               <button
                 onClick={() => {
                   setShowUserMenu(false);
@@ -431,7 +472,10 @@ export default function DashboardShell({ user }: { user: User | null }) {
           if (!open) setShowLogoutDialog(false);
         }}
       >
-        <DialogContent className="max-w-[380px] border border-white/[0.10] bg-[#0D0D14]/60 backdrop-blur-xl rounded-2xl p-0 gap-0" style={{ boxShadow: '0 0 40px rgba(var(--brand-primary-rgb), 0.10)' }}>
+        <DialogContent
+          className="max-w-[380px] border border-white/[0.10] bg-[#0D0D14]/60 backdrop-blur-xl rounded-2xl p-0 gap-0"
+          style={{ boxShadow: "0 0 40px rgba(var(--brand-primary-rgb), 0.10)" }}
+        >
           <div className="bg-white/[0.04] shadow-[inset_0_1px_1px_rgba(255,255,255,0.10)] rounded-[calc(1rem-2px)] px-7 pb-6 pt-7">
             <DialogHeader className="mb-0">
               <div className="w-11 h-11 rounded-xl bg-white/[0.08] border border-white/[0.10] flex items-center justify-center mb-[18px]">
@@ -462,7 +506,8 @@ export default function DashboardShell({ user }: { user: User | null }) {
                 disabled={loggingOut}
                 className="flex-1 rounded-xl border-0 text-white font-semibold disabled:opacity-40"
                 style={{
-                  background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))',
+                  background:
+                    "linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))",
                 }}
               >
                 {loggingOut ? "Saindo..." : "Sair"}

@@ -32,7 +32,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-// ── Constants ──────────────────────────────────────────────────────────────────
 
 const COLUMN_TYPES = [
   "text",
@@ -59,7 +58,6 @@ const emptyTable = (): TableDef => ({
   columns: [emptyColumn()],
 });
 
-// ── Validation ─────────────────────────────────────────────────────────────────
 
 function validateName(name: string): string | null {
   if (!name.trim()) return "Nome obrigatório";
@@ -69,7 +67,6 @@ function validateName(name: string): string | null {
   return null;
 }
 
-// ── Component ──────────────────────────────────────────────────────────────────
 
 export default function AppFormPage() {
   const navigate = useNavigate();
@@ -98,12 +95,10 @@ export default function AppFormPage() {
   const updateApp = useUpdateApp();
   const isMutating = createApp.isPending || updateApp.isPending;
 
-  // Populate form when editing
   useEffect(() => {
     if (editTarget) {
       setAppName(editTarget.name);
       setAuthEmail(editTarget.auth_email_enabled);
-      // Load Google provider config
       const providers = (editTarget as any).auth_providers;
       if (providers?.google?.enabled) {
         setGoogleEnabled(true);
@@ -133,7 +128,6 @@ export default function AppFormPage() {
     setSubmitError(null);
   }, [editTarget, isEdit]);
 
-  // ── Table helpers ────────────────────────────────────────────────────────────
 
   const addTable = () => setTables((prev) => [...prev, emptyTable()]);
 
@@ -191,7 +185,6 @@ export default function AppFormPage() {
     );
   };
 
-  // ── Validate ─────────────────────────────────────────────────────────────────
 
   function validate(): boolean {
     const errs: Record<string, string> = {};
@@ -214,7 +207,6 @@ export default function AppFormPage() {
     return Object.keys(errs).length === 0;
   }
 
-  // ── Submit ───────────────────────────────────────────────────────────────────
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -248,7 +240,6 @@ export default function AppFormPage() {
     }
   }
 
-  // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
     <motion.div

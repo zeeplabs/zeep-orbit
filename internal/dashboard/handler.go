@@ -1,5 +1,3 @@
-// Package dashboard implements the web dashboard backend (HTTP handlers),
-// database stores, and embedded React frontend for managing zeep-orbit apps.
 package dashboard
 
 import (
@@ -59,7 +57,6 @@ var (
 	}
 )
 
-// validateAppInput checks that app name, table names, column names, and column types
 // are safe SQL identifiers / known types before they reach the provisioner DDL.
 func validateAppInput(name string, tables []AppTableRow) error {
 	if !appNameRe.MatchString(name) {
@@ -81,7 +78,6 @@ func validateAppInput(name string, tables []AppTableRow) error {
 	return nil
 }
 
-// Bootstrap handles POST /dashboard/api/bootstrap
 // Creates the first superadmin. Requires DASHBOARD_BOOTSTRAP_SECRET env var.
 func (h *Handler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 	secret := os.Getenv("DASHBOARD_BOOTSTRAP_SECRET")
@@ -128,6 +124,7 @@ func (h *Handler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, map[string]string{"message": "superadmin created", "email": body.Email})
+	h.audit(r.Context(), "", body.Email, "bootstrap.complete", "user", "", body.Email, nil, r.RemoteAddr)
 }
 
 // BootstrapStatus handles GET /dashboard/api/bootstrap/status
@@ -140,7 +137,6 @@ func (h *Handler) BootstrapStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"bootstrapped": ok})
 }
 
-// Config handles GET /dashboard/api/config
 // Reads from zeep_system.brand_config, falling back to environment defaults.
 func (h *Handler) Config(w http.ResponseWriter, r *http.Request) {
 	cfg, err := GetBrandConfig(r.Context(), h.pool)
@@ -163,7 +159,6 @@ func (h *Handler) Config(w http.ResponseWriter, r *http.Request) {
 		company = cfg.CompanyName
 	}
 
-	// Check Google OAuth config from DB (with env var fallback)
 	googleProv, _ := GetAuthProvider(r.Context(), h.pool, "google")
 
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -173,7 +168,6 @@ func (h *Handler) Config(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// UpdateConfig handles PUT /dashboard/api/config
 // Updates the brand_config singleton row. Requires superadmin.
 func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
@@ -210,9 +204,10 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, cfg)
+	meta, _ := json.Marshal(body)
+	h.audit(r.Context(), user.ID, user.Email, "config.update", "config", "", "", meta, r.RemoteAddr)
 }
 
-// ListAuthProviders handles GET /dashboard/api/config/auth/providers
 // Lists all configured auth providers. Requires superadmin.
 func (h *Handler) ListAuthProviders(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
@@ -235,7 +230,6 @@ func (h *Handler) ListAuthProviders(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, providers)
 }
 
-// GetAuthProvider handles GET /dashboard/api/config/auth/providers/{provider}
 // Returns a single provider's config. Requires superadmin.
 func (h *Handler) GetAuthProvider(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
@@ -264,7 +258,6 @@ func (h *Handler) GetAuthProvider(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// UpsertAuthProvider handles PUT /dashboard/api/config/auth/providers/{provider}
 // Creates or updates a provider's config. Requires superadmin. Encrypts config JSON.
 func (h *Handler) UpsertAuthProvider(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
@@ -293,6 +286,7 @@ func (h *Handler) UpsertAuthProvider(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, result)
+	h.audit(r.Context(), user.ID, user.Email, "auth.provider.update", "auth_provider", provider, provider, nil, r.RemoteAddr)
 }
 
 // Login handles POST /dashboard/api/login
@@ -348,7 +342,6 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   86400,
 	})
 
-	// Lazy cleanup: purge expired sessions in the background on each login.
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -362,6 +355,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 			"role":  user.Role,
 		},
 	})
+	h.audit(r.Context(), user.ID, user.Email, "user.login", "session", "", user.Email, nil, r.RemoteAddr)
 }
 
 // Logout handles POST /dashboard/api/logout
@@ -399,7 +393,6 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ChangeMyPassword handles PUT /dashboard/api/me/password
 // Authenticated user changes own password (requires current password).
 func (h *Handler) ChangeMyPassword(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
@@ -436,7 +429,6 @@ func (h *Handler) ChangeMyPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fetch current user to verify current password
 	fullUser, err := GetUserByEmail(r.Context(), h.pool, user.Email)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
@@ -465,9 +457,9 @@ func (h *Handler) ChangeMyPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "password updated successfully"})
+	h.audit(r.Context(), user.ID, user.Email, "user.password.change", "user", user.ID, user.Email, nil, r.RemoteAddr)
 }
 
-// ChangeUserPassword handles PUT /dashboard/api/users/{id}/password
 // Superadmin changes any user's password (no current password required).
 func (h *Handler) ChangeUserPassword(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
@@ -525,6 +517,7 @@ func (h *Handler) ChangeUserPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "password updated successfully"})
+	h.audit(r.Context(), user.ID, user.Email, "user.password.change", "user", targetID, "", nil, r.RemoteAddr)
 }
 
 // ListUsers handles GET /dashboard/api/users
@@ -603,6 +596,7 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		"email": newUser.Email,
 		"role":  newUser.Role,
 	})
+	h.audit(r.Context(), user.ID, user.Email, "user.create", "user", newUser.ID, newUser.Email, nil, r.RemoteAddr)
 }
 
 // DeleteUser handles DELETE /dashboard/api/users/{id}
@@ -633,6 +627,7 @@ func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+	h.audit(r.Context(), currentUser.ID, currentUser.Email, "user.delete", "user", targetID, "", nil, r.RemoteAddr)
 }
 
 // ListApps handles GET /dashboard/api/apps
@@ -687,7 +682,6 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Save auth providers if provided
 	if len(body.AuthProviders) > 0 {
 		if err := UpdateAppAuthProvidersRaw(r.Context(), h.pool, app.ID, body.AuthProviders); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save auth providers"})
@@ -705,6 +699,8 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 	h.reg.Register(appRowToRegistryApp(app))
 
 	writeJSON(w, http.StatusCreated, app)
+	meta, _ := json.Marshal(map[string]any{"tables": body.Tables})
+	h.audit(r.Context(), user.ID, user.Email, "app.create", "app", app.ID, app.Name, meta, r.RemoteAddr)
 }
 
 // GetApp handles GET /dashboard/api/apps/{id}
@@ -762,7 +758,6 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Save auth providers if provided
 	if len(body.AuthProviders) > 0 {
 		if err := UpdateAppAuthProvidersRaw(r.Context(), h.pool, app.ID, body.AuthProviders); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save auth providers"})
@@ -779,8 +774,10 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 
 	h.reg.Register(appRowToRegistryApp(app))
 
-	app.JWTSecret = "" // not returned on update; fetch via GET /apps/{id} if needed
+	app.JWTSecret = ""
 	writeJSON(w, http.StatusOK, app)
+	meta, _ := json.Marshal(map[string]any{"tables": body.Tables})
+	h.audit(r.Context(), user.ID, user.Email, "app.update", "app", app.ID, app.Name, meta, r.RemoteAddr)
 }
 
 // DeleteApp handles DELETE /dashboard/api/apps/{id}
@@ -793,7 +790,6 @@ func (h *Handler) DeleteApp(w http.ResponseWriter, r *http.Request) {
 
 	appID := chi.URLParam(r, "id")
 
-	// Fetch name before deletion for registry unregister.
 	existing, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -816,6 +812,7 @@ func (h *Handler) DeleteApp(w http.ResponseWriter, r *http.Request) {
 	h.reg.Unregister(existing.Name)
 
 	w.WriteHeader(http.StatusNoContent)
+	h.audit(r.Context(), user.ID, user.Email, "app.delete", "app", appID, existing.Name, nil, r.RemoteAddr)
 }
 
 // buildAppConfig converts an AppRow into a config.AppConfig for the provisioner.
@@ -872,6 +869,11 @@ func appRowToRegistryApp(app *AppRow) *registry.App {
 	}
 }
 
+func (h *Handler) audit(ctx context.Context, userID, userEmail, action, resourceType, resourceID, resourceName string, metadata json.RawMessage, ip string) {
+	if err := InsertAuditLog(ctx, h.pool, userID, userEmail, action, resourceType, resourceID, resourceName, metadata, ip); err != nil {
+	}
+}
+
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -902,7 +904,7 @@ func (h *Handler) ListLogs(w http.ResponseWriter, r *http.Request) {
 
 	appFilter := r.URL.Query().Get("app")
 	if appFilter != "" && allowedApps != nil && !allowedApps[appFilter] {
-		appFilter = "" // user doesn't own this app, ignore filter
+		appFilter = ""
 	}
 
 	limit := 100
@@ -953,7 +955,6 @@ type DataBrowserApp struct {
 	Tables []DataBrowserTable `json:"tables"`
 }
 
-// ListDataBrowserApps handles GET /dashboard/api/data-browser/apps
 // Returns apps with their tables from the registry, filtered by ownership.
 func (h *Handler) ListDataBrowserApps(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
@@ -997,7 +998,6 @@ func (h *Handler) ListDataBrowserApps(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// DataBrowserQuery handles GET /dashboard/api/data-browser/query
 // Executes a paginated SELECT using the existing query builder.
 func (h *Handler) DataBrowserQuery(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
@@ -1013,7 +1013,6 @@ func (h *Handler) DataBrowserQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Ownership check
 	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
@@ -1036,7 +1035,6 @@ func (h *Handler) DataBrowserQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse query params
 	params := make(map[string]string)
 	for k, vals := range r.URL.Query() {
 		if k == "app" || k == "table" {
@@ -1063,7 +1061,6 @@ func (h *Handler) DataBrowserQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// DATA
 	rows, err := h.pool.Query(ctx, q.SQL, q.Args...)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to query rows"})
@@ -1095,7 +1092,6 @@ func (h *Handler) DataBrowserQuery(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// DataBrowserExport handles GET /dashboard/api/data-browser/export
 // Exports table data as CSV (max 10 000 rows). Respects the same filters as DataBrowserQuery.
 func (h *Handler) DataBrowserExport(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
@@ -1165,7 +1161,6 @@ func (h *Handler) DataBrowserExport(w http.ResponseWriter, r *http.Request) {
 
 	sanitized := sanitizeData(data)
 
-	// Build column order from table definition
 	colNames := make([]string, 0, len(table.Columns))
 	for _, col := range table.Columns {
 		colNames = append(colNames, col.Name)
@@ -1194,8 +1189,7 @@ func (h *Handler) DataBrowserExport(w http.ResponseWriter, r *http.Request) {
 	cw.Flush()
 }
 
-// csvSafeCell previne CSV formula injection prefixando células que iniciam
-// com caracteres interpretados por planilhas como fórmulas (=, +, -, @, tab, CR).
+// with characters interpreted by spreadsheets as formulas (=, +, -, @, tab, CR).
 func csvSafeCell(s string) string {
 	if s == "" {
 		return s
@@ -1221,7 +1215,7 @@ func sanitizeData(rows []map[string]any) []map[string]any {
 	return rows
 }
 
-// sanitizeRow converte [16]byte em string UUID para uma única row.
+// sanitizeRow converts [16]byte to UUID string for a single row.
 func sanitizeRow(row map[string]any) map[string]any {
 	return sanitizeData([]map[string]any{row})[0]
 }
@@ -1233,7 +1227,6 @@ type dataBrowserMutationRequest struct {
 	Data  map[string]any `json:"data,omitempty"`
 }
 
-// DataBrowserCreate handles POST /dashboard/api/data-browser/row
 // Insere um novo registro na tabela.
 func (h *Handler) DataBrowserCreate(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
@@ -1293,9 +1286,9 @@ func (h *Handler) DataBrowserCreate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"data": sanitizeRow(row),
 	})
+	h.audit(r.Context(), user.ID, user.Email, "data.create", "data", "", req.App+"/"+req.Table, nil, r.RemoteAddr)
 }
 
-// DataBrowserUpdate handles PUT /dashboard/api/data-browser/row
 // Atualiza parcialmente um registro existente.
 func (h *Handler) DataBrowserUpdate(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
@@ -1335,7 +1328,6 @@ func (h *Handler) DataBrowserUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Dashboard bypasses row-level RLS for update (consistent with read path).
 	q, err := query.BuildUpdate(app.SchemaName, req.Table, table, req.ID, req.Data, "")
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -1356,9 +1348,9 @@ func (h *Handler) DataBrowserUpdate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"data": sanitizeRow(row),
 	})
+	h.audit(r.Context(), user.ID, user.Email, "data.update", "data", req.ID, req.App+"/"+req.Table, nil, r.RemoteAddr)
 }
 
-// DataBrowserDelete handles DELETE /dashboard/api/data-browser/row
 // Remove um registro pelo ID.
 func (h *Handler) DataBrowserDelete(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
@@ -1408,6 +1400,7 @@ func (h *Handler) DataBrowserDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"success": true})
+	h.audit(r.Context(), user.ID, user.Email, "data.delete", "data", id, appName+"/"+tableName, nil, r.RemoteAddr)
 }
 
 // appUserRequest is the JSON body for app user list params.
@@ -1417,7 +1410,6 @@ type appUserListParams struct {
 	Offset int    `json:"offset"`
 }
 
-// ListAppUsers handles GET /dashboard/api/apps/{id}/users
 // Lists users registered in an app's _auth_users table.
 func (h *Handler) ListAppUsers(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
@@ -1439,9 +1431,7 @@ func (h *Handler) ListAppUsers(w http.ResponseWriter, r *http.Request) {
 
 	schema := "app_" + app.Name
 
-	// Ensure _auth_users has the latest columns (active, provider, etc.)
 	if err := h.prov.EnsureAuthUserColumns(r.Context(), schema); err != nil {
-		// Non-fatal — best effort. If it fails, we still try the query.
 	}
 
 	search := r.URL.Query().Get("search")
@@ -1502,6 +1492,7 @@ func (h *Handler) DeactivateAppUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "user deactivated"})
+	h.audit(r.Context(), user.ID, user.Email, "app.user.deactivate", "app_user", appID, app.Name+"/"+userID, nil, r.RemoteAddr)
 }
 
 // ActivateAppUser handles PUT /dashboard/api/apps/{id}/users/{userId}/activate
@@ -1532,6 +1523,7 @@ func (h *Handler) ActivateAppUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "user activated"})
+	h.audit(r.Context(), user.ID, user.Email, "app.user.activate", "app_user", appID, app.Name+"/"+userID, nil, r.RemoteAddr)
 }
 
 // ResetAppUserSessions handles POST /dashboard/api/apps/{id}/users/{userId}/reset-sessions
@@ -1562,6 +1554,46 @@ func (h *Handler) ResetAppUserSessions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "sessions reset"})
+	h.audit(r.Context(), user.ID, user.Email, "app.user.sessions.reset", "app_user", appID, app.Name+"/"+userID, nil, r.RemoteAddr)
+}
+
+func (h *Handler) ListAuditLog(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	if user.Role != "superadmin" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+
+	limit := 50
+	if l, err := parseInt(r.URL.Query().Get("limit")); err == nil && l > 0 && l <= 200 {
+		limit = l
+	}
+	offset := 0
+	if o, err := parseInt(r.URL.Query().Get("offset")); err == nil && o >= 0 {
+		offset = o
+	}
+
+	entries, total, err := ListAuditLog(r.Context(), h.pool, AuditLogFilter{
+		Action: r.URL.Query().Get("action"),
+		UserID: r.URL.Query().Get("user"),
+		Limit:  limit,
+		Offset: offset,
+	})
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data":   entries,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	})
 }
 
 func parseInt(s string) (int, error) {

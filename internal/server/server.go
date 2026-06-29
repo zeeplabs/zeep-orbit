@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -44,14 +45,14 @@ func init() {
 	prometheus.MustRegister(httpRequestsTotal, httpRequestDuration, activeApps)
 }
 
-// Server encapsula o http.Server e suas dependências.
+// Server wraps the http.Server and its dependencies.
 type Server struct {
 	httpServer *http.Server
 	reg        *registry.Registry
 	logger     *zap.Logger
 }
 
-// New cria um Server com router configurado e pronto para Start.
+// New creates a Server with a configured router ready for Start.
 func New(reg *registry.Registry, pool *db.Pool, port int) (*Server, error) {
 	logger, err := buildLogger()
 	if err != nil {
@@ -82,7 +83,7 @@ func (s *Server) Router() http.Handler {
 	return s.httpServer.Handler
 }
 
-// Start bloqueia até receber SIGINT ou SIGTERM, depois faz graceful shutdown (30s).
+// Start blocks until SIGINT or SIGTERM, then performs a graceful shutdown (30s).
 func (s *Server) Start() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -122,16 +123,14 @@ func buildLogger() (*zap.Logger, error) {
 	return zap.NewProduction()
 }
 
-// newRouter monta o chi.Mux com todas as rotas e middlewares.
+// newRouter builds the chi.Mux with all routes and middleware.
 func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Logger, dashH *dashboard.Handler) *chi.Mux {
 	logBuf := dashH.Logs
 	r := chi.NewRouter()
 
-	// Middleware stack global
 	r.Use(logMiddleware(logger, logBuf))
 	r.Use(chimiddleware.Recoverer)
 
-	// Rotas sem JWT
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/dashboard", http.StatusFound)
 	})
@@ -143,7 +142,6 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 	r.Get("/docs/{app}", dh.HandleUI)
 	r.Get("/docs/{app}/openapi.json", dh.HandleSpec)
 
-	// Dashboard — deve vir antes dos wildcards /{app}
 	authLimiter := dashboard.NewRateLimiter(5, time.Minute)
 	r.Route("/dashboard", func(r chi.Router) {
 		r.Use(dashboard.SecurityHeaders)
@@ -174,6 +172,7 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Get("/api/config/auth/providers", dashH.ListAuthProviders)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/config/auth/providers/{provider}", dashH.GetAuthProvider)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/config/auth/providers/{provider}", dashH.UpsertAuthProvider)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/audit-log", dashH.ListAuditLog)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/data-browser/apps", dashH.ListDataBrowserApps)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/data-browser/query", dashH.DataBrowserQuery)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/data-browser/export", dashH.DataBrowserExport)
@@ -185,13 +184,10 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.Handle("/*", dashboard.StaticHandler())
 	})
 
-	// Google OAuth — rotas sempre montadas, config pode vir do DB ou env vars
-	// O handler carrega a config lazymente de GetGoogleOAuthConfig()
 	googleH := dashboard.NewGoogleOAuthHandler(pool, nil)
 	r.Get("/dashboard/api/auth/google/login", googleH.Login)
 	r.Get("/dashboard/api/auth/google/callback", googleH.Callback)
 
-	// Auth nativo por app — deve vir antes das rotas CRUD wildcard
 	ah := auth.New(pool, reg)
 	appGoogleH := auth.NewAppGoogleHandler(pool, reg)
 	r.Route("/{app}/auth", func(r chi.Router) {
@@ -206,14 +202,12 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.Get("/google/callback", appGoogleH.Callback)
 	})
 
-	// Rotas com JWT — grupo /{app}/{table}
 	r.Route("/{app}/{table}", func(r chi.Router) {
 		r.Use(JWTMiddleware(reg))
 		r.Get("/", h.HandleList)
 		r.Post("/", h.HandleCreate)
 	})
 
-	// Rotas com JWT — grupo /{app}/{table}/{id}
 	r.Route("/{app}/{table}/{id}", func(r chi.Router) {
 		r.Use(JWTMiddleware(reg))
 		r.Get("/", h.HandleGetByID)
@@ -225,18 +219,21 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 	return r
 }
 
-// logMiddleware loga cada request com zap e alimenta o ring buffer do dashboard.
+// logMiddleware logs each request with zap and feeds the dashboard ring buffer.
 func logMiddleware(logger *zap.Logger, buf *dashboard.RingBuffer) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
-			ww := chimiddleware.NewWrapResponseWriter(w, r.ProtoMajor)
+			cw := &captureResponseWriter{ResponseWriter: w}
 
-			next.ServeHTTP(ww, r)
+			reqBody := readBody(r)
+
+			next.ServeHTTP(cw, r)
 
 			latency := time.Since(start)
-			status := ww.Status()
+			status := cw.Status()
 			method := r.Method
+			contentType := r.Header.Get("Content-Type")
 
 			logger.Info("request",
 				zap.String("method", method),
@@ -245,19 +242,49 @@ func logMiddleware(logger *zap.Logger, buf *dashboard.RingBuffer) func(http.Hand
 				zap.Int64("latency_ms", latency.Milliseconds()),
 			)
 
-			buf.Push(dashboard.LogEntry{
-				Timestamp: start,
-				App:       dashboard.ExtractApp(r.URL.Path),
-				Method:    method,
-				Path:      r.URL.Path,
-				Status:    status,
-				LatencyMs: latency.Milliseconds(),
-				UserAgent: r.UserAgent(),
-			})
+			entry := dashboard.LogEntry{
+				Timestamp:   start,
+				App:         dashboard.ExtractApp(r.URL.Path),
+				Method:      method,
+				Path:        r.URL.Path,
+				Query:       r.URL.RawQuery,
+				Status:      status,
+				LatencyMs:   latency.Milliseconds(),
+				UserAgent:   r.UserAgent(),
+				RemoteAddr:  r.RemoteAddr,
+				ContentType: contentType,
+			}
+
+			if isTextContent(contentType) {
+				if cw.body.Len() > 0 {
+					entry.ResBody = cw.body.String()
+				}
+				if reqBody != "" {
+					entry.ReqBody = reqBody
+				}
+			}
+
+			buf.Push(entry)
 
 			statusStr := fmt.Sprintf("%d", status)
 			httpRequestsTotal.WithLabelValues(method, statusStr).Inc()
 			httpRequestDuration.WithLabelValues(method).Observe(latency.Seconds())
 		})
 	}
+}
+
+func isTextContent(contentType string) bool {
+	if contentType == "" {
+		return true
+	}
+	base := strings.SplitN(contentType, ";", 2)[0]
+	base = strings.TrimSpace(base)
+	switch base {
+	case "application/json", "text/plain", "text/html",
+		"application/x-www-form-urlencoded", "application/xml",
+		"text/xml", "application/yaml", "text/yaml",
+		"application/graphql":
+		return true
+	}
+	return false
 }

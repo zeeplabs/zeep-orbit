@@ -26,8 +26,6 @@ var (
 	}
 )
 
-// Load reads a YAML config file at path, interpolates env vars, unmarshals
-// it into Config and validates all fields. Returns a non-nil error with a
 // descriptive message on any failure.
 func Load(path string) (*Config, error) {
 	raw, err := os.ReadFile(path)
@@ -52,7 +50,6 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-// interpolateEnvVars replaces every ${VAR} token in s with os.Getenv("VAR").
 // Returns an error if any referenced env var is not set.
 func interpolateEnvVars(s string) (string, error) {
 	var firstErr error
@@ -60,7 +57,6 @@ func interpolateEnvVars(s string) (string, error) {
 		if firstErr != nil {
 			return match
 		}
-		// Extract the variable name from ${VAR}
 		name := match[2 : len(match)-1]
 		val, ok := os.LookupEnv(name)
 		if !ok {

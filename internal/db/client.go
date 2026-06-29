@@ -1,5 +1,3 @@
-// Package db provides a pgxpool-based PostgreSQL client with connection
-// pooling, startup health checks, and a thin Pool wrapper for dashboard queries.
 package db
 
 import (
@@ -9,14 +7,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Pool wraps pgxpool.Pool para permitir extensão futura sem quebrar o contrato externo.
+// Pool wraps pgxpool.Pool to allow future extension without breaking the external contract.
 type Pool struct {
 	*pgxpool.Pool
 }
 
-// New cria e valida um pool de conexões PostgreSQL.
-// dsn deve estar no formato postgres://user:pass@host:port/db (DATABASE_URL).
-// O ctx é usado durante a conexão inicial e o Ping; use context.WithTimeout para
 // limitar o tempo de espera (recomendado: 5s).
 func New(ctx context.Context, dsn string) (*Pool, error) {
 	cfg, err := pgxpool.ParseConfig(dsn)
@@ -40,7 +35,7 @@ func New(ctx context.Context, dsn string) (*Pool, error) {
 	return &Pool{Pool: pool}, nil
 }
 
-// Close encerra todas as conexões do pool.
+// Close closes all connections in the pool.
 func (p *Pool) Close() {
 	p.Pool.Close()
 }

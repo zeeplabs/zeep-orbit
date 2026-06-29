@@ -39,7 +39,6 @@ func TestNewInvalidDSN(t *testing.T) {
 }
 
 func TestNewBadHost(t *testing.T) {
-	// Host inexistente; timeout curto para o teste não travar.
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 

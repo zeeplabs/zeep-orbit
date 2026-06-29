@@ -6,14 +6,26 @@ import (
 	"time"
 )
 
+const maxBodyCapture = 2048
+
+var ignoredPrefixes = []string{
+	"/api/logs",
+	"/dashboard/api/logs",
+}
+
 type LogEntry struct {
-	Timestamp  time.Time `json:"timestamp"`
-	App        string    `json:"app"`
-	Method     string    `json:"method"`
-	Path       string    `json:"path"`
-	Status     int       `json:"status"`
-	LatencyMs  int64     `json:"latency_ms"`
-	UserAgent  string    `json:"user_agent,omitempty"`
+	Timestamp   time.Time `json:"timestamp"`
+	App         string    `json:"app"`
+	Method      string    `json:"method"`
+	Path        string    `json:"path"`
+	Query       string    `json:"query,omitempty"`
+	Status      int       `json:"status"`
+	LatencyMs   int64     `json:"latency_ms"`
+	UserAgent   string    `json:"user_agent,omitempty"`
+	RemoteAddr  string    `json:"remote_addr,omitempty"`
+	ReqBody     string    `json:"req_body,omitempty"`
+	ResBody     string    `json:"res_body,omitempty"`
+	ContentType string    `json:"content_type,omitempty"`
 }
 
 type LogMetrics struct {
@@ -41,6 +53,11 @@ func NewRingBuffer(capacity int) *RingBuffer {
 }
 
 func (rb *RingBuffer) Push(e LogEntry) {
+	for _, prefix := range ignoredPrefixes {
+		if strings.HasPrefix(e.Path, prefix) {
+			return
+		}
+	}
 	rb.mu.Lock()
 	defer rb.mu.Unlock()
 	rb.entries[rb.pos] = e

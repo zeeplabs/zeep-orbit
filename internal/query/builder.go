@@ -1,6 +1,3 @@
-// Package query builds parameterized SQL statements (SELECT, INSERT, UPDATE,
-// DELETE) from typed column configurations. All queries use pgx parameter
-// placeholders to prevent SQL injection.
 package query
 
 import (
@@ -11,14 +8,14 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/registry"
 )
 
-// ListQuery é o resultado de BuildList: SQL paginado + CountSQL sem paginação.
+// ListQuery is the result of BuildList: paginated SQL + unpaginated CountSQL.
 type ListQuery struct {
 	SQL      string
 	Args     []any
-	CountSQL string // SELECT COUNT(*) ... (mesmos filtros, sem LIMIT/OFFSET)
+	CountSQL string
 }
 
-// WriteQuery é o resultado de operações de escrita (INSERT, UPDATE, DELETE, GET by ID).
+// WriteQuery is the result of write operations (INSERT, UPDATE, DELETE, GET by ID).
 type WriteQuery struct {
 	SQL  string
 	Args []any
@@ -33,7 +30,7 @@ func columnSet(table *registry.Table) map[string]struct{} {
 	return set
 }
 
-// columnTypes retorna map[colName]colType para lookup rápido de tipo.
+// columnTypes returns map[colName]colType for fast type lookup.
 func columnTypes(table *registry.Table) map[string]string {
 	m := make(map[string]string, len(table.Columns))
 	for _, col := range table.Columns {
@@ -42,8 +39,7 @@ func columnTypes(table *registry.Table) map[string]string {
 	return m
 }
 
-// pgCast retorna o cast SQL necessário para o tipo da coluna no extended protocol.
-// uuid e timestamptz não têm auto-cast de text no protocolo estendido do pgx.
+// uuid and timestamptz do not have auto-cast from text in pgx extended protocol.
 func pgCast(colType string) string {
 	switch colType {
 	case "uuid":
@@ -55,7 +51,7 @@ func pgCast(colType string) string {
 	}
 }
 
-// systemFields são campos gerenciados pelo servidor que nunca devem vir do caller.
+// systemFields are fields managed by the server that must never come from the caller.
 var systemFields = map[string]struct{}{
 	"id":         {},
 	"created_at": {},
@@ -75,21 +71,7 @@ var operatorMap = map[string]string{
 	"ilike.": "ILIKE",
 }
 
-// BuildList constrói SELECT paginado para GET /{app}/{table}.
-//
-// Parâmetros aceitos em params:
-//   - limit: inteiro positivo (default 50, max 1000)
-//   - offset: inteiro não-negativo (default 0)
-//   - {field}=eq.{value}: filtro de igualdade; campo deve existir na tabela
-//   - {field}=ne.{value}: filtro de diferença
-//   - {field}=gt.{value}: maior que
-//   - {field}=gte.{value}: maior ou igual
-//   - {field}=lt.{value}: menor que
-//   - {field}=lte.{value}: menor ou igual
-//   - {field}=like.{value}: LIKE (case-sensitive)
-//   - {field}=ilike.{value}: ILIKE (case-insensitive)
-//   - {field}=in.{v1},{v2}: IN (múltiplos valores separados por vírgula)
-//   - order={field}.asc|{field}.desc: ordenação; campo deve existir na tabela
+//   - order={field}.asc|{field}.desc: sorting; field must exist in the table
 func BuildList(schemaName, tableName string, table *registry.Table, params map[string]string, ownerID string) (*ListQuery, error) {
 	const defaultLimit = 50
 	const maxLimit = 1000
@@ -97,7 +79,6 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 	known := columnSet(table)
 	types := columnTypes(table)
 
-	// --- limit ---
 	limit := defaultLimit
 	if raw, ok := params["limit"]; ok {
 		v, err := strconv.Atoi(raw)
@@ -110,7 +91,6 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 		limit = v
 	}
 
-	// --- offset ---
 	offset := 0
 	if raw, ok := params["offset"]; ok {
 		v, err := strconv.Atoi(raw)
@@ -133,7 +113,6 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 		}
 
 		if strings.HasPrefix(val, "in.") {
-			// in.{v1},{v2} → IN ($1, $2) com múltiplos placeholders
 			raw := strings.TrimPrefix(val, "in.")
 			parts := strings.Split(raw, ",")
 			var placeholders []string
@@ -169,7 +148,6 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 	// --- order ---
 	var orderClause string
 	if raw, ok := params["order"]; ok {
-		// Formato: {field}.asc ou {field}.desc
 		parts := strings.Split(raw, ".")
 		if len(parts) != 2 {
 			return nil, fmt.Errorf("query: formato de 'order' inválido: %q (use field.asc ou field.desc)", raw)
@@ -184,17 +162,14 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 		orderClause = fmt.Sprintf(" ORDER BY %s %s", field, direction)
 	}
 
-	// --- monta WHERE ---
 	baseFrom := fmt.Sprintf("FROM %s.%s", schemaName, tableName)
 	var whereStr string
 	if len(whereClauses) > 0 {
 		whereStr = " WHERE " + strings.Join(whereClauses, " AND ")
 	}
 
-	// CountSQL (sem LIMIT/OFFSET)
 	countSQL := fmt.Sprintf("SELECT COUNT(*) %s%s", baseFrom, whereStr)
 
-	// SQL principal
 	nextIdx := len(args) + 1
 	listSQL := fmt.Sprintf("SELECT * %s%s%s LIMIT $%d OFFSET $%d",
 		baseFrom, whereStr, orderClause, nextIdx, nextIdx+1)
@@ -208,16 +183,11 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 	}, nil
 }
 
-// BuildInsert constrói INSERT para POST /{app}/{table}.
-//
-// Strip silencioso: id, created_at, updated_at são ignorados mesmo que venham no body.
-// Campos required ausentes ou null retornam erro.
 // Campos desconhecidos retornam erro.
 func BuildInsert(schemaName, tableName string, table *registry.Table, body map[string]any, ownerID string) (*WriteQuery, error) {
 	known := columnSet(table)
 	types := columnTypes(table)
 
-	// Valida campos do body
 	for key := range body {
 		if _, skip := systemFields[key]; skip {
 			continue
@@ -227,7 +197,6 @@ func BuildInsert(schemaName, tableName string, table *registry.Table, body map[s
 		}
 	}
 
-	// Valida required
 	for _, col := range table.Columns {
 		if !col.Required {
 			continue
@@ -238,7 +207,7 @@ func BuildInsert(schemaName, tableName string, table *registry.Table, body map[s
 		}
 	}
 
-	// Monta listas de colunas e placeholders na ordem das colunas da tabela (determinístico)
+	// Builds column and placeholder lists in deterministic table column order
 	var cols []string
 	var placeholders []string
 	var args []any
@@ -276,16 +245,11 @@ func BuildInsert(schemaName, tableName string, table *registry.Table, body map[s
 	return &WriteQuery{SQL: sql, Args: args}, nil
 }
 
-// BuildUpdate constrói UPDATE parcial para PATCH /{app}/{table}/{id}.
-//
-// Strip silencioso: id, created_at, updated_at são ignorados mesmo que venham no body.
-// updated_at = now() é sempre incluído server-side.
 // Campos desconhecidos retornam erro.
 func BuildUpdate(schemaName, tableName string, table *registry.Table, id string, body map[string]any, ownerID string) (*WriteQuery, error) {
 	known := columnSet(table)
 	types := columnTypes(table)
 
-	// Valida campos do body
 	for key := range body {
 		if _, skip := systemFields[key]; skip {
 			continue
@@ -295,7 +259,7 @@ func BuildUpdate(schemaName, tableName string, table *registry.Table, id string,
 		}
 	}
 
-	// Monta SET clauses na ordem das colunas (determinístico), excluindo system fields
+	// Builds SET clauses in deterministic column order, excluding system fields
 	var setClauses []string
 	var args []any
 
@@ -315,10 +279,8 @@ func BuildUpdate(schemaName, tableName string, table *registry.Table, id string,
 		return nil, fmt.Errorf("query: nenhum campo válido fornecido para UPDATE")
 	}
 
-	// updated_at server-side (não usa placeholder — função SQL)
 	setClauses = append(setClauses, "updated_at = now()")
 
-	// id é o último argumento
 	args = append(args, id)
 	idPlaceholder := fmt.Sprintf("$%d", len(args))
 
@@ -337,8 +299,7 @@ func BuildUpdate(schemaName, tableName string, table *registry.Table, id string,
 	return &WriteQuery{SQL: sql, Args: args}, nil
 }
 
-// BuildGetByID constrói SELECT por id para GET /{app}/{table}/{id}.
-// id e ownerID são incluídos em Args; o caller usa pool.Query(ctx, q.SQL, q.Args...).
+// id and ownerID are included in Args; the caller uses pool.Query(ctx, q.SQL, q.Args...).
 func BuildGetByID(schemaName, tableName string, id string, ownerID string) *WriteQuery {
 	if ownerID != "" {
 		return &WriteQuery{
@@ -352,8 +313,7 @@ func BuildGetByID(schemaName, tableName string, id string, ownerID string) *Writ
 	}
 }
 
-// BuildDelete constrói DELETE por id para DELETE /{app}/{table}/{id}.
-// id e ownerID são incluídos em Args; o caller usa pool.Exec(ctx, q.SQL, q.Args...).
+// id and ownerID are included in Args; the caller uses pool.Exec(ctx, q.SQL, q.Args...).
 func BuildDelete(schemaName, tableName string, id string, ownerID string) *WriteQuery {
 	if ownerID != "" {
 		return &WriteQuery{

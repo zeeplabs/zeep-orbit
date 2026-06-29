@@ -6,7 +6,6 @@ import (
 	"testing"
 )
 
-// writeYAML creates a temporary YAML file with the given content and returns
 // its path. The file is cleaned up when the test ends.
 func writeYAML(t *testing.T, content string) string {
 	t.Helper()
@@ -284,7 +283,6 @@ apps:
 }
 
 func TestLoadEnvVarMissing(t *testing.T) {
-	// Ensure the var is not set
 	os.Unsetenv("MISSING_VAR") //nolint:errcheck
 
 	content := `

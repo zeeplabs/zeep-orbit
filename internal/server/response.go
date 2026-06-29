@@ -10,19 +10,18 @@ type errorResponse struct {
 	Error string `json:"error"`
 }
 
-// writeJSON serializa v como JSON e envia com o status code dado.
+// writeJSON serializes v as JSON and sends it with the given status code.
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v)
 }
 
-// writeError envia {"error": msg} com o status code dado.
+// writeError sends {"error": msg} with the given status code.
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, errorResponse{Error: msg})
 }
 
-// sanitizeRow converte tipos pgx não-serializáveis em valores JSON-friendly.
 // [16]byte (UUID do pgx v5) → string "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx".
 func sanitizeRow(row map[string]any) map[string]any {
 	for k, v := range row {

@@ -1,11 +1,3 @@
-// zeep-orbit — Open-source BaaS platform.
-//
-// Usage:
-//
-//	zeep serve --config apps.yaml
-//	zeep apply --config apps.yaml
-//	zeep list
-//	zeep status
 package main
 
 import (
@@ -82,7 +74,6 @@ func cmdServe() *cobra.Command {
 			if companyName == "" {
 				companyName = "Zeep Tecnologia"
 			}
-			// Seed the brand_config singleton row from env vars on first startup.
 			if _, err := dashboard.UpsertBrandConfig(context.Background(), pool, brandTheme, companyName, ""); err != nil {
 				fmt.Fprintf(os.Stderr, "error seeding brand config: %v\n", err)
 				os.Exit(1)
