@@ -12,7 +12,8 @@ All app routes require a Bearer JWT signed with the app's `jwt_secret` (HS256).
 | POST | `/{app}/{table}` | Create record |
 | GET | `/{app}/{table}/{id}` | Get by ID |
 | PUT/PATCH | `/{app}/{table}/{id}` | Update (partial) |
-| DELETE | `/{app}/{table}/{id}` | Delete |
+| DELETE | `/{app}/{table}/{id}` | Delete (or soft-delete if enabled) |
+| GET | `/{app}/health` | App health check (no auth required) |
 | POST | `/{app}/files` | Upload file (multipart) |
 | GET | `/{app}/files` | List files |
 | GET | `/{app}/files/{id}` | Get file metadata |
@@ -38,6 +39,31 @@ curl localhost:8080/billing/invoices \
 # Get
 curl localhost:8080/billing/invoices/018e4c72-... \
   -H "Authorization: Bearer $TOKEN"
+```
+
+## Sorting
+
+Use `?order=field.desc` or `?order=field.asc`:
+
+```bash
+curl "localhost:8080/billing/invoices?order=created_at.desc"
+```
+
+## Soft Delete
+
+When soft delete is enabled (Dashboard → Settings → Soft Delete), the `DELETE` endpoint performs an `UPDATE SET deleted_at = now()` instead. Listed records automatically exclude soft-deleted rows. Use `?deleted=true` to include them:
+
+```bash
+curl "localhost:8080/billing/invoices?deleted=true"
+```
+
+## Health Check
+
+Each app exposes an unauthenticated health endpoint:
+
+```bash
+curl localhost:8080/my-app/health
+# {"status":"ok","app":"my-app","healthy":true,"checks":{"database":true,"schema":true}}
 ```
 
 ## Response Format

@@ -18,6 +18,15 @@ sidebar_position: 3
 | `BRAND_COMPANY_NAME` | ❌ | Company name for white-label |
 | `LOG_LEVEL` | ❌ | Set `debug` for development output |
 
+## App Names
+
+App names support lowercase letters, numbers, hyphens (`-`), and underscores (`_`). Hyphens in the app name are automatically converted to underscores for the PostgreSQL schema.
+
+```yaml
+apps:
+  - name: my-app  # URL: /my-app/todos, Schema: my_app
+```
+
 ## apps.yaml
 
 ```yaml

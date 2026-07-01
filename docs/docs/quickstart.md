@@ -56,6 +56,17 @@ volumes:
 docker compose up -d
 ```
 
+## Example App
+
+A complete React + Vite todo example is available at `examples/todo-app/`:
+
+```bash
+cd examples/todo-app
+npm install && npm run dev
+```
+
+It demonstrates authentication, CRUD operations, and SDK usage against any Orbit instance.
+
 ## First-time setup
 
 1. Open the dashboard at `http://localhost:8080/dashboard`
