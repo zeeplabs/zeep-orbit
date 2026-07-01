@@ -26,7 +26,7 @@ func testTable() *registry.Table {
 
 func TestBuildList_Basic(t *testing.T) {
 	tbl := testTable()
-	q, err := BuildList("app_billing", "invoices", tbl, map[string]string{}, "")
+	q, err := BuildList("app_billing", "invoices", tbl, map[string]string{}, "", false)
 	if err != nil {
 		t.Fatalf("esperava nil error, got: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestBuildList_WithFilters(t *testing.T) {
 		"limit":   "10",
 		"offset":  "5",
 	}
-	q, err := BuildList("app_billing", "invoices", tbl, params, "")
+	q, err := BuildList("app_billing", "invoices", tbl, params, "", false)
 	if err != nil {
 		t.Fatalf("erro inesperado: %v", err)
 	}
@@ -158,7 +158,7 @@ func TestBuildList_FilterOperators(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			q, err := BuildList("app_billing", "invoices", tbl, tt.params, "")
+			q, err := BuildList("app_billing", "invoices", tbl, tt.params, "", false)
 			if err != nil {
 				t.Fatalf("erro inesperado: %v", err)
 			}
@@ -177,7 +177,7 @@ func TestBuildList_UnknownOperator(t *testing.T) {
 	params := map[string]string{
 		"status": "invalid.paid",
 	}
-	_, err := BuildList("app_billing", "invoices", tbl, params, "")
+	_, err := BuildList("app_billing", "invoices", tbl, params, "", false)
 	if err == nil {
 		t.Fatal("esperava erro para operador inválido, got nil")
 	}
@@ -188,7 +188,7 @@ func TestBuildList_UnknownField(t *testing.T) {
 	params := map[string]string{
 		"nonexistent": "eq.foo",
 	}
-	_, err := BuildList("app_billing", "invoices", tbl, params, "")
+	_, err := BuildList("app_billing", "invoices", tbl, params, "", false)
 	if err == nil {
 		t.Fatal("esperava erro para campo desconhecido, got nil")
 	}
@@ -202,7 +202,7 @@ func TestBuildList_UnknownFieldInOrder(t *testing.T) {
 	params := map[string]string{
 		"order": "nonexistent.asc",
 	}
-	_, err := BuildList("app_billing", "invoices", tbl, params, "")
+	_, err := BuildList("app_billing", "invoices", tbl, params, "", false)
 	if err == nil {
 		t.Fatal("esperava erro para campo desconhecido em order, got nil")
 	}
@@ -213,7 +213,7 @@ func TestBuildList_LimitClamp(t *testing.T) {
 	params := map[string]string{
 		"limit": "9999",
 	}
-	q, err := BuildList("app_billing", "invoices", tbl, params, "")
+	q, err := BuildList("app_billing", "invoices", tbl, params, "", false)
 	if err != nil {
 		t.Fatalf("erro inesperado: %v", err)
 	}
@@ -406,7 +406,7 @@ func TestBuildGetByID(t *testing.T) {
 // ── BuildDelete ───────────────────────────────────────────────────────────────
 
 func TestBuildDelete(t *testing.T) {
-	q := BuildDelete("app_billing", "invoices", "uuid-del", "")
+	q := BuildDelete("app_billing", "invoices", "uuid-del", "", false)
 	expected := "DELETE FROM app_billing.invoices WHERE id = $1::uuid"
 	if q.SQL != expected {
 		t.Errorf("SQL esperado %q, got %q", expected, q.SQL)

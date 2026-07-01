@@ -3,6 +3,7 @@ package provisioner
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
@@ -31,7 +32,7 @@ func (p *Provisioner) Apply(ctx context.Context, cfg *config.Config) (*Report, e
 	report := &Report{}
 
 	for _, app := range cfg.Apps {
-		schemaName := app.Name
+		schemaName := strings.ReplaceAll(app.Name, "-", "_")
 
 		created, err := p.createSchema(ctx, schemaName)
 		if err != nil {

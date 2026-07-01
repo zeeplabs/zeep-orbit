@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/zeeplabs/zeep-orbit/internal/config"
@@ -12,8 +13,9 @@ import (
 
 // All read and write operations are protected by RWMutex.
 type Registry struct {
-	mu   sync.RWMutex
-	apps map[string]*App
+	mu          sync.RWMutex
+	apps        map[string]*App
+	sysCfg      SystemConfig
 }
 
 // App represents an application with its schema and tables.
@@ -41,6 +43,11 @@ type Column struct {
 	Default    string
 	Unique     bool
 	RenameFrom string
+}
+
+// SystemConfig holds global platform settings.
+type SystemConfig struct {
+	SoftDeleteEnabled bool `json:"soft_delete_enabled"`
 }
 
 // New retorna um Registry vazio, pronto para uso.
@@ -81,7 +88,7 @@ func (r *Registry) Load(cfg *config.Config) error {
 
 		newApps[appCfg.Name] = &App{
 			Config:     appCfg,
-			SchemaName: appCfg.Name,
+			SchemaName: strings.ReplaceAll(appCfg.Name, "-", "_"),
 			Tables:     tables,
 		}
 	}
@@ -240,7 +247,7 @@ func (r *Registry) LoadFromDB(ctx context.Context, pool *db.Pool) error {
 				},
 				Tables: tableCfgs,
 			},
-			SchemaName:    a.name,
+			SchemaName:    strings.ReplaceAll(a.name, "-", "_"),
 			Tables:        tables,
 			AuthProviders: authProviders,
 			StorageConfig: storageCfg,
@@ -267,4 +274,18 @@ func (r *Registry) Unregister(appName string) {
 	r.mu.Lock()
 	delete(r.apps, appName)
 	r.mu.Unlock()
+}
+
+// SetSystemConfig stores the global system config.
+func (r *Registry) SetSystemConfig(cfg SystemConfig) {
+	r.mu.Lock()
+	r.sysCfg = cfg
+	r.mu.Unlock()
+}
+
+// SystemConfig returns the current global system config.
+func (r *Registry) SystemConfig() SystemConfig {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.sysCfg
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { Palette, Save, Eye, EyeOff, CheckCircle, Loader2, Globe } from "lucide-react";
+import { Palette, Save, Eye, EyeOff, CheckCircle, Loader2, Globe, Shield } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { THEMES, BrandTheme, applyTheme } from "../lib/themes";
 import { Button } from "@/components/ui/button";
@@ -209,6 +209,17 @@ export default function BrandSettingsPage() {
         </div>
       </div>
 
+      {/* ── Soft Delete Config ── */}
+      <div className="mt-10">
+        <span className="mb-3 inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em]"
+          style={{ borderColor: 'rgba(var(--brand-primary-rgb), 0.2)', backgroundColor: 'rgba(var(--brand-primary-rgb), 0.12)', color: 'var(--brand-light)' }}
+        >
+          <Shield size={12} strokeWidth={1.5} />
+          {t("system.softDelete")}
+        </span>
+        <SoftDeleteCard />
+      </div>
+
       {/* ── Google OAuth Config ── */}
       <div className="mt-10">
         <span className="mb-3 inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em]"
@@ -391,6 +402,64 @@ function GoogleAuthProviderCard() {
         className="mt-5 gap-2 rounded-xl border-0 text-white font-semibold disabled:opacity-40"
         style={{ background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))' }}>
         {saving ? <><Loader2 size={14} className="animate-spin" /> {t("brand.saving")}</> : <><Save size={14} /> {t("brand.save")}</>}
+      </Button>
+    </div>
+  );
+}
+
+function SoftDeleteCard() {
+  const { t } = useTranslation();
+  const [enabled, setEnabled] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/dashboard/api/config/system", { credentials: "include" })
+      .then((r) => r.json())
+      .then((d) => { setEnabled(d.soft_delete_enabled); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/dashboard/api/config/system", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ soft_delete_enabled: enabled }),
+      });
+      if (!res.ok) throw new Error(t("system.error"));
+      setMessage(t("system.saved"));
+    } catch {
+      setMessage(t("system.error"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <p className="text-[13px] text-[#94A3B8]">{t("app.loading")}</p>;
+
+  return (
+    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6 mt-4">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <span className="text-[15px] font-bold text-[#F8FAFC]">{t("system.softDelete")}</span>
+          <p className="text-[12px] text-[#94A3B8] mt-0.5">{t("system.softDeleteDesc")}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-[12px] text-[#94A3B8]">{t("system.softDeleteEnabled")}</span>
+          <Switch checked={enabled} onCheckedChange={setEnabled} />
+        </div>
+      </div>
+      {message && <p className="text-[12px] text-green-400 mb-4">{message}</p>}
+      <Button onClick={handleSave} disabled={saving}
+        className="gap-2 rounded-xl border-0 text-white font-semibold disabled:opacity-40"
+        style={{ background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))' }}>
+        {saving ? <><Loader2 size={14} className="animate-spin" /> {t("system.saving")}</> : <><Save size={14} /> {t("system.save")}</>}
       </Button>
     </div>
   );

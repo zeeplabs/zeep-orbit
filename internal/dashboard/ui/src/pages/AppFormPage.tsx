@@ -11,6 +11,7 @@ import {
   Table2,
   Eye,
   EyeOff,
+  Copy,
 } from "lucide-react";
 import {
   useCreateApp,
@@ -68,8 +69,8 @@ const emptyTable = (): TableDef => ({
 
 function validateName(name: string): string | null {
   if (!name.trim()) return "Nome obrigatório";
-  if (!/^[a-z][a-z0-9_]*$/.test(name))
-    return "Apenas letras minúsculas, números e _ (máx 32), começando com letra";
+  if (!/^[a-z][a-z0-9_-]*$/.test(name))
+    return "Apenas letras minúsculas, números, hífen e _ (máx 32), começando com letra";
   if (name.length > 32) return "Máximo de 32 caracteres";
   return null;
 }
@@ -370,7 +371,7 @@ export default function AppFormPage() {
               <TabsTrigger value="api"
                 className="rounded-xl px-4 py-2 text-[13px] font-semibold text-[#94A3B8] data-[state=active]:bg-white/[0.08] data-[state=active]:text-[#F8FAFC] data-[state=active]:shadow-none"
               >
-                API
+                {t("appForm.tabApi")}
               </TabsTrigger>
             </TabsList>
 
@@ -386,10 +387,10 @@ export default function AppFormPage() {
                     value={appName}
                     onChange={(e) =>
                       setAppName(
-                        e.target.value.toLowerCase().replace(/[\s-]+/g, "_"),
+                        e.target.value.toLowerCase().replace(/[\s]+/g, "-"),
                       )
                     }
-                    placeholder="meu_app"
+                    placeholder={t("appForm.namePlaceholder")}
                     className={cn(
                       "h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus",
                       errors["appName"] &&
@@ -400,8 +401,7 @@ export default function AppFormPage() {
                     <p className="text-xs text-red-400">{errors["appName"]}</p>
                   )}
                   <p className="text-[11px] text-[#94A3B8]">
-                    Apenas minúsculas, números e underscore. Máx 32 chars, começando
-                    com letra.
+                    {t("appForm.nameHint")}
                   </p>
                 </div>
 
@@ -750,7 +750,7 @@ export default function AppFormPage() {
                       <div>
                         <Label className="text-[12px] font-medium text-[#94A3B8]">Redirect URL</Label>
                         <Input value={googleRedirectUrl} onChange={(e) => setGoogleRedirectUrl(e.target.value)}
-                          placeholder={`https://seu-dominio.com/${appName || "meu_app"}/auth/google/callback`}
+                          placeholder={`https://seu-dominio.com/${appName || "meu-app"}/auth/google/callback`}
                           className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus mt-1" />
                         <p className="text-[11px] text-[#64748B] mt-1">
                           Configure este URL no Google Cloud Console
@@ -825,14 +825,60 @@ export default function AppFormPage() {
                       </div>
                     </div>
                     <p className="text-[11px] text-[#94A3B8]">
-                      Os arquivos ficarão disponíveis em <code className="text-[#B3D1FF]">/{appName || "meu_app"}/files/*</code> via API.
+                      Os arquivos ficarão disponíveis em <code className="text-[#B3D1FF]">/{appName || "meu-app"}/files/*</code> via API.
                     </p>
                   </div>
                 )}
               </div>
              </TabsContent>
 
-            <TabsContent value="api" className="mt-0">
+            <TabsContent value="api" className="mt-0 flex flex-col gap-6">
+
+              {isEdit && (
+                <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-5 flex flex-col gap-4">
+                  <h3 className="text-[13px] font-semibold text-[#94A3B8] uppercase tracking-wider">
+                    {t("appForm.apiBaseUrl.title")}
+                  </h3>
+                  <div className="flex flex-col gap-3">
+                    <p className="text-xs text-[#94A3B8]">
+                      {t("appForm.apiBaseUrl.desc")}
+                    </p>
+                    <div className="flex items-center gap-2 bg-black/30 rounded-xl px-4 py-3">
+                      <code className="text-sm text-[#B3D1FF] break-all font-mono">
+                        {window.location.origin}/{appName}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={() => navigator.clipboard.writeText(`${window.location.origin}/${appName}`)}
+                        className="shrink-0 p-1.5 rounded-lg hover:bg-white/[0.08] text-[#94A3B8] hover:text-[#F8FAFC] transition-colors"
+                      >
+                        <Copy size={14} />
+                      </button>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <p className="text-[11px] text-[#64748B] font-medium">
+                        {t("appForm.apiBaseUrl.examples")}
+                      </p>
+                      <code className="text-[11px] text-[#64748B] font-mono">
+                        {t("appForm.apiBaseUrl.register", { name: appName })}
+                      </code>
+                      <code className="text-[11px] text-[#64748B] font-mono">
+                        {t("appForm.apiBaseUrl.login", { name: appName })}
+                      </code>
+                      <code className="text-[11px] text-[#64748B] font-mono">
+                        {t("appForm.apiBaseUrl.list", { name: appName })}
+                      </code>
+                      <code className="text-[11px] text-[#64748B] font-mono">
+                        {t("appForm.apiBaseUrl.create", { name: appName })}
+                      </code>
+                      <code className="text-[11px] text-[#64748B] font-mono">
+                        {t("appForm.apiBaseUrl.health", { name: appName })}
+                      </code>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-5 flex flex-col gap-4">
                 <h3 className="text-[13px] font-semibold text-[#94A3B8] uppercase tracking-wider">
                   API

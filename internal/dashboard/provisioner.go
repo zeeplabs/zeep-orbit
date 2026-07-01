@@ -86,6 +86,14 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 		`CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON zeep_system.audit_log(created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_audit_log_action ON zeep_system.audit_log(action)`,
 		`CREATE INDEX IF NOT EXISTS idx_audit_log_user_id ON zeep_system.audit_log(user_id)`,
+		`CREATE TABLE IF NOT EXISTS zeep_system.system_config (
+			soft_delete_enabled BOOLEAN   NOT NULL DEFAULT false,
+			updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_system_config_singleton
+		 ON zeep_system.system_config ((TRUE))`,
+		`INSERT INTO zeep_system.system_config (soft_delete_enabled)
+		 SELECT false WHERE NOT EXISTS (SELECT 1 FROM zeep_system.system_config)`,
 	}
 
 	for _, stmt := range stmts {

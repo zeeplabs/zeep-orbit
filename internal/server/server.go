@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
@@ -130,6 +131,14 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 
 	r.Use(logMiddleware(logger, logBuf))
 	r.Use(chimiddleware.Recoverer)
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"*"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Requested-With"},
+		ExposedHeaders:   []string{"Link", "X-Truncated"},
+		AllowCredentials: false,
+		MaxAge:           300,
+	}))
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/dashboard", http.StatusFound)
@@ -173,6 +182,8 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Get("/api/config/auth/providers", dashH.ListAuthProviders)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/config/auth/providers/{provider}", dashH.GetAuthProvider)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/config/auth/providers/{provider}", dashH.UpsertAuthProvider)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/config/system", dashH.GetSystemConfig)
+		r.With(dashboard.RequireAuth(pool)).Put("/api/config/system", dashH.UpdateSystemConfig)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/audit-log", dashH.ListAuditLog)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/data-browser/apps", dashH.ListDataBrowserApps)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/data-browser/query", dashH.DataBrowserQuery)
@@ -216,6 +227,8 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.Delete("/{id}", h.HandleFileDelete)
 		r.Get("/{id}/url", h.HandleFileSignedURL)
 	})
+
+	r.Get("/{app}/health", h.HandleAppHealth)
 
 	r.Route("/{app}/{table}", func(r chi.Router) {
 		r.Use(appRateLimit)

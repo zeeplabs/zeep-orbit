@@ -25,9 +25,9 @@ func NewHandler(pool *db.Pool, reg *registry.Registry) *Handler {
 	return &Handler{pool: pool, reg: reg}
 }
 
-// Returns ok=false when RLS is "owner" but no authenticated user is in context.
+// Returns ok=false when RLS is enabled but no authenticated user is in context.
 func resolveOwner(ctx context.Context, table *registry.Table) (ownerID string, ok bool) {
-	if table.RLS != "owner" {
+	if table.RLS != "owner" && table.RLS != "enabled" {
 		return "", true
 	}
 	user, hasUser := auth.UserFromContext(ctx)
@@ -66,7 +66,7 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	q, err := query.BuildList(app.SchemaName, tableName, table, params, ownerID)
+	q, err := query.BuildList(app.SchemaName, tableName, table, params, ownerID, h.reg.SystemConfig().SoftDeleteEnabled)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -148,7 +148,7 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	row, err := pgx.CollectOneRow(rows, pgx.RowToMap)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to collect inserted row")
+		writeError(w, http.StatusInternalServerError, "failed to collect inserted row: "+err.Error())
 		return
 	}
 
@@ -274,7 +274,7 @@ func (h *Handler) HandleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	q := query.BuildDelete(app.SchemaName, tableName, id, ownerID)
+	q := query.BuildDelete(app.SchemaName, tableName, id, ownerID, h.reg.SystemConfig().SoftDeleteEnabled)
 
 	tag, err := h.pool.Exec(r.Context(), q.SQL, q.Args...)
 	if err != nil {
@@ -296,5 +296,49 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status": "ok",
 		"apps":   len(apps),
+	})
+}
+
+// HandleAppHealth implementa GET /{app}/health → status do app individual.
+func (h *Handler) HandleAppHealth(w http.ResponseWriter, r *http.Request) {
+	appName := chi.URLParam(r, "app")
+
+	app, ok := h.reg.Get(appName)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"status": "not_found", "error": "app not found"})
+		return
+	}
+
+	dbOK := true
+	if err := h.pool.Ping(r.Context()); err != nil {
+		dbOK = false
+	}
+
+	schemaOK := true
+	if dbOK {
+		var exists bool
+		err := h.pool.QueryRow(r.Context(),
+			`SELECT EXISTS(SELECT 1 FROM information_schema.schemata WHERE schema_name = $1)`,
+			app.SchemaName,
+		).Scan(&exists)
+		if err != nil || !exists {
+			schemaOK = false
+		}
+	}
+
+	healthy := dbOK && schemaOK
+	code := http.StatusOK
+	if !healthy {
+		code = http.StatusServiceUnavailable
+	}
+
+	writeJSON(w, code, map[string]any{
+		"status":  "ok",
+		"app":     appName,
+		"healthy": healthy,
+		"checks": map[string]bool{
+			"database": dbOK,
+			"schema":   schemaOK,
+		},
 	})
 }

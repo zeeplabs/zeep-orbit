@@ -23,7 +23,10 @@ type WriteQuery struct {
 
 // columnSet retorna um conjunto (map) de nomes de colunas conhecidas para lookup O(1).
 func columnSet(table *registry.Table) map[string]struct{} {
-	set := make(map[string]struct{}, len(table.Columns))
+	set := make(map[string]struct{}, len(table.Columns)+len(systemFields))
+	for col := range systemFields {
+		set[col] = struct{}{}
+	}
 	for _, col := range table.Columns {
 		set[col.Name] = struct{}{}
 	}
@@ -32,7 +35,10 @@ func columnSet(table *registry.Table) map[string]struct{} {
 
 // columnTypes returns map[colName]colType for fast type lookup.
 func columnTypes(table *registry.Table) map[string]string {
-	m := make(map[string]string, len(table.Columns))
+	m := make(map[string]string, len(table.Columns)+len(systemFields))
+	for col, typ := range systemFields {
+		m[col] = typ
+	}
 	for _, col := range table.Columns {
 		m[col.Name] = col.Type
 	}
@@ -52,11 +58,12 @@ func pgCast(colType string) string {
 }
 
 // systemFields are fields managed by the server that must never come from the caller.
-var systemFields = map[string]struct{}{
-	"id":         {},
-	"created_at": {},
-	"updated_at": {},
-	"owner_id":   {},
+var systemFields = map[string]string{
+	"id":         "uuid",
+	"created_at": "timestamptz",
+	"updated_at": "timestamptz",
+	"owner_id":   "uuid",
+	"deleted_at": "timestamptz",
 }
 
 // operatorMap mapeia prefixo de operador → SQL operator.
@@ -72,7 +79,8 @@ var operatorMap = map[string]string{
 }
 
 //   - order={field}.asc|{field}.desc: sorting; field must exist in the table
-func BuildList(schemaName, tableName string, table *registry.Table, params map[string]string, ownerID string) (*ListQuery, error) {
+//   - softDelete=true: automatically filters WHERE deleted_at IS NULL (unless ?deleted=true)
+func BuildList(schemaName, tableName string, table *registry.Table, params map[string]string, ownerID string, softDelete bool) (*ListQuery, error) {
 	const defaultLimit = 50
 	const maxLimit = 1000
 
@@ -104,8 +112,13 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 	var whereClauses []string
 	var args []any
 
+	showDeleted := false
 	for key, val := range params {
 		if key == "limit" || key == "offset" || key == "order" {
+			continue
+		}
+		if key == "deleted" && val == "true" {
+			showDeleted = true
 			continue
 		}
 		if _, ok := known[key]; !ok {
@@ -143,6 +156,10 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 	if ownerID != "" {
 		args = append(args, ownerID)
 		whereClauses = append(whereClauses, fmt.Sprintf("owner_id = $%d::uuid", len(args)))
+	}
+
+	if softDelete && !showDeleted {
+		whereClauses = append(whereClauses, "deleted_at IS NULL")
 	}
 
 	// --- order ---
@@ -314,7 +331,20 @@ func BuildGetByID(schemaName, tableName string, id string, ownerID string) *Writ
 }
 
 // id and ownerID are included in Args; the caller uses pool.Exec(ctx, q.SQL, q.Args...).
-func BuildDelete(schemaName, tableName string, id string, ownerID string) *WriteQuery {
+// When softDelete is true, performs UPDATE SET deleted_at = now() instead of DELETE.
+func BuildDelete(schemaName, tableName string, id string, ownerID string, softDelete bool) *WriteQuery {
+	if softDelete {
+		if ownerID != "" {
+			return &WriteQuery{
+				SQL:  fmt.Sprintf("UPDATE %s.%s SET deleted_at = now() WHERE id = $1::uuid AND owner_id = $2::uuid AND deleted_at IS NULL", schemaName, tableName),
+				Args: []any{id, ownerID},
+			}
+		}
+		return &WriteQuery{
+			SQL:  fmt.Sprintf("UPDATE %s.%s SET deleted_at = now() WHERE id = $1::uuid AND deleted_at IS NULL", schemaName, tableName),
+			Args: []any{id},
+		}
+	}
 	if ownerID != "" {
 		return &WriteQuery{
 			SQL:  fmt.Sprintf("DELETE FROM %s.%s WHERE id = $1::uuid AND owner_id = $2::uuid", schemaName, tableName),

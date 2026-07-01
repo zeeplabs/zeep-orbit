@@ -12,6 +12,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -51,7 +52,7 @@ func NewHandler(pool *db.Pool, reg *registry.Registry) *Handler {
 
 var (
 	identRe      = regexp.MustCompile(`^[a-z][a-z0-9_]{0,62}$`)
-	appNameRe    = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
+	appNameRe    = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
 	allowedTypes = map[string]bool{
 		"text": true, "integer": true, "bigint": true, "boolean": true,
 		"uuid": true, "timestamptz": true, "numeric": true, "jsonb": true,
@@ -61,7 +62,7 @@ var (
 // are safe SQL identifiers / known types before they reach the provisioner DDL.
 func validateAppInput(name string, tables []AppTableRow) error {
 	if !appNameRe.MatchString(name) {
-		return errors.New("app name must be lowercase letters, digits, or underscores (max 32), starting with a letter")
+		return errors.New("app name must be lowercase letters, digits, hyphens, or underscores (max 32), starting with a letter")
 	}
 	for _, t := range tables {
 		if !identRe.MatchString(t.Name) {
@@ -289,6 +290,53 @@ func (h *Handler) UpsertAuthProvider(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, result)
 	h.audit(r.Context(), user.ID, user.Email, "auth.provider.update", "auth_provider", provider, provider, nil, r.RemoteAddr)
+}
+
+func (h *Handler) GetSystemConfig(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	if user.Role != "superadmin" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+
+	cfg := h.reg.SystemConfig()
+	writeJSON(w, http.StatusOK, cfg)
+}
+
+func (h *Handler) UpdateSystemConfig(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	if user.Role != "superadmin" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1024)
+	var body struct {
+		SoftDeleteEnabled bool `json:"soft_delete_enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	cfg, err := UpsertSystemConfig(r.Context(), h.pool, body.SoftDeleteEnabled)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update system config"})
+		return
+	}
+
+	h.reg.SetSystemConfig(registry.SystemConfig{SoftDeleteEnabled: cfg.SoftDeleteEnabled})
+
+	writeJSON(w, http.StatusOK, cfg)
+	h.audit(r.Context(), user.ID, user.Email, "config.system.update", "config", "system", "", nil, r.RemoteAddr)
 }
 
 // Login handles POST /dashboard/api/login
@@ -933,12 +981,17 @@ func appRowToRegistryApp(app *AppRow) *registry.App {
 
 	return &registry.App{
 		Config:        buildAppConfig(app),
-		SchemaName:    app.Name,
+		SchemaName:    schemaNameForDB(app.Name),
 		Tables:        tables,
 		AuthProviders: authProviders,
 		StorageConfig: sc,
 		RateLimit:     rl,
 	}
+}
+
+// Hyphens are not valid in PostgreSQL identifiers, so convert them to underscores.
+func schemaNameForDB(appName string) string {
+	return strings.ReplaceAll(appName, "-", "_")
 }
 
 func (h *Handler) audit(ctx context.Context, userID, userEmail, action, resourceType, resourceID, resourceName string, metadata json.RawMessage, ip string) {
@@ -1146,7 +1199,7 @@ func (h *Handler) DataBrowserQuery(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	q, err := query.BuildList(app.SchemaName, tableName, table, params, "")
+	q, err := query.BuildList(app.SchemaName, tableName, table, params, "", h.reg.SystemConfig().SoftDeleteEnabled)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
@@ -1243,7 +1296,7 @@ func (h *Handler) DataBrowserExport(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	q, err := query.BuildList(app.SchemaName, tableName, table, params, "")
+	q, err := query.BuildList(app.SchemaName, tableName, table, params, "", h.reg.SystemConfig().SoftDeleteEnabled)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
@@ -1489,7 +1542,7 @@ func (h *Handler) DataBrowserDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	q := query.BuildDelete(app.SchemaName, tableName, id, "")
+	q := query.BuildDelete(app.SchemaName, tableName, id, "", h.reg.SystemConfig().SoftDeleteEnabled)
 	tag, err := h.pool.Exec(r.Context(), q.SQL, q.Args...)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to delete row: " + err.Error()})

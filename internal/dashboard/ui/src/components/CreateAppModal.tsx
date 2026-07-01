@@ -50,8 +50,8 @@ const emptyTable = (): TableDef => ({
 
 function validateName(name: string): string | null {
   if (!name.trim()) return "Nome obrigatório";
-  if (!/^[a-z][a-z0-9_]*$/.test(name))
-    return "Apenas letras minúsculas, números e _ (máx 32), começando com letra";
+  if (!/^[a-z][a-z0-9_-]*$/.test(name))
+    return "Apenas letras minúsculas, números, hífen e _ (máx 32), começando com letra";
   if (name.length > 32) return "Máximo de 32 caracteres";
   return null;
 }
@@ -253,8 +253,8 @@ export default function CreateAppModal({ open, editTarget, onClose }: Props) {
                 </Label>
                 <Input
                   value={appName}
-                  onChange={(e) => setAppName(e.target.value.toLowerCase().replace(/[\s-]+/g, "_"))}
-                  placeholder="meu_app"
+                  onChange={(e) => setAppName(e.target.value.toLowerCase().replace(/[\s]+/g, "-"))}
+                  placeholder="meu-app"
                   className={cn(
                     "bg-white/[0.05] border-white/[0.10] rounded-xl text-[#F8FAFC] placeholder:text-white/30 focus-visible:ring-[#0347A5]/40 focus-visible:border-[#0347A5]/60 h-10",
                     errors["appName"] &&
@@ -265,7 +265,7 @@ export default function CreateAppModal({ open, editTarget, onClose }: Props) {
                   <p className="text-xs text-red-400">{errors["appName"]}</p>
                 )}
                 <p className="text-[11px] text-[#94A3B8]">
-                  Apenas minúsculas, números e underscore. Máx 32 chars, começando com letra.
+                  Apenas minúsculas, números, hífen e underscore. Máx 32 chars, começando com letra.
                 </p>
               </div>
 

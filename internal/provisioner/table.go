@@ -14,6 +14,7 @@ var systemColumnNames = map[string]bool{
 	"created_at": true,
 	"updated_at": true,
 	"owner_id":   true,
+	"deleted_at": true,
 }
 
 // pgType converte o tipo do config para o tipo PostgreSQL correspondente.
@@ -94,6 +95,7 @@ func (p *Provisioner) createTable(ctx context.Context, schemaName, tableName str
 	colDefs = append(colDefs,
 		`"created_at" TIMESTAMPTZ NOT NULL DEFAULT now()`,
 		`"updated_at" TIMESTAMPTZ NOT NULL DEFAULT now()`,
+		`"deleted_at" TIMESTAMPTZ`,
 	)
 
 	sql := fmt.Sprintf(
