@@ -47,6 +47,9 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/billing/invoices
 | **Auth by Email**      | Built-in email/password register & login per app         |
 | **Google OAuth**       | Sign in with Google — both dashboard and per-app         |
 | **Row-Level Security** | Auto-filter data by owner (`rls: owner`)                 |
+| **Per-App Health**     | `GET /{app}/health` for monitoring and readiness probes  |
+| **Soft Delete**        | Configurable soft delete toggle (dashboard settings)     |
+| **CORS**               | Cross-origin support for SPAs and mobile apps            |
 | **OpenAPI Docs**       | Auto-generated Swagger UI per app                        |
 | **Data Browser**       | GUI to browse, filter, edit, export CSV, delete rows     |
 | **User Management**    | Manage dashboard admins and app users                    |
@@ -193,6 +196,7 @@ The web dashboard is embedded in the binary and accessible at `/dashboard`. Feat
 | `BRAND_THEME`                | ❌       | Default theme (azure, emerald, ruby, amber, orange) |
 | `BRAND_COMPANY_NAME`         | ❌       | Company name for white-label                        |
 | `LOG_LEVEL`                  | ❌       | Set `debug` for development output                  |
+| `DASHBOARD_LOG_BUFFER_SIZE`  | ❌       | Ring buffer size for log viewer (default: 2000)     |
 
 ### apps.yaml
 
@@ -219,7 +223,7 @@ apps:
 
 Options: `required` (NOT NULL), `unique`, `default` (SQL expression).
 
-Auto-generated columns: `id` (UUID), `created_at`, `updated_at`.
+Auto-generated columns: `id` (UUID), `created_at`, `updated_at`, `deleted_at` (nullable, used when soft delete is enabled).
 
 ---
 
@@ -252,8 +256,9 @@ Dashboard has its own auth system (email/password or Google OAuth), separate fro
 | POST      | `/{app}/{table}`      | Create                             |
 | GET       | `/{app}/{table}/{id}` | Get by ID                          |
 | PUT/PATCH | `/{app}/{table}/{id}` | Update (partial)                   |
-| DELETE    | `/{app}/{table}/{id}` | Delete                             |
-| GET       | `/health`             | Health check                       |
+| DELETE    | `/{app}/{table}/{id}` | Delete (soft-delete if enabled)    |
+| GET       | `/{app}/health`       | Per-app health check (no auth)     |
+| GET       | `/health`             | Global health check                |
 | GET       | `/metrics`            | Prometheus metrics                 |
 | GET       | `/docs/{app}`         | Swagger UI                         |
 | GET       | `/{app}/auth/*`       | Auth endpoints                     |
@@ -264,7 +269,7 @@ Dashboard has its own auth system (email/password or Google OAuth), separate fro
 | GET       | `/{app}/files/{id}/url` | Get signed URL with TTL          |
 | DELETE    | `/{app}/files/{id}`   | Delete file                        |
 
-Query params for list: `?limit=`, `?offset=`, `?field=eq.value`, `?order=field.asc`
+Query params for list: `?limit=`, `?offset=`, `?field=eq.value`, `?order=field.asc`, `?deleted=true` (show soft-deleted records when soft delete is enabled)
 
 ---
 
