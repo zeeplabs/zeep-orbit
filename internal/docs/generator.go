@@ -130,6 +130,10 @@ func generate(apps []*registry.App) *Spec {
 			addAuthPaths(spec, appName, security)
 		}
 
+		if app.StorageConfig != nil {
+			addFilePaths(spec, appName, security)
+		}
+
 		tableNames := make([]string, 0, len(app.Tables))
 		for name := range app.Tables {
 			tableNames = append(tableNames, name)
@@ -309,6 +313,146 @@ func openAPIType(zeepType string) (typ, format string) {
 
 func jsonContent(s schemaOrRef) map[string]mediaType {
 	return map[string]mediaType{"application/json": {Schema: s}}
+}
+
+func addFilePaths(spec *Spec, appName string, security []map[string][]string) {
+	base := fmt.Sprintf("/%s/files", appName)
+
+	fileSchema := schemaOrRef{
+		Type: "object",
+		Properties: map[string]schemaOrRef{
+			"id":         {Type: "string", Format: "uuid"},
+			"name":       {Type: "string"},
+			"size":       {Type: "integer", Format: "int64"},
+			"mime_type":  {Type: "string"},
+			"url":        {Type: "string"},
+			"created_at": {Type: "string", Format: "date-time"},
+		},
+	}
+
+	urlSchema := schemaOrRef{
+		Type: "object",
+		Properties: map[string]schemaOrRef{
+			"url": {Type: "string"},
+		},
+	}
+
+	idParam := parameter{
+		Name:     "id",
+		In:       "path",
+		Required: true,
+		Schema:   schemaOrRef{Type: "string", Format: "uuid"},
+	}
+
+	spec.Paths[base+"/"] = pathItem{
+		Get: &operation{
+			Tags:        []string{appName},
+			Summary:     "List files",
+			OperationID: fmt.Sprintf("list_files_%s", appName),
+			Security:    security,
+			Parameters: []parameter{
+				{Name: "limit", In: "query", Schema: schemaOrRef{Type: "integer", Format: "int32"}},
+				{Name: "offset", In: "query", Schema: schemaOrRef{Type: "integer", Format: "int32"}},
+			},
+			Responses: map[string]response{
+				"200": {Description: "OK", Content: jsonContent(schemaOrRef{
+					Type:  "array",
+					Items: &schemaOrRef{Ref: "#/components/schemas/" + appName + "_file"},
+				})},
+				"401": {Description: "Unauthorized"},
+			},
+		},
+		Post: &operation{
+			Tags:        []string{appName},
+			Summary:     "Upload file",
+			OperationID: fmt.Sprintf("upload_file_%s", appName),
+			Security:    security,
+			RequestBody: &requestBody{
+				Required: true,
+				Content: map[string]mediaType{
+					"multipart/form-data": {
+						Schema: schemaOrRef{
+							Type: "object",
+							Properties: map[string]schemaOrRef{
+								"file": {Type: "string", Format: "binary"},
+							},
+							Required: []string{"file"},
+						},
+					},
+				},
+			},
+			Responses: map[string]response{
+				"201": {Description: "Created", Content: jsonContent(schemaOrRef{Ref: "#/components/schemas/" + appName + "_file"})},
+				"400": {Description: "Bad Request"},
+				"401": {Description: "Unauthorized"},
+			},
+		},
+	}
+
+	spec.Paths[base+"/{id}"] = pathItem{
+		Get: &operation{
+			Tags:        []string{appName},
+			Summary:     "Get file metadata",
+			OperationID: fmt.Sprintf("get_file_%s", appName),
+			Security:    security,
+			Parameters:  []parameter{idParam},
+			Responses: map[string]response{
+				"200": {Description: "OK", Content: jsonContent(schemaOrRef{Ref: "#/components/schemas/" + appName + "_file"})},
+				"401": {Description: "Unauthorized"},
+				"404": {Description: "Not Found"},
+			},
+		},
+		Delete: &operation{
+			Tags:        []string{appName},
+			Summary:     "Delete file",
+			OperationID: fmt.Sprintf("delete_file_%s", appName),
+			Security:    security,
+			Parameters:  []parameter{idParam},
+			Responses: map[string]response{
+				"204": {Description: "No Content"},
+				"401": {Description: "Unauthorized"},
+				"404": {Description: "Not Found"},
+			},
+		},
+	}
+
+	spec.Paths[base+"/{id}/download"] = pathItem{
+		Get: &operation{
+			Tags:        []string{appName},
+			Summary:     "Download file (redirects to signed URL)",
+			OperationID: fmt.Sprintf("download_file_%s", appName),
+			Security:    security,
+			Parameters: []parameter{
+				idParam,
+				{Name: "ttl", In: "query", Schema: schemaOrRef{Type: "integer"}},
+			},
+			Responses: map[string]response{
+				"302": {Description: "Redirect to signed S3 URL"},
+				"401": {Description: "Unauthorized"},
+				"404": {Description: "Not Found"},
+			},
+		},
+	}
+
+	spec.Paths[base+"/{id}/url"] = pathItem{
+		Get: &operation{
+			Tags:        []string{appName},
+			Summary:     "Get signed URL for file",
+			OperationID: fmt.Sprintf("signed_url_file_%s", appName),
+			Security:    security,
+			Parameters: []parameter{
+				idParam,
+				{Name: "ttl", In: "query", Schema: schemaOrRef{Type: "integer"}},
+			},
+			Responses: map[string]response{
+				"200": {Description: "OK", Content: jsonContent(urlSchema)},
+				"401": {Description: "Unauthorized"},
+				"404": {Description: "Not Found"},
+			},
+		},
+	}
+
+	spec.Components.Schemas[appName+"_file"] = fileSchema
 }
 
 func addAuthPaths(spec *Spec, appName string, security []map[string][]string) {
