@@ -74,7 +74,7 @@ func cmdServe() *cobra.Command {
 			if companyName == "" {
 				companyName = "Zeep Tecnologia"
 			}
-			if _, err := dashboard.UpsertBrandConfig(context.Background(), pool, brandTheme, companyName, ""); err != nil {
+			if _, err := dashboard.UpsertBrandConfig(context.Background(), pool, brandTheme, companyName, "", ""); err != nil {
 				fmt.Fprintf(os.Stderr, "error seeding brand config: %v\n", err)
 				os.Exit(1)
 			}

@@ -38,6 +38,32 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/billing/invoices
 
 ---
 
+## 📑 Index
+
+- [Features](#-features)
+- [Quick start](#-quick-start)
+  - [Docker](#docker-compose)
+  - [Kubernetes (Helm)](#kubernetes-helm)
+  - [Binary](#binary)
+- [Dashboard](#%EF%B8%8F-dashboard)
+- [Configuration](#-configuration)
+  - [Environment variables](#environment-variables)
+  - [apps.yaml](#appsyaml)
+- [Authentication](#-authentication)
+- [REST API](#-rest-api)
+- [SDK Clients](#-sdk-clients)
+- [CLI](#-cli)
+- [Observability](#-observability)
+- [Deployment](#-deployment)
+  - [Docker](#docker)
+  - [Kubernetes (Helm)](#kubernetes-helm-1)
+- [Roadmap](#%EF%B8%8F-roadmap)
+- [Development](#%EF%B8%8F-development)
+- [Contributing](#-contributing)
+- [License](#-license)
+
+---
+
 ## ✨ Features
 
 | Feature                | Description                                              |
@@ -160,7 +186,7 @@ zeep serve --config ./apps.yaml
 ### Kubernetes (Helm)
 
 ```bash
-helm repo add zeeplabs https://zeeplabs.github.io/zeep-orbit
+helm repo add zeeplabs https://zeeplabs.github.io/zeep-orbit/helm
 helm install zeep-orbit zeeplabs/zeep-orbit \
   --values values.yaml
 ```
@@ -444,12 +470,25 @@ brand:
 Install:
 
 ```bash
-helm repo add zeeplabs https://zeeplabs.github.io/zeep-orbit
+helm repo add zeeplabs https://zeeplabs.github.io/zeep-orbit/helm
 helm install zeep-orbit zeeplabs/zeep-orbit \
   --values values.yaml
 ```
 
 After deployment, go to `/dashboard`, bootstrap with the `dashboardBootstrapSecret`, and create your users and apps — all through the interface.
+
+#### Upgrading
+
+To upgrade an existing Helm release:
+
+```bash
+helm repo update zeeplabs
+helm upgrade zeep-orbit zeeplabs/zeep-orbit \
+  --values values.yaml \
+  --atomic
+```
+
+The `--atomic` flag rolls back automatically if the upgrade fails. Always keep your `values.yaml` backed up — it contains your database URL and secrets.
 
 ---
 
@@ -463,6 +502,7 @@ After deployment, go to `/dashboard`, bootstrap with the `dashboardBootstrapSecr
 | **M4 — Storage & Events** | 🔵 In progress | ✅ S3/File Storage · ⬜ Webhooks · ⬜ Event Bus |
 | **M5 — i18n** | 🟢 Done | pt-BR / English, language switcher |
 | **M6 — SDKs** | 🟢 Done | TS, Go, Python, Rust, Java, PHP clients |
+| **M7 — AI Schema** | 🔵 In progress | ✅ Natural language table creation via AI |
 
 ### Deferred / Backlog
 

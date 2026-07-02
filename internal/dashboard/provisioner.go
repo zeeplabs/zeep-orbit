@@ -8,7 +8,18 @@ import (
 )
 
 // Idempotent — safe to call on every startup.
+// Uses pg_advisory_xact_lock to serialize provisioning across concurrent pods.
 func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("dashboard: provision begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('zeep-orbit-provision'))`); err != nil {
+		return fmt.Errorf("dashboard: provision acquire lock: %w", err)
+	}
+
 	stmts := []string{
 		`CREATE EXTENSION IF NOT EXISTS pgcrypto`,
 		`CREATE SCHEMA IF NOT EXISTS zeep_system`,
@@ -61,8 +72,10 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			theme        TEXT        NOT NULL DEFAULT 'azure',
 			company_name TEXT        NOT NULL DEFAULT 'Zeep Tecnologia',
 			logo_url     TEXT        NOT NULL DEFAULT '',
+			icon_url     TEXT        NOT NULL DEFAULT '',
 			updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
+		`ALTER TABLE zeep_system.brand_config ADD COLUMN IF NOT EXISTS icon_url TEXT NOT NULL DEFAULT ''`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_brand_config_singleton
 		 ON zeep_system.brand_config ((TRUE))`,
 		`CREATE TABLE IF NOT EXISTS zeep_system.auth_providers (
@@ -88,8 +101,10 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 		`CREATE INDEX IF NOT EXISTS idx_audit_log_user_id ON zeep_system.audit_log(user_id)`,
 		`CREATE TABLE IF NOT EXISTS zeep_system.system_config (
 			soft_delete_enabled BOOLEAN   NOT NULL DEFAULT false,
+			storage_config      JSONB     NOT NULL DEFAULT '{}',
 			updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
+		`ALTER TABLE zeep_system.system_config ADD COLUMN IF NOT EXISTS storage_config JSONB NOT NULL DEFAULT '{}'`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_system_config_singleton
 		 ON zeep_system.system_config ((TRUE))`,
 		`INSERT INTO zeep_system.system_config (soft_delete_enabled)
@@ -97,9 +112,9 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 	}
 
 	for _, stmt := range stmts {
-		if _, err := pool.Exec(ctx, stmt); err != nil {
+		if _, err := tx.Exec(ctx, stmt); err != nil {
 			return fmt.Errorf("dashboard: provision: %w", err)
 		}
 	}
-	return nil
+	return tx.Commit(ctx)
 }

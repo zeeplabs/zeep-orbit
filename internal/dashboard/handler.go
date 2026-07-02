@@ -163,11 +163,13 @@ func (h *Handler) Config(w http.ResponseWriter, r *http.Request) {
 	}
 
 	googleProv, _ := GetAuthProvider(r.Context(), h.pool, "google")
+	sysCfg, _ := GetSystemConfig(r.Context(), h.pool)
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"theme":               theme,
-		"company_name":        company,
+		"theme":                theme,
+		"company_name":         company,
 		"google_oauth_enabled": googleProv.Enabled,
+		"storage_configured":   sysCfg != nil && sysCfg.StorageConfig != nil,
 	})
 }
 
@@ -183,11 +185,12 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, 4096)
+	r.Body = http.MaxBytesReader(w, r.Body, 8192)
 	var body struct {
 		Theme       string `json:"theme"`
 		CompanyName string `json:"company_name"`
 		LogoURL     string `json:"logo_url"`
+		IconURL     string `json:"icon_url"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
@@ -200,7 +203,7 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cfg, err := UpsertBrandConfig(r.Context(), h.pool, body.Theme, body.CompanyName, body.LogoURL)
+	cfg, err := UpsertBrandConfig(r.Context(), h.pool, body.Theme, body.CompanyName, body.LogoURL, body.IconURL)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 		return
@@ -303,7 +306,14 @@ func (h *Handler) GetSystemConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cfg := h.reg.SystemConfig()
+	cfg, err := GetSystemConfig(r.Context(), h.pool)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	if cfg.StorageConfig != nil {
+		cfg.StorageConfig.SecretAccessKey = ""
+	}
 	writeJSON(w, http.StatusOK, cfg)
 }
 
@@ -318,19 +328,24 @@ func (h *Handler) UpdateSystemConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, 1024)
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
 	var body struct {
-		SoftDeleteEnabled bool `json:"soft_delete_enabled"`
+		SoftDeleteEnabled bool                 `json:"soft_delete_enabled"`
+		StorageConfig     *GlobalStorageConfig `json:"storage_config,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
 
-	cfg, err := UpsertSystemConfig(r.Context(), h.pool, body.SoftDeleteEnabled)
+	cfg, err := UpsertSystemConfig(r.Context(), h.pool, body.SoftDeleteEnabled, body.StorageConfig)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update system config"})
 		return
+	}
+
+	if cfg.StorageConfig != nil {
+		cfg.StorageConfig.SecretAccessKey = ""
 	}
 
 	h.reg.SetSystemConfig(registry.SystemConfig{SoftDeleteEnabled: cfg.SoftDeleteEnabled})
@@ -438,12 +453,13 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{
-		"id":       user.ID,
-		"email":    user.Email,
-		"name":     user.Name,
-		"role":     user.Role,
-		"language": user.Language,
+	writeJSON(w, http.StatusOK, map[string]any{
+		"id":          user.ID,
+		"email":       user.Email,
+		"name":        user.Name,
+		"role":        user.Role,
+		"language":    user.Language,
+		"needs_setup": user.Name == "" && user.PasswordHash == "",
 	})
 }
 
@@ -749,11 +765,16 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if body.StorageConfig != nil && body.StorageConfig.Bucket != "" {
-		if err := UpdateAppStorageConfig(r.Context(), h.pool, app.ID, body.StorageConfig); err != nil {
+		sc, err := resolveAppStorage(r.Context(), h.pool, body.StorageConfig)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to resolve storage config"})
+			return
+		}
+		if err := UpdateAppStorageConfig(r.Context(), h.pool, app.ID, sc); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save storage config"})
 			return
 		}
-		app.StorageConfig = body.StorageConfig
+		app.StorageConfig = sc
 	}
 
 	cfg := buildAppConfig(app)
@@ -834,11 +855,16 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if body.StorageConfig != nil && body.StorageConfig.Bucket != "" {
-		if err := UpdateAppStorageConfig(r.Context(), h.pool, app.ID, body.StorageConfig); err != nil {
+		sc, err := resolveAppStorage(r.Context(), h.pool, body.StorageConfig)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to resolve storage config"})
+			return
+		}
+		if err := UpdateAppStorageConfig(r.Context(), h.pool, app.ID, sc); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save storage config"})
 			return
 		}
-		app.StorageConfig = body.StorageConfig
+		app.StorageConfig = sc
 	}
 
 	if body.RateLimit != nil {
@@ -989,6 +1015,42 @@ func appRowToRegistryApp(app *AppRow) *registry.App {
 	}
 }
 
+// If the request has only bucket_name and global S3 is configured, merge the
+// global endpoint/region/keys into the app's storage config. The app's bucket
+// name becomes a folder prefix within the global bucket.
+func resolveAppStorage(ctx context.Context, pool *db.Pool, input *storage.StorageConfig) (*storage.StorageConfig, error) {
+	if input == nil || input.Bucket == "" {
+		return input, nil
+	}
+
+	// If all fields are provided, use as-is
+	if input.Endpoint != "" && input.AccessKeyID != "" {
+		return input, nil
+	}
+
+	// Try to merge with global S3 config
+	cfg, err := GetSystemConfig(ctx, pool)
+	if err != nil || cfg.StorageConfig == nil {
+		return input, nil
+	}
+	global := cfg.StorageConfig
+	if global.Bucket == "" || global.Region == "" || global.Endpoint == "" {
+		return input, nil
+	}
+
+	appFolder := input.Bucket
+	merged := &storage.StorageConfig{
+		Bucket:          global.Bucket,
+		Region:          global.Region,
+		Endpoint:        global.Endpoint,
+		AccessKeyID:     global.AccessKeyID,
+		SecretAccessKey: global.SecretAccessKey,
+		Folder:          appFolder,
+	}
+
+	return merged, nil
+}
+
 // Hyphens are not valid in PostgreSQL identifiers, so convert them to underscores.
 func schemaNameForDB(appName string) string {
 	return strings.ReplaceAll(appName, "-", "_")
@@ -1000,6 +1062,70 @@ func (h *Handler) audit(ctx context.Context, userID, userEmail, action, resource
 }
 
 // SetLanguage handles PUT /dashboard/api/me/language
+func (h *Handler) CompleteGoogleSetup(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	fullUser, err := GetUserByEmail(r.Context(), h.pool, user.Email)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	if fullUser.PasswordHash != "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "account already has a password"})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
+	var body struct {
+		Name            string `json:"name"`
+		Password        string `json:"password"`
+		ConfirmPassword string `json:"confirm_password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	if body.Name == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name is required"})
+		return
+	}
+	if body.Password == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password is required"})
+		return
+	}
+	if len(body.Password) < 8 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password must be at least 8 characters"})
+		return
+	}
+	if body.Password != body.ConfirmPassword {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "passwords do not match"})
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(body.Password), bcrypt.DefaultCost)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	if err := UpdateUserName(r.Context(), h.pool, fullUser.ID, body.Name); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	if err := UpdatePassword(r.Context(), h.pool, fullUser.ID, string(hash)); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
 func (h *Handler) SetLanguage(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
 	if !ok {
@@ -1747,6 +1873,108 @@ func (h *Handler) ListAuditLog(w http.ResponseWriter, r *http.Request) {
 		"total":  total,
 		"limit":  limit,
 		"offset": offset,
+	})
+}
+
+func (h *Handler) UploadLogo(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	if user.Role != "superadmin" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+
+	logoType := chi.URLParam(r, "type")
+	if logoType != "login-logo" && logoType != "icon" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid type, use login-logo or icon"})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 5<<20)
+	if err := r.ParseMultipartForm(5 << 20); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid multipart form"})
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "file is required"})
+		return
+	}
+	defer file.Close()
+
+	cfg, err := GetSystemConfig(r.Context(), h.pool)
+	if err != nil || cfg.StorageConfig == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "global S3 not configured"})
+		return
+	}
+
+	s3Client, err := storage.NewClient(r.Context(), storage.StorageConfig{
+		Bucket:          cfg.StorageConfig.Bucket,
+		Region:          cfg.StorageConfig.Region,
+		Endpoint:        cfg.StorageConfig.Endpoint,
+		AccessKeyID:     cfg.StorageConfig.AccessKeyID,
+		SecretAccessKey: cfg.StorageConfig.SecretAccessKey,
+	})
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create S3 client"})
+		return
+	}
+
+	key := "brand/" + logoType
+	mimeType := header.Header.Get("Content-Type")
+	if mimeType == "" {
+		mimeType = "image/png"
+	}
+
+	if err := s3Client.Upload(r.Context(), key, file, mimeType); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	signedURL, err := s3Client.SignedURL(r.Context(), key, 7*24*time.Hour)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to generate URL"})
+		return
+	}
+
+	current, _ := GetBrandConfig(r.Context(), h.pool)
+	newLogo := signedURL
+	newIcon := signedURL
+	if logoType == "login-logo" {
+		newIcon = ""
+		if current != nil {
+			newIcon = current.IconURL
+		}
+	} else {
+		newLogo = ""
+		if current != nil {
+			newLogo = current.LogoURL
+		}
+	}
+
+	bc, err := UpdateBrandLogos(r.Context(), h.pool, newLogo, newIcon)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update brand config"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, bc)
+}
+
+func (h *Handler) GetPublicBrandConfig(w http.ResponseWriter, r *http.Request) {
+	bc, err := GetBrandConfig(r.Context(), h.pool)
+	if err != nil || bc == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"logo_url": "", "icon_url": "", "company_name": "Zeep Orbit"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"logo_url":     bc.LogoURL,
+		"icon_url":     bc.IconURL,
+		"company_name": bc.CompanyName,
 	})
 }
 

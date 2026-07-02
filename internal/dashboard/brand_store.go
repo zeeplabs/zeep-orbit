@@ -9,22 +9,21 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
 
-// BrandConfig represents the brand_config singleton row.
 type BrandConfig struct {
 	Theme       string    `json:"theme"`
 	CompanyName string    `json:"company_name"`
 	LogoURL     string    `json:"logo_url"`
+	IconURL     string    `json:"icon_url"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-// Returns nil if no row exists yet.
 func GetBrandConfig(ctx context.Context, pool *db.Pool) (*BrandConfig, error) {
 	var c BrandConfig
 	err := pool.QueryRow(ctx,
-		`SELECT theme, company_name, logo_url, updated_at
+		`SELECT theme, company_name, COALESCE(logo_url, ''), COALESCE(icon_url, ''), updated_at
 		 FROM zeep_system.brand_config
 		 LIMIT 1`,
-	).Scan(&c.Theme, &c.CompanyName, &c.LogoURL, &c.UpdatedAt)
+	).Scan(&c.Theme, &c.CompanyName, &c.LogoURL, &c.IconURL, &c.UpdatedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, nil
@@ -34,22 +33,36 @@ func GetBrandConfig(ctx context.Context, pool *db.Pool) (*BrandConfig, error) {
 	return &c, nil
 }
 
-// UpsertBrandConfig inserts or updates the singleton brand_config row.
-func UpsertBrandConfig(ctx context.Context, pool *db.Pool, theme, companyName, logoURL string) (*BrandConfig, error) {
+func UpsertBrandConfig(ctx context.Context, pool *db.Pool, theme, companyName, logoURL, iconURL string) (*BrandConfig, error) {
 	var c BrandConfig
 	err := pool.QueryRow(ctx,
-		`INSERT INTO zeep_system.brand_config (theme, company_name, logo_url)
-		 VALUES ($1, $2, $3)
+		`INSERT INTO zeep_system.brand_config (theme, company_name, logo_url, icon_url)
+		 VALUES ($1, $2, $3, $4)
 		 ON CONFLICT ((TRUE)) DO UPDATE
 		   SET theme = COALESCE(NULLIF($1, ''), brand_config.theme),
 		       company_name = COALESCE(NULLIF($2, ''), brand_config.company_name),
 		       logo_url = COALESCE(NULLIF($3, ''), brand_config.logo_url),
+		       icon_url = COALESCE(NULLIF($4, ''), brand_config.icon_url),
 		       updated_at = now()
-		 RETURNING theme, company_name, logo_url, updated_at`,
-		theme, companyName, logoURL,
-	).Scan(&c.Theme, &c.CompanyName, &c.LogoURL, &c.UpdatedAt)
+		 RETURNING theme, company_name, COALESCE(logo_url, ''), COALESCE(icon_url, ''), updated_at`,
+		theme, companyName, logoURL, iconURL,
+	).Scan(&c.Theme, &c.CompanyName, &c.LogoURL, &c.IconURL, &c.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: upsert brand config: %w", err)
+	}
+	return &c, nil
+}
+
+func UpdateBrandLogos(ctx context.Context, pool *db.Pool, logoURL, iconURL string) (*BrandConfig, error) {
+	var c BrandConfig
+	err := pool.QueryRow(ctx,
+		`UPDATE zeep_system.brand_config
+		 SET logo_url = $1, icon_url = $2, updated_at = now()
+		 RETURNING theme, company_name, COALESCE(logo_url, ''), COALESCE(icon_url, ''), updated_at`,
+		logoURL, iconURL,
+	).Scan(&c.Theme, &c.CompanyName, &c.LogoURL, &c.IconURL, &c.UpdatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("dashboard: update brand logos: %w", err)
 	}
 	return &c, nil
 }

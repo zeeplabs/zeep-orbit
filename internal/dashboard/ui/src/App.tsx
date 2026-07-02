@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Navigate, Routes, Route } from 'react-router-dom'
 import LoginPage from './pages/LoginPage'
+import GoogleSetupPage from './pages/GoogleSetupPage'
 import DashboardShell from './pages/DashboardShell'
 import OnboardingPage from './pages/OnboardingPage'
 import AppsPage from './pages/AppsPage'
@@ -12,8 +13,9 @@ import UsersPage from './pages/UsersPage'
 import LogsPage from './pages/LogsPage'
 import AuditLogPage from './pages/AuditLogPage'
 import SdkPage from './pages/SdkPage'
-import DataBrowserPage from './pages/DataBrowserPage'
 import AppUsersPage from './pages/AppUsersPage'
+import DataBrowserPage from './pages/DataBrowserPage'
+import { Toaster } from 'sonner'
 import { useBootstrapStatus } from './lib/api'
 import { THEMES, applyTheme } from './lib/themes'
 
@@ -84,25 +86,43 @@ function App() {
   }
 
   return (
-    <Routes>
-      <Route path="/login" element={user ? <Navigate to="/apps" replace /> : <LoginPage />} />
-      <Route
-        element={<DashboardShell user={user} />}
-      >
-        <Route index element={<Navigate to="/apps" replace />} />
-        <Route path="/apps" element={<AppsPage />} />
-        <Route path="/apps/new" element={<AppFormPage />} />
-        <Route path="/apps/:id/edit" element={<AppFormPage />} />
-        <Route path="/apps/:id/users" element={<AppUsersPage />} />
-        <Route path="/configuracoes" element={<BrandSettingsPage />} />
-        <Route path="/data-browser" element={<DataBrowserPage />} />
-        <Route path="/usuarios" element={<UsersPage />} />
-        <Route path="/logs" element={<LogsPage />} />
-        <Route path="/auditoria" element={<AuditLogPage />} />
-        <Route path="/sdks" element={<SdkPage />} />
-      </Route>
-      <Route path="*" element={<Navigate to="/apps" replace />} />
-    </Routes>
+    <>
+      <Routes>
+        <Route path="/login" element={user ? <Navigate to="/apps" replace /> : <LoginPage />} />
+        <Route path="/google-setup" element={
+          !user ? <Navigate to="/login" replace /> :
+          user.needs_setup ? <GoogleSetupPage /> :
+          <Navigate to="/apps" replace />
+        } />
+        <Route
+          element={<DashboardShell user={user} />}
+        >
+          <Route index element={<Navigate to="/apps" replace />} />
+          <Route path="/apps" element={<AppsPage />} />
+          <Route path="/apps/new" element={<AppFormPage />} />
+          <Route path="/apps/:id/edit" element={<AppFormPage />} />
+          <Route path="/apps/:id/users" element={<AppUsersPage />} />
+          <Route path="/configuracoes" element={<BrandSettingsPage />} />
+          <Route path="/data-browser" element={<DataBrowserPage />} />
+          <Route path="/usuarios" element={<UsersPage />} />
+          <Route path="/logs" element={<LogsPage />} />
+          <Route path="/auditoria" element={<AuditLogPage />} />
+          <Route path="/sdks" element={<SdkPage />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/apps" replace />} />
+      </Routes>
+      <Toaster
+        position="bottom-right"
+        theme="dark"
+        toastOptions={{
+          style: {
+            background: '#1A1A24',
+            border: '1px solid rgba(255,255,255,0.10)',
+            color: '#F8FAFC',
+          },
+        }}
+      />
+    </>
   )
 }
 

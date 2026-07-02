@@ -66,7 +66,7 @@ GOOGLE_REDIRECT_URL=https://seu-dominio.com/dashboard/api/auth/google/callback
 ## Kubernetes (Helm)
 
 ```bash
-helm repo add zeeplabs https://zeeplabs.github.io/zeep-orbit
+helm repo add zeeplabs https://zeeplabs.github.io/zeep-orbit/helm
 helm install zeep-orbit zeeplabs/zeep-orbit \
   --set secrets.databaseUrl=postgres://... \
   --set secrets.dashboardBootstrapSecret=my-secret \

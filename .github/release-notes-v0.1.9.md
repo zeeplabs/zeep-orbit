@@ -43,6 +43,6 @@ docker pull ghcr.io/zeeplabs/zeep-orbit:v0.1.9
 
 ### 📋 Helm
 ```bash
-helm repo add zeeplabs https://zeeplabs.github.io/zeep-orbit
+helm repo add zeeplabs https://zeeplabs.github.io/zeep-orbit/helm
 helm install zeep-orbit zeeplabs/zeep-orbit
 ```

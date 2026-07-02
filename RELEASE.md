@@ -7,8 +7,8 @@ Step-by-step to create a new Zeep Orbit release.
 ### charts/zeep-orbit/Chart.yaml
 
 ```yaml
-version: 0.1.3       # bump this
-appVersion: "0.1.3"  # keep in sync
+version: 0.1.10      # bump this
+appVersion: "0.1.10" # keep in sync with the release version
 ```
 
 ## 2. Update CHANGELOG.md
@@ -16,7 +16,7 @@ appVersion: "0.1.3"  # keep in sync
 Move unreleased changes to a new version section at the top of `CHANGELOG.md`:
 
 ```markdown
-## [0.1.3] — 2026-06-28
+## [0.1.10] — 2026-07-02
 
 ### Added
 - ...
@@ -24,7 +24,7 @@ Move unreleased changes to a new version section at the top of `CHANGELOG.md`:
 ### Fixed
 - ...
 
-## [0.1.2] — 2026-06-28
+## [0.1.9] — 2026-07-02
 ...
 ```
 
@@ -32,15 +32,17 @@ Move unreleased changes to a new version section at the top of `CHANGELOG.md`:
 
 ```bash
 git add -A
-git commit -m "chore: bump version to 0.1.3"
+git commit -m "chore: bump version to 0.1.10"
 git push origin main
 ```
+
+> **Note:** Pushing to `main` triggers `docs.yml` which packages the Helm chart and publishes it to `https://zeeplabs.github.io/zeep-orbit/helm/`. The chart version comes from `Chart.yaml`.
 
 ## 4. Create and push tag
 
 ```bash
-git tag v0.1.3
-git push origin v0.1.3
+git tag v0.1.10
+git push origin v0.1.10
 ```
 
 ## 5. CI does the rest
@@ -50,10 +52,9 @@ Pushing the tag triggers:
 | Workflow | What it does |
 |----------|-------------|
 | `docker-publish.yml` | Test → Build multi-arch Docker image → Push to GHCR |
-| Same workflow | Create GitHub Release with auto-generated notes |
-| Same workflow | Package Helm chart → Update `gh-pages` branch (no separate release) |
+| Same workflow | Package Helm chart → Attach `.tgz` to GitHub Release |
 
-The Helm chart version is automatically set from the git tag (e.g. `v0.1.3` → chart `0.1.3`).
+The Helm chart repository at `https://zeeplabs.github.io/zeep-orbit/helm/` is updated automatically by `docs.yml` when the `Chart.yaml` version is bumped and pushed to `main`.
 
 ## 6. Publish SDK Clients
 
@@ -119,7 +120,7 @@ cd clients/php
 
 ## 7. Verify
 
-- [ ] Docker image: `docker pull ghcr.io/zeeplabs/zeep-orbit:v0.1.3`
+- [ ] Docker image: `docker pull ghcr.io/zeeplabs/zeep-orbit:v0.1.10`
 - [ ] GitHub Release: https://github.com/zeeplabs/zeep-orbit/releases
 - [ ] Helm chart: `helm repo update zeeplabs && helm search repo zeeplabs/zeep-orbit --versions`
 - [ ] npm: `npm view @zeeptech/orbit-client versions`
@@ -130,9 +131,10 @@ cd clients/php
 ## Checklist
 
 - [ ] `CHANGELOG.md` updated
-- [ ] All changes committed
-- [ ] Tag pushed to GitHub
+- [ ] `charts/zeep-orbit/Chart.yaml` version bumped
+- [ ] All changes committed and pushed to `main`
+- [ ] Tag pushed to GitHub (`git push origin v0.1.10`)
 - [ ] CI workflows passed
 - [ ] Docker pull works
-- [ ] Helm install works
+- [ ] Helm install works (`helm repo update && helm install zeeplabs/zeep-orbit`)
 - [ ] SDK clients published (TS / Go / Python / Rust / Java / PHP)

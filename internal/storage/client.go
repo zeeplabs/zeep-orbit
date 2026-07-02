@@ -18,11 +18,13 @@ type StorageConfig struct {
 	Endpoint        string `json:"endpoint"`
 	AccessKeyID     string `json:"access_key_id"`
 	SecretAccessKey string `json:"secret_access_key"`
+	Folder          string `json:"folder,omitempty"`
 }
 
 type Client struct {
 	s3     *s3.Client
 	bucket string
+	folder string
 }
 
 func NewClient(ctx context.Context, cfg StorageConfig) (*Client, error) {
@@ -46,43 +48,54 @@ func NewClient(ctx context.Context, cfg StorageConfig) (*Client, error) {
 	return &Client{
 		s3:     s3.NewFromConfig(awsCfg),
 		bucket: cfg.Bucket,
+		folder: cfg.Folder,
 	}, nil
 }
 
+func (c *Client) objectKey(key string) string {
+	if c.folder != "" {
+		return c.folder + "/" + key
+	}
+	return key
+}
+
 func (c *Client) Upload(ctx context.Context, key string, body io.Reader, mimeType string) error {
+	objKey := c.objectKey(key)
 	_, err := c.s3.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:      &c.bucket,
-		Key:         &key,
+		Key:         &objKey,
 		Body:        body,
 		ContentType: &mimeType,
 	})
 	if err != nil {
-		return fmt.Errorf("storage: upload %s: %w", key, err)
+		return fmt.Errorf("storage: upload %s: %w", objKey, err)
 	}
 	return nil
 }
 
 func (c *Client) Delete(ctx context.Context, key string) error {
+	objKey := c.objectKey(key)
 	_, err := c.s3.DeleteObject(ctx, &s3.DeleteObjectInput{
 		Bucket: &c.bucket,
-		Key:    &key,
+		Key:    &objKey,
 	})
 	if err != nil {
-		return fmt.Errorf("storage: delete %s: %w", key, err)
+		return fmt.Errorf("storage: delete %s: %w", objKey, err)
 	}
 	return nil
 }
 
 func (c *Client) SignedURL(ctx context.Context, key string, ttl time.Duration) (string, error) {
+	objKey := c.objectKey(key)
 	ps := s3.NewPresignClient(c.s3)
 	req, err := ps.PresignGetObject(ctx, &s3.GetObjectInput{
 		Bucket: &c.bucket,
-		Key:    &key,
+		Key:    &objKey,
 	}, func(opts *s3.PresignOptions) {
 		opts.Expires = ttl
 	})
 	if err != nil {
-		return "", fmt.Errorf("storage: signed url %s: %w", key, err)
+		return "", fmt.Errorf("storage: signed url %s: %w", objKey, err)
 	}
 	return req.URL, nil
 }

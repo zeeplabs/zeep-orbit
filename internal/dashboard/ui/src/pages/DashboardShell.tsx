@@ -28,7 +28,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import logoType from "@/assets/images/logo/logotype.svg";
-
 interface User {
   id: string;
   email: string;
@@ -150,7 +149,17 @@ export default function DashboardShell({ user }: { user: User | null }) {
     staleTime: 30000,
   });
 
-  const companyName = brandConfig?.company_name || t("app.title");
+  const { data: brandAssets } = useQuery({
+    queryKey: ["brand-assets"],
+    queryFn: async () => {
+      const res = await fetch("/dashboard/api/brand/config");
+      if (!res.ok) return { icon_url: "", logo_url: "", company_name: "" };
+      return res.json() as Promise<{ icon_url: string; logo_url: string; company_name: string }>;
+    },
+    staleTime: 60000,
+  });
+
+  const companyName = brandConfig?.company_name || brandAssets?.company_name || t("app.title");
 
   useEffect(() => {
     if (user?.language && user.language !== i18n.language) {
@@ -222,7 +231,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
           }}
         >
           <img
-            src={logoType}
+            src={brandAssets?.icon_url || logoType}
             alt="Zeep Orbit"
             style={{
               width: 42,

@@ -13,6 +13,7 @@ import (
 type dashCtxKey int
 
 const userCtxKey dashCtxKey = 0
+const poolCtxKey dashCtxKey = 1
 
 const cookieName = "zeep_session"
 

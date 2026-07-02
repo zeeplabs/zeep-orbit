@@ -180,6 +180,12 @@ func (h *GoogleOAuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		DeleteExpiredSessions(ctx, h.pool)
 	}()
 
+	needsSetup := user.Name == "" && user.PasswordHash == ""
+	if needsSetup {
+		http.Redirect(w, r, "/dashboard/google-setup", http.StatusFound)
+		return
+	}
+
 	http.Redirect(w, r, "/dashboard", http.StatusFound)
 }
 

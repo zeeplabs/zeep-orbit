@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { useTranslation } from "react-i18next";
+import { useTranslation, Trans } from "react-i18next";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
@@ -99,6 +99,7 @@ export default function AppFormPage() {
   const [googleRedirectUrl, setGoogleRedirectUrl] = useState("");
   const [googleAllowedDomains, setGoogleAllowedDomains] = useState("");
   const [showGoogleSecret, setShowGoogleSecret] = useState(false);
+  const [globalStorage, setGlobalStorage] = useState(false);
   const [storageEnabled, setStorageEnabled] = useState(false);
   const [storageBucket, setStorageBucket] = useState("");
   const [storageRegion, setStorageRegion] = useState("");
@@ -118,6 +119,13 @@ export default function AppFormPage() {
   const createApp = useCreateApp();
   const updateApp = useUpdateApp();
   const isMutating = createApp.isPending || updateApp.isPending;
+
+  useEffect(() => {
+    fetch("/dashboard/api/config", { cache: "no-cache" })
+      .then((r) => r.json())
+      .then((d) => setGlobalStorage(d.storage_configured === true))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (editTarget) {
@@ -274,14 +282,18 @@ export default function AppFormPage() {
       };
     }
 
-    if (storageEnabled && storageBucket && storageRegion && storageEndpoint && storageAccessKey && storageSecretKey) {
-      payload.storage_config = {
-        bucket: storageBucket,
-        region: storageRegion,
-        endpoint: storageEndpoint,
-        access_key_id: storageAccessKey,
-        secret_access_key: storageSecretKey,
-      };
+    if (storageEnabled) {
+      if (globalStorage && appName) {
+        payload.storage_config = { bucket: appName };
+      } else if (!globalStorage && storageBucket && storageRegion && storageEndpoint && storageAccessKey && storageSecretKey) {
+        payload.storage_config = {
+          bucket: storageBucket,
+          region: storageRegion,
+          endpoint: storageEndpoint,
+          access_key_id: storageAccessKey,
+          secret_access_key: storageSecretKey,
+        };
+      }
     }
 
     if (rateLimitEnabled) {
@@ -778,9 +790,9 @@ export default function AppFormPage() {
                 </h3>
                 <div className="flex items-center justify-between">
                   <div className="flex flex-col gap-0.5">
-                    <p className="text-sm font-semibold text-[#F8FAFC]">Ativar S3</p>
+                    <p className="text-sm font-semibold text-[#F8FAFC]">{t("appForm.storageToggle")}</p>
                     <p className="text-xs text-[#94A3B8]">
-                      Conecte um bucket S3-compatible (DO Spaces, Magalu, AWS, MinIO)
+                      {t("appForm.storageToggleDesc")}
                     </p>
                   </div>
                   <Switch checked={storageEnabled} onCheckedChange={setStorageEnabled} className="shrink-0" />
@@ -789,43 +801,55 @@ export default function AppFormPage() {
                   <div className="flex flex-col gap-3 border-t border-white/[0.06] pt-3">
                     <div>
                       <Label className="text-[12px] font-medium text-[#94A3B8]">Bucket</Label>
-                      <Input value={storageBucket} onChange={(e) => setStorageBucket(e.target.value)}
-                        placeholder="meu-bucket"
-                        className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus mt-1" />
+                      {globalStorage ? (
+                        <>
+                          <p className="text-[11px] text-[#94A3B8] mt-1 mb-1">{t("appForm.storageGlobalHint")}</p>
+                          <Input value={appName || ""} readOnly
+                            className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#94A3B8] placeholder:text-white/30 brand-focus mt-1 cursor-not-allowed opacity-60" />
+                        </>
+                      ) : (
+                        <Input value={storageBucket} onChange={(e) => setStorageBucket(e.target.value)}
+                          placeholder="meu-bucket"
+                          className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus mt-1" />
+                      )}
                     </div>
-                    <div>
-                      <Label className="text-[12px] font-medium text-[#94A3B8]">Região</Label>
-                      <Input value={storageRegion} onChange={(e) => setStorageRegion(e.target.value)}
-                        placeholder="us-east-1"
-                        className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus mt-1" />
-                    </div>
-                    <div>
-                      <Label className="text-[12px] font-medium text-[#94A3B8]">Endpoint</Label>
-                      <Input value={storageEndpoint} onChange={(e) => setStorageEndpoint(e.target.value)}
-                        placeholder="https://nyc3.digitaloceanspaces.com"
-                        className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus mt-1" />
-                    </div>
-                    <div>
-                      <Label className="text-[12px] font-medium text-[#94A3B8]">Access Key ID</Label>
-                      <Input value={storageAccessKey} onChange={(e) => setStorageAccessKey(e.target.value)}
-                        placeholder="DO00XXXXXXXXXXXX"
-                        className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus mt-1" />
-                    </div>
-                    <div>
-                      <Label className="text-[12px] font-medium text-[#94A3B8]">Secret Access Key</Label>
-                      <div className="relative mt-1">
-                        <Input type={showStorageSecret ? "text" : "password"} value={storageSecretKey}
-                          onChange={(e) => setStorageSecretKey(e.target.value)}
-                          placeholder="Secret Key"
-                          className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus w-full pr-10" />
-                        <button type="button" onClick={() => setShowStorageSecret(!showStorageSecret)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#F8FAFC] bg-transparent border-none cursor-pointer">
-                          {showStorageSecret ? <EyeOff size={16} /> : <Eye size={16} />}
-                        </button>
-                      </div>
-                    </div>
+                    {!globalStorage && (
+                      <>
+                        <div>
+                          <Label className="text-[12px] font-medium text-[#94A3B8]">Region</Label>
+                          <Input value={storageRegion} onChange={(e) => setStorageRegion(e.target.value)}
+                            placeholder="us-east-1"
+                            className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus mt-1" />
+                        </div>
+                        <div>
+                          <Label className="text-[12px] font-medium text-[#94A3B8]">Endpoint</Label>
+                          <Input value={storageEndpoint} onChange={(e) => setStorageEndpoint(e.target.value)}
+                            placeholder="https://nyc3.digitaloceanspaces.com"
+                            className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus mt-1" />
+                        </div>
+                        <div>
+                          <Label className="text-[12px] font-medium text-[#94A3B8]">Access Key ID</Label>
+                          <Input value={storageAccessKey} onChange={(e) => setStorageAccessKey(e.target.value)}
+                            placeholder="DO00XXXXXXXXXXXX"
+                            className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus mt-1" />
+                        </div>
+                        <div>
+                          <Label className="text-[12px] font-medium text-[#94A3B8]">Secret Access Key</Label>
+                          <div className="relative mt-1">
+                            <Input type={showStorageSecret ? "text" : "password"} value={storageSecretKey}
+                              onChange={(e) => setStorageSecretKey(e.target.value)}
+                              placeholder="Secret Key"
+                              className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus w-full pr-10" />
+                            <button type="button" onClick={() => setShowStorageSecret(!showStorageSecret)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#F8FAFC] bg-transparent border-none cursor-pointer">
+                              {showStorageSecret ? <EyeOff size={16} /> : <Eye size={16} />}
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
                     <p className="text-[11px] text-[#94A3B8]">
-                      Os arquivos ficarão disponíveis em <code className="text-[#B3D1FF]">/{appName || "meu-app"}/files/*</code> via API.
+                      <Trans i18nKey="appForm.storageHint" values={{ path: `/${appName || "meu-app"}/files/*` }} components={{ 1: <code className="text-[#B3D1FF]" /> }} />
                     </p>
                   </div>
                 )}

@@ -85,7 +85,7 @@ zeep serve --config ./apps.yaml
 ## Kubernetes (Helm)
 
 ```bash
-helm repo add zeeplabs https://zeeplabs.github.io/zeep-orbit
+helm repo add zeeplabs https://zeeplabs.github.io/zeep-orbit/helm
 helm install zeep-orbit zeeplabs/zeep-orbit \
   --set secrets.databaseUrl=postgres://... \
   --set 'secrets.apps.myapp.jwtSecret=...'

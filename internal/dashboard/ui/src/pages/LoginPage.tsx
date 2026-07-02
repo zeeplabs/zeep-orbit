@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Eye, EyeOff } from "lucide-react";
-import logo from "@/assets/images/logo/logo.svg";
+import logoFallback from "@/assets/images/logo/logo.svg";
 import pkg from "../../package.json";
 
 export default function LoginPage() {
@@ -25,6 +25,16 @@ export default function LoginPage() {
         .then((d) => ({
           googleOAuthEnabled: d.google_oauth_enabled === true,
         })),
+    staleTime: 60000,
+  });
+
+  const { data: brandAssets } = useQuery({
+    queryKey: ["brand-assets"],
+    queryFn: async () => {
+      const res = await fetch("/dashboard/api/brand/config");
+      if (!res.ok) return { logo_url: "" };
+      return res.json() as Promise<{ logo_url: string; company_name: string }>;
+    },
     staleTime: 60000,
   });
 
@@ -49,7 +59,7 @@ export default function LoginPage() {
       qc.clear();
       window.location.href = "/dashboard/apps";
     } catch {
-      setError("Connection error");
+      setError(t("common.connectionError"));
     } finally {
       setLoading(false);
     }
@@ -76,7 +86,7 @@ export default function LoginPage() {
         {/* Header */}
         <div className="flex flex-col items-center mb-8">
           <img
-            src={logo}
+            src={brandAssets?.logo_url || logoFallback}
             alt="Zeep Orbit"
             className="size-42 max-md:size-32 object-contain mb-3"
           />
