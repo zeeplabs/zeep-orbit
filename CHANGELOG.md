@@ -7,6 +7,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.11] — 2026-07-02
+
+### Fixed
+
+- **Google OAuth "session expired" on callback** — OAuth `state` was stored in an in-memory map per pod. With multiple replicas and no sticky session, `/login` and `/callback` could land on different pods, so the state was never found and login always failed with "Login expired, please try again". State is now a stateless, HMAC-signed token (embeds `redirect` + expiry, signed with the app's JWT secret) — any replica can validate it without shared storage.
+- **API docs branding** — Generated OpenAPI spec title and docs index page now show "API Documentation" instead of the hardcoded "zeep-orbit" name.
+
+### Changed
+
+- **Dashboard copy** — Login page and app subtitle updated to "Database-first backend platform" / "Create backends from your database", with new supporting subtitle text.
+
 ## [0.1.10] — 2026-07-02
 
 ### Added
