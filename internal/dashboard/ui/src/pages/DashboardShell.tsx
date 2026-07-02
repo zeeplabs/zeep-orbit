@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import logoType from "@/assets/images/logo/logotype.svg";
+import pkg from "../../package.json";
 interface User {
   id: string;
   email: string;
@@ -451,6 +452,10 @@ export default function DashboardShell({ user }: { user: User | null }) {
             <LogOut size={14} strokeWidth={1.5} /> {t("nav.logout")}
           </button>
         </div>
+
+        <p className="text-[11px] text-white/15 text-center pb-3">
+          v{pkg.version}
+        </p>
       </motion.aside>
 
       {/* Main content */}

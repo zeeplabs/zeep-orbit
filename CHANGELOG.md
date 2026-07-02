@@ -7,6 +7,38 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.10] — 2026-07-02
+
+### Added
+
+- **Global S3 Configuration** — Superadmin configures global S3 (endpoint, region, keys, bucket). Admins creating apps only need a folder name (auto-filled with app name). Files stored as subfolders within the global bucket.
+- **Brand Logos** — Superadmin uploads login logo and sidebar icon to global S3 bucket. Instant sidebar update. Fallback to built-in SVGs when not configured.
+- **Google Setup page** — First-time Google login users are prompted to set name + password as backup auth method.
+- **Settings tabs** — Settings page reorganized into 5 tabs: Branding, Logo, Database, Auth Provider, Storage.
+- **Toast notifications** — `sonner` toasts replace native `alert()` throughout the dashboard.
+- **Public brand config endpoint** — `GET /dashboard/api/brand/config` (unauthenticated) returns logo URLs for login page.
+- **`needs_setup` on `/api/me`** — Frontend detects Google users who need to complete account setup.
+- **`storage_configured` on `/api/config`** — Frontend knows if global S3 is active.
+- **`Folder` field in StorageConfig** — Files in global S3 are prefixed with the app's folder name.
+
+### Fixed
+
+- **Helm chart 404** — Chart now published alongside Docusaurus docs at `https://zeeplabs.github.io/zeep-orbit/helm/` (was on orphan `gh-pages` branch ignored by Pages).
+- **Helm `--config` flag** — Removed invalid `--config /app/apps.yaml` from deployment args (`zeep serve` doesn't use config files).
+- **Race condition on startup** — `ProvisionZeepSystem` wrapped in transaction with `pg_advisory_xact_lock` to serialize across concurrent pods.
+- **Logo upload overwrite** — Uploading one logo no longer clears the other.
+- **Global S3 save resets soft delete** — `GlobalStorageCard` now preserves existing `soft_delete_enabled`.
+- **Hardcoded texts** — All user-facing strings in BrandSettingsPage and AppFormPage storage section moved to i18n keys.
+
+### Changed
+
+- **Settings page** — Now uses tabs routed via `?tab=` (branding, logo, database, auth, storage).
+- **App form storage** — When global S3 is active, bucket field is read-only and automatically set to the app name.
+- **Dashboard sidebar** — Icon fetched dynamically from `GET /dashboard/api/brand/config` with query cache invalidation on upload.
+- **`storage_config` column** — App storage config now supports `folder` field for global S3 subfolder prefix.
+- **`brand_config`** — Added `icon_url` column for sidebar icon.
+- **`system_config`** — Added `storage_config` JSONB column for global S3 settings.
+
 ## [0.1.5] — 2026-06-29
 
 ### Added
