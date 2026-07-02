@@ -98,7 +98,7 @@ func generate(apps []*registry.App) *Spec {
 	spec := &Spec{
 		OpenAPI: "3.0.3",
 		Info: specInfo{
-			Title:   "zeep-orbit API",
+			Title:   "API Documentation",
 			Version: "1.0.0",
 		},
 		Paths: make(map[string]pathItem),

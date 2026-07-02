@@ -1,6 +1,6 @@
 {
   "app.title": "Orbit",
-  "app.subtitle": "BaaS Platform Manager",
+  "app.subtitle": "Database-first backend platform",
   "app.loading": "Carregando...",
   "common.connectionError": "Erro de conexão",
   "common.errorSaving": "Erro ao salvar",
@@ -116,7 +116,8 @@
   "onboarding.done": "Tudo pronto!",
   "onboarding.doneDesc": "O superadmin foi criado com sucesso. Agora você pode entrar no dashboard com as credenciais configuradas.",
   "onboarding.goLogin": "Ir para o login",
-  "login.title": "BaaS Platform Manager",
+  "login.title": "Crie backends a partir do seu banco",
+  "login.subtitle": "Gere apps backend, APIs REST e permissões diretamente do schema do banco.",
   "login.email": "Email",
   "login.password": "Senha",
   "login.signIn": "Entrar",

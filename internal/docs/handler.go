@@ -34,9 +34,9 @@ func (h *Handler) HandleIndex(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprint(w, `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/>`)
-	fmt.Fprint(w, `<title>zeep-orbit API docs</title>`)
+	fmt.Fprint(w, `<title>API Documentation</title>`)
 	fmt.Fprint(w, `<style>body{font-family:sans-serif;padding:2rem}ul{line-height:2}</style>`)
-	fmt.Fprint(w, `</head><body><h1>zeep-orbit API</h1><ul>`)
+	fmt.Fprint(w, `</head><body><h1>API Documentation</h1><ul>`)
 	for _, app := range apps {
 		fmt.Fprintf(w, `<li><a href="/docs/%s">%s</a></li>`, app.Config.Name, app.Config.Name)
 	}

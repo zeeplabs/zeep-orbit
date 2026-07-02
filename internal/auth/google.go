@@ -2,7 +2,8 @@ package auth
 
 import (
 	"context"
-	"crypto/rand"
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -11,7 +12,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -20,18 +20,10 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/registry"
 )
 
-type appGoogleState struct {
-	token     string
-	expiresAt time.Time
-	redirect  string
-}
-
 // AppGoogleHandler handles per-app Google OAuth sign-in.
 type AppGoogleHandler struct {
 	pool       *db.Pool
 	reg        *registry.Registry
-	states     map[string]*appGoogleState
-	statesMu   sync.Mutex
 	httpClient *http.Client
 }
 
@@ -40,7 +32,6 @@ func NewAppGoogleHandler(pool *db.Pool, reg *registry.Registry) *AppGoogleHandle
 	return &AppGoogleHandler{
 		pool:       pool,
 		reg:        reg,
-		states:     make(map[string]*appGoogleState),
 		httpClient: &http.Client{Timeout: 10 * time.Second},
 	}
 }
@@ -119,7 +110,7 @@ func (h *AppGoogleHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	redirect := r.URL.Query().Get("redirect")
 
-	state, err := h.generateState(redirect)
+	state, err := signState([]byte(app.Config.Auth.JWTSecret), redirect)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
@@ -158,11 +149,12 @@ func (h *AppGoogleHandler) Callback(w http.ResponseWriter, r *http.Request) {
 
 	frontendRedirect := ""
 	if state != "" {
-		if !h.validateState(state) {
+		redirect, ok := verifyState([]byte(app.Config.Auth.JWTSecret), state)
+		if !ok {
 			h.redirectOrError(w, r, "", "Login expired, please try again", http.StatusBadRequest)
 			return
 		}
-		frontendRedirect = h.getStateRedirect(state)
+		frontendRedirect = redirect
 	}
 
 	if errorParam != "" {
@@ -230,38 +222,67 @@ type appGoogleTokenResponse struct {
 	ErrorDesc   string `json:"error_description"`
 }
 
-func (h *AppGoogleHandler) generateState(redirect string) (string, error) {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("app-google: generate state: %w", err)
-	}
-	token := base64.RawURLEncoding.EncodeToString(b)
-
-	h.statesMu.Lock()
-	h.states[token] = &appGoogleState{token: token, expiresAt: time.Now().Add(10 * time.Minute), redirect: redirect}
-	h.statesMu.Unlock()
-	return token, nil
+// stateClaims is the payload embedded in the OAuth "state" param. Signing it
+// with the app's JWT secret lets any replica validate the callback without
+// sharing in-memory state — required because the service runs multiple
+// replicas behind a non-sticky load balancer (login and callback can land on
+// different pods).
+type stateClaims struct {
+	Redirect  string `json:"redirect"`
+	ExpiresAt int64  `json:"exp"`
 }
 
-func (h *AppGoogleHandler) validateState(token string) bool {
-	h.statesMu.Lock()
-	defer h.statesMu.Unlock()
-	s, ok := h.states[token]
-	if !ok {
-		return false
+func marshalStateClaims(c stateClaims) (string, error) {
+	payload, err := json.Marshal(c)
+	if err != nil {
+		return "", fmt.Errorf("app-google: marshal state: %w", err)
 	}
-	return !time.Now().After(s.expiresAt)
+	return base64.RawURLEncoding.EncodeToString(payload), nil
 }
 
-func (h *AppGoogleHandler) getStateRedirect(token string) string {
-	h.statesMu.Lock()
-	defer h.statesMu.Unlock()
-	s, ok := h.states[token]
-	if !ok {
-		return ""
+func signPayload(secret []byte, encodedPayload string) string {
+	mac := hmac.New(sha256.New, secret)
+	mac.Write([]byte(encodedPayload))
+	sig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	return encodedPayload + "." + sig
+}
+
+func signState(secret []byte, redirect string) (string, error) {
+	encoded, err := marshalStateClaims(stateClaims{
+		Redirect:  redirect,
+		ExpiresAt: time.Now().Add(10 * time.Minute).Unix(),
+	})
+	if err != nil {
+		return "", err
 	}
-	delete(h.states, token)
-	return s.redirect
+	return signPayload(secret, encoded), nil
+}
+
+func verifyState(secret []byte, token string) (redirect string, ok bool) {
+	encoded, sig, found := strings.Cut(token, ".")
+	if !found || encoded == "" || sig == "" {
+		return "", false
+	}
+
+	mac := hmac.New(sha256.New, secret)
+	mac.Write([]byte(encoded))
+	expectedSig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	if !hmac.Equal([]byte(sig), []byte(expectedSig)) {
+		return "", false
+	}
+
+	payload, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil {
+		return "", false
+	}
+	var claims stateClaims
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return "", false
+	}
+	if time.Now().Unix() > claims.ExpiresAt {
+		return "", false
+	}
+	return claims.Redirect, true
 }
 
 func (h *AppGoogleHandler) exchangeCode(ctx context.Context, clientID, clientSecret, redirectURL, code string) (*appGoogleTokenResponse, error) {
