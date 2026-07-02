@@ -42,7 +42,7 @@ spec:
         - name: {{ .Chart.Name }}
           image: {{ include "zeep-orbit.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          args: ["serve", "--config", "/app/apps.yaml"]
+          args: ["serve"]
 
           {{- with .Values.containerSecurityContext }}
           securityContext:

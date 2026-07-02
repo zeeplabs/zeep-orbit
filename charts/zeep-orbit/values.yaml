@@ -111,7 +111,9 @@ probes:
 
 # ── Secrets (obrigatório) ───────────────────────────────
 secrets:
+  # (obrigatório) PostgreSQL connection string
   databaseUrl: ""
+  # (obrigatório) Secret usado no bootstrap inicial do dashboard
   dashboardBootstrapSecret: ""
   # google:
   #   clientId: "..."
@@ -122,6 +124,14 @@ secrets:
   apps: {}
   #   billing:
   #     jwtSecret: "..."
+  # storage — Configuração S3 usada via ${STORAGE_*} no appsConfig.
+  # Necessário apenas se algum app usa file storage.
+  # storage:
+  #   endpoint: "https://s3.amazonaws.com"
+  #   bucket: "meu-bucket"
+  #   region: "us-east-1"
+  #   accessKeyId: "AKIA..."
+  #   secretAccessKey: "wJalrX..."
 
 # ── White-label branding ────────────────────────────────
 brand:
@@ -129,6 +139,9 @@ brand:
   companyName: "Zeep Tecnologia"
 
 # ── apps.yaml (config) ──────────────────────────────────
+# ⚠️  O zeep serve NÃO usa este arquivo. Ele carrega apps do banco de dados.
+#     Use o Dashboard em /dashboard para criar/gerenciar apps.
+#     Este configmap é mantido para compatibilidade futura com zeep apply.
 appsConfig: |
   platform:
     database_url: ${DATABASE_URL}
