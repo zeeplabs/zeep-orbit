@@ -81,7 +81,7 @@ docker run -d \
   ghcr.io/zeeplabs/zeep-orbit:latest
 ```
 
-> **Nota:** Se o PostgreSQL estiver rodando na máquina host (não em outro container), use `host.docker.internal` no lugar de `localhost` na `DATABASE_URL`.
+> **Note:** If PostgreSQL is running on the host machine (not in another container), use `host.docker.internal` instead of `localhost` in `DATABASE_URL`.
 
 Then visit **http://localhost:8080/dashboard** to complete the first-time setup.
 
@@ -165,7 +165,7 @@ helm install zeep-orbit zeeplabs/zeep-orbit \
   --values values.yaml
 ```
 
-→ Veja a seção [Kubernetes (Helm)](#kubernetes-helm-1) em **Deployment** para um guia completo com todas as opções.
+→ See the [Kubernetes (Helm)](#kubernetes-helm-1) section under **Deployment** for a full guide with all options.
 
 ---
 
@@ -370,78 +370,78 @@ docker run -e DATABASE_URL=... -p 8080:8080 ghcr.io/zeeplabs/zeep-orbit
 
 ### Kubernetes (Helm)
 
-O Helm chart inclui: HPA, PDB, Ingress, ServiceMonitor, IRSA-ready ServiceAccount, topology spread, e resource limits configuráveis.
+The Helm chart includes: HPA, PDB, Ingress, ServiceMonitor, IRSA-ready ServiceAccount, topology spread, and configurable resource limits.
 
-> ⚠️ **Importante:** O comando `zeep serve` **não usa arquivo de configuração**. Ele carrega tudo do banco de dados. Apps são criados e gerenciados pelo Dashboard em `/dashboard`. O `appsConfig` no values.yaml é apenas para o comando `zeep apply` (futuro) — para deploy padrão, **basta configurar o database**.
+> ⚠️ **Important:** The `zeep serve` command **does not use a config file**. It loads everything from the database. Apps are created and managed through the Dashboard at `/dashboard`. For a standard deployment, **all you need is the database**.
 
-#### Dashboard-only — gerenciar apps pelo Dashboard
+#### Dashboard-only — manage apps through the UI
 
-O mínimo necessário para rodar:
+The minimum required to run:
 
 ```yaml
 # values.yaml
 secrets:
   databaseUrl: "postgres://user:pass@host:5432/zeep?sslmode=require"
-  dashboardBootstrapSecret: "meu-secret-admin"
+  dashboardBootstrapSecret: "my-admin-secret"
 ```
 
-1. Instale com Helm
-2. Acesse `https://seu-dominio/dashboard`
-3. Use o `dashboardBootstrapSecret` no formulário de bootstrap
-4. Crie usuários admin e apps diretamente pela interface
+1. Install with Helm
+2. Access `https://your-domain/dashboard`
+3. Use the `dashboardBootstrapSecret` in the bootstrap form
+4. Create admin users and apps through the interface
 
-Apps criados no Dashboard persistem no banco e são carregados automaticamente em todo restart.
+Apps created in the Dashboard persist in the database and are automatically loaded on every restart.
 
-#### Fluxo de env vars
+#### Env var flow
 
-O chart usa **2 mecanismos** para injetar env vars no pod:
+The chart uses **2 mechanisms** to inject env vars into the pod:
 
 ```
 values.yaml
-  ├── brand.*               ──>  env direto no deployment.yaml (BRAND_THEME, BRAND_COMPANY_NAME)
-  └── secrets.*             ──>  Secret injetado via envFrom (todas as chaves viram env vars)
+  ├── brand.*               ──>  direct env in deployment.yaml (BRAND_THEME, BRAND_COMPANY_NAME)
+  └── secrets.*             ──>  Secret injected via envFrom (all keys become env vars)
        ├── databaseUrl             DATABASE_URL
        ├── dashboardBootstrapSecret DASHBOARD_BOOTSTRAP_SECRET
        ├── google.*                GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, etc.
-       ├── apps.*                  <APP>_JWT_SECRET (se for definir apps via YAML)
+       ├── apps.*                  <APP>_JWT_SECRET (if defining apps via YAML)
        └── storage.*               STORAGE_ENDPOINT, STORAGE_BUCKET, etc.
 ```
 
-#### Exemplo completo (dashboard + apps pré-definidos + Google OAuth + storage)
+#### Full example (dashboard + pre-defined apps + Google OAuth + storage)
 
 ```yaml
 # values.yaml
 secrets:
-  # (obrigatório)
+  # (required)
   databaseUrl: "postgres://user:pass@host:5432/zeep?sslmode=require"
-  dashboardBootstrapSecret: "meu-secret-admin"
+  dashboardBootstrapSecret: "my-admin-secret"
 
-  # Opcional: Google OAuth para login no dashboard
+  # Optional: Google OAuth for dashboard login
   google:
     clientId: "123.apps.googleusercontent.com"
     clientSecret: "GOCSPX-xxxx"
-    redirectUrl: "https://orbit.meusite.com/dashboard/api/auth/google/callback"
-    allowedDomains: "meusite.com"
+    redirectUrl: "https://orbit.yoursite.com/dashboard/api/auth/google/callback"
+    allowedDomains: "yoursite.com"
 
-  # Opcional: JWT secrets para apps (usado se quiser pré-criar apps via Dashboard)
+  # Optional: JWT secrets for apps (pre-create apps via Dashboard)
   apps:
     myapp:
-      jwtSecret: "jwt-super-secreto"
+      jwtSecret: "super-secret-jwt"
 
-  # Opcional: storage S3 (para file storage nos apps)
+  # Optional: S3 storage (for file storage in apps)
   storage:
     endpoint: "https://s3.amazonaws.com"
-    bucket: "meu-bucket"
+    bucket: "my-bucket"
     region: "us-east-1"
     accessKeyId: "AKIA..."
     secretAccessKey: "wJalrX..."
 
 brand:
   theme: "azure"
-  companyName: "Minha Empresa"
+  companyName: "My Company"
 ```
 
-Instale:
+Install:
 
 ```bash
 helm repo add zeeplabs https://zeeplabs.github.io/zeep-orbit
@@ -449,7 +449,7 @@ helm install zeep-orbit zeeplabs/zeep-orbit \
   --values values.yaml
 ```
 
-Após o deploy, acesse `/dashboard`, faça o bootstrap com o `dashboardBootstrapSecret`, crie seus usuários e apps — tudo pela interface.
+After deployment, go to `/dashboard`, bootstrap with the `dashboardBootstrapSecret`, and create your users and apps — all through the interface.
 
 ---
 
