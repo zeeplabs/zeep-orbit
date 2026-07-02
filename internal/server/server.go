@@ -256,7 +256,10 @@ func logMiddleware(logger *zap.Logger, buf *dashboard.RingBuffer) func(http.Hand
 			start := time.Now()
 			cw := &captureResponseWriter{ResponseWriter: w}
 
-			reqBody := readBody(r)
+			var reqBody string
+			if !isMultipart(r) {
+				reqBody = readBody(r)
+			}
 
 			next.ServeHTTP(cw, r)
 
@@ -301,6 +304,11 @@ func logMiddleware(logger *zap.Logger, buf *dashboard.RingBuffer) func(http.Hand
 			httpRequestDuration.WithLabelValues(method).Observe(latency.Seconds())
 		})
 	}
+}
+
+func isMultipart(r *http.Request) bool {
+	ct := r.Header.Get("Content-Type")
+	return strings.HasPrefix(ct, "multipart/")
 }
 
 func isTextContent(contentType string) bool {

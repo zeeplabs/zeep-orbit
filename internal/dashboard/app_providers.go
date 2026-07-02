@@ -94,5 +94,10 @@ func (h *Handler) UpdateAppProviders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	if err == nil {
+		h.reg.Register(appRowToRegistryApp(app))
+	}
+
 	writeJSON(w, http.StatusOK, providers)
 }

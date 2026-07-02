@@ -47,3 +47,22 @@ apps:
           - { name: quantity, type: integer, required: true }
           - { name: type,     type: text,    required: true }
           - { name: reference, type: text }
+
+  # ─── App com object storage para upload de arquivos ─────────────────
+  # Requer as variáveis STORAGE_* no .env para funcionar.
+  - name: assets
+    auth:
+      jwt_secret: ${ASSETS_JWT_SECRET}
+      providers:
+        email: true
+    storage:
+      bucket: ${STORAGE_BUCKET}
+      region: ${STORAGE_REGION}
+      endpoint: ${STORAGE_ENDPOINT}
+      access_key_id: ${STORAGE_ACCESS_KEY_ID}
+      secret_access_key: ${STORAGE_SECRET_ACCESS_KEY}
+    tables:
+      - name: categories
+        columns:
+          - { name: name, type: text, required: true }
+          - { name: slug, type: text, required: true, unique: true }

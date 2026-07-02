@@ -18,6 +18,8 @@ func (p *Provisioner) provisionAuthTables(ctx context.Context, schema string) ([
 		"avatar_url"         TEXT,
 		"email_confirmed_at" TIMESTAMPTZ,
 		"last_sign_in_at"    TIMESTAMPTZ,
+		"provider"           TEXT        NOT NULL DEFAULT 'email',
+		"google_id"          TEXT,
 		"created_at"         TIMESTAMPTZ NOT NULL DEFAULT now(),
 		"updated_at"         TIMESTAMPTZ NOT NULL DEFAULT now()
 	)`, schema)
@@ -65,6 +67,7 @@ func (p *Provisioner) addMissingAuthUserColumns(ctx context.Context, schema stri
 		fmt.Sprintf(`ALTER TABLE %q."_auth_users" ADD COLUMN IF NOT EXISTS "last_sign_in_at"    TIMESTAMPTZ`, schema),
 		fmt.Sprintf(`ALTER TABLE %q."_auth_users" ADD COLUMN IF NOT EXISTS "active"             BOOLEAN NOT NULL DEFAULT true`, schema),
 		fmt.Sprintf(`ALTER TABLE %q."_auth_users" ADD COLUMN IF NOT EXISTS "provider"           TEXT NOT NULL DEFAULT 'email'`, schema),
+		fmt.Sprintf(`ALTER TABLE %q."_auth_users" ADD COLUMN IF NOT EXISTS "google_id"          TEXT`, schema),
 		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS %q ON %q."_auth_users" ("email")`, schema+"_auth_users_email_idx", schema),
 	}
 	for _, sql := range alters {

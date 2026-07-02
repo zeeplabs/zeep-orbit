@@ -41,6 +41,25 @@ type fileResponse struct {
 	CreatedAt string `json:"created_at"`
 }
 
+func (h *Handler) ensureFilesTable(ctx context.Context, app *registry.App) error {
+	schemaName := "app_" + app.Config.Name
+	_, err := h.pool.Exec(ctx, fmt.Sprintf(`CREATE SCHEMA IF NOT EXISTS %q`, schemaName))
+	if err != nil {
+		return err
+	}
+	ddl := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %q."_files" (
+		"id"         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+		"name"       TEXT        NOT NULL,
+		"size"       BIGINT      NOT NULL,
+		"mime_type"  TEXT        NOT NULL DEFAULT 'application/octet-stream',
+		"key"        TEXT        NOT NULL UNIQUE,
+		"owner_id"   UUID,
+		"created_at" TIMESTAMPTZ NOT NULL DEFAULT now()
+	)`, schemaName)
+	_, err = h.pool.Exec(ctx, ddl)
+	return err
+}
+
 func randomID() string {
 	b := make([]byte, 16)
 	rand.Read(b)
@@ -60,6 +79,11 @@ func (h *Handler) HandleFileUpload(w http.ResponseWriter, r *http.Request) {
 
 	if app.StorageConfig == nil {
 		writeError(w, http.StatusBadRequest, "storage not configured for this app")
+		return
+	}
+
+	if err := h.ensureFilesTable(r.Context(), app); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to initialize file storage")
 		return
 	}
 
@@ -134,6 +158,16 @@ func (h *Handler) HandleFileList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if app.StorageConfig == nil {
+		writeError(w, http.StatusBadRequest, "storage not configured for this app")
+		return
+	}
+
+	if err := h.ensureFilesTable(r.Context(), app); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to initialize file storage")
+		return
+	}
+
 	limit := 50
 	if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 && l <= 200 {
 		limit = l
@@ -180,6 +214,16 @@ func (h *Handler) HandleFileGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if app.StorageConfig == nil {
+		writeError(w, http.StatusBadRequest, "storage not configured for this app")
+		return
+	}
+
+	if err := h.ensureFilesTable(r.Context(), app); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to initialize file storage")
+		return
+	}
+
 	fileID := chi.URLParam(r, "id")
 	schemaName := "app_" + app.Config.Name
 	q := fmt.Sprintf(`SELECT id, name, size, mime_type, created_at
@@ -211,6 +255,11 @@ func (h *Handler) HandleFileDownload(w http.ResponseWriter, r *http.Request) {
 
 	if app.StorageConfig == nil {
 		writeError(w, http.StatusBadRequest, "storage not configured")
+		return
+	}
+
+	if err := h.ensureFilesTable(r.Context(), app); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to initialize file storage")
 		return
 	}
 
@@ -265,6 +314,11 @@ func (h *Handler) HandleFileDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := h.ensureFilesTable(r.Context(), app); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to initialize file storage")
+		return
+	}
+
 	fileID := chi.URLParam(r, "id")
 	schemaName := "app_" + app.Config.Name
 
@@ -314,6 +368,11 @@ func (h *Handler) HandleFileSignedURL(w http.ResponseWriter, r *http.Request) {
 
 	if app.StorageConfig == nil {
 		writeError(w, http.StatusBadRequest, "storage not configured")
+		return
+	}
+
+	if err := h.ensureFilesTable(r.Context(), app); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to initialize file storage")
 		return
 	}
 

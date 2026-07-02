@@ -23,6 +23,7 @@ import (
 type appGoogleState struct {
 	token     string
 	expiresAt time.Time
+	redirect  string
 }
 
 // AppGoogleHandler handles per-app Google OAuth sign-in.
@@ -116,7 +117,9 @@ func (h *AppGoogleHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = clientSecret
 
-	state, err := h.generateState()
+	redirect := r.URL.Query().Get("redirect")
+
+	state, err := h.generateState(redirect)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
@@ -145,7 +148,7 @@ func (h *AppGoogleHandler) Callback(w http.ResponseWriter, r *http.Request) {
 
 	clientID, clientSecret, redirectURL, ok := h.getGoogleConfig(app)
 	if !ok {
-		http.Error(w, "Google OAuth not configured", http.StatusServiceUnavailable)
+		h.redirectOrError(w, r, "", "Google OAuth not configured", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -153,51 +156,69 @@ func (h *AppGoogleHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	state := r.URL.Query().Get("state")
 	errorParam := r.URL.Query().Get("error")
 
+	frontendRedirect := ""
+	if state != "" {
+		if !h.validateState(state) {
+			h.redirectOrError(w, r, "", "Login expired, please try again", http.StatusBadRequest)
+			return
+		}
+		frontendRedirect = h.getStateRedirect(state)
+	}
+
 	if errorParam != "" {
-		http.Error(w, "Authorization denied", http.StatusBadRequest)
+		h.redirectOrError(w, r, frontendRedirect, "Authorization denied", http.StatusBadRequest)
 		return
 	}
-	if code == "" || state == "" {
-		http.Error(w, "Invalid request", http.StatusBadRequest)
-		return
-	}
-	if !h.validateState(state) {
-		http.Error(w, "Invalid or expired state", http.StatusBadRequest)
+	if code == "" {
+		h.redirectOrError(w, r, frontendRedirect, "Invalid request", http.StatusBadRequest)
 		return
 	}
 
 	token, err := h.exchangeCode(r.Context(), clientID, clientSecret, redirectURL, code)
 	if err != nil {
-		http.Error(w, "Authentication failed", http.StatusInternalServerError)
+		h.redirectOrError(w, r, frontendRedirect, "Google token exchange failed (redirect_url="+redirectURL+"): "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	email, googleID := extractAppGoogleInfo(token)
 	if email == "" || googleID == "" {
-		http.Error(w, "Failed to get user info", http.StatusInternalServerError)
+		h.redirectOrError(w, r, frontendRedirect, "Failed to get user info", http.StatusInternalServerError)
 		return
 	}
 
 	if !h.checkAllowedDomain(email, app) {
-		http.Error(w, "Email domain not allowed", http.StatusForbidden)
+		h.redirectOrError(w, r, frontendRedirect, "Email domain not allowed", http.StatusForbidden)
 		return
 	}
 
 	userID, err := h.findOrCreateAppUser(r.Context(), app.SchemaName, email, googleID)
 	if err != nil {
-		http.Error(w, "Failed to create user", http.StatusInternalServerError)
+		h.redirectOrError(w, r, frontendRedirect, "Failed to create user", http.StatusInternalServerError)
 		return
 	}
 
 	jwtToken, err := IssueJWT([]byte(app.Config.Auth.JWTSecret), userID, email, appName)
 	if err != nil {
-		http.Error(w, "Failed to issue token", http.StatusInternalServerError)
+		h.redirectOrError(w, r, frontendRedirect, "Failed to issue token", http.StatusInternalServerError)
+		return
+	}
+
+	if frontendRedirect != "" {
+		http.Redirect(w, r, frontendRedirect+"#token="+jwtToken, http.StatusFound)
 		return
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{
 		"token": jwtToken,
 	})
+}
+
+func (h *AppGoogleHandler) redirectOrError(w http.ResponseWriter, r *http.Request, frontendRedirect, msg string, status int) {
+	if frontendRedirect != "" {
+		http.Redirect(w, r, frontendRedirect+"#error="+url.QueryEscape(msg), http.StatusFound)
+		return
+	}
+	http.Error(w, msg, status)
 }
 
 type appGoogleTokenResponse struct {
@@ -209,7 +230,7 @@ type appGoogleTokenResponse struct {
 	ErrorDesc   string `json:"error_description"`
 }
 
-func (h *AppGoogleHandler) generateState() (string, error) {
+func (h *AppGoogleHandler) generateState(redirect string) (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return "", fmt.Errorf("app-google: generate state: %w", err)
@@ -217,7 +238,7 @@ func (h *AppGoogleHandler) generateState() (string, error) {
 	token := base64.RawURLEncoding.EncodeToString(b)
 
 	h.statesMu.Lock()
-	h.states[token] = &appGoogleState{token: token, expiresAt: time.Now().Add(10 * time.Minute)}
+	h.states[token] = &appGoogleState{token: token, expiresAt: time.Now().Add(10 * time.Minute), redirect: redirect}
 	h.statesMu.Unlock()
 	return token, nil
 }
@@ -229,8 +250,18 @@ func (h *AppGoogleHandler) validateState(token string) bool {
 	if !ok {
 		return false
 	}
-	delete(h.states, token)
 	return !time.Now().After(s.expiresAt)
+}
+
+func (h *AppGoogleHandler) getStateRedirect(token string) string {
+	h.statesMu.Lock()
+	defer h.statesMu.Unlock()
+	s, ok := h.states[token]
+	if !ok {
+		return ""
+	}
+	delete(h.states, token)
+	return s.redirect
 }
 
 func (h *AppGoogleHandler) exchangeCode(ctx context.Context, clientID, clientSecret, redirectURL, code string) (*appGoogleTokenResponse, error) {
@@ -260,10 +291,10 @@ func (h *AppGoogleHandler) exchangeCode(ctx context.Context, clientID, clientSec
 
 	var tr appGoogleTokenResponse
 	if err := json.Unmarshal(body, &tr); err != nil {
-		return nil, fmt.Errorf("app-google: parse response: %w", err)
+		return nil, fmt.Errorf("app-google: parse response (status=%d): %w", resp.StatusCode, err)
 	}
 	if tr.Error != "" {
-		return nil, fmt.Errorf("app-google: token error: %s", tr.Error)
+		return nil, fmt.Errorf("app-google: token error (status=%d): %s — %s", resp.StatusCode, tr.Error, tr.ErrorDesc)
 	}
 	return &tr, nil
 }
