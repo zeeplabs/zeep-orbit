@@ -5,9 +5,10 @@ import { createClient } from '../orbit'
 interface TodoPageProps {
   config: OrbitConfig
   onLogout: () => void
+  onNavigate: (page: 'todos' | 'files') => void
 }
 
-export function TodoPage({ config, onLogout }: TodoPageProps) {
+export function TodoPage({ config, onLogout, onNavigate }: TodoPageProps) {
   const [todos, setTodos] = useState<Todo[]>([])
   const [newTitle, setNewTitle] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -106,9 +107,14 @@ export function TodoPage({ config, onLogout }: TodoPageProps) {
               {config.baseURL}/{config.app}
             </p>
           </div>
-          <button className="btn-ghost" onClick={onLogout}>
-            Logout
-          </button>
+          <div className="header-actions">
+            <button className="btn-ghost" onClick={() => onNavigate('files')}>
+              Files
+            </button>
+            <button className="btn-ghost" onClick={onLogout}>
+              Logout
+            </button>
+          </div>
         </div>
 
         <form className="create-form" onSubmit={handleCreate}>

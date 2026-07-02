@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { OrbitConfig } from '../types'
-import { createClient } from '../orbit'
+import { createClient, loadConfig, saveConfig } from '../orbit'
 
 interface LoginPageProps {
   config: OrbitConfig
@@ -12,8 +12,28 @@ export function LoginPage({ config, onLogin }: LoginPageProps) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
+  const [error, setError] = useState(config.pendingError || '')
   const [loading, setLoading] = useState(false)
+  const [hasGoogle, setHasGoogle] = useState(false)
+
+  useEffect(() => {
+    if (config.pendingError) {
+      const saved = loadConfig()
+      if (saved) {
+        delete saved.pendingError
+        saveConfig(saved)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    fetch(`${config.baseURL}/${config.app}/auth/providers`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.google?.enabled) setHasGoogle(true)
+      })
+      .catch(() => {})
+  }, [config.baseURL, config.app])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -36,6 +56,10 @@ export function LoginPage({ config, onLogin }: LoginPageProps) {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleGoogleLogin = () => {
+    window.location.href = `${config.baseURL}/${config.app}/auth/google/login?redirect=${encodeURIComponent(window.location.origin)}`
   }
 
   return (
@@ -88,6 +112,17 @@ export function LoginPage({ config, onLogin }: LoginPageProps) {
             {loading ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'}
           </button>
         </form>
+
+        {hasGoogle && (
+          <>
+            <div className="divider">
+              <span>or</span>
+            </div>
+            <button type="button" className="btn-google" onClick={handleGoogleLogin}>
+              Sign in with Google
+            </button>
+          </>
+        )}
 
         <p className="switch-mode">
           {mode === 'login' ? (

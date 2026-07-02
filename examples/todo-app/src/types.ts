@@ -10,4 +10,5 @@ export interface OrbitConfig {
   baseURL: string
   app: string
   jwt?: string
+  pendingError?: string
 }
