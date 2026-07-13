@@ -7,6 +7,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.2.0] — 2026-07-13
+
+### Fixed
+
+- **Company Name / Theme resetting on restart** — the server reseeded `zeep_system.brand_config` on every boot via an upsert that always applies the env var (or hardcoded default) as the new value, overwriting anything saved through the dashboard Settings page. Startup seeding is now insert-only (`ON CONFLICT DO NOTHING`) and never touches an existing row — saved settings survive restarts.
+
+### Removed
+
+- **Custom logo upload** — removed the ability to upload a custom login logo / app icon from Settings. The dashboard and login page now always use the default Zeep Orbit logo.
+
+---
+
 ## [0.1.11] — 2026-07-02
 
 ### Fixed
