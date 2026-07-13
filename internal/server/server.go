@@ -61,7 +61,7 @@ func New(reg *registry.Registry, pool *db.Pool, port int) (*Server, error) {
 	}
 
 	h := NewHandler(pool, reg)
-	dashH := dashboard.NewHandler(pool, reg)
+	dashH := dashboard.NewHandler(pool, reg, logger)
 	r := newRouter(reg, h, pool, logger, dashH)
 
 	s := &Server{

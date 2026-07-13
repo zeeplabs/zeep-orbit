@@ -17,6 +17,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
+	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
@@ -28,25 +29,32 @@ import (
 
 // Handler holds dependencies for dashboard HTTP handlers.
 type Handler struct {
-	pool  *db.Pool
-	reg   *registry.Registry
-	prov  *provisioner.Provisioner
-	Logs  *RingBuffer
+	pool   *db.Pool
+	reg    *registry.Registry
+	prov   *provisioner.Provisioner
+	Logs   *RingBuffer
+	logger *zap.Logger
 }
 
-// NewHandler creates a new Handler.
-func NewHandler(pool *db.Pool, reg *registry.Registry) *Handler {
+// NewHandler creates a new Handler. logger receives detailed error context for
+// every failed request so infra can diagnose issues from container logs alone;
+// pass zap.NewNop() if no logger is available.
+func NewHandler(pool *db.Pool, reg *registry.Registry, logger *zap.Logger) *Handler {
 	bufSize := 2000
 	if v := os.Getenv("DASHBOARD_LOG_BUFFER_SIZE"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			bufSize = n
 		}
 	}
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	return &Handler{
-		pool: pool,
-		reg:  reg,
-		prov: provisioner.New(pool),
-		Logs: NewRingBuffer(bufSize),
+		pool:   pool,
+		reg:    reg,
+		prov:   provisioner.New(pool),
+		Logs:   NewRingBuffer(bufSize),
+		logger: logger,
 	}
 }
 
@@ -60,14 +68,28 @@ var (
 )
 
 // are safe SQL identifiers / known types before they reach the provisioner DDL.
-func validateAppInput(name string, tables []AppTableRow) error {
+func validateAppInput(name string, authEmailEnabled bool, tables []AppTableRow) error {
 	if !appNameRe.MatchString(name) {
 		return errors.New("app name must be lowercase letters, digits, hyphens, or underscores (max 32), starting with a letter")
 	}
+	seenTables := make(map[string]bool, len(tables))
 	for _, t := range tables {
 		if !identRe.MatchString(t.Name) {
 			return errors.New("table name must be lowercase letters, digits, or underscores (max 63), starting with a letter")
 		}
+		if seenTables[t.Name] {
+			return errors.New("duplicate table name: " + t.Name)
+		}
+		seenTables[t.Name] = true
+
+		// owner_id FK points at "_auth_users", which the provisioner only
+		// creates when email auth is on — restricted access without it is a
+		// guaranteed provisioning failure, not a soft misconfiguration.
+		if (t.RLS == "enabled" || t.RLS == "owner") && !authEmailEnabled {
+			return errors.New("table " + t.Name + " uses restricted access (RLS), which requires 'Autenticação por e-mail' to be enabled for this app")
+		}
+
+		seenColumns := make(map[string]bool, len(t.Columns))
 		for _, c := range t.Columns {
 			if !identRe.MatchString(c.Name) {
 				return errors.New("column name must be lowercase letters, digits, or underscores (max 63), starting with a letter")
@@ -75,6 +97,10 @@ func validateAppInput(name string, tables []AppTableRow) error {
 			if !allowedTypes[c.Type] {
 				return errors.New("unsupported column type: " + c.Type)
 			}
+			if seenColumns[c.Name] {
+				return errors.New("duplicate column name in table " + t.Name + ": " + c.Name)
+			}
+			seenColumns[c.Name] = true
 		}
 	}
 	return nil
@@ -95,8 +121,7 @@ func (h *Handler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+	if !h.decodeJSONBody(w, r, &body) {
 		return
 	}
 
@@ -112,13 +137,13 @@ func (h *Handler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(body.Password), 12)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
 	created, err := BootstrapFirstSuperadmin(r.Context(), h.pool, body.Email, body.Name, string(hash))
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 	if !created {
@@ -134,7 +159,7 @@ func (h *Handler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) BootstrapStatus(w http.ResponseWriter, r *http.Request) {
 	ok, err := IsBootstrapped(r.Context(), h.pool)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"bootstrapped": ok})
@@ -144,7 +169,7 @@ func (h *Handler) BootstrapStatus(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Config(w http.ResponseWriter, r *http.Request) {
 	cfg, err := GetBrandConfig(r.Context(), h.pool)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
@@ -192,8 +217,7 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 		LogoURL     string `json:"logo_url"`
 		IconURL     string `json:"icon_url"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+	if !h.decodeJSONBody(w, r, &body) {
 		return
 	}
 
@@ -205,7 +229,7 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 
 	cfg, err := UpsertBrandConfig(r.Context(), h.pool, body.Theme, body.CompanyName, body.LogoURL, body.IconURL)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
@@ -229,7 +253,7 @@ func (h *Handler) ListAuthProviders(w http.ResponseWriter, r *http.Request) {
 	reveal := r.URL.Query().Get("reveal") == "true"
 	providers, err := ListAuthProviders(r.Context(), h.pool, reveal)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
@@ -253,7 +277,7 @@ func (h *Handler) GetAuthProvider(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := GetAuthProvider(r.Context(), h.pool, provider)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
@@ -280,14 +304,13 @@ func (h *Handler) UpsertAuthProvider(w http.ResponseWriter, r *http.Request) {
 
 	r.Body = http.MaxBytesReader(w, r.Body, 8192)
 	var body authProviderUpsertInput
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+	if !h.decodeJSONBody(w, r, &body) {
 		return
 	}
 
 	result, err := UpsertAuthProvider(r.Context(), h.pool, provider, &body)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update provider"})
+		h.writeError(w, r, http.StatusInternalServerError, "failed to update provider", err)
 		return
 	}
 
@@ -308,7 +331,7 @@ func (h *Handler) GetSystemConfig(w http.ResponseWriter, r *http.Request) {
 
 	cfg, err := GetSystemConfig(r.Context(), h.pool)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 	if cfg.StorageConfig != nil {
@@ -333,14 +356,13 @@ func (h *Handler) UpdateSystemConfig(w http.ResponseWriter, r *http.Request) {
 		SoftDeleteEnabled bool                 `json:"soft_delete_enabled"`
 		StorageConfig     *GlobalStorageConfig `json:"storage_config,omitempty"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+	if !h.decodeJSONBody(w, r, &body) {
 		return
 	}
 
 	cfg, err := UpsertSystemConfig(r.Context(), h.pool, body.SoftDeleteEnabled, body.StorageConfig)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update system config"})
+		h.writeError(w, r, http.StatusInternalServerError, "failed to update system config", err)
 		return
 	}
 
@@ -361,8 +383,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+	if !h.decodeJSONBody(w, r, &body) {
 		return
 	}
 
@@ -372,7 +393,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
 			return
 		}
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
@@ -387,13 +408,13 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	token, err := generateToken()
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
 	expiresAt := time.Now().Add(24 * time.Hour)
 	if err := CreateSession(r.Context(), h.pool, token, user.ID, expiresAt); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
@@ -477,8 +498,7 @@ func (h *Handler) ChangeMyPassword(w http.ResponseWriter, r *http.Request) {
 		NewPassword     string `json:"new_password"`
 		ConfirmPassword string `json:"confirm_password"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+	if !h.decodeJSONBody(w, r, &body) {
 		return
 	}
 
@@ -501,7 +521,7 @@ func (h *Handler) ChangeMyPassword(w http.ResponseWriter, r *http.Request) {
 
 	fullUser, err := GetUserByEmail(r.Context(), h.pool, user.Email)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
@@ -517,12 +537,12 @@ func (h *Handler) ChangeMyPassword(w http.ResponseWriter, r *http.Request) {
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(body.NewPassword), 12)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
 	if err := UpdatePassword(r.Context(), h.pool, user.ID, string(hash)); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update password"})
+		h.writeError(w, r, http.StatusInternalServerError, "failed to update password", err)
 		return
 	}
 
@@ -553,8 +573,7 @@ func (h *Handler) ChangeUserPassword(w http.ResponseWriter, r *http.Request) {
 		NewPassword     string `json:"new_password"`
 		ConfirmPassword string `json:"confirm_password"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+	if !h.decodeJSONBody(w, r, &body) {
 		return
 	}
 
@@ -573,7 +592,7 @@ func (h *Handler) ChangeUserPassword(w http.ResponseWriter, r *http.Request) {
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(body.NewPassword), 12)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
@@ -582,7 +601,7 @@ func (h *Handler) ChangeUserPassword(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
 			return
 		}
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update password"})
+		h.writeError(w, r, http.StatusInternalServerError, "failed to update password", err)
 		return
 	}
 
@@ -604,7 +623,7 @@ func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
 
 	users, err := ListUsers(r.Context(), h.pool)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 	if users == nil {
@@ -632,8 +651,7 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 		Role     string `json:"role"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+	if !h.decodeJSONBody(w, r, &body) {
 		return
 	}
 
@@ -652,13 +670,13 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(body.Password), 12)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
 	newUser, err := CreateUser(r.Context(), h.pool, body.Email, body.Name, string(hash), body.Role)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
@@ -694,7 +712,7 @@ func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 			return
 		}
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
@@ -712,7 +730,7 @@ func (h *Handler) ListApps(w http.ResponseWriter, r *http.Request) {
 
 	apps, err := ListApps(r.Context(), h.pool, user.ID, user.Role)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 	if apps == nil {
@@ -741,24 +759,23 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 
 	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
 	var body appRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+	if !h.decodeJSONBody(w, r, &body) {
 		return
 	}
-	if err := validateAppInput(body.Name, body.Tables); err != nil {
+	if err := validateAppInput(body.Name, body.AuthEmailEnabled, body.Tables); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 
 	app, err := CreateApp(r.Context(), h.pool, body.Name, user.ID, body.AuthEmailEnabled, body.Tables)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
 	if len(body.AuthProviders) > 0 {
 		if err := UpdateAppAuthProvidersRaw(r.Context(), h.pool, app.ID, body.AuthProviders); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save auth providers"})
+			h.writeError(w, r, http.StatusInternalServerError, "failed to save auth providers", err)
 			return
 		}
 		app.AuthProviders = body.AuthProviders
@@ -767,11 +784,11 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 	if body.StorageConfig != nil && body.StorageConfig.Bucket != "" {
 		sc, err := resolveAppStorage(r.Context(), h.pool, body.StorageConfig)
 		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to resolve storage config"})
+			h.writeError(w, r, http.StatusInternalServerError, "failed to resolve storage config", err)
 			return
 		}
 		if err := UpdateAppStorageConfig(r.Context(), h.pool, app.ID, sc); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save storage config"})
+			h.writeError(w, r, http.StatusInternalServerError, "failed to save storage config", err)
 			return
 		}
 		app.StorageConfig = sc
@@ -779,7 +796,7 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 
 	cfg := buildAppConfig(app)
 	if _, err := h.prov.Apply(r.Context(), &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "provisioning failed: " + err.Error()})
+		h.writeError(w, r, http.StatusInternalServerError, "provisioning failed: "+err.Error(), err)
 		return
 	}
 
@@ -807,7 +824,7 @@ func (h *Handler) GetApp(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 			return
 		}
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
@@ -826,12 +843,11 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 
 	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
 	var body appRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+	if !h.decodeJSONBody(w, r, &body) {
 		return
 	}
 
-	if err := validateAppInput(body.Name, body.Tables); err != nil {
+	if err := validateAppInput(body.Name, body.AuthEmailEnabled, body.Tables); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -842,13 +858,13 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 			return
 		}
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
 	if len(body.AuthProviders) > 0 {
 		if err := UpdateAppAuthProvidersRaw(r.Context(), h.pool, app.ID, body.AuthProviders); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save auth providers"})
+			h.writeError(w, r, http.StatusInternalServerError, "failed to save auth providers", err)
 			return
 		}
 		app.AuthProviders = body.AuthProviders
@@ -857,11 +873,11 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 	if body.StorageConfig != nil && body.StorageConfig.Bucket != "" {
 		sc, err := resolveAppStorage(r.Context(), h.pool, body.StorageConfig)
 		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to resolve storage config"})
+			h.writeError(w, r, http.StatusInternalServerError, "failed to resolve storage config", err)
 			return
 		}
 		if err := UpdateAppStorageConfig(r.Context(), h.pool, app.ID, sc); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save storage config"})
+			h.writeError(w, r, http.StatusInternalServerError, "failed to save storage config", err)
 			return
 		}
 		app.StorageConfig = sc
@@ -869,7 +885,7 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 
 	if body.RateLimit != nil {
 		if err := UpdateAppRateLimitConfig(r.Context(), h.pool, app.ID, body.RateLimit); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save rate limit config"})
+			h.writeError(w, r, http.StatusInternalServerError, "failed to save rate limit config", err)
 			return
 		}
 		app.RateLimit = body.RateLimit
@@ -877,7 +893,7 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 
 	cfg := buildAppConfig(app)
 	if _, err := h.prov.Apply(r.Context(), &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "provisioning failed: " + err.Error()})
+		h.writeError(w, r, http.StatusInternalServerError, "provisioning failed: "+err.Error(), err)
 		return
 	}
 
@@ -905,7 +921,7 @@ func (h *Handler) DeleteApp(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 			return
 		}
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
@@ -914,7 +930,7 @@ func (h *Handler) DeleteApp(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 			return
 		}
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
@@ -1071,7 +1087,7 @@ func (h *Handler) CompleteGoogleSetup(w http.ResponseWriter, r *http.Request) {
 
 	fullUser, err := GetUserByEmail(r.Context(), h.pool, user.Email)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
@@ -1086,8 +1102,7 @@ func (h *Handler) CompleteGoogleSetup(w http.ResponseWriter, r *http.Request) {
 		Password        string `json:"password"`
 		ConfirmPassword string `json:"confirm_password"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+	if !h.decodeJSONBody(w, r, &body) {
 		return
 	}
 
@@ -1110,16 +1125,16 @@ func (h *Handler) CompleteGoogleSetup(w http.ResponseWriter, r *http.Request) {
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(body.Password), bcrypt.DefaultCost)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
 	if err := UpdateUserName(r.Context(), h.pool, fullUser.ID, body.Name); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 	if err := UpdatePassword(r.Context(), h.pool, fullUser.ID, string(hash)); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
@@ -1137,8 +1152,7 @@ func (h *Handler) SetLanguage(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Language string `json:"language"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+	if !h.decodeJSONBody(w, r, &body) {
 		return
 	}
 	if body.Language != "pt-BR" && body.Language != "en" {
@@ -1147,7 +1161,7 @@ func (h *Handler) SetLanguage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := SetUserLanguage(r.Context(), h.pool, user.ID, body.Language); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
@@ -1158,6 +1172,36 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v) //nolint:errcheck
+}
+
+// writeError logs the real err (with request context) at Error level, then
+// sends only publicMsg to the client so internals never leak over the wire.
+func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, status int, publicMsg string, err error) {
+	h.logger.Error("dashboard request failed",
+		zap.String("method", r.Method),
+		zap.String("path", r.URL.Path),
+		zap.Int("status", status),
+		zap.Error(err),
+	)
+	writeJSON(w, status, map[string]string{"error": publicMsg})
+}
+
+// decodeJSONBody decodes r.Body into v, logging and responding on failure.
+// It distinguishes an oversized body (http.MaxBytesReader) from a genuinely
+// malformed payload, since both previously surfaced as the same opaque
+// "invalid request body" message. Returns false when the caller should return.
+func (h *Handler) decodeJSONBody(w http.ResponseWriter, r *http.Request, v any) bool {
+	err := json.NewDecoder(r.Body).Decode(v)
+	if err == nil {
+		return true
+	}
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(err, &maxBytesErr) {
+		h.writeError(w, r, http.StatusRequestEntityTooLarge, "request payload too large", err)
+		return false
+	}
+	h.writeError(w, r, http.StatusBadRequest, "invalid request body", err)
+	return false
 }
 
 func generateToken() (string, error) {
@@ -1178,7 +1222,7 @@ func (h *Handler) ListLogs(w http.ResponseWriter, r *http.Request) {
 
 	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
@@ -1210,7 +1254,7 @@ func (h *Handler) LogsMetrics(w http.ResponseWriter, r *http.Request) {
 
 	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
@@ -1245,7 +1289,7 @@ func (h *Handler) ListDataBrowserApps(w http.ResponseWriter, r *http.Request) {
 
 	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
@@ -1295,7 +1339,7 @@ func (h *Handler) DataBrowserQuery(w http.ResponseWriter, r *http.Request) {
 
 	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 	if allowedApps != nil && !allowedApps[appName] {
@@ -1337,18 +1381,18 @@ func (h *Handler) DataBrowserQuery(w http.ResponseWriter, r *http.Request) {
 	var count int
 	filterArgs := q.Args[:len(q.Args)-2]
 	if err := h.pool.QueryRow(ctx, q.CountSQL, filterArgs...).Scan(&count); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to count rows"})
+		h.writeError(w, r, http.StatusInternalServerError, "failed to count rows", err)
 		return
 	}
 
 	rows, err := h.pool.Query(ctx, q.SQL, q.Args...)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to query rows"})
+		h.writeError(w, r, http.StatusInternalServerError, "failed to query rows", err)
 		return
 	}
 	data, err := pgx.CollectRows(rows, pgx.RowToMap)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to collect rows"})
+		h.writeError(w, r, http.StatusInternalServerError, "failed to collect rows", err)
 		return
 	}
 	if data == nil {
@@ -1389,7 +1433,7 @@ func (h *Handler) DataBrowserExport(w http.ResponseWriter, r *http.Request) {
 
 	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 	if allowedApps != nil && !allowedApps[appName] {
@@ -1430,12 +1474,12 @@ func (h *Handler) DataBrowserExport(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.pool.Query(r.Context(), q.SQL, q.Args...)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to query rows"})
+		h.writeError(w, r, http.StatusInternalServerError, "failed to query rows", err)
 		return
 	}
 	data, err := pgx.CollectRows(rows, pgx.RowToMap)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to collect rows"})
+		h.writeError(w, r, http.StatusInternalServerError, "failed to collect rows", err)
 		return
 	}
 
@@ -1517,7 +1561,7 @@ func (h *Handler) DataBrowserCreate(w http.ResponseWriter, r *http.Request) {
 
 	var req dataBrowserMutationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		h.writeError(w, r, http.StatusBadRequest, "invalid JSON body", err)
 		return
 	}
 	if req.App == "" || req.Table == "" || req.Data == nil {
@@ -1527,7 +1571,7 @@ func (h *Handler) DataBrowserCreate(w http.ResponseWriter, r *http.Request) {
 
 	ownership, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 	if ownership != nil && !ownership[req.App] {
@@ -1554,12 +1598,12 @@ func (h *Handler) DataBrowserCreate(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.pool.Query(r.Context(), q.SQL, q.Args...)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to insert row: " + err.Error()})
+		h.writeError(w, r, http.StatusInternalServerError, "failed to insert row: "+err.Error(), err)
 		return
 	}
 	row, err := pgx.CollectOneRow(rows, pgx.RowToMap)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to read inserted row: " + err.Error()})
+		h.writeError(w, r, http.StatusInternalServerError, "failed to read inserted row: "+err.Error(), err)
 		return
 	}
 
@@ -1579,7 +1623,7 @@ func (h *Handler) DataBrowserUpdate(w http.ResponseWriter, r *http.Request) {
 
 	var req dataBrowserMutationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		h.writeError(w, r, http.StatusBadRequest, "invalid JSON body", err)
 		return
 	}
 	if req.App == "" || req.Table == "" || req.ID == "" || req.Data == nil {
@@ -1589,7 +1633,7 @@ func (h *Handler) DataBrowserUpdate(w http.ResponseWriter, r *http.Request) {
 
 	ownership, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 	if ownership != nil && !ownership[req.App] {
@@ -1616,12 +1660,12 @@ func (h *Handler) DataBrowserUpdate(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.pool.Query(r.Context(), q.SQL, q.Args...)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update row: " + err.Error()})
+		h.writeError(w, r, http.StatusInternalServerError, "failed to update row: "+err.Error(), err)
 		return
 	}
 	row, err := pgx.CollectOneRow(rows, pgx.RowToMap)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to read updated row: " + err.Error()})
+		h.writeError(w, r, http.StatusInternalServerError, "failed to read updated row: "+err.Error(), err)
 		return
 	}
 
@@ -1649,7 +1693,7 @@ func (h *Handler) DataBrowserDelete(w http.ResponseWriter, r *http.Request) {
 
 	ownership, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 	if ownership != nil && !ownership[appName] {
@@ -1671,7 +1715,7 @@ func (h *Handler) DataBrowserDelete(w http.ResponseWriter, r *http.Request) {
 	q := query.BuildDelete(app.SchemaName, tableName, id, "", h.reg.SystemConfig().SoftDeleteEnabled)
 	tag, err := h.pool.Exec(r.Context(), q.SQL, q.Args...)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to delete row: " + err.Error()})
+		h.writeError(w, r, http.StatusInternalServerError, "failed to delete row: "+err.Error(), err)
 		return
 	}
 	if tag.RowsAffected() == 0 {
@@ -1705,7 +1749,7 @@ func (h *Handler) ListAppUsers(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "app not found"})
 			return
 		}
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
@@ -1726,7 +1770,7 @@ func (h *Handler) ListAppUsers(w http.ResponseWriter, r *http.Request) {
 
 	users, total, err := ListAppUsers(r.Context(), h.pool, schema, search, limit, offset)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list users"})
+		h.writeError(w, r, http.StatusInternalServerError, "failed to list users", err)
 		return
 	}
 
@@ -1767,7 +1811,7 @@ func (h *Handler) DeactivateAppUser(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
 			return
 		}
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to deactivate user"})
+		h.writeError(w, r, http.StatusInternalServerError, "failed to deactivate user", err)
 		return
 	}
 
@@ -1798,7 +1842,7 @@ func (h *Handler) ActivateAppUser(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
 			return
 		}
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to activate user"})
+		h.writeError(w, r, http.StatusInternalServerError, "failed to activate user", err)
 		return
 	}
 
@@ -1829,7 +1873,7 @@ func (h *Handler) ResetAppUserSessions(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "no sessions found"})
 			return
 		}
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to reset sessions"})
+		h.writeError(w, r, http.StatusInternalServerError, "failed to reset sessions", err)
 		return
 	}
 
@@ -1864,7 +1908,7 @@ func (h *Handler) ListAuditLog(w http.ResponseWriter, r *http.Request) {
 		Offset: offset,
 	})
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
@@ -1920,7 +1964,7 @@ func (h *Handler) UploadLogo(w http.ResponseWriter, r *http.Request) {
 		SecretAccessKey: cfg.StorageConfig.SecretAccessKey,
 	})
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create S3 client"})
+		h.writeError(w, r, http.StatusInternalServerError, "failed to create S3 client", err)
 		return
 	}
 
@@ -1931,13 +1975,13 @@ func (h *Handler) UploadLogo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s3Client.Upload(r.Context(), key, file, mimeType); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		h.writeError(w, r, http.StatusInternalServerError, err.Error(), err)
 		return
 	}
 
 	signedURL, err := s3Client.SignedURL(r.Context(), key, 7*24*time.Hour)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to generate URL"})
+		h.writeError(w, r, http.StatusInternalServerError, "failed to generate URL", err)
 		return
 	}
 
@@ -1958,7 +2002,7 @@ func (h *Handler) UploadLogo(w http.ResponseWriter, r *http.Request) {
 
 	bc, err := UpdateBrandLogos(r.Context(), h.pool, newLogo, newIcon)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update brand config"})
+		h.writeError(w, r, http.StatusInternalServerError, "failed to update brand config", err)
 		return
 	}
 

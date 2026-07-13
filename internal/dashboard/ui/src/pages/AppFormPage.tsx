@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useTranslation, Trans } from "react-i18next";
 import { motion } from "framer-motion";
@@ -115,6 +115,8 @@ export default function AppFormPage() {
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const lastTableRef = useRef<HTMLDivElement | null>(null);
+  const scrollToNewTable = useRef(false);
 
   const createApp = useCreateApp();
   const updateApp = useUpdateApp();
@@ -183,7 +185,17 @@ export default function AppFormPage() {
   }, [editTarget, isEdit]);
 
 
-  const addTable = () => setTables((prev) => [...prev, emptyTable()]);
+  const addTable = () => {
+    scrollToNewTable.current = true;
+    setTables((prev) => [...prev, emptyTable()]);
+  };
+
+  useEffect(() => {
+    if (scrollToNewTable.current && lastTableRef.current) {
+      lastTableRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      scrollToNewTable.current = false;
+    }
+  }, [tables.length]);
 
   const removeTable = (ti: number) => {
     setTables((prev) => prev.filter((_, i) => i !== ti));
@@ -480,9 +492,11 @@ export default function AppFormPage() {
             <div className="flex flex-col gap-3">
               {tables.map((table, ti) => {
                 const isCollapsed = collapsedTables.has(ti);
+                const isLast = ti === tables.length - 1;
                 return (
                   <motion.div
                     key={ti}
+                    ref={isLast ? lastTableRef : undefined}
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
