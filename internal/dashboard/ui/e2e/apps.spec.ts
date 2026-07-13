@@ -2,38 +2,46 @@ import { test, expect } from '@playwright/test'
 import { bootstrapOrSkip, login, createTestApp } from './helpers'
 
 test.describe('App Management', () => {
-  test('create app with table', async ({ page }) => {
+  test('create app, then add, edit and delete a table', async ({ page }) => {
     await bootstrapOrSkip(page)
     await login(page)
 
-    await page.goto('/dashboard/apps')
-    await page.click('text=Novo App')
-    await page.waitForURL('**/apps/new')
-
-    // Fill app name
-    await page.fill('input[placeholder="meu_app"]', 'e2e_app')
+    await createTestApp(page, 'e2e_app')
+    // createTestApp already waits for the redirect to /apps/:id
 
     // Add a table
     await page.click('text=Adicionar Tabela')
-    await page.fill('input[placeholder="nome_da_tabela"]', 'items')
+    await page.fill('input[placeholder="tabela_1"]', 'items')
+    await page.fill('input[placeholder="nome_coluna"]', 'title')
+    await page.click('text=Salvar tabela')
 
-    // Add a column
+    // Table now shows saved (collapsed), no longer in edit mode
+    await expect(page.locator('text=Salvar tabela')).toHaveCount(0)
+    await expect(page.locator('text=items')).toBeVisible()
+
+    // "Adicionar Tabela" is available again once nothing is being edited
+    await expect(page.locator('text=Adicionar Tabela')).toBeEnabled()
+
+    // Edit the saved table: add a second column
+    await page.click('text=Editar')
     await page.click('text=Adicionar Coluna')
-    await page.fill('input[placeholder="nome"]', 'title')
-    await page.selectOption('select:below(:text("Tipo"))', 'text')
+    const columnNames = page.locator('input[placeholder="nome_coluna"]')
+    await columnNames.nth(1).fill('description')
+    await page.click('text=Salvar tabela')
+    await expect(page.locator('text=Salvar tabela')).toHaveCount(0)
 
-    // Submit
-    await page.click('text=Criar')
-    await page.waitForURL('**/apps')
-
-    // App should be listed
-    await expect(page.locator('text=e2e_app')).toBeVisible()
+    // Delete the table
+    page.once('dialog', (dialog) => dialog.accept())
+    await page.click('[class*="border-red-500"]')
+    await expect(page.locator('text=Nenhuma tabela')).toBeVisible()
   })
 
   test('delete app', async ({ page }) => {
     await bootstrapOrSkip(page)
     await login(page)
     await createTestApp(page, 'e2e_to_delete')
+
+    await page.goto('/dashboard/apps')
 
     // Hover to show delete button and click
     await page.hover('text=e2e_to_delete')

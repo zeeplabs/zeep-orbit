@@ -275,7 +275,7 @@ export default function AppsPage() {
   const [deleteTarget, setDeleteTarget] = useState<AppDef | null>(null);
 
   function handleEdit(app: AppDef) {
-    navigate(`/apps/${app.id}/edit`);
+    navigate(`/apps/${app.id}`);
   }
 
   function handleUsers(app: AppDef) {

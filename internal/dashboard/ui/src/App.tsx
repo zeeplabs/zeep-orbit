@@ -1,13 +1,14 @@
 import { useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Navigate, Routes, Route } from 'react-router-dom'
+import { Navigate, Routes, Route, useParams } from 'react-router-dom'
 import LoginPage from './pages/LoginPage'
 import GoogleSetupPage from './pages/GoogleSetupPage'
 import DashboardShell from './pages/DashboardShell'
 import OnboardingPage from './pages/OnboardingPage'
 import AppsPage from './pages/AppsPage'
-import AppFormPage from './pages/AppFormPage'
+import AppOnboardingPage from './pages/AppOnboardingPage'
+import AppDetailsPage from './pages/AppDetailsPage'
 import BrandSettingsPage from './pages/BrandSettingsPage'
 import UsersPage from './pages/UsersPage'
 import LogsPage from './pages/LogsPage'
@@ -41,6 +42,11 @@ function LoadingScreen() {
       </div>
     </div>
   )
+}
+
+function RedirectToAppDetails() {
+  const { id } = useParams()
+  return <Navigate to={`/apps/${id}`} replace />
 }
 
 function useTheme() {
@@ -99,8 +105,9 @@ function App() {
         >
           <Route index element={<Navigate to="/apps" replace />} />
           <Route path="/apps" element={<AppsPage />} />
-          <Route path="/apps/new" element={<AppFormPage />} />
-          <Route path="/apps/:id/edit" element={<AppFormPage />} />
+          <Route path="/apps/new" element={<AppOnboardingPage />} />
+          <Route path="/apps/:id" element={<AppDetailsPage />} />
+          <Route path="/apps/:id/edit" element={<RedirectToAppDetails />} />
           <Route path="/apps/:id/users" element={<AppUsersPage />} />
           <Route path="/configuracoes" element={<BrandSettingsPage />} />
           <Route path="/data-browser" element={<DataBrowserPage />} />

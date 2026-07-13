@@ -111,6 +111,16 @@ func (p *Provisioner) createTable(ctx context.Context, schemaName, tableName str
 	return true, nil
 }
 
+// DropTable drops a table if it exists. Used when a single table is removed
+// from an app without touching the app's other tables.
+func (p *Provisioner) DropTable(ctx context.Context, schemaName, tableName string) error {
+	sql := fmt.Sprintf(`DROP TABLE IF EXISTS %q.%q`, schemaName, tableName)
+	if _, err := p.pool.Exec(ctx, sql); err != nil {
+		return fmt.Errorf("table: drop %q.%q: %w", schemaName, tableName, err)
+	}
+	return nil
+}
+
 // Retorna a lista de colunas adicionadas no formato "schema.table.column".
 func (p *Provisioner) addMissingColumns(ctx context.Context, schemaName, tableName string, cols []config.ColumnConfig, rls string) ([]string, error) {
 	rows, err := p.pool.Query(ctx,

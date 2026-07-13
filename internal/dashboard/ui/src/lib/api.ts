@@ -37,7 +37,6 @@ export interface AppDef {
 export interface CreateAppInput {
   name: string
   auth_email_enabled: boolean
-  tables: TableDef[]
 }
 
 
@@ -107,6 +106,49 @@ export function useDeleteApp(): UseMutationResult<void, Error, string> {
   return useMutation({
     mutationFn: (id: string) =>
       apiFetch<void>(`/dashboard/api/apps/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['apps'] })
+    },
+  })
+}
+
+export function useCreateAppTable(appId: string): UseMutationResult<TableDef, Error, TableDef> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (table: TableDef) =>
+      apiFetch<TableDef>(`/dashboard/api/apps/${appId}/tables`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(table),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['apps'] })
+    },
+  })
+}
+
+export function useUpdateAppTable(
+  appId: string,
+): UseMutationResult<TableDef, Error, { tableId: string; rls: string; columns: ColumnDef[] }> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ tableId, ...input }) =>
+      apiFetch<TableDef>(`/dashboard/api/apps/${appId}/tables/${tableId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['apps'] })
+    },
+  })
+}
+
+export function useDeleteAppTable(appId: string): UseMutationResult<void, Error, string> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (tableId: string) =>
+      apiFetch<void>(`/dashboard/api/apps/${appId}/tables/${tableId}`, { method: 'DELETE' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['apps'] })
     },

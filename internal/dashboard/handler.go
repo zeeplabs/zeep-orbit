@@ -67,41 +67,47 @@ var (
 	}
 )
 
-// are safe SQL identifiers / known types before they reach the provisioner DDL.
-func validateAppInput(name string, authEmailEnabled bool, tables []AppTableRow) error {
+// validateAppInput checks the app name is a safe SQL schema identifier.
+func validateAppInput(name string) error {
 	if !appNameRe.MatchString(name) {
 		return errors.New("app name must be lowercase letters, digits, hyphens, or underscores (max 32), starting with a letter")
 	}
-	seenTables := make(map[string]bool, len(tables))
-	for _, t := range tables {
-		if !identRe.MatchString(t.Name) {
-			return errors.New("table name must be lowercase letters, digits, or underscores (max 63), starting with a letter")
-		}
-		if seenTables[t.Name] {
+	return nil
+}
+
+// validateTableInput checks a single table before it reaches the provisioner
+// DDL: safe identifiers, known column types, no duplicate name against the
+// app's other tables (otherTables — exclude the table being updated, if any),
+// no duplicate column name within the table, and the RLS×auth rule.
+func validateTableInput(t AppTableRow, authEmailEnabled bool, otherTables []AppTableRow) error {
+	if !identRe.MatchString(t.Name) {
+		return errors.New("table name must be lowercase letters, digits, or underscores (max 63), starting with a letter")
+	}
+	for _, other := range otherTables {
+		if other.Name == t.Name {
 			return errors.New("duplicate table name: " + t.Name)
 		}
-		seenTables[t.Name] = true
+	}
 
-		// owner_id FK points at "_auth_users", which the provisioner only
-		// creates when email auth is on — restricted access without it is a
-		// guaranteed provisioning failure, not a soft misconfiguration.
-		if (t.RLS == "enabled" || t.RLS == "owner") && !authEmailEnabled {
-			return errors.New("table " + t.Name + " uses restricted access (RLS), which requires 'Autenticação por e-mail' to be enabled for this app")
-		}
+	// owner_id FK points at "_auth_users", which the provisioner only
+	// creates when email auth is on — restricted access without it is a
+	// guaranteed provisioning failure, not a soft misconfiguration.
+	if (t.RLS == "enabled" || t.RLS == "owner") && !authEmailEnabled {
+		return errors.New("table " + t.Name + " uses restricted access (RLS), which requires 'Autenticação por e-mail' to be enabled for this app")
+	}
 
-		seenColumns := make(map[string]bool, len(t.Columns))
-		for _, c := range t.Columns {
-			if !identRe.MatchString(c.Name) {
-				return errors.New("column name must be lowercase letters, digits, or underscores (max 63), starting with a letter")
-			}
-			if !allowedTypes[c.Type] {
-				return errors.New("unsupported column type: " + c.Type)
-			}
-			if seenColumns[c.Name] {
-				return errors.New("duplicate column name in table " + t.Name + ": " + c.Name)
-			}
-			seenColumns[c.Name] = true
+	seenColumns := make(map[string]bool, len(t.Columns))
+	for _, c := range t.Columns {
+		if !identRe.MatchString(c.Name) {
+			return errors.New("column name must be lowercase letters, digits, or underscores (max 63), starting with a letter")
 		}
+		if !allowedTypes[c.Type] {
+			return errors.New("unsupported column type: " + c.Type)
+		}
+		if seenColumns[c.Name] {
+			return errors.New("duplicate column name in table " + t.Name + ": " + c.Name)
+		}
+		seenColumns[c.Name] = true
 	}
 	return nil
 }
@@ -739,14 +745,21 @@ func (h *Handler) ListApps(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, apps)
 }
 
-// appRequestBody is the JSON body for create/update app requests.
+// appRequestBody is the JSON body for create/update app requests. Tables are
+// managed one at a time via the /apps/{id}/tables endpoints, not here.
 type appRequestBody struct {
 	Name             string                    `json:"name"`
 	AuthEmailEnabled bool                      `json:"auth_email_enabled"`
-	Tables           []AppTableRow             `json:"tables"`
 	AuthProviders    json.RawMessage           `json:"auth_providers,omitempty"`
 	StorageConfig    *storage.StorageConfig    `json:"storage_config,omitempty"`
 	RateLimit        *config.RateLimitConfig   `json:"rate_limit,omitempty"`
+}
+
+// tableRequestBody is the JSON body for create/update table requests.
+type tableRequestBody struct {
+	Name    string                `json:"name"`
+	RLS     string                `json:"rls"`
+	Columns []config.ColumnConfig `json:"columns"`
 }
 
 // CreateApp handles POST /dashboard/api/apps
@@ -762,12 +775,12 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 	if !h.decodeJSONBody(w, r, &body) {
 		return
 	}
-	if err := validateAppInput(body.Name, body.AuthEmailEnabled, body.Tables); err != nil {
+	if err := validateAppInput(body.Name); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 
-	app, err := CreateApp(r.Context(), h.pool, body.Name, user.ID, body.AuthEmailEnabled, body.Tables)
+	app, err := CreateApp(r.Context(), h.pool, body.Name, user.ID, body.AuthEmailEnabled)
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
@@ -804,8 +817,7 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 
 	app.JWTSecret = ""
 	writeJSON(w, http.StatusCreated, app)
-	meta, _ := json.Marshal(map[string]any{"tables": body.Tables})
-	h.audit(r.Context(), user.ID, user.Email, "app.create", "app", app.ID, app.Name, meta, r.RemoteAddr)
+	h.audit(r.Context(), user.ID, user.Email, "app.create", "app", app.ID, app.Name, nil, r.RemoteAddr)
 }
 
 // GetApp handles GET /dashboard/api/apps/{id}
@@ -847,12 +859,12 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := validateAppInput(body.Name, body.AuthEmailEnabled, body.Tables); err != nil {
+	if err := validateAppInput(body.Name); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 
-	app, err := UpdateApp(r.Context(), h.pool, appID, user.ID, user.Role, body.AuthEmailEnabled, body.Tables)
+	app, err := UpdateApp(r.Context(), h.pool, appID, user.ID, user.Role, body.AuthEmailEnabled)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -901,8 +913,7 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 
 	app.JWTSecret = ""
 	writeJSON(w, http.StatusOK, app)
-	meta, _ := json.Marshal(map[string]any{"tables": body.Tables})
-	h.audit(r.Context(), user.ID, user.Email, "app.update", "app", app.ID, app.Name, meta, r.RemoteAddr)
+	h.audit(r.Context(), user.ID, user.Email, "app.update", "app", app.ID, app.Name, nil, r.RemoteAddr)
 }
 
 // DeleteApp handles DELETE /dashboard/api/apps/{id}
@@ -938,6 +949,187 @@ func (h *Handler) DeleteApp(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusNoContent)
 	h.audit(r.Context(), user.ID, user.Email, "app.delete", "app", appID, existing.Name, nil, r.RemoteAddr)
+}
+
+// CreateAppTable handles POST /dashboard/api/apps/{id}/tables. Tables are
+// created one at a time — the request only ever describes a single table,
+// applied to the provisioner without touching the app's other tables.
+func (h *Handler) CreateAppTable(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appID := chi.URLParam(r, "id")
+	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
+	var body tableRequestBody
+	if !h.decodeJSONBody(w, r, &body) {
+		return
+	}
+
+	table := AppTableRow{Name: body.Name, RLS: body.RLS, Columns: body.Columns}
+	if err := validateTableInput(table, app.AuthEmailEnabled, app.Tables); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	row, err := InsertAppTable(r.Context(), h.pool, appID, table)
+	if err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+
+	cfg := buildAppConfig(app)
+	cfg.Tables = []config.TableConfig{{Name: row.Name, RLS: row.RLS, Columns: row.Columns}}
+	if _, err := h.prov.Apply(r.Context(), &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "provisioning failed: "+err.Error(), err)
+		return
+	}
+
+	updated, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	if err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+	h.reg.Register(appRowToRegistryApp(updated))
+
+	writeJSON(w, http.StatusCreated, row)
+	h.audit(r.Context(), user.ID, user.Email, "app.table.create", "app_table", row.ID, app.Name+"/"+row.Name, nil, r.RemoteAddr)
+}
+
+// UpdateAppTable handles PUT /dashboard/api/apps/{id}/tables/{tableId}. Table
+// name is immutable once created; only rls/columns can change here.
+func (h *Handler) UpdateAppTable(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appID := chi.URLParam(r, "id")
+	tableID := chi.URLParam(r, "tableId")
+	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+
+	var existingTable *AppTableRow
+	var otherTables []AppTableRow
+	for _, t := range app.Tables {
+		if t.ID == tableID {
+			tCopy := t
+			existingTable = &tCopy
+		} else {
+			otherTables = append(otherTables, t)
+		}
+	}
+	if existingTable == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
+	var body tableRequestBody
+	if !h.decodeJSONBody(w, r, &body) {
+		return
+	}
+
+	table := AppTableRow{Name: existingTable.Name, RLS: body.RLS, Columns: body.Columns}
+	if err := validateTableInput(table, app.AuthEmailEnabled, otherTables); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	row, err := UpdateAppTable(r.Context(), h.pool, appID, tableID, body.RLS, body.Columns)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
+			return
+		}
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+
+	cfg := buildAppConfig(app)
+	cfg.Tables = []config.TableConfig{{Name: row.Name, RLS: row.RLS, Columns: row.Columns}}
+	if _, err := h.prov.Apply(r.Context(), &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "provisioning failed: "+err.Error(), err)
+		return
+	}
+
+	updated, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	if err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+	h.reg.Register(appRowToRegistryApp(updated))
+
+	writeJSON(w, http.StatusOK, row)
+	h.audit(r.Context(), user.ID, user.Email, "app.table.update", "app_table", row.ID, app.Name+"/"+row.Name, nil, r.RemoteAddr)
+}
+
+// DeleteAppTable handles DELETE /dashboard/api/apps/{id}/tables/{tableId}.
+// Removes the metadata row and drops the physical table — unlike the old
+// bulk UpdateApp flow, a removed table is never left behind in the database.
+func (h *Handler) DeleteAppTable(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appID := chi.URLParam(r, "id")
+	tableID := chi.URLParam(r, "tableId")
+	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+
+	tableName, err := DeleteAppTable(r.Context(), h.pool, appID, tableID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
+			return
+		}
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+
+	if err := h.prov.DropTable(r.Context(), schemaNameForDB(app.Name), tableName); err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "failed to drop table: "+err.Error(), err)
+		return
+	}
+
+	updated, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	if err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+	h.reg.Register(appRowToRegistryApp(updated))
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "table deleted"})
+	h.audit(r.Context(), user.ID, user.Email, "app.table.delete", "app_table", tableID, app.Name+"/"+tableName, nil, r.RemoteAddr)
 }
 
 // buildAppConfig converts an AppRow into a config.AppConfig for the provisioner.

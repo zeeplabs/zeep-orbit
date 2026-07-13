@@ -30,9 +30,9 @@ export async function createTestApp(page: Page, name = 'e2e_test') {
   await page.goto('/dashboard/apps')
   await page.click('text=Novo App')
   await page.waitForURL('**/apps/new')
-  await page.fill('input[placeholder="meu_app"]', name)
-  await page.click('text=Criar')
-  await page.waitForURL('**/apps')
+  await page.fill('input[placeholder="my-app"]', name)
+  await page.click('text=Criar App')
+  await page.waitForURL('**/apps/*')
 }
 
 export function expectOk(response: { status(): number }) {

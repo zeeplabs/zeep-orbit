@@ -106,8 +106,9 @@ func ListApps(ctx context.Context, pool *db.Pool, userID, role string) ([]*AppRo
 	return apps, nil
 }
 
-// Returns the created AppRow with ID and CreatedAt populated.
-func CreateApp(ctx context.Context, pool *db.Pool, name, ownerID string, authEmail bool, tables []AppTableRow) (*AppRow, error) {
+// Returns the created AppRow with ID and CreatedAt populated. Tables are
+// created afterwards, one at a time, via InsertAppTable.
+func CreateApp(ctx context.Context, pool *db.Pool, name, ownerID string, authEmail bool) (*AppRow, error) {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: create app begin: %w", err)
@@ -137,11 +138,7 @@ func CreateApp(ctx context.Context, pool *db.Pool, name, ownerID string, authEma
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: create app insert: %w", err)
 	}
-
-	app.Tables, err = insertAppTables(ctx, tx, app.ID, tables)
-	if err != nil {
-		return nil, err
-	}
+	app.Tables = make([]AppTableRow, 0)
 
 	if _, err := tx.Exec(ctx,
 		`INSERT INTO zeep_system.app_ownership (user_id, app_id) VALUES ($1, $2)`,
@@ -205,22 +202,17 @@ func GetApp(ctx context.Context, pool *db.Pool, appID, userID, role string) (*Ap
 	return &app, nil
 }
 
-// Ownership check is the same as GetApp.
-func UpdateApp(ctx context.Context, pool *db.Pool, appID, userID, role string, authEmail bool, tables []AppTableRow) (*AppRow, error) {
+// Ownership check is the same as GetApp. Tables are managed separately via
+// InsertAppTable/UpdateAppTable/DeleteAppTable, one at a time.
+func UpdateApp(ctx context.Context, pool *db.Pool, appID, userID, role string, authEmail bool) (*AppRow, error) {
 	existing, err := GetApp(ctx, pool, appID, userID, role)
 	if err != nil {
 		return nil, err
 	}
 
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("dashboard: update app begin: %w", err)
-	}
-	defer tx.Rollback(ctx) //nolint:errcheck
-
 	var app AppRow
 	var storageJSON, rateLimitJSONUpd []byte
-	err = tx.QueryRow(ctx,
+	err = pool.QueryRow(ctx,
 		`UPDATE zeep_system.apps
 		 SET auth_email_enabled = $2
 		 WHERE id = $1
@@ -243,20 +235,7 @@ func UpdateApp(ctx context.Context, pool *db.Pool, appID, userID, role string, a
 		return nil, fmt.Errorf("dashboard: update app: %w", err)
 	}
 
-	if _, err := tx.Exec(ctx, `DELETE FROM zeep_system.app_tables WHERE app_id = $1`, appID); err != nil {
-		return nil, fmt.Errorf("dashboard: update app delete tables: %w", err)
-	}
-
-	app.Tables, err = insertAppTables(ctx, tx, appID, tables)
-	if err != nil {
-		return nil, err
-	}
-
-	_ = existing
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("dashboard: update app commit: %w", err)
-	}
+	app.Tables = existing.Tables
 
 	return &app, nil
 }
@@ -349,35 +328,79 @@ func loadAppTables(ctx context.Context, pool *db.Pool, appID string) ([]AppTable
 	return scanAppTableRows(rows)
 }
 
-// insertAppTables inserts a slice of AppTableRow within an existing transaction.
-func insertAppTables(ctx context.Context, tx pgx.Tx, appID string, tables []AppTableRow) ([]AppTableRow, error) {
-	result := make([]AppTableRow, 0, len(tables))
-	for _, t := range tables {
-		colsJSON, err := json.Marshal(t.Columns)
-		if err != nil {
-			return nil, fmt.Errorf("dashboard: marshal columns for table %q: %w", t.Name, err)
-		}
-		var row AppTableRow
-		err = tx.QueryRow(ctx,
-			`INSERT INTO zeep_system.app_tables (app_id, name, rls, columns)
-			 VALUES ($1, $2, $3, $4)
-			 RETURNING id, name, rls, columns`,
-			appID, t.Name, t.RLS, colsJSON,
-		).Scan(&row.ID, &row.Name, &row.RLS, &colsJSON)
-		if err != nil {
-			return nil, fmt.Errorf("dashboard: insert app table %q: %w", t.Name, err)
-		}
-		if err := json.Unmarshal(colsJSON, &row.Columns); err != nil {
-			return nil, fmt.Errorf("dashboard: unmarshal columns for table %q: %w", t.Name, err)
-		}
-		result = append(result, row)
+// InsertAppTable creates a single table for an app and returns the saved row.
+func InsertAppTable(ctx context.Context, pool *db.Pool, appID string, t AppTableRow) (AppTableRow, error) {
+	colsJSON, err := json.Marshal(t.Columns)
+	if err != nil {
+		return AppTableRow{}, fmt.Errorf("dashboard: marshal columns for table %q: %w", t.Name, err)
 	}
-	return result, nil
+	var row AppTableRow
+	err = pool.QueryRow(ctx,
+		`INSERT INTO zeep_system.app_tables (app_id, name, rls, columns)
+		 VALUES ($1, $2, $3, $4)
+		 RETURNING id, name, rls, columns`,
+		appID, t.Name, t.RLS, colsJSON,
+	).Scan(&row.ID, &row.Name, &row.RLS, &colsJSON)
+	if err != nil {
+		return AppTableRow{}, fmt.Errorf("dashboard: insert app table %q: %w", t.Name, err)
+	}
+	if err := json.Unmarshal(colsJSON, &row.Columns); err != nil {
+		return AppTableRow{}, fmt.Errorf("dashboard: unmarshal columns for table %q: %w", t.Name, err)
+	}
+	return row, nil
 }
 
-// scanAppTableRows scans pgx.Rows into a slice of AppTableRow.
+// UpdateAppTable updates rls/columns of an existing table. The table name is
+// immutable once created — renaming would require renaming the physical
+// table too, out of scope here.
+func UpdateAppTable(ctx context.Context, pool *db.Pool, appID, tableID, rls string, columns []config.ColumnConfig) (AppTableRow, error) {
+	colsJSON, err := json.Marshal(columns)
+	if err != nil {
+		return AppTableRow{}, fmt.Errorf("dashboard: marshal columns for table %s: %w", tableID, err)
+	}
+	var row AppTableRow
+	err = pool.QueryRow(ctx,
+		`UPDATE zeep_system.app_tables
+		 SET rls = $3, columns = $4
+		 WHERE id = $1 AND app_id = $2
+		 RETURNING id, name, rls, columns`,
+		tableID, appID, rls, colsJSON,
+	).Scan(&row.ID, &row.Name, &row.RLS, &colsJSON)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return AppTableRow{}, ErrNotFound
+		}
+		return AppTableRow{}, fmt.Errorf("dashboard: update app table %s: %w", tableID, err)
+	}
+	if err := json.Unmarshal(colsJSON, &row.Columns); err != nil {
+		return AppTableRow{}, fmt.Errorf("dashboard: unmarshal columns for table %s: %w", tableID, err)
+	}
+	return row, nil
+}
+
+// DeleteAppTable removes a table's metadata row and returns its name so the
+// caller can drop the physical table too.
+func DeleteAppTable(ctx context.Context, pool *db.Pool, appID, tableID string) (string, error) {
+	var name string
+	err := pool.QueryRow(ctx,
+		`DELETE FROM zeep_system.app_tables WHERE id = $1 AND app_id = $2 RETURNING name`,
+		tableID, appID,
+	).Scan(&name)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", ErrNotFound
+		}
+		return "", fmt.Errorf("dashboard: delete app table %s: %w", tableID, err)
+	}
+	return name, nil
+}
+
+// scanAppTableRows scans pgx.Rows into a slice of AppTableRow. Always
+// returns a non-nil slice (even when empty) so it serializes as JSON "[]"
+// instead of "null" — the frontend always expects an array to call
+// .length/.map on.
 func scanAppTableRows(rows pgx.Rows) ([]AppTableRow, error) {
-	var result []AppTableRow
+	result := make([]AppTableRow, 0)
 	for rows.Next() {
 		var t AppTableRow
 		var colsJSON []byte
