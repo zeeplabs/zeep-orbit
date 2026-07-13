@@ -2,9 +2,8 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
-import { Palette, Save, Eye, EyeOff, Loader2, Globe, Shield, HardDrive, Upload, Image as ImageIcon } from "lucide-react";
+import { Palette, Save, Eye, EyeOff, Loader2, Globe, Shield, HardDrive } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { THEMES, BrandTheme, applyTheme } from "../lib/themes";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -44,9 +43,6 @@ export default function BrandSettingsPage() {
           <TabsTrigger value="branding" className="rounded-xl data-[state=active]:bg-white/[0.08] data-[state=active]:shadow-none text-[13px] gap-1.5">
             <Palette size={14} /> {t("settings.tabBranding")}
           </TabsTrigger>
-          <TabsTrigger value="logo" className="rounded-xl data-[state=active]:bg-white/[0.08] data-[state=active]:shadow-none text-[13px] gap-1.5">
-            <ImageIcon size={14} /> {t("settings.tabLogo")}
-          </TabsTrigger>
           <TabsTrigger value="database" className="rounded-xl data-[state=active]:bg-white/[0.08] data-[state=active]:shadow-none text-[13px] gap-1.5">
             <Shield size={14} /> {t("settings.tabDatabase")}
           </TabsTrigger>
@@ -60,10 +56,6 @@ export default function BrandSettingsPage() {
 
         <TabsContent value="branding" className="mt-0">
           <BrandingTab />
-        </TabsContent>
-
-        <TabsContent value="logo" className="mt-0">
-          <BrandLogoCard />
         </TabsContent>
 
         <TabsContent value="database" className="mt-0">
@@ -489,86 +481,3 @@ function GlobalStorageCard() {
   );
 }
 
-function BrandLogoCard() {
-  const { t } = useTranslation();
-  const qc = useQueryClient();
-  const [logoUrl, setLogoUrl] = useState("");
-  const [iconUrl, setIconUrl] = useState("");
-  const [uploading, setUploading] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch("/dashboard/api/brand/config", { credentials: "include" })
-      .then((r) => r.json())
-      .then((d) => {
-        setLogoUrl(d.logo_url || "");
-        setIconUrl(d.icon_url || "");
-      })
-      .catch(() => {});
-  }, []);
-
-  const handleUpload = async (type: "login-logo" | "icon") => {
-    const fileInput = document.createElement("input");
-    fileInput.type = "file";
-    fileInput.accept = "image/*";
-    fileInput.onchange = async () => {
-      const file = fileInput.files?.[0];
-      if (!file) return;
-      setUploading(type);
-      const form = new FormData();
-      form.append("file", file);
-      try {
-        const res = await fetch(`/dashboard/api/brand/logo/${type}`, {
-          method: "POST",
-          credentials: "include",
-          body: form,
-        });
-        if (!res.ok) throw new Error(t("settings.uploadFailed"));
-        const data = await res.json();
-        if (type === "login-logo") setLogoUrl(data.logo_url);
-        else setIconUrl(data.icon_url);
-        qc.invalidateQueries({ queryKey: ["brand-assets"] });
-      } catch {
-        toast.error(t("settings.uploadFailed"));
-      } finally {
-        setUploading(null);
-      }
-    };
-    fileInput.click();
-  };
-
-  return (
-    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6 mt-4">
-      <div className="flex flex-col gap-6 max-w-lg">
-        <div>
-          <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">{t("settings.loginLogo")}</label>
-          <p className="text-[11px] text-[#64748B] mb-3">{t("settings.loginLogoDesc")}</p>
-          {logoUrl && (
-            <div className="mb-3 p-3 rounded-lg bg-white/[0.04] border border-white/[0.06]">
-              <img src={logoUrl} alt="Login logo" className="max-h-16 object-contain" />
-            </div>
-          )}
-          <button onClick={() => handleUpload("login-logo")} disabled={uploading === "login-logo"}
-            className="flex items-center gap-2 h-9 rounded-lg bg-white/[0.06] border border-white/[0.10] text-[12px] font-medium text-[#F8FAFC] px-4 hover:bg-white/[0.10] transition-colors disabled:opacity-40 cursor-pointer">
-            {uploading === "login-logo" ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-            {uploading === "login-logo" ? t("settings.uploading") : t("settings.uploadLogo")}
-          </button>
-        </div>
-
-        <div>
-          <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">{t("settings.appIcon")}</label>
-          <p className="text-[11px] text-[#64748B] mb-3">{t("settings.appIconDesc")}</p>
-          {iconUrl && (
-            <div className="mb-3 p-3 rounded-lg bg-white/[0.04] border border-white/[0.06] inline-block">
-              <img src={iconUrl} alt="App icon" className="size-10 object-contain rounded-lg" />
-            </div>
-          )}
-          <button onClick={() => handleUpload("icon")} disabled={uploading === "icon"}
-            className="flex items-center gap-2 h-9 rounded-lg bg-white/[0.06] border border-white/[0.10] text-[12px] font-medium text-[#F8FAFC] px-4 hover:bg-white/[0.10] transition-colors disabled:opacity-40 cursor-pointer">
-            {uploading === "icon" ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-            {uploading === "icon" ? t("settings.uploading") : t("settings.uploadIcon")}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}

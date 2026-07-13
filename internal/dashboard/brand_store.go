@@ -33,6 +33,22 @@ func GetBrandConfig(ctx context.Context, pool *db.Pool) (*BrandConfig, error) {
 	return &c, nil
 }
 
+// SeedBrandConfig creates the singleton brand_config row on first boot only.
+// Unlike UpsertBrandConfig, it never overwrites an existing row — safe to
+// call on every server start without resetting user-saved settings.
+func SeedBrandConfig(ctx context.Context, pool *db.Pool, theme, companyName string) error {
+	_, err := pool.Exec(ctx,
+		`INSERT INTO zeep_system.brand_config (theme, company_name)
+		 VALUES ($1, $2)
+		 ON CONFLICT ((TRUE)) DO NOTHING`,
+		theme, companyName,
+	)
+	if err != nil {
+		return fmt.Errorf("dashboard: seed brand config: %w", err)
+	}
+	return nil
+}
+
 func UpsertBrandConfig(ctx context.Context, pool *db.Pool, theme, companyName, logoURL, iconURL string) (*BrandConfig, error) {
 	var c BrandConfig
 	err := pool.QueryRow(ctx,
@@ -53,16 +69,3 @@ func UpsertBrandConfig(ctx context.Context, pool *db.Pool, theme, companyName, l
 	return &c, nil
 }
 
-func UpdateBrandLogos(ctx context.Context, pool *db.Pool, logoURL, iconURL string) (*BrandConfig, error) {
-	var c BrandConfig
-	err := pool.QueryRow(ctx,
-		`UPDATE zeep_system.brand_config
-		 SET logo_url = $1, icon_url = $2, updated_at = now()
-		 RETURNING theme, company_name, COALESCE(logo_url, ''), COALESCE(icon_url, ''), updated_at`,
-		logoURL, iconURL,
-	).Scan(&c.Theme, &c.CompanyName, &c.LogoURL, &c.IconURL, &c.UpdatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("dashboard: update brand logos: %w", err)
-	}
-	return &c, nil
-}

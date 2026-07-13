@@ -232,7 +232,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
           }}
         >
           <img
-            src={brandAssets?.icon_url || logoType}
+            src={logoType}
             alt="Zeep Orbit"
             style={{
               width: 42,

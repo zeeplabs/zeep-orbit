@@ -28,16 +28,6 @@ export default function LoginPage() {
     staleTime: 60000,
   });
 
-  const { data: brandAssets } = useQuery({
-    queryKey: ["brand-assets"],
-    queryFn: async () => {
-      const res = await fetch("/dashboard/api/brand/config");
-      if (!res.ok) return { logo_url: "" };
-      return res.json() as Promise<{ logo_url: string; company_name: string }>;
-    },
-    staleTime: 60000,
-  });
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -86,7 +76,7 @@ export default function LoginPage() {
         {/* Header */}
         <div className="flex flex-col items-center mb-8">
           <img
-            src={brandAssets?.logo_url || logoFallback}
+            src={logoFallback}
             alt="Zeep Orbit"
             className="size-42 max-md:size-32 object-contain mb-3"
           />
