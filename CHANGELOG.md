@@ -7,6 +7,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **App token refresh endpoint missing from Swagger** — `POST /{app}/auth/token/refresh` existed in the router but was never registered in `internal/docs/generator.go`, so it didn't show up in the per-app OpenAPI docs. Now documented, gated to apps without email/password auth (same scope as the endpoint itself); apps with email auth keep using the separate, already-documented `/auth/refresh` (refresh_token grant).
+
+---
+
 ## [0.3.0] — 2026-07-25
 
 ### Added
