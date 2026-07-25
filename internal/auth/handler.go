@@ -397,10 +397,11 @@ func (h *Handler) TokenRefresh(w http.ResponseWriter, r *http.Request) {
 
 	var revokedAt *time.Time
 	var expiresAt *time.Time
+	var createdAt time.Time
 	err = h.pool.QueryRow(r.Context(),
-		`SELECT revoked_at, expires_at FROM zeep_system.app_tokens WHERE jti = $1`,
+		`SELECT revoked_at, expires_at, created_at FROM zeep_system.app_tokens WHERE jti = $1`,
 		claims.ID,
-	).Scan(&revokedAt, &expiresAt)
+	).Scan(&revokedAt, &expiresAt, &createdAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, http.StatusUnauthorized, "token not found")
@@ -418,7 +419,21 @@ func (h *Handler) TokenRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newJWT, err := IssueAppTokenJWT(secret, claims.ID, app.Config.Name, expiresAt)
+	newExpiresAt := expiresAt
+	if expiresAt != nil {
+		duration := expiresAt.Sub(createdAt)
+		t := time.Now().Add(duration)
+		newExpiresAt = &t
+		if _, err := h.pool.Exec(r.Context(),
+			`UPDATE zeep_system.app_tokens SET expires_at = $1 WHERE jti = $2`,
+			newExpiresAt, claims.ID,
+		); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to extend token")
+			return
+		}
+	}
+
+	newJWT, err := IssueAppTokenJWT(secret, claims.ID, app.Config.Name, newExpiresAt)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to issue token")
 		return

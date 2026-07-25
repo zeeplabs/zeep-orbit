@@ -2215,9 +2215,8 @@ func (h *Handler) CreateAppToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	registryApp, _ := h.reg.Get(app.Name)
 	jwtStr, err := auth.IssueAppTokenJWT(
-		[]byte(registryApp.Config.Auth.JWTSecret),
+		[]byte(app.JWTSecret),
 		tokenRow.JTI, app.Name, expiresAt,
 	)
 	if err != nil {
@@ -2268,6 +2267,11 @@ func (h *Handler) RegenerateAppSecret(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appID := chi.URLParam(r, "id")
+
+	if _, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
 
 	var body struct {
 		Confirm bool `json:"confirm"`

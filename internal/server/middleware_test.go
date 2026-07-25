@@ -10,6 +10,7 @@ import (
 	jwtlib "github.com/golang-jwt/jwt/v5"
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/registry"
+	"github.com/zeeplabs/zeep-orbit/internal/tokencache"
 )
 
 // buildRegistry creates a Registry with a single app of the given appName and secret.
@@ -203,14 +204,13 @@ func TestMiddlewareAppTokenExpired(t *testing.T) {
 }
 
 func TestCacheFunctions(t *testing.T) {
-	isTokenActiveCached("nonexistent")
-	active, cached := isTokenActiveCached("nonexistent")
+	active, cached := tokencache.IsActive("nonexistent")
 	if cached {
 		t.Fatal("expected cache miss for nonexistent key")
 	}
 
-	setTokenCache("test-key", true)
-	active, cached = isTokenActiveCached("test-key")
+	tokencache.Set("test-key", true)
+	active, cached = tokencache.IsActive("test-key")
 	if !cached {
 		t.Fatal("expected cache hit after set")
 	}
@@ -218,13 +218,17 @@ func TestCacheFunctions(t *testing.T) {
 		t.Fatal("expected active=true")
 	}
 
-	setTokenCache("test-key", false)
-	active, cached = isTokenActiveCached("test-key")
+	tokencache.Set("test-key", false)
+	active, cached = tokencache.IsActive("test-key")
 	if !cached {
 		t.Fatal("expected cache hit after set to false")
 	}
 	if active {
 		t.Fatal("expected active=false")
+	}
+	tokencache.Invalidate("test-key")
+	if _, cached := tokencache.IsActive("test-key"); cached {
+		t.Fatal("expected cache miss after invalidate")
 	}
 }
 

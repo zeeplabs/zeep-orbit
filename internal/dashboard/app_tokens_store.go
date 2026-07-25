@@ -4,24 +4,22 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
+	"github.com/zeeplabs/zeep-orbit/internal/tokencache"
 )
 
-func randomJTI() string {
+func randomJTI() (string, error) {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
-		b2 := make([]byte, 16)
-		for i := range b2 {
-			b2[i] = byte(i * 17)
-		}
-		return hex.EncodeToString(b2)
+		return "", fmt.Errorf("app_tokens: failed to generate jti: %w", err)
 	}
 	b[6] = (b[6] & 0x0f) | 0x40
 	b[8] = (b[8] & 0x3f) | 0x80
-	return hex.EncodeToString(b)
+	return hex.EncodeToString(b), nil
 }
 
 type AppTokenRow struct {
@@ -62,9 +60,12 @@ func ListAppTokens(ctx context.Context, pool *db.Pool, appID string) ([]AppToken
 }
 
 func CreateAppToken(ctx context.Context, pool *db.Pool, input CreateAppTokenInput) (*AppTokenRow, error) {
-	jti := randomJTI()
+	jti, err := randomJTI()
+	if err != nil {
+		return nil, err
+	}
 	var t AppTokenRow
-	err := pool.QueryRow(ctx,
+	err = pool.QueryRow(ctx,
 		`INSERT INTO zeep_system.app_tokens (app_id, name, jti, expires_at)
 		 VALUES ($1, $2, $3, $4)
 		 RETURNING id, app_id, name, jti, expires_at, revoked_at, last_used_at, created_at`,
@@ -77,17 +78,44 @@ func CreateAppToken(ctx context.Context, pool *db.Pool, input CreateAppTokenInpu
 }
 
 func RevokeAppToken(ctx context.Context, pool *db.Pool, tokenID string, appID string) error {
-	_, err := pool.Exec(ctx,
-		`UPDATE zeep_system.app_tokens SET revoked_at = now() WHERE id = $1 AND app_id = $2 AND revoked_at IS NULL`,
-		tokenID, appID)
-	return err
+	var jti string
+	err := pool.QueryRow(ctx,
+		`UPDATE zeep_system.app_tokens SET revoked_at = now() WHERE id = $1 AND app_id = $2 AND revoked_at IS NULL RETURNING jti`,
+		tokenID, appID).Scan(&jti)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil
+		}
+		return err
+	}
+	tokencache.Invalidate(jti)
+	return nil
 }
 
 func RevokeAllAppTokens(ctx context.Context, pool *db.Pool, appID string) error {
-	_, err := pool.Exec(ctx,
-		`UPDATE zeep_system.app_tokens SET revoked_at = now() WHERE app_id = $1 AND revoked_at IS NULL`,
+	rows, err := pool.Query(ctx,
+		`UPDATE zeep_system.app_tokens SET revoked_at = now() WHERE app_id = $1 AND revoked_at IS NULL RETURNING jti`,
 		appID)
-	return err
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	var jtis []string
+	for rows.Next() {
+		var jti string
+		if err := rows.Scan(&jti); err != nil {
+			return err
+		}
+		jtis = append(jtis, jti)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, jti := range jtis {
+		tokencache.Invalidate(jti)
+	}
+	return nil
 }
 
 func GetAppTokenByJTI(ctx context.Context, pool *db.Pool, jti string) (*AppTokenRow, error) {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -13,32 +12,8 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/dashboard"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 	"github.com/zeeplabs/zeep-orbit/internal/registry"
+	"github.com/zeeplabs/zeep-orbit/internal/tokencache"
 )
-
-var (
-	jtiCache     = make(map[string]bool)
-	jtiCacheMu   sync.RWMutex
-	jtiCacheTTL  = 30 * time.Second
-	jtiCacheLast = make(map[string]time.Time)
-)
-
-func isTokenActiveCached(jti string) (bool, bool) {
-	jtiCacheMu.RLock()
-	active, ok := jtiCache[jti]
-	last := jtiCacheLast[jti]
-	jtiCacheMu.RUnlock()
-	if !ok || time.Since(last) > jtiCacheTTL {
-		return false, false
-	}
-	return active, true
-}
-
-func setTokenCache(jti string, active bool) {
-	jtiCacheMu.Lock()
-	jtiCache[jti] = active
-	jtiCacheLast[jti] = time.Now()
-	jtiCacheMu.Unlock()
-}
 
 // contextKey is the type for context keys in this package.
 type contextKey int
@@ -127,8 +102,7 @@ func JWTMiddleware(reg *registry.Registry, pool *db.Pool) func(http.Handler) htt
 
 			// app_token jti validation
 			if pool != nil {
-				var mapClaims jwtlib.MapClaims
-				if _, err := jwtlib.ParseWithClaims(rawToken, &mapClaims, nil, jwtlib.WithValidMethods([]string{"HS256"})); err == nil {
+				if mapClaims, ok := token.Claims.(jwtlib.MapClaims); ok {
 					if tokenType, _ := mapClaims["token_type"].(string); tokenType == "app_token" {
 						jti, _ := mapClaims["jti"].(string)
 						if jti == "" {
@@ -136,11 +110,11 @@ func JWTMiddleware(reg *registry.Registry, pool *db.Pool) func(http.Handler) htt
 							return
 						}
 
-						active, cached := isTokenActiveCached(jti)
+						active, cached := tokencache.IsActive(jti)
 						if !cached {
 							tokenRow, err := dashboard.GetAppTokenByJTI(r.Context(), pool, jti)
 							if err != nil || tokenRow == nil {
-								setTokenCache(jti, false)
+								tokencache.Set(jti, false)
 								writeError(w, http.StatusUnauthorized, "unauthorized")
 								return
 							}
@@ -148,7 +122,7 @@ func JWTMiddleware(reg *registry.Registry, pool *db.Pool) func(http.Handler) htt
 							if active && tokenRow.ExpiresAt != nil && time.Now().After(*tokenRow.ExpiresAt) {
 								active = false
 							}
-							setTokenCache(jti, active)
+							tokencache.Set(jti, active)
 						}
 
 						if !active {
