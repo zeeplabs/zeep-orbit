@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -369,11 +370,79 @@ func (h *Handler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// TokenRefresh handles POST /{app}/auth/token/refresh for app tokens
+func (h *Handler) TokenRefresh(w http.ResponseWriter, r *http.Request) {
+	app, ok := h.appWithoutEmail(w, r)
+	if !ok {
+		return
+	}
+
+	authHeader := r.Header.Get("Authorization")
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	rawToken := strings.TrimPrefix(authHeader, "Bearer ")
+
+	secret := []byte(app.Config.Auth.JWTSecret)
+	claims, err := ParseAppTokenJWT(secret, rawToken)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	if claims.TokenType != "app_token" {
+		writeError(w, http.StatusUnauthorized, "invalid token type")
+		return
+	}
+
+	var revokedAt *time.Time
+	var expiresAt *time.Time
+	err = h.pool.QueryRow(r.Context(),
+		`SELECT revoked_at, expires_at FROM zeep_system.app_tokens WHERE jti = $1`,
+		claims.ID,
+	).Scan(&revokedAt, &expiresAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusUnauthorized, "token not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to query token")
+		return
+	}
+	if revokedAt != nil {
+		writeError(w, http.StatusUnauthorized, "token revoked")
+		return
+	}
+	if expiresAt != nil && time.Now().After(*expiresAt) {
+		writeError(w, http.StatusUnauthorized, "token expired")
+		return
+	}
+
+	newJWT, err := IssueAppTokenJWT(secret, claims.ID, app.Config.Name, expiresAt)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to issue token")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"token": newJWT})
+}
+
 // appWithEmail retrieves the app and asserts email provider is enabled.
 func (h *Handler) appWithEmail(w http.ResponseWriter, r *http.Request) (*registry.App, bool) {
 	appName := chi.URLParam(r, "app")
 	app, ok := h.reg.Get(appName)
 	if !ok || !app.Config.Auth.Providers.Email {
+		writeError(w, http.StatusNotFound, "not found")
+		return nil, false
+	}
+	return app, true
+}
+
+// appWithoutEmail retrieves the app and asserts email provider is disabled.
+func (h *Handler) appWithoutEmail(w http.ResponseWriter, r *http.Request) (*registry.App, bool) {
+	appName := chi.URLParam(r, "app")
+	app, ok := h.reg.Get(appName)
+	if !ok || app.Config.Auth.Providers.Email {
 		writeError(w, http.StatusNotFound, "not found")
 		return nil, false
 	}
