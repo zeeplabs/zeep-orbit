@@ -99,6 +99,18 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 		`CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON zeep_system.audit_log(created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_audit_log_action ON zeep_system.audit_log(action)`,
 		`CREATE INDEX IF NOT EXISTS idx_audit_log_user_id ON zeep_system.audit_log(user_id)`,
+		`CREATE TABLE IF NOT EXISTS zeep_system.app_tokens (
+			id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			app_id       UUID NOT NULL REFERENCES zeep_system.apps(id) ON DELETE CASCADE,
+			name         TEXT NOT NULL,
+			jti          TEXT NOT NULL UNIQUE,
+			expires_at   TIMESTAMPTZ,
+			revoked_at   TIMESTAMPTZ,
+			last_used_at TIMESTAMPTZ,
+			created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_app_tokens_app_id ON zeep_system.app_tokens(app_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_app_tokens_jti ON zeep_system.app_tokens(jti)`,
 		`CREATE TABLE IF NOT EXISTS zeep_system.system_config (
 			soft_delete_enabled BOOLEAN   NOT NULL DEFAULT false,
 			storage_config      JSONB     NOT NULL DEFAULT '{}',
