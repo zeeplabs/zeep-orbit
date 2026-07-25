@@ -7,6 +7,29 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.3.0] — 2026-07-25
+
+### Added
+
+- **App Tokens** — JWT-based token management for apps without email/password auth. Dashboard exposes 5 endpoints (list, create, revoke, revoke-all via secret regeneration, view secret) and a new "Tokens" tab on the app details page (create with configurable expiration — 7d/30d/365d/never —, one-time JWT reveal with copy, status badges, 2-step confirm to regenerate the app secret).
+- `POST /{app}/auth/token/refresh` — reissues an app token JWT (same `jti`), extending `expires_at` by the token's original duration.
+- `zeep_system.app_tokens` table (`id`, `app_id` FK cascade, `name`, `jti` unique, `expires_at`, `revoked_at`, `last_used_at`, `created_at`), indexed on `app_id` and `jti`.
+- `internal/tokencache` — shared in-memory jti activity cache (30s TTL) used by the request-path middleware and invalidated immediately on revoke/regenerate-secret.
+
+### Fixed
+
+- `JWTMiddleware` validated app-token `jti`/revocation using a second JWT parse with a `nil` keyFunc, which `golang-jwt/v5` always rejects — the revocation check was dead code; a revoked token kept authenticating until its own `exp`. Now reuses the claims from the already-verified parse.
+- `RegenerateAppSecret` was missing the app-ownership check present in every sibling token endpoint, letting any authenticated dashboard user rotate the JWT secret (and revoke all tokens) of an app they don't own.
+- `CreateAppToken` could nil-pointer-dereference on a registry cache miss; now reads the JWT secret from the already-loaded app row instead.
+- jti activity cache was never invalidated on revoke/regenerate-secret, giving a revoked token up to 30s of extra validity.
+- `randomJTI` fell back to a fixed, predictable id when `crypto/rand.Read` failed instead of returning an error.
+
+### Security
+
+- Rate limiting added to `POST /{app}/auth/token/refresh`, matching `/register` and `/login`.
+
+---
+
 ## [0.2.0] — 2026-07-13
 
 ### Fixed
