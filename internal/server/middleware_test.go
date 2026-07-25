@@ -146,6 +146,88 @@ func TestMiddlewareUnknownApp(t *testing.T) {
 	}
 }
 
+// buildAppToken creates a JWT with app_token claims for testing.
+func buildAppToken(secret string, jti string, expired bool) string {
+	claims := jwtlib.MapClaims{
+		"token_type": "app_token",
+		"jti":        jti,
+		"sub":        "testapp",
+	}
+	if expired {
+		claims["exp"] = time.Now().Add(-1 * time.Hour).Unix()
+	}
+	token := jwtlib.NewWithClaims(jwtlib.SigningMethodHS256, claims)
+	signed, err := token.SignedString([]byte(secret))
+	if err != nil {
+		panic("buildAppToken: " + err.Error())
+	}
+	return signed
+}
+
+func TestMiddlewareAppTokenValid(t *testing.T) {
+	const appName = "testapp"
+	const secret = "app-secret"
+
+	reg := buildRegistry(appName, secret)
+	router := buildRouter(reg)
+
+	token := buildAppToken(secret, "test-jti-123", false)
+	req := httptest.NewRequest(http.MethodGet, "/"+appName+"/users", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for valid app token, got %d", rec.Code)
+	}
+}
+
+func TestMiddlewareAppTokenExpired(t *testing.T) {
+	const appName = "testapp"
+	const secret = "app-secret"
+
+	reg := buildRegistry(appName, secret)
+	router := buildRouter(reg)
+
+	token := buildAppToken(secret, "test-jti-456", true)
+	req := httptest.NewRequest(http.MethodGet, "/"+appName+"/users", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for expired app token, got %d", rec.Code)
+	}
+}
+
+func TestCacheFunctions(t *testing.T) {
+	isTokenActiveCached("nonexistent")
+	active, cached := isTokenActiveCached("nonexistent")
+	if cached {
+		t.Fatal("expected cache miss for nonexistent key")
+	}
+
+	setTokenCache("test-key", true)
+	active, cached = isTokenActiveCached("test-key")
+	if !cached {
+		t.Fatal("expected cache hit after set")
+	}
+	if !active {
+		t.Fatal("expected active=true")
+	}
+
+	setTokenCache("test-key", false)
+	active, cached = isTokenActiveCached("test-key")
+	if !cached {
+		t.Fatal("expected cache hit after set to false")
+	}
+	if active {
+		t.Fatal("expected active=false")
+	}
+}
+
 func TestMiddlewareCrossApp(t *testing.T) {
 	reg := registry.New()
 	_ = reg.Load(&config.Config{
