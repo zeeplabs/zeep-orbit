@@ -43,7 +43,7 @@ func buildToken(secret string, expired bool) string {
 // buildRouter creates a minimal chi.Router with JWTMiddleware for appName.
 func buildRouter(reg *registry.Registry) http.Handler {
 	r := chi.NewRouter()
-	r.With(JWTMiddleware(reg)).Get("/{app}/{table}", func(w http.ResponseWriter, r *http.Request) {
+	r.With(JWTMiddleware(reg, nil)).Get("/{app}/{table}", func(w http.ResponseWriter, r *http.Request) {
 		app, ok := AppFromContext(r.Context())
 		if !ok {
 			writeError(w, http.StatusInternalServerError, "app not in context")

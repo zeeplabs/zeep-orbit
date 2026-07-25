@@ -228,7 +228,7 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 
 	r.Route("/{app}/files", func(r chi.Router) {
 		r.Use(appRateLimit)
-		r.Use(JWTMiddleware(reg))
+		r.Use(JWTMiddleware(reg, pool))
 		r.Post("/", h.HandleFileUpload)
 		r.Get("/", h.HandleFileList)
 		r.Get("/{id}", h.HandleFileGet)
@@ -241,14 +241,14 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 
 	r.Route("/{app}/{table}", func(r chi.Router) {
 		r.Use(appRateLimit)
-		r.Use(JWTMiddleware(reg))
+		r.Use(JWTMiddleware(reg, pool))
 		r.Get("/", h.HandleList)
 		r.Post("/", h.HandleCreate)
 	})
 
 	r.Route("/{app}/{table}/{id}", func(r chi.Router) {
 		r.Use(appRateLimit)
-		r.Use(JWTMiddleware(reg))
+		r.Use(JWTMiddleware(reg, pool))
 		r.Get("/", h.HandleGetByID)
 		r.Put("/", h.HandleUpdate)
 		r.Patch("/", h.HandleUpdate)

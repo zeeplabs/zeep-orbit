@@ -16,12 +16,12 @@ import (
 func buildRLSRouter(h *Handler) http.Handler {
 	r := chi.NewRouter()
 	r.Route("/{app}/{table}", func(r chi.Router) {
-		r.Use(JWTMiddleware(testReg))
+		r.Use(JWTMiddleware(testReg, nil))
 		r.Get("/", h.HandleList)
 		r.Post("/", h.HandleCreate)
 	})
 	r.Route("/{app}/{table}/{id}", func(r chi.Router) {
-		r.Use(JWTMiddleware(testReg))
+		r.Use(JWTMiddleware(testReg, nil))
 		r.Get("/", h.HandleGetByID)
 		r.Put("/", h.HandleUpdate)
 		r.Patch("/", h.HandleUpdate)
