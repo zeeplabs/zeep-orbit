@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
+	"github.com/zeeplabs/zeep-orbit/internal/auth"
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 	"github.com/zeeplabs/zeep-orbit/internal/provisioner"
@@ -2123,6 +2124,186 @@ func (h *Handler) GetPublicBrandConfig(w http.ResponseWriter, r *http.Request) {
 		"icon_url":     bc.IconURL,
 		"company_name": bc.CompanyName,
 	})
+}
+
+var tokenExpirationOptions = map[string]*time.Duration{
+	"7d":   durationPtr(7 * 24 * time.Hour),
+	"30d":  durationPtr(30 * 24 * time.Hour),
+	"365d": durationPtr(365 * 24 * time.Hour),
+	"never": nil,
+}
+
+func durationPtr(d time.Duration) *time.Duration { return &d }
+
+func (h *Handler) ListAppTokens(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appID := chi.URLParam(r, "id")
+	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	if app.AuthEmailEnabled {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "app tokens only available for apps without email auth"})
+		return
+	}
+
+	tokens, err := ListAppTokens(r.Context(), h.pool, appID)
+	if err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "failed to list tokens", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, tokens)
+}
+
+func (h *Handler) CreateAppToken(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appID := chi.URLParam(r, "id")
+	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	if app.AuthEmailEnabled {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "app tokens only available for apps without email auth"})
+		return
+	}
+
+	var body struct {
+		Name       string `json:"name"`
+		Expiration string `json:"expiration"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+	if body.Name == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name is required"})
+		return
+	}
+	dur, ok := tokenExpirationOptions[body.Expiration]
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid expiration"})
+		return
+	}
+
+	var expiresAt *time.Time
+	if dur != nil {
+		t := time.Now().Add(*dur)
+		expiresAt = &t
+	}
+
+	tokenRow, err := CreateAppToken(r.Context(), h.pool, CreateAppTokenInput{
+		AppID: appID, Name: body.Name, ExpiresAt: expiresAt,
+	})
+	if err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "failed to create token", err)
+		return
+	}
+
+	registryApp, _ := h.reg.Get(app.Name)
+	jwtStr, err := auth.IssueAppTokenJWT(
+		[]byte(registryApp.Config.Auth.JWTSecret),
+		tokenRow.JTI, app.Name, expiresAt,
+	)
+	if err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "failed to issue jwt", err)
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"token": jwtStr,
+		"row":   tokenRow,
+	})
+	h.audit(r.Context(), user.ID, user.Email, "app.token.create", "app", app.ID, app.Name, nil, r.RemoteAddr)
+}
+
+func (h *Handler) RevokeAppToken(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appID := chi.URLParam(r, "id")
+	tokenID := chi.URLParam(r, "tokenId")
+
+	if err := RevokeAppToken(r.Context(), h.pool, tokenID, appID); err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "failed to revoke token", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"message": "token revoked"})
+	h.audit(r.Context(), user.ID, user.Email, "app.token.revoke", "app", appID, "", nil, r.RemoteAddr)
+}
+
+func (h *Handler) RegenerateAppSecret(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appID := chi.URLParam(r, "id")
+
+	var body struct {
+		Confirm bool `json:"confirm"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || !body.Confirm {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "confirmation required"})
+		return
+	}
+
+	var newSecret string
+	err := h.pool.QueryRow(r.Context(),
+		`UPDATE zeep_system.apps SET jwt_secret = encode(gen_random_bytes(32), 'hex') WHERE id = $1 RETURNING jwt_secret`,
+		appID,
+	).Scan(&newSecret)
+	if err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "failed to regenerate secret", err)
+		return
+	}
+
+	if err := RevokeAllAppTokens(r.Context(), h.pool, appID); err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "failed to revoke tokens", err)
+		return
+	}
+
+	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	if err == nil {
+		registryApp := appRowToRegistryApp(app)
+		h.reg.Register(registryApp)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"jwt_secret": newSecret})
+	h.audit(r.Context(), user.ID, user.Email, "app.secret.regenerate", "app", appID, "", nil, r.RemoteAddr)
+}
+
+func (h *Handler) GetAppSecret(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appID := chi.URLParam(r, "id")
+	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"jwt_secret": app.JWTSecret})
+	h.audit(r.Context(), user.ID, user.Email, "app.secret.view", "app", appID, app.Name, nil, r.RemoteAddr)
 }
 
 func parseInt(s string) (int, error) {
