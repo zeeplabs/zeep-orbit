@@ -551,6 +551,85 @@ export interface ChangeUserPasswordInput {
   confirm_password: string
 }
 
+export interface AppToken {
+  id: string
+  app_id: string
+  name: string
+  jti: string
+  expires_at: string | null
+  revoked_at: string | null
+  last_used_at: string | null
+  created_at: string
+}
+
+export interface CreateAppTokenInput {
+  name: string
+  expiration: '7d' | '30d' | '365d' | 'never'
+}
+
+export interface CreateAppTokenResponse {
+  token: string
+  row: AppToken
+}
+
+export function useAppTokens(appId: string): UseQueryResult<AppToken[]> {
+  return useQuery({
+    queryKey: ['app-tokens', appId],
+    queryFn: () => apiFetch<AppToken[]>(`/dashboard/api/apps/${appId}/tokens`),
+    enabled: Boolean(appId),
+  })
+}
+
+export function useCreateAppToken(appId: string): UseMutationResult<CreateAppTokenResponse, Error, CreateAppTokenInput> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input) =>
+      apiFetch<CreateAppTokenResponse>(`/dashboard/api/apps/${appId}/tokens`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['app-tokens', appId] })
+    },
+  })
+}
+
+export function useRevokeAppToken(appId: string): UseMutationResult<{ message: string }, Error, string> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (tokenId) =>
+      apiFetch(`/dashboard/api/apps/${appId}/tokens/${tokenId}/revoke`, { method: 'POST' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['app-tokens', appId] })
+    },
+  })
+}
+
+export function useRegenerateAppSecret(appId: string): UseMutationResult<{ jwt_secret: string }, Error, void> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ jwt_secret: string }>(`/dashboard/api/apps/${appId}/regenerate-secret`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: true }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['apps'] })
+      qc.invalidateQueries({ queryKey: ['app-tokens', appId] })
+    },
+  })
+}
+
+export function useAppSecret(appId: string): UseQueryResult<{ jwt_secret: string }> {
+  return useQuery({
+    queryKey: ['app-secret', appId],
+    queryFn: () => apiFetch<{ jwt_secret: string }>(`/dashboard/api/apps/${appId}/secret`),
+    enabled: Boolean(appId),
+  })
+}
+
 export function useChangeMyPassword(): UseMutationResult<
   { message: string },
   Error,

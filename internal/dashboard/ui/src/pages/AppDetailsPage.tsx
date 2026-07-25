@@ -2,13 +2,18 @@ import { useState, useEffect } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Trans } from "react-i18next";
 import { motion } from "framer-motion";
-import { ArrowLeft, Plus, Eye, EyeOff, Copy, Table2 } from "lucide-react";
+import { ArrowLeft, Plus, Eye, EyeOff, Copy, Table2, Key, RefreshCw, X, AlertTriangle } from "lucide-react";
 import {
   useApp,
   useUpdateApp,
   useCreateAppTable,
   useUpdateAppTable,
   useDeleteAppTable,
+  useAppTokens,
+  useCreateAppToken,
+  useRevokeAppToken,
+  useRegenerateAppSecret,
+  AppToken,
   TableDef,
 } from "../lib/api";
 import { Input } from "@/components/ui/input";
@@ -96,6 +101,12 @@ export default function AppDetailsPage() {
           >
             API
           </TabsTrigger>
+          <TabsTrigger
+            value="tokens"
+            className="rounded-xl px-4 py-2 text-[13px] font-semibold text-[#94A3B8] data-[state=active]:bg-white/[0.08] data-[state=active]:text-[#F8FAFC] data-[state=active]:shadow-none"
+          >
+            Tokens
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="database" className="mt-0">
@@ -109,6 +120,9 @@ export default function AppDetailsPage() {
         </TabsContent>
         <TabsContent value="api" className="mt-0">
           <ApiTab app={app} />
+        </TabsContent>
+        <TabsContent value="tokens" className="mt-0">
+          <TokensTab app={app} />
         </TabsContent>
       </Tabs>
     </motion.div>
@@ -582,6 +596,293 @@ function ApiTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]> }
 
       {error && <p className="text-xs text-red-400">{error}</p>}
       <SaveBar onSave={save} saving={updateApp.isPending} saved={saved} />
+    </div>
+  );
+}
+
+function TokensTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]> }) {
+  const { data: tokens, isLoading } = useAppTokens(app.id);
+  const createToken = useCreateAppToken(app.id);
+  const revokeToken = useRevokeAppToken(app.id);
+  const regenerateSecret = useRegenerateAppSecret(app.id);
+  const [showCreate, setShowCreate] = useState(false);
+  const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
+  const [createdToken, setCreatedToken] = useState<string | null>(null);
+  const [revealedSecret, setRevealedSecret] = useState<string | null>(null);
+
+  if (app.auth_email_enabled) {
+    return (
+      <div className="rounded-2xl border border-yellow-500/[0.18] bg-yellow-500/[0.06] px-6 py-5 text-sm text-yellow-400">
+        App tokens estão disponíveis apenas para apps sem autenticação por e-mail.
+      </div>
+    );
+  }
+
+  const statusBadge = (t: AppToken) => {
+    if (t.revoked_at) return <span className="text-[11px] font-medium text-red-400 bg-red-500/[0.12] px-2 py-0.5 rounded-full">Revogado</span>;
+    if (t.expires_at && new Date(t.expires_at) < new Date()) return <span className="text-[11px] font-medium text-yellow-400 bg-yellow-500/[0.12] px-2 py-0.5 rounded-full">Expirado</span>;
+    return <span className="text-[11px] font-medium text-emerald-400 bg-emerald-500/[0.12] px-2 py-0.5 rounded-full">Ativo</span>;
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div
+            className="h-6 w-1 rounded-full"
+            style={{ background: "linear-gradient(to bottom, var(--brand-primary), var(--brand-secondary))" }}
+          />
+          <p className="text-[15px] font-extrabold text-[#F8FAFC]">Access Tokens</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowRegenerateConfirm(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-white/[0.12] bg-white/[0.05] text-[#94A3B8] text-[13px] font-medium cursor-pointer hover:text-white transition-colors"
+          >
+            <RefreshCw size={14} /> Regenerar Secret
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowCreate(true)}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-white/[0.12] bg-white/[0.05] text-[#F8FAFC] text-[13px] font-medium cursor-pointer hover:bg-white/[0.08] transition-colors"
+          >
+            <Plus size={14} /> Novo Token
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-4">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-[12px] font-semibold text-[#94A3B8] uppercase tracking-wider">JWT Secret</p>
+          <button
+            type="button"
+            onClick={async () => {
+              if (!revealedSecret) {
+                try {
+                  const res = await fetch(`/dashboard/api/apps/${app.id}/secret`, { credentials: "include" });
+                  const data = await res.json();
+                  setRevealedSecret(data.jwt_secret);
+                } catch {}
+              } else {
+                setRevealedSecret(null);
+              }
+            }}
+            className="flex items-center gap-1 text-[11px] text-[#94A3B8] hover:text-white bg-transparent border-none cursor-pointer"
+          >
+            {revealedSecret ? <EyeOff size={13} /> : <Eye size={13} />}
+            {revealedSecret ? "Ocultar" : "Revelar"}
+          </button>
+        </div>
+        {revealedSecret ? (
+          <div className="flex items-center gap-2 bg-black/30 rounded-xl px-4 py-3">
+            <code className="text-sm text-[#B3D1FF] break-all font-mono flex-1">{revealedSecret}</code>
+            <button
+              type="button"
+              onClick={() => navigator.clipboard.writeText(revealedSecret)}
+              className="shrink-0 p-1.5 rounded-lg hover:bg-white/[0.08] text-[#94A3B8] hover:text-[#F8FAFC] transition-colors bg-transparent border-none cursor-pointer"
+            >
+              <Copy size={14} />
+            </button>
+          </div>
+        ) : (
+          <p className="text-xs text-[#64748B]">O secret é usado para assinar JWTs. Clique em "Revelar" para vê-lo.</p>
+        )}
+      </div>
+
+      <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-4">
+        <p className="text-[12px] font-semibold text-[#94A3B8] uppercase tracking-wider mb-3">Tokens</p>
+        {isLoading ? (
+          <p className="text-sm text-[#94A3B8]">Carregando...</p>
+        ) : !tokens || tokens.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-2 py-8 text-center text-[#94A3B8]">
+            <Key size={18} className="opacity-40" />
+            <p className="text-[13px] font-medium">Nenhum token</p>
+            <p className="text-[11px]">Crie um token para gerar um JWT</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {tokens.map((t) => (
+              <div key={t.id} className="flex items-center justify-between bg-black/20 rounded-xl px-4 py-3">
+                <div className="flex flex-col gap-0.5 min-w-0">
+                  <p className="text-sm font-semibold text-[#F8FAFC] truncate">{t.name}</p>
+                  <p className="text-[11px] text-[#64748B]">
+                    {t.expires_at ? `Expira ${new Date(t.expires_at).toLocaleDateString()}` : "Nunca expira"}
+                    {t.last_used_at && ` · Último uso ${new Date(t.last_used_at).toLocaleDateString()}`}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {statusBadge(t)}
+                  {!t.revoked_at && (
+                    <button
+                      type="button"
+                      onClick={() => revokeToken.mutate(t.id)}
+                      className="p-1.5 rounded-lg hover:bg-white/[0.08] text-[#94A3B8] hover:text-red-400 transition-colors bg-transparent border-none cursor-pointer"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {showCreate && (
+        <CreateTokenModal
+          appId={app.id}
+          onClose={() => { setShowCreate(false); setCreatedToken(null); }}
+          onCreated={(jwt) => { setCreatedToken(jwt); setShowCreate(false); }}
+        />
+      )}
+      {createdToken && (
+        <TokenRevealModal jwt={createdToken} onClose={() => setCreatedToken(null)} />
+      )}
+
+      {showRegenerateConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-[#0F172A] border border-white/[0.08] rounded-2xl p-6 max-w-md w-full mx-4">
+            <div className="flex items-center gap-3 mb-4">
+              <AlertTriangle size={20} className="text-yellow-400" />
+              <p className="text-[15px] font-bold text-[#F8FAFC]">Regenerar JWT Secret</p>
+            </div>
+            <p className="text-sm text-[#94A3B8] mb-6">
+              Todos os tokens existentes serão imediatamente invalidados. Esta ação não pode ser desfeita.
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowRegenerateConfirm(false)}
+                className="px-4 py-2 rounded-full border border-white/[0.12] text-[13px] text-[#94A3B8] cursor-pointer bg-transparent hover:text-white transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  regenerateSecret.mutate(undefined, {
+                    onSuccess: (data) => {
+                      setShowRegenerateConfirm(false);
+                      setRevealedSecret(data.jwt_secret);
+                    },
+                  });
+                }}
+                disabled={regenerateSecret.isPending}
+                className="px-4 py-2 rounded-full text-[13px] font-semibold text-white cursor-pointer disabled:opacity-50"
+                style={{ background: "linear-gradient(to right, #EF4444, #DC2626)" }}
+              >
+                {regenerateSecret.isPending ? "Regenerando..." : "Confirmar Regeneração"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CreateTokenModal({ appId, onClose, onCreated }: { appId: string; onClose: () => void; onCreated: (jwt: string) => void }) {
+  const createToken = useCreateAppToken(appId);
+  const [name, setName] = useState("");
+  const [expiration, setExpiration] = useState("30d");
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleCreate() {
+    setError(null);
+    try {
+      const res = await createToken.mutateAsync({ name, expiration: expiration as any });
+      onCreated(res.token);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao criar token");
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-[#0F172A] border border-white/[0.08] rounded-2xl p-6 max-w-md w-full mx-4">
+        <p className="text-[15px] font-bold text-[#F8FAFC] mb-4">Novo Token</p>
+        <div className="flex flex-col gap-3">
+          <div>
+            <Label className="text-[12px] font-medium text-[#94A3B8]">Nome</Label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ex: Production frontend"
+              className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus mt-1"
+            />
+          </div>
+          <div>
+            <Label className="text-[12px] font-medium text-[#94A3B8]">Expiração</Label>
+            <select
+              value={expiration}
+              onChange={(e) => setExpiration(e.target.value)}
+              className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] brand-focus mt-1 w-full px-3"
+            >
+              <option value="7d">7 dias</option>
+              <option value="30d">30 dias</option>
+              <option value="365d">365 dias</option>
+              <option value="never">Nunca expira</option>
+            </select>
+          </div>
+          {error && <p className="text-xs text-red-400">{error}</p>}
+        </div>
+        <div className="flex items-center justify-end gap-3 mt-6">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-full border border-white/[0.12] text-[13px] text-[#94A3B8] cursor-pointer bg-transparent hover:text-white transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={handleCreate}
+            disabled={!name || createToken.isPending}
+            className="px-4 py-2 rounded-full text-[13px] font-semibold text-white cursor-pointer disabled:opacity-50"
+            style={{ background: "linear-gradient(to right, var(--brand-primary), var(--brand-secondary))" }}
+          >
+            {createToken.isPending ? "Criando..." : "Criar Token"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TokenRevealModal({ jwt, onClose }: { jwt: string; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-[#0F172A] border border-white/[0.08] rounded-2xl p-6 max-w-lg w-full mx-4">
+        <div className="flex items-center gap-3 mb-4">
+          <Key size={20} className="text-[var(--brand-light)]" />
+          <p className="text-[15px] font-bold text-[#F8FAFC]">Token Criado</p>
+        </div>
+        <p className="text-xs text-yellow-400 mb-3">Copie este token agora. Não será possível vê-lo novamente.</p>
+        <div className="flex items-center gap-2 bg-black/30 rounded-xl px-4 py-3">
+          <code className="text-sm text-[#B3D1FF] break-all font-mono flex-1 max-h-32 overflow-y-auto">{jwt}</code>
+          <button
+            type="button"
+            onClick={() => { navigator.clipboard.writeText(jwt); setCopied(true); }}
+            className="shrink-0 p-2 rounded-lg hover:bg-white/[0.08] text-[#94A3B8] hover:text-[#F8FAFC] transition-colors bg-transparent border-none cursor-pointer"
+          >
+            <Copy size={16} />
+          </button>
+        </div>
+        {copied && <p className="text-[11px] text-emerald-400 mt-2">Copiado!</p>}
+        <div className="flex justify-end mt-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-full text-[13px] font-semibold text-white cursor-pointer"
+            style={{ background: "linear-gradient(to right, var(--brand-primary), var(--brand-secondary))" }}
+          >
+            Fechar
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
