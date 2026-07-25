@@ -128,6 +128,8 @@ func generate(apps []*registry.App) *Spec {
 
 		if app.Config.Auth.Providers.Email {
 			addAuthPaths(spec, appName, security)
+		} else {
+			addAppTokenRefreshPath(spec, appName, security)
 		}
 
 		if app.StorageConfig != nil {
@@ -565,4 +567,24 @@ func addAuthPaths(spec *Spec, appName string, security []map[string][]string) {
 			Responses: map[string]response{"200": {Description: "OK", Content: jsonContent(userSchema)}, "401": {Description: "Unauthorized"}},
 		},
 	}
+}
+
+func addAppTokenRefreshPath(spec *Spec, appName string, security []map[string][]string) {
+	base := fmt.Sprintf("/%s/auth", appName)
+
+	spec.Paths[base+"/token/refresh"] = pathItem{Post: &operation{
+		Tags:        []string{appName},
+		Summary:     "Refresh app token — for apps without email/password auth only. App tokens are created and revoked from the dashboard, not this API; this endpoint only reissues an existing one with the same jti and a renewed expiration.",
+		OperationID: "auth_token_refresh_" + appName,
+		Security:    security,
+		Responses: map[string]response{
+			"200": {Description: "OK", Content: jsonContent(schemaOrRef{
+				Type: "object",
+				Properties: map[string]schemaOrRef{
+					"token": {Type: "string"},
+				},
+			})},
+			"401": {Description: "Unauthorized"},
+		},
+	}}
 }
