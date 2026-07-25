@@ -2191,6 +2191,10 @@ func (h *Handler) CreateAppToken(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name is required"})
 		return
 	}
+	if len(body.Name) > 128 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name must be at most 128 characters"})
+		return
+	}
 	dur, ok := tokenExpirationOptions[body.Expiration]
 	if !ok {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid expiration"})
@@ -2236,6 +2240,16 @@ func (h *Handler) RevokeAppToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appID := chi.URLParam(r, "id")
+	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	if app.AuthEmailEnabled {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "app tokens only available for apps without email auth"})
+		return
+	}
+
 	tokenID := chi.URLParam(r, "tokenId")
 
 	if err := RevokeAppToken(r.Context(), h.pool, tokenID, appID); err != nil {
@@ -2278,10 +2292,9 @@ func (h *Handler) RegenerateAppSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	appRow, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
 	if err == nil {
-		registryApp := appRowToRegistryApp(app)
-		h.reg.Register(registryApp)
+		h.reg.Register(appRowToRegistryApp(appRow))
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"jwt_secret": newSecret})

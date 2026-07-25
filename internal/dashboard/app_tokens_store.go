@@ -3,19 +3,25 @@ package dashboard
 import (
 	"context"
 	"crypto/rand"
-	"fmt"
+	"encoding/hex"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
 
-func randomUUID() string {
+func randomJTI() string {
 	b := make([]byte, 16)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		b2 := make([]byte, 16)
+		for i := range b2 {
+			b2[i] = byte(i * 17)
+		}
+		return hex.EncodeToString(b2)
+	}
 	b[6] = (b[6] & 0x0f) | 0x40
 	b[8] = (b[8] & 0x3f) | 0x80
-	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
+	return hex.EncodeToString(b)
 }
 
 type AppTokenRow struct {
@@ -56,7 +62,7 @@ func ListAppTokens(ctx context.Context, pool *db.Pool, appID string) ([]AppToken
 }
 
 func CreateAppToken(ctx context.Context, pool *db.Pool, input CreateAppTokenInput) (*AppTokenRow, error) {
-	jti := randomUUID()
+	jti := randomJTI()
 	var t AppTokenRow
 	err := pool.QueryRow(ctx,
 		`INSERT INTO zeep_system.app_tokens (app_id, name, jti, expires_at)
