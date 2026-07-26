@@ -201,7 +201,7 @@ interface FrontendCardProps {
   onSync: (app: FrontendApp) => void;
   onDelete: (app: FrontendApp) => void;
   onDeployRetry: (app: FrontendApp) => void;
-  onSetDomain: (app: FrontendApp, subdomain: string) => void;
+  onSetDomain: (app: FrontendApp) => void;
 }
 
 function FrontendCard({ app, index, onSync, onDelete, onDeployRetry, onSetDomain }: FrontendCardProps) {
@@ -268,7 +268,7 @@ function FrontendCard({ app, index, onSync, onDelete, onDeployRetry, onSetDomain
                     {app.deploy_url.replace("https://", "")}
                   </a>
                   <button
-                    onClick={(e) => { e.preventDefault(); const s = prompt("Set subdomain:", app.custom_domain?.split(".")[0] || ""); if (s) onSetDomain(app, s); }}
+                    onClick={() => onSetDomain(app)}
                     title="Set custom domain"
                     className="text-[#64748B] hover:text-[#94A3B8]"
                   >
@@ -392,6 +392,11 @@ export default function AppsPage() {
   const [feLoading, setFeLoading] = useState(true);
   const [feError, setFeError] = useState<string | null>(null);
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [baseDomain, setBaseDomain] = useState("");
+
+  // Domain modal
+  const [domainApp, setDomainApp] = useState<FrontendApp | null>(null);
+  const [domainSub, setDomainSub] = useState("");
 
   // Type selection modal
   const [showTypeModal, setShowTypeModal] = useState(false);
@@ -430,8 +435,18 @@ export default function AppsPage() {
     } catch { /* non-critical */ }
   };
 
+  const fetchBaseDomain = async () => {
+    try {
+      const res = await fetch("/dashboard/api/deploy-provider/status", { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        setBaseDomain(data.base_domain || "");
+      }
+    } catch {}
+  };
+
   useEffect(() => {
-    Promise.all([fetchFrontendApps(), fetchTemplates()]).finally(() => setFeLoading(false));
+    Promise.all([fetchFrontendApps(), fetchTemplates(), fetchBaseDomain()]).finally(() => setFeLoading(false));
   }, []);
 
   // Handlers
@@ -471,12 +486,20 @@ export default function AppsPage() {
     fetchFrontendApps();
   };
 
-  const handleSetDomain = async (app: FrontendApp, subdomain: string) => {
-    await fetch(`/dashboard/api/frontend-apps/${app.id}/custom-domain`, {
+  const openDomainModal = (app: FrontendApp) => {
+    setDomainApp(app);
+    setDomainSub(app.custom_domain?.split(".")[0] || "");
+  };
+
+  const handleSetDomain = async () => {
+    if (!domainApp || !domainSub.trim()) return;
+    await fetch(`/dashboard/api/frontend-apps/${domainApp.id}/custom-domain`, {
       method: "PUT", credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subdomain }),
+      body: JSON.stringify({ subdomain: domainSub }),
     });
+    setDomainApp(null);
+    setDomainSub("");
     fetchFrontendApps();
   };
 
@@ -624,7 +647,7 @@ AFTER CLONE
                         onSync={openSync}
                         onDelete={(a) => setFeDeleteTarget(a)}
                         onDeployRetry={handleDeployRetry}
-                        onSetDomain={handleSetDomain} />
+                        onSetDomain={openDomainModal} />
                     ))}
                   </div>
                 </>
@@ -842,6 +865,56 @@ AFTER CLONE
             <Button variant="ghost" onClick={() => setFeDeleteTarget(null)} className="text-[#94A3B8]">{t("frontendApps.cancel", "Cancel")}</Button>
             <Button onClick={() => feDeleteTarget && handleFeDelete(feDeleteTarget.id)} className="bg-[#EF4444] hover:bg-[#DC2626] text-white">
               {t("frontendApps.delete", "Delete")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Domain modal */}
+      <Dialog open={!!domainApp} onOpenChange={() => { setDomainApp(null); setDomainSub(""); }}>
+        <DialogContent className="bg-[#0F0F17] border-white/[0.08] text-[#F8FAFC] max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t("frontendApps.domainTitle", "Custom Domain")}</DialogTitle>
+            <DialogDescription className="text-[#94A3B8]">
+              {t("frontendApps.domainDesc", "Set a subdomain for this app.")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {!baseDomain ? (
+              <p className="text-xs text-[#EF4444]">
+                {t("frontendApps.noBaseDomain", "Base domain not configured. Ask the superadmin to set it in Integrations → Deploy.")}
+              </p>
+            ) : (
+              <>
+                <div>
+                  <Label htmlFor="subdomain-input" className="text-[#94A3B8] text-xs">{t("frontendApps.subdomain", "Subdomain")}</Label>
+                  <Input
+                    id="subdomain-input"
+                    value={domainSub}
+                    onChange={(e) => {
+                      const val = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "");
+                      setDomainSub(val);
+                    }}
+                    placeholder="meuapp"
+                    className="mt-1 bg-white/[0.04] border-white/[0.08] text-[#F8FAFC] font-mono text-sm"
+                  />
+                </div>
+                <div className="p-3 rounded-lg bg-white/[0.04] border border-white/[0.06] text-center">
+                  <span className="text-xs text-[#64748B]">{t("frontendApps.domainPreview", "Full domain")}</span>
+                  <div className="text-sm font-mono font-bold text-[#22C55E] mt-0.5 break-all">
+                    {domainSub || "..."}.{baseDomain}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => { setDomainApp(null); setDomainSub(""); }}
+              className="text-[#94A3B8] hover:text-[#F8FAFC]">
+              {t("frontendApps.cancel", "Cancel")}
+            </Button>
+            <Button onClick={handleSetDomain} disabled={!domainSub.trim() || !baseDomain}
+              className="bg-[#3B82F6] hover:bg-[#2563EB] text-white">
+              {t("frontendApps.saveDomain", "Save")}
             </Button>
           </DialogFooter>
         </DialogContent>
