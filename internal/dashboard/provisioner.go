@@ -177,6 +177,25 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
 			updated_at             TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
+		`CREATE TABLE IF NOT EXISTS zeep_system.deploy_provider_config (
+			provider      TEXT NOT NULL DEFAULT 'render',
+			api_key       TEXT NOT NULL,
+			connected_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_deploy_provider_config_singleton
+		 ON zeep_system.deploy_provider_config ((TRUE))`,
+		`ALTER TABLE zeep_system.github_templates
+		 ADD COLUMN IF NOT EXISTS render_service_type TEXT NOT NULL DEFAULT '',
+		 ADD COLUMN IF NOT EXISTS build_command       TEXT NOT NULL DEFAULT '',
+		 ADD COLUMN IF NOT EXISTS publish_path        TEXT NOT NULL DEFAULT '',
+		 ADD COLUMN IF NOT EXISTS start_command       TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE zeep_system.frontend_apps
+		 ADD COLUMN IF NOT EXISTS backend_app_id        UUID REFERENCES zeep_system.apps(id),
+		 ADD COLUMN IF NOT EXISTS deploy_service_id     TEXT NOT NULL DEFAULT '',
+		 ADD COLUMN IF NOT EXISTS deploy_url            TEXT NOT NULL DEFAULT '',
+		 ADD COLUMN IF NOT EXISTS deploy_status         TEXT NOT NULL DEFAULT 'pending',
+		 ADD COLUMN IF NOT EXISTS deploy_error_message  TEXT NOT NULL DEFAULT ''`,
 	}
 
 	for _, stmt := range stmts {
