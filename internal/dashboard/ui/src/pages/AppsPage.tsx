@@ -805,7 +805,7 @@ AFTER CLONE
               {syncInfo.sync_status === "ready" && !revealedKey && (
                 <Button onClick={handleReveal} disabled={revealing} className="w-full bg-[#3B82F6] hover:bg-[#2563EB] text-white">
                   {revealing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  <Key className="h-4 w-4 mr-2" />{t("frontendApps.revealKey", "Reveal Private Key")}
+                  <Key className="h-4 w-4 mr-2" />{t("frontendApps.viewInstructions", "View usage instructions")}
                 </Button>
               )}
 

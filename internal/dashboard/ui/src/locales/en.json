@@ -369,7 +369,7 @@
   "frontendApps.syncFailed": "Failed",
   "frontendApps.cloneCommand": "Clone command",
   "frontendApps.copy": "Copy",
-  "frontendApps.revealKey": "Reveal Private Key",
+  "frontendApps.viewInstructions": "View usage instructions",
   "frontendApps.privateKey": "Private Key",
   "frontendApps.agentPrompt": "Copy this prompt for your AI agent",
   "frontendApps.syncRetry": "Retry",
