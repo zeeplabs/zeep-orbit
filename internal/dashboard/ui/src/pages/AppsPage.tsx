@@ -205,9 +205,10 @@ interface FrontendCardProps {
   onDelete: (app: FrontendApp) => void;
   onDeployRetry: (app: FrontendApp) => void;
   onSetDomain: (app: FrontendApp) => void;
+  loading: { deployRetry: string | null; delete: string | null };
 }
 
-function FrontendCard({ app, index, onSync, onDelete, onDeployRetry, onSetDomain }: FrontendCardProps) {
+function FrontendCard({ app, index, onSync, onDelete, onDeployRetry, onSetDomain, loading }: FrontendCardProps) {
   const { t } = useTranslation();
   const createdAt = new Date(app.created_at).toLocaleDateString("pt-BR", {
     day: "2-digit", month: "short", year: "numeric",
@@ -311,16 +312,18 @@ function FrontendCard({ app, index, onSync, onDelete, onDeployRetry, onSetDomain
           {deployFailed && (
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
               <Button variant="outline" size="icon" onClick={() => onDeployRetry(app)} title="Retry deploy"
+                disabled={loading.deployRetry === app.id}
                 className="size-7 rounded-lg border-white/[0.10] bg-white/[0.04] text-[#F59E0B] hover:bg-[#F59E0B]/10 cursor-pointer">
-                <Rocket size={12} strokeWidth={1.5} />
+                {loading.deployRetry === app.id ? <Loader2 size={12} className="animate-spin" /> : <Rocket size={12} strokeWidth={1.5} />}
               </Button>
             </motion.div>
           )}
         </div>
         <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
           <Button variant="outline" size="icon" onClick={() => onDelete(app)} title="Deletar"
+            disabled={loading.delete === app.id}
             className="size-7 rounded-lg border-red-500/20 bg-red-500/[0.06] text-red-400 hover:bg-red-500/10 hover:text-red-400 cursor-pointer">
-            <Trash2 size={12} strokeWidth={1.5} />
+            {loading.delete === app.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} strokeWidth={1.5} />}
           </Button>
         </motion.div>
       </div>
@@ -403,6 +406,9 @@ export default function AppsPage() {
   const [feError, setFeError] = useState<string | null>(null);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [baseDomain, setBaseDomain] = useState("");
+  const [deployRetrying, setDeployRetrying] = useState<string | null>(null);
+  const [deletingFe, setDeletingFe] = useState<string | null>(null);
+  const [settingDomain, setSettingDomain] = useState(false);
 
   // Domain modal
   const [domainApp, setDomainApp] = useState<FrontendApp | null>(null);
@@ -486,31 +492,37 @@ export default function AppsPage() {
   };
 
   const handleFeDelete = async (id: string) => {
-    await fetch(`/dashboard/api/frontend-apps/${id}`, { method: "DELETE", credentials: "include" });
-    setFrontendApps(prev => prev.filter(a => a.id !== id));
-    setFeDeleteTarget(null);
+    setDeletingFe(id);
+    try {
+      const res = await fetch(`/dashboard/api/frontend-apps/${id}`, { method: "DELETE", credentials: "include" });
+      if (res.ok) { setFrontendApps(prev => prev.filter(a => a.id !== id)); toast.success(t("frontendApps.deleted", "Deleted")); }
+      else { const d = await res.json(); toast.error(d.error || t("frontendApps.deleteErr", "Delete failed")); }
+    } catch { toast.error(t("frontendApps.deleteErr", "Delete failed")); }
+    finally { setDeletingFe(null); setFeDeleteTarget(null); }
   };
 
   const handleDeployRetry = async (app: FrontendApp) => {
-    await fetch(`/dashboard/api/frontend-apps/${app.id}/deploy/retry`, { method: "POST", credentials: "include" });
-    fetchFrontendApps();
+    setDeployRetrying(app.id);
+    try {
+      const res = await fetch(`/dashboard/api/frontend-apps/${app.id}/deploy/retry`, { method: "POST", credentials: "include" });
+      if (res.ok) toast.success(t("frontendApps.deployRetryOk", "Deploy retry started"));
+      else toast.error(t("frontendApps.deployRetryErr", "Deploy retry failed"));
+      fetchFrontendApps();
+    } catch { toast.error(t("frontendApps.deployRetryErr", "Deploy retry failed")); }
+    finally { setDeployRetrying(null); }
   };
 
-  const openDomainModal = (app: FrontendApp) => {
-    setDomainApp(app);
-    setDomainSub(app.custom_domain?.split(".")[0] || "");
-  };
+  const openDomainModal = (app: FrontendApp) => { setDomainApp(app); setDomainSub(app.custom_domain?.split(".")[0] || ""); };
 
   const handleSetDomain = async () => {
     if (!domainApp || !domainSub.trim()) return;
-    await fetch(`/dashboard/api/frontend-apps/${domainApp.id}/custom-domain`, {
-      method: "PUT", credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subdomain: domainSub }),
-    });
-    setDomainApp(null);
-    setDomainSub("");
-    fetchFrontendApps();
+    setSettingDomain(true);
+    try {
+      const res = await fetch(`/dashboard/api/frontend-apps/${domainApp.id}/custom-domain`, { method: "PUT", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subdomain: domainSub }) });
+      if (res.ok) { toast.success(t("frontendApps.domainSaved", "Domain saved")); setDomainApp(null); setDomainSub(""); fetchFrontendApps(); }
+      else { const d = await res.json(); toast.error(d.error || t("frontendApps.domainErr", "Domain update failed")); }
+    } catch { toast.error(t("frontendApps.domainErr", "Domain update failed")); }
+    finally { setSettingDomain(false); }
   };
 
   // Sync
@@ -519,7 +531,8 @@ export default function AppsPage() {
     try {
       const res = await fetch(`/dashboard/api/frontend-apps/${app.id}/sync`, { credentials: "include" });
       if (res.ok) setSyncInfo(await res.json());
-    } finally { setSyncLoading(false); }
+    } catch { toast.error(t("frontendApps.syncErr", "Failed to load sync status")); }
+    finally { setSyncLoading(false); }
   };
 
   const handleReveal = async () => {
@@ -528,7 +541,9 @@ export default function AppsPage() {
     try {
       const res = await fetch(`/dashboard/api/frontend-apps/${syncApp.id}/reveal-key`, { method: "POST", credentials: "include" });
       if (res.ok) setRevealedKey((await res.json()).private_key);
-    } finally { setRevealing(false); }
+      else toast.error(t("frontendApps.revealErr", "Failed to reveal key"));
+    } catch { toast.error(t("frontendApps.revealErr", "Failed to reveal key")); }
+    finally { setRevealing(false); }
   };
 
   const handleSyncRetry = async () => {
@@ -536,8 +551,10 @@ export default function AppsPage() {
     setSyncLoading(true);
     try {
       const res = await fetch(`/dashboard/api/frontend-apps/${syncApp.id}/sync/retry`, { method: "POST", credentials: "include" });
-      if (res.ok) { const d = await res.json(); setSyncInfo({ sync_status: d.sync_status, public_key: d.public_key || "", error_message: d.error_message || "" }); }
-    } finally { setSyncLoading(false); }
+      if (res.ok) { const d = await res.json(); setSyncInfo({ sync_status: d.sync_status, public_key: d.public_key || "", error_message: d.error_message || "" }); toast.success(t("frontendApps.syncRetryOk", "Sync retry started")); }
+      else toast.error(t("frontendApps.syncRetryErr", "Sync retry failed"));
+    } catch { toast.error(t("frontendApps.syncRetryErr", "Sync retry failed")); }
+    finally { setSyncLoading(false); }
   };
 
   const handleSyncRegenerate = async () => {
@@ -545,8 +562,10 @@ export default function AppsPage() {
     setSyncLoading(true); setRevealedKey(null);
     try {
       const res = await fetch(`/dashboard/api/frontend-apps/${syncApp.id}/sync/regenerate`, { method: "POST", credentials: "include" });
-      if (res.ok) { const d = await res.json(); setSyncInfo({ sync_status: d.sync_status, public_key: d.public_key || "", error_message: d.error_message || "" }); }
-    } finally { setSyncLoading(false); }
+      if (res.ok) { const d = await res.json(); setSyncInfo({ sync_status: d.sync_status, public_key: d.public_key || "", error_message: d.error_message || "" }); toast.success(t("frontendApps.syncRegenOk", "Key regenerated")); }
+      else toast.error(t("frontendApps.syncRegenErr", "Regenerate failed"));
+    } catch { toast.error(t("frontendApps.syncRegenErr", "Regenerate failed")); }
+    finally { setSyncLoading(false); }
   };
 
   const cloneCommand = syncApp?.github_repo_url
@@ -657,7 +676,8 @@ AFTER CLONE
                         onSync={openSync}
                         onDelete={(a) => setFeDeleteTarget(a)}
                         onDeployRetry={handleDeployRetry}
-                        onSetDomain={openDomainModal} />
+                        onSetDomain={openDomainModal}
+                        loading={{ deployRetry: deployRetrying, delete: deletingFe }} />
                     ))}
                   </div>
                 </div>
@@ -876,7 +896,10 @@ AFTER CLONE
           </DialogHeader>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setFeDeleteTarget(null)} className="text-[#94A3B8]">{t("frontendApps.cancel", "Cancel")}</Button>
-            <Button onClick={() => feDeleteTarget && handleFeDelete(feDeleteTarget.id)} className="bg-[#EF4444] hover:bg-[#DC2626] text-white">
+            <Button onClick={() => feDeleteTarget && handleFeDelete(feDeleteTarget.id)}
+              disabled={deletingFe !== null}
+              className="bg-[#EF4444] hover:bg-[#DC2626] text-white">
+              {deletingFe ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
               {t("frontendApps.delete", "Delete")}
             </Button>
           </DialogFooter>
@@ -929,8 +952,9 @@ AFTER CLONE
               className="text-[#94A3B8] hover:text-[#F8FAFC]">
               {t("frontendApps.cancel", "Cancel")}
             </Button>
-            <Button onClick={handleSetDomain} disabled={!domainSub.trim() || !baseDomain}
+            <Button onClick={handleSetDomain} disabled={!domainSub.trim() || !baseDomain || settingDomain}
               className="bg-[#3B82F6] hover:bg-[#2563EB] text-white">
+              {settingDomain ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
               {t("frontendApps.saveDomain", "Save")}
             </Button>
           </DialogFooter>
