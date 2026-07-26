@@ -193,6 +193,7 @@ func (p *RenderProvider) CreateService(ctx context.Context, params deploy.Create
 		ServiceDetails: serviceDetails,
 		EnvVars:        toEnvVarList(params.EnvVars),
 	}
+	reqJSON, _ := json.Marshal(req)
 
 	resp, body, err := p.client.do(ctx, http.MethodPost, "/services", req)
 	if err != nil {
@@ -217,7 +218,7 @@ func (p *RenderProvider) CreateService(ctx context.Context, params deploy.Create
 		return deploy.ServiceInfo{}, fmt.Errorf("render: rate limit reached, try again later")
 	}
 
-	return deploy.ServiceInfo{}, fmt.Errorf("render: create service failed (status %d): %s", resp.StatusCode, string(body))
+	return deploy.ServiceInfo{}, fmt.Errorf("render: create service failed (status %d): sent=%s response=%s", resp.StatusCode, string(reqJSON), string(body))
 }
 
 func (p *RenderProvider) DeleteService(ctx context.Context, serviceID string) error {
