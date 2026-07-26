@@ -9,8 +9,10 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/zeeplabs/zeep-orbit/internal/crypto"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 	"github.com/zeeplabs/zeep-orbit/internal/github"
+	"github.com/zeeplabs/zeep-orbit/internal/sshkey"
 )
 
 var slugRe = regexp.MustCompile(`[^a-z0-9-]+`)
@@ -178,6 +180,16 @@ func (h *FrontendAppsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// T-05: Generate sync credential after successful repo creation.
+	if status == "ready" {
+		if createErr := CreateSyncCredential(r.Context(), h.pool, app.ID); createErr == nil {
+			ghClient, ghErr := h.buildClient(r.Context())
+			if ghErr == nil {
+				h.setupSync(r.Context(), ghClient, app)
+			}
+		}
+	}
+
 	meta, _ := json.Marshal(map[string]string{
 		"slug":          slug,
 		"template_name": tmpl.Name,
@@ -307,6 +319,11 @@ func (h *FrontendAppsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			})
 			if owner, repo := parseGitHubOwnerRepo(app.GithubRepoURL); owner != "" && repo != "" {
 				_ = client.ArchiveRepo(r.Context(), owner, repo)
+
+				// T-10: Best-effort deploy key revocation.
+				if sc, scErr := GetSyncCredential(r.Context(), h.pool, app.ID); scErr == nil && sc.GithubKeyID != nil {
+					_ = client.RevokeDeployKey(r.Context(), owner, repo, *sc.GithubKeyID)
+				}
 			}
 		}
 	}
@@ -326,6 +343,205 @@ func parseGitHubOwnerRepo(repoURL string) (owner, repo string) {
 	return parts[0], parts[1]
 }
 
+func (h *FrontendAppsHandler) SyncStatus(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	_ = user
+
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		return
+	}
+
+	sc, err := GetSyncCredential(r.Context(), h.pool, id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"sync_status":   sc.SyncStatus,
+		"public_key":    sc.PublicKey,
+		"error_message": sc.ErrorMessage,
+	})
+}
+
+func (h *FrontendAppsHandler) RevealKey(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		return
+	}
+
+	sc, err := GetSyncCredential(r.Context(), h.pool, id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+
+	if sc.SyncStatus != "ready" {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "no credential available to reveal"})
+		return
+	}
+
+	privateKey, err := crypto.Decrypt(sc.PrivateKeyEncrypted)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	meta, _ := json.Marshal(map[string]string{"frontend_app_id": id})
+	h.audit(r.Context(), user.ID, user.Email, "frontend_app.sync.reveal", "frontend_app_sync_credentials", sc.ID, "", meta, r.RemoteAddr)
+
+	writeJSON(w, http.StatusOK, map[string]string{"private_key": privateKey})
+}
+
+func (h *FrontendAppsHandler) SyncRetry(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		return
+	}
+
+	sc, err := GetSyncCredential(r.Context(), h.pool, id)
+	if err != nil || sc.SyncStatus == "ready" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "sync already configured"})
+		return
+	}
+
+	app, err := GetFrontendApp(r.Context(), h.pool, id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+
+	client, err := h.buildClient(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "github not connected"})
+		return
+	}
+
+	h.setupSync(r.Context(), client, app)
+
+	meta, _ := json.Marshal(map[string]string{"frontend_app_id": id})
+	h.audit(r.Context(), user.ID, user.Email, "frontend_app.sync.retry", "frontend_app_sync_credentials", sc.ID, "", meta, r.RemoteAddr)
+
+	updated, _ := GetSyncCredential(r.Context(), h.pool, id)
+	if updated != nil {
+		writeJSON(w, http.StatusOK, updated)
+	} else {
+		writeJSON(w, http.StatusOK, map[string]string{"sync_status": "pending"})
+	}
+}
+
+func (h *FrontendAppsHandler) SyncRegenerate(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		return
+	}
+
+	sc, err := GetSyncCredential(r.Context(), h.pool, id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+
+	app, err := GetFrontendApp(r.Context(), h.pool, id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+
+	client, err := h.buildClient(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "github not connected"})
+		return
+	}
+
+	// Best-effort: revoke old key if one exists.
+	if sc.GithubKeyID != nil && app.GithubRepoURL != "" {
+		if owner, repo := parseGitHubOwnerRepo(app.GithubRepoURL); owner != "" && repo != "" {
+			_ = client.RevokeDeployKey(r.Context(), owner, repo, *sc.GithubKeyID)
+		}
+	}
+
+	h.setupSync(r.Context(), client, app)
+
+	meta, _ := json.Marshal(map[string]string{"frontend_app_id": id})
+	h.audit(r.Context(), user.ID, user.Email, "frontend_app.sync.regenerate", "frontend_app_sync_credentials", sc.ID, "", meta, r.RemoteAddr)
+
+	updated, _ := GetSyncCredential(r.Context(), h.pool, id)
+	if updated != nil {
+		writeJSON(w, http.StatusOK, updated)
+	} else {
+		writeJSON(w, http.StatusOK, map[string]string{"sync_status": "pending"})
+	}
+}
+
 func (h *FrontendAppsHandler) audit(ctx context.Context, userID, userEmail, action, resourceType, resourceID, resourceName string, metadata json.RawMessage, ip string) {
 	_ = InsertAuditLog(ctx, h.pool, userID, userEmail, action, resourceType, resourceID, resourceName, metadata, ip)
+}
+
+func (h *FrontendAppsHandler) buildClient(ctx context.Context) (*github.Client, error) {
+	cfg, err := GetGitHubConfig(ctx, h.pool)
+	if err != nil || cfg == nil || cfg.InstallationID == nil {
+		return nil, err
+	}
+	return github.NewClient(github.AppConfig{
+		AppID:          cfg.AppID,
+		InstallationID: strconv.FormatInt(*cfg.InstallationID, 10),
+		PrivateKeyPEM:  []byte(cfg.PrivateKey),
+		HTTPClient:     h.httpClient,
+	}), nil
+}
+
+func (h *FrontendAppsHandler) setupSync(ctx context.Context, client *github.Client, app *FrontendApp) {
+	owner, repo := parseGitHubOwnerRepo(app.GithubRepoURL)
+	if owner == "" || repo == "" {
+		_ = UpdateSyncCredentialFailure(ctx, h.pool, app.ID, "cannot parse owner/repo from github URL")
+		return
+	}
+
+	pub, priv, err := sshkey.GenerateKeyPair()
+	if err != nil {
+		_ = UpdateSyncCredentialFailure(ctx, h.pool, app.ID, err.Error())
+		return
+	}
+
+	encrypted, err := crypto.Encrypt(priv)
+	if err != nil {
+		_ = UpdateSyncCredentialFailure(ctx, h.pool, app.ID, "encryption failed")
+		return
+	}
+
+	keyID, err := client.AddDeployKey(ctx, owner, repo, "zeep-orbit sync key", pub)
+	if err != nil {
+		_ = UpdateSyncCredentialFailure(ctx, h.pool, app.ID, err.Error())
+		return
+	}
+
+	_ = UpdateSyncCredentialSuccess(ctx, h.pool, app.ID, keyID, pub, encrypted)
 }

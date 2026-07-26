@@ -220,6 +220,10 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Post("/api/frontend-apps", frontendAppsH.Create)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/frontend-apps/{id}/retry", frontendAppsH.Retry)
 		r.With(dashboard.RequireAuth(pool)).Delete("/api/frontend-apps/{id}", frontendAppsH.Delete)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/frontend-apps/{id}/sync", frontendAppsH.SyncStatus)
+		r.With(dashboard.RequireAuth(pool)).Post("/api/frontend-apps/{id}/reveal-key", frontendAppsH.RevealKey)
+		r.With(dashboard.RequireAuth(pool)).Post("/api/frontend-apps/{id}/sync/retry", frontendAppsH.SyncRetry)
+		r.With(dashboard.RequireAuth(pool)).Post("/api/frontend-apps/{id}/sync/regenerate", frontendAppsH.SyncRegenerate)
 		r.Handle("/*", dashboard.StaticHandler())
 	})
 
