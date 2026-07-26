@@ -271,7 +271,7 @@ func (c *Client) CreateRepoFromTemplate(ctx context.Context, templateOwner, temp
 		}
 		return parsed.HTMLURL, nil
 	case http.StatusUnprocessableEntity:
-		return "", fmt.Errorf("github: cannot create repository %q from template %s/%s: name already exists or is invalid", newRepoSlug, templateOwner, templateRepo)
+		return "", fmt.Errorf("github: cannot create repository %q from template %s/%s (422): name already exists, template is not a template repo, or name is invalid. GitHub response: %s", newRepoSlug, templateOwner, templateRepo, string(body))
 	case http.StatusForbidden:
 		if rlErr := rateLimitErrorFromResponse(resp); rlErr != nil {
 			return "", rlErr

@@ -150,6 +150,11 @@ func (h *FrontendAppsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		HTTPClient:     h.httpClient,
 	})
 
+	if err := client.VerifyTemplateRepo(r.Context(), tmpl.GitHubOwner, tmpl.GitHubRepo); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "template repository is not accessible or is not a template: " + err.Error()})
+		return
+	}
+
 	repoURL, createErr := client.CreateRepoFromTemplate(r.Context(), tmpl.GitHubOwner, tmpl.GitHubRepo, slug)
 
 	status := "ready"
