@@ -613,8 +613,8 @@ func (h *FrontendAppsHandler) attemptDeploy(ctx context.Context, app *FrontendAp
 
 	// Add custom domain if base_domain and subdomain are configured.
 	customDomain := ""
-	if dcfg.BaseDomain != "" && subdomain != "" && info.ServiceID != "" {
-		customDomain = subdomain + "." + dcfg.BaseDomain
+	if strings.TrimSpace(dcfg.BaseDomain) != "" && subdomain != "" && info.ServiceID != "" {
+		customDomain = subdomain + "." + strings.TrimSpace(dcfg.BaseDomain)
 		if rp, ok := provider.(*render.RenderProvider); ok {
 			_ = rp.AddCustomDomain(ctx, info.ServiceID, customDomain)
 		}
@@ -698,10 +698,12 @@ func (h *FrontendAppsHandler) SetCustomDomain(w http.ResponseWriter, r *http.Req
 	var body struct {
 		Subdomain string `json:"subdomain"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Subdomain == "" {
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Subdomain) == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "subdomain required"})
 		return
 	}
+
+	subdomain := strings.TrimSpace(body.Subdomain)
 
 	app, err := GetFrontendApp(r.Context(), h.pool, id)
 	if err != nil {
@@ -715,12 +717,12 @@ func (h *FrontendAppsHandler) SetCustomDomain(w http.ResponseWriter, r *http.Req
 	}
 
 	dcfg, err := GetDeployProviderConfig(r.Context(), h.pool)
-	if err != nil || dcfg == nil || dcfg.BaseDomain == "" {
+	if err != nil || dcfg == nil || strings.TrimSpace(dcfg.BaseDomain) == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "base domain not configured"})
 		return
 	}
 
-	customDomain := body.Subdomain + "." + dcfg.BaseDomain
+	customDomain := subdomain + "." + strings.TrimSpace(dcfg.BaseDomain)
 	deployURL := "https://" + customDomain
 
 	provider, err := buildDeployProvider(r.Context(), dcfg)
