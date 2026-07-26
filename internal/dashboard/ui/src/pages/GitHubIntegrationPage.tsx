@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
-import { Save, Eye, EyeOff, Loader2, Link2, Trash2, Plus, Pencil } from "lucide-react";
+import { Save, Eye, EyeOff, Loader2, Link2, Trash2, Plus, Pencil, Rocket } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
@@ -81,6 +81,9 @@ export default function GitHubIntegrationPage() {
           <TabsTrigger value="templates" className="rounded-xl data-[state=active]:bg-white/[0.08] data-[state=active]:shadow-none text-[13px] gap-1.5">
             <Save size={14} /> {t("github.tabTemplates")}
           </TabsTrigger>
+          <TabsTrigger value="deploy" className="rounded-xl data-[state=active]:bg-white/[0.08] data-[state=active]:shadow-none text-[13px] gap-1.5">
+            <Rocket size={14} /> {t("deploy.tabDeploy", "Deploy")}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="config" className="mt-0">
@@ -89,6 +92,10 @@ export default function GitHubIntegrationPage() {
 
         <TabsContent value="templates" className="mt-0">
           <GitHubTemplatesTab />
+        </TabsContent>
+
+        <TabsContent value="deploy" className="mt-0">
+          <DeployTab />
         </TabsContent>
       </Tabs>
     </motion.div>
@@ -902,6 +909,86 @@ function GitHubTemplatesTab() {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function DeployTab() {
+  const { t } = useTranslation();
+  const [apiKey, setApiKey] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<{ connected: boolean; provider: string } | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [messageType, setMessageType] = useState<"success" | "error">("success");
+
+  useEffect(() => { fetchStatus(); }, []);
+
+  const fetchStatus = async () => {
+    try {
+      const res = await fetch("/dashboard/api/deploy-provider/status", { credentials: "include" });
+      if (res.ok) setStatus(await res.json());
+    } catch {}
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/dashboard/api/deploy-provider/config", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: apiKey }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setMessage(data.error || "Failed to connect"); setMessageType("error"); return; }
+      setMessage("Provider connected successfully");
+      setMessageType("success");
+      setApiKey("");
+      await fetchStatus();
+    } catch { setMessage("Connection error"); setMessageType("error"); }
+    finally { setSaving(false); }
+  };
+
+  const inputClass = "h-9 rounded-lg border border-white/[0.10] bg-white/[0.06] px-3 text-[13px] text-[#F8FAFC] placeholder:text-[#64748B] outline-none focus:border-[rgba(var(--brand-primary-rgb),0.35)] transition-colors w-full";
+
+  return (
+    <div>
+      <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-6">
+        <div className="flex items-center gap-4 mb-6">
+          <div className={`flex size-10 shrink-0 items-center justify-center rounded-xl border ${status?.connected ? "border-[#22C55E]/20 bg-[#22C55E]/10" : "border-white/[0.08] bg-white/[0.06]"}`}>
+            <Rocket size={18} className={status?.connected ? "text-[#22C55E]" : "text-[#64748B]"} />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-[#F8FAFC]">{t("deploy.title", "Deploy Provider")}</h3>
+            <p className="text-xs text-[#64748B]">
+              {status?.connected
+                ? t("deploy.connected", "Connected to Render — services will be created automatically on frontend app creation")
+                : t("deploy.notConnected", "Not connected — connect your Render account to enable automatic deploys")}
+            </p>
+          </div>
+          {status?.connected && (
+            <span className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-[#22C55E] bg-[#22C55E]/10 px-2 py-1 rounded-full">
+              <span className="size-1.5 rounded-full bg-[#22C55E]" /> {t("deploy.active", "Active")}
+            </span>
+          )}
+        </div>
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">{t("deploy.apiKey", "Render API Key")}</label>
+            <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
+              placeholder="rnd_..." className={inputClass}
+              onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
+            <p className="mt-1 text-[11px] text-[#64748B]">{t("deploy.apiKeyHint", "Create an API key in your Render dashboard at Account Settings → API Keys")}</p>
+          </div>
+          {message && <p className={`text-[12px] ${messageType === "error" ? "text-[#EF4444]" : "text-[#22C55E]"}`}>{message}</p>}
+          <Button onClick={handleSave} disabled={saving || !apiKey.trim()}
+            className="gap-2 rounded-xl border-0 text-white font-semibold disabled:opacity-40"
+            style={{ background: "linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))" }}>
+            {saving ? <><Loader2 size={14} className="animate-spin" /> {t("brand.saving")}</>
+              : <><Save size={14} /> {status?.connected ? t("deploy.update", "Update Key") : t("deploy.connect", "Connect Render")}</>}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
