@@ -295,3 +295,84 @@ func TestStatus_TokenExchangeFails(t *testing.T) {
 		t.Error("expected non-empty Error message when token exchange fails")
 	}
 }
+
+// newAppClient builds a Client with appID/privateKeyPEM wired for
+// VerifyAppCredentials/GetInstallation (App-JWT-authenticated calls), routed
+// through a mock transport so no real network call reaches GitHub.
+func newAppClient(t *testing.T, handler func(req *http.Request) (*http.Response, error)) *Client {
+	t.Helper()
+	keyPEM := generateTestPrivateKeyPEM(t)
+	mock := newMockClient(handler)
+
+	return &Client{
+		tokens: &InstallationTokenCache{
+			AppID:         "app-1",
+			PrivateKeyPEM: keyPEM,
+			HTTPClient:    mock,
+		},
+		httpClient:    mock,
+		appID:         "app-1",
+		privateKeyPEM: keyPEM,
+	}
+}
+
+func TestVerifyAppCredentials_OK(t *testing.T) {
+	client := newAppClient(t, func(req *http.Request) (*http.Response, error) {
+		if got := req.Method; got != http.MethodGet {
+			t.Errorf("method = %q, want GET", got)
+		}
+		if got := req.URL.String(); got != "https://api.github.com/app" {
+			t.Errorf("url = %q, want https://api.github.com/app", got)
+		}
+		if got := req.Header.Get("Authorization"); !strings.HasPrefix(got, "Bearer ") {
+			t.Errorf("Authorization header = %q, want Bearer <jwt>", got)
+		}
+		return mockJSONResponse(http.StatusOK, `{"id":1,"slug":"my-app"}`), nil
+	})
+
+	if err := client.VerifyAppCredentials(context.Background()); err != nil {
+		t.Fatalf("VerifyAppCredentials() error = %v, want nil", err)
+	}
+}
+
+func TestVerifyAppCredentials_Unauthorized(t *testing.T) {
+	client := newAppClient(t, func(req *http.Request) (*http.Response, error) {
+		return mockJSONResponse(http.StatusUnauthorized, `{"message":"Bad credentials"}`), nil
+	})
+
+	err := client.VerifyAppCredentials(context.Background())
+	if err == nil {
+		t.Fatal("expected error for invalid app credentials, got nil")
+	}
+	if !strings.Contains(err.Error(), "401") {
+		t.Errorf("error = %q, want mention of status 401", err.Error())
+	}
+}
+
+func TestGetInstallation_OK(t *testing.T) {
+	client := newAppClient(t, func(req *http.Request) (*http.Response, error) {
+		if want := "https://api.github.com/app/installations/999"; req.URL.String() != want {
+			t.Errorf("url = %q, want %q", req.URL.String(), want)
+		}
+		return mockJSONResponse(http.StatusOK, `{"id":999,"account":{"login":"acme-org","type":"Organization"}}`), nil
+	})
+
+	orgLogin, err := client.GetInstallation(context.Background(), "999")
+	if err != nil {
+		t.Fatalf("GetInstallation() error = %v, want nil", err)
+	}
+	if orgLogin != "acme-org" {
+		t.Errorf("orgLogin = %q, want %q", orgLogin, "acme-org")
+	}
+}
+
+func TestGetInstallation_NotFound(t *testing.T) {
+	client := newAppClient(t, func(req *http.Request) (*http.Response, error) {
+		return mockJSONResponse(http.StatusNotFound, `{"message":"Not Found"}`), nil
+	})
+
+	_, err := client.GetInstallation(context.Background(), "999")
+	if err == nil {
+		t.Fatal("expected error for missing installation, got nil")
+	}
+}

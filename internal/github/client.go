@@ -20,11 +20,15 @@ const (
 )
 
 // AppConfig holds the GitHub App credentials and installation used to
-// authenticate every request made by Client.
+// authenticate every request made by Client. HTTPClient is optional: when
+// nil, a default *http.Client with httpClientTimeout is used; callers (e.g.
+// tests) may override it with a client wired to a mock transport so no real
+// network calls reach the GitHub API.
 type AppConfig struct {
 	AppID          string
 	InstallationID string
 	PrivateKeyPEM  []byte
+	HTTPClient     *http.Client
 }
 
 // Client is a small REST client for the subset of the GitHub API needed to
@@ -35,14 +39,27 @@ type Client struct {
 	tokens         *InstallationTokenCache
 	installationID string
 	httpClient     httpDoer
+	appID          string
+	privateKeyPEM  []byte
 }
 
 // NewClient builds a Client for the given GitHub App configuration.
 func NewClient(cfg AppConfig) *Client {
+	httpClient := cfg.HTTPClient
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: httpClientTimeout}
+	}
+
 	return &Client{
-		tokens:         NewInstallationTokenCache(cfg.AppID, cfg.PrivateKeyPEM),
+		tokens: &InstallationTokenCache{
+			AppID:         cfg.AppID,
+			PrivateKeyPEM: cfg.PrivateKeyPEM,
+			HTTPClient:    httpClient,
+		},
 		installationID: cfg.InstallationID,
-		httpClient:     &http.Client{Timeout: httpClientTimeout},
+		httpClient:     httpClient,
+		appID:          cfg.AppID,
+		privateKeyPEM:  cfg.PrivateKeyPEM,
 	}
 }
 
@@ -83,6 +100,93 @@ func (c *Client) Status(ctx context.Context) (StatusResult, error) {
 		return StatusResult{Connected: false, Error: err.Error()}, nil
 	}
 	return StatusResult{Connected: true}, nil
+}
+
+// VerifyAppCredentials confirms that appID/privateKeyPEM produce a JWT
+// GitHub accepts, by calling GET /app authenticated as the App itself (not
+// an installation access token — no InstallationID is required or used).
+// This lets callers validate App credentials before an installation exists.
+func (c *Client) VerifyAppCredentials(ctx context.Context) error {
+	resp, body, err := c.doAsApp(ctx, http.MethodGet, githubAPIBaseURL+"/app")
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return unexpectedStatusError(resp, body)
+	}
+	return nil
+}
+
+// GetInstallation fetches installation metadata for installationID,
+// authenticated as the App itself (per GitHub's docs, GET
+// /app/installations/{installation_id} is an "as the app" endpoint, not an
+// installation-token endpoint). It returns the installation's account login,
+// which works for both organization and user installations.
+func (c *Client) GetInstallation(ctx context.Context, installationID string) (string, error) {
+	url := fmt.Sprintf("%s/app/installations/%s", githubAPIBaseURL, installationID)
+	resp, body, err := c.doAsApp(ctx, http.MethodGet, url)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", unexpectedStatusError(resp, body)
+	}
+
+	var parsed struct {
+		Account struct {
+			Login string `json:"login"`
+		} `json:"account"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return "", fmt.Errorf("github: parse installation response: %w", err)
+	}
+	if parsed.Account.Login == "" {
+		return "", fmt.Errorf("github: installation response missing account.login")
+	}
+	return parsed.Account.Login, nil
+}
+
+// doAsApp builds and executes a GitHub API request authenticated as the App
+// itself using a freshly-signed App JWT, as opposed to doAuthenticated which
+// uses an installation access token. It is used for endpoints that operate
+// at the App/installation level (GET /app, GET /app/installations/{id})
+// rather than on a specific installation's repositories.
+func (c *Client) doAsApp(ctx context.Context, method, url string) (*http.Response, []byte, error) {
+	appJWT, err := generateAppJWT(c.appID, c.privateKeyPEM)
+	if err != nil {
+		return nil, nil, fmt.Errorf("github: generate app jwt: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, url, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("github: build request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+appJWT)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", githubAPIVersion)
+
+	client := c.httpClient
+	if client == nil {
+		client = &http.Client{Timeout: httpClientTimeout}
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, nil, fmt.Errorf("github: request failed: %w", err)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		resp.Body.Close()
+		return nil, nil, fmt.Errorf("github: read response body: %w", err)
+	}
+	resp.Body = io.NopCloser(strings.NewReader(string(body)))
+
+	return resp, body, nil
 }
 
 // VerifyTemplateRepo confirms that owner/repo exists, is accessible to the

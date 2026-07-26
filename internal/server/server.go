@@ -62,7 +62,8 @@ func New(reg *registry.Registry, pool *db.Pool, port int) (*Server, error) {
 
 	h := NewHandler(pool, reg)
 	dashH := dashboard.NewHandler(pool, reg, logger)
-	r := newRouter(reg, h, pool, logger, dashH)
+	githubConfigH := dashboard.NewGitHubConfigHandler(pool)
+	r := newRouter(reg, h, pool, logger, dashH, githubConfigH)
 
 	s := &Server{
 		httpServer: &http.Server{
@@ -125,7 +126,7 @@ func buildLogger() (*zap.Logger, error) {
 }
 
 // newRouter builds the chi.Mux with all routes and middleware.
-func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Logger, dashH *dashboard.Handler) *chi.Mux {
+func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Logger, dashH *dashboard.Handler, githubConfigH *dashboard.GitHubConfigHandler) *chi.Mux {
 	logBuf := dashH.Logs
 	r := chi.NewRouter()
 
@@ -202,8 +203,17 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Delete("/api/data-browser/row", dashH.DataBrowserDelete)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/apps/{id}/auth/providers", dashH.ListAppProviders)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/apps/{id}/auth/providers", dashH.UpdateAppProviders)
+		r.With(dashboard.RequireAuth(pool)).Post("/api/github/config", githubConfigH.UpsertConfig)
+		r.With(dashboard.RequireAuth(pool)).Delete("/api/github/config", githubConfigH.DeleteConfig)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/github/status", githubConfigH.Status)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/github/install/start", githubConfigH.InstallStart)
 		r.Handle("/*", dashboard.StaticHandler())
 	})
+
+	// Unauthenticated: GitHub redirects the superadmin's browser here
+	// directly after installation, with no session cookie guaranteed.
+	// CSRF protection is via the state token instead (see github_config.go).
+	r.Get("/dashboard/api/github/install/callback", githubConfigH.InstallCallback)
 
 	googleH := dashboard.NewGoogleOAuthHandler(pool, nil)
 	r.Get("/dashboard/api/auth/google/login", googleH.Login)

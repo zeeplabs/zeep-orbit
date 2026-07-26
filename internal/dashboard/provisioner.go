@@ -99,6 +99,12 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 		`CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON zeep_system.audit_log(created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_audit_log_action ON zeep_system.audit_log(action)`,
 		`CREATE INDEX IF NOT EXISTS idx_audit_log_user_id ON zeep_system.audit_log(user_id)`,
+		// user_id is nullable so events with no authenticated actor (e.g. the
+		// GitHub App installation callback, which GitHub redirects the
+		// browser to directly with no session cookie guaranteed) can still
+		// be audit-logged, instead of the insert silently failing on an
+		// empty-string UUID (see InsertAuditLog).
+		`ALTER TABLE zeep_system.audit_log ALTER COLUMN user_id DROP NOT NULL`,
 		`CREATE TABLE IF NOT EXISTS zeep_system.app_tokens (
 			id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			app_id       UUID NOT NULL REFERENCES zeep_system.apps(id) ON DELETE CASCADE,
@@ -132,6 +138,7 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			installed_at     TIMESTAMPTZ,
 			updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
+		`ALTER TABLE zeep_system.github_app_config ADD COLUMN IF NOT EXISTS app_slug TEXT NOT NULL DEFAULT ''`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_github_app_config_singleton
 		 ON zeep_system.github_app_config ((TRUE))`,
 		`CREATE TABLE IF NOT EXISTS zeep_system.github_templates (

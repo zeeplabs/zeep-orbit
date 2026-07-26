@@ -26,10 +26,20 @@ func InsertAuditLog(ctx context.Context, pool *db.Pool, userID, userEmail, actio
 	if metadata == nil {
 		metadata = json.RawMessage("{}")
 	}
+	// user_id is a UUID column: an empty string is not valid UUID syntax and
+	// would fail the insert (verified against Postgres — it errors with
+	// "invalid input syntax for type uuid"). Events with no authenticated
+	// actor (e.g. an unauthenticated callback) pass userID == "", which must
+	// become SQL NULL, not the literal empty string.
+	var userIDParam any
+	if userID != "" {
+		userIDParam = userID
+	}
+
 	_, err := pool.Exec(ctx,
 		`INSERT INTO zeep_system.audit_log (user_id, user_email, action, resource_type, resource_id, resource_name, metadata, ip_address)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-		userID, userEmail, action, resourceType, resourceID, resourceName, metadata, ip,
+		userIDParam, userEmail, action, resourceType, resourceID, resourceName, metadata, ip,
 	)
 	if err != nil {
 		return fmt.Errorf("dashboard: insert audit log: %w", err)
@@ -72,7 +82,7 @@ func ListAuditLog(ctx context.Context, pool *db.Pool, f AuditLogFilter) ([]Audit
 		return nil, 0, fmt.Errorf("dashboard: count audit log: %w", err)
 	}
 
-	q := fmt.Sprintf(`SELECT id, user_id, user_email, action, resource_type,
+	q := fmt.Sprintf(`SELECT id, COALESCE(user_id::text, ''), user_email, action, resource_type,
 		COALESCE(resource_id, ''), COALESCE(resource_name, ''),
 		COALESCE(metadata, '{}'), COALESCE(ip_address, ''), created_at
 		FROM zeep_system.audit_log %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`, where, n, n+1)

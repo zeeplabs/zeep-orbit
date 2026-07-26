@@ -31,6 +31,7 @@ func githubTestPool(t *testing.T) *db.Pool {
 	if _, err := pool.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS zeep_system.github_app_config (
 			app_id           TEXT NOT NULL,
+			app_slug         TEXT NOT NULL DEFAULT '',
 			client_id        TEXT NOT NULL,
 			client_secret    TEXT NOT NULL,
 			private_key      TEXT NOT NULL,
@@ -41,6 +42,10 @@ func githubTestPool(t *testing.T) *db.Pool {
 			updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`); err != nil {
 		t.Fatalf("create table: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		ALTER TABLE zeep_system.github_app_config ADD COLUMN IF NOT EXISTS app_slug TEXT NOT NULL DEFAULT ''`); err != nil {
+		t.Fatalf("alter table add app_slug: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `
 		CREATE UNIQUE INDEX IF NOT EXISTS idx_github_app_config_singleton
