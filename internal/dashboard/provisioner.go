@@ -152,6 +152,20 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			created_by   TEXT NOT NULL,
 			created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
+		`CREATE TABLE IF NOT EXISTS zeep_system.frontend_apps (
+			id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			name            TEXT NOT NULL,
+			slug            TEXT NOT NULL,
+			template_id     UUID NOT NULL REFERENCES zeep_system.github_templates(id),
+			github_repo_url TEXT NOT NULL DEFAULT '',
+			status          TEXT NOT NULL DEFAULT 'ready',
+			error_message   TEXT NOT NULL DEFAULT '',
+			created_by      TEXT NOT NULL,
+			created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+			archived_at     TIMESTAMPTZ
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_frontend_apps_slug
+		 ON zeep_system.frontend_apps (slug) WHERE archived_at IS NULL`,
 	}
 
 	for _, stmt := range stmts {
