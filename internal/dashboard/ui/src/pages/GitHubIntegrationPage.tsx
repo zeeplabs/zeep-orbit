@@ -916,8 +916,9 @@ function GitHubTemplatesTab() {
 function DeployTab() {
   const { t } = useTranslation();
   const [apiKey, setApiKey] = useState("");
+  const [renderProjectId, setRenderProjectId] = useState("");
   const [saving, setSaving] = useState(false);
-  const [status, setStatus] = useState<{ connected: boolean; provider: string } | null>(null);
+  const [status, setStatus] = useState<{ connected: boolean; provider: string; render_project_id?: string } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [messageType, setMessageType] = useState<"success" | "error">("success");
 
@@ -926,7 +927,11 @@ function DeployTab() {
   const fetchStatus = async () => {
     try {
       const res = await fetch("/dashboard/api/deploy-provider/status", { credentials: "include" });
-      if (res.ok) setStatus(await res.json());
+      if (res.ok) {
+        const data = await res.json();
+        setStatus(data);
+        if (data.render_project_id) setRenderProjectId(data.render_project_id);
+      }
     } catch {}
   };
 
@@ -937,7 +942,7 @@ function DeployTab() {
       const res = await fetch("/dashboard/api/deploy-provider/config", {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ api_key: apiKey }),
+        body: JSON.stringify({ api_key: apiKey, render_project_id: renderProjectId }),
       });
       const data = await res.json();
       if (!res.ok) { setMessage(data.error || "Failed to connect"); setMessageType("error"); return; }
@@ -979,6 +984,12 @@ function DeployTab() {
               placeholder="rnd_..." className={inputClass}
               onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
             <p className="mt-1 text-[11px] text-[#64748B]">{t("deploy.apiKeyHint", "Create an API key in your Render dashboard at Account Settings → API Keys")}</p>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">{t("deploy.projectId", "Render Project ID (optional)")}</label>
+            <input type="text" value={renderProjectId} onChange={(e) => setRenderProjectId(e.target.value)}
+              placeholder="prj-..." className={inputClass} />
+            <p className="mt-1 text-[11px] text-[#64748B]">{t("deploy.projectIdHint", "All services created via Zeep Orbit will be grouped under this project. Leave empty to use the default workspace.")}</p>
           </div>
           {message && <p className={`text-[12px] ${messageType === "error" ? "text-[#EF4444]" : "text-[#22C55E]"}`}>{message}</p>}
           <Button onClick={handleSave} disabled={saving || !apiKey.trim()}

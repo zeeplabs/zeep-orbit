@@ -386,6 +386,8 @@
   "deploy.apiKeyHint": "Create an API key in your Render dashboard at Account Settings → API Keys",
   "deploy.connect": "Connect Render",
   "deploy.update": "Update Key",
+  "deploy.projectId": "Render Project ID (optional)",
+  "deploy.projectIdHint": "All services created via Zeep Orbit will be grouped under this project. Leave empty to use the default workspace.",
   "github.deployConfig": "Deploy Configuration (Render)",
   "github.deployNone": "No deploy config",
   "apps.typeModalTitle": "What type of app do you want to create?",

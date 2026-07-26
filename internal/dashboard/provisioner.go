@@ -178,13 +178,16 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			updated_at             TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
 		`CREATE TABLE IF NOT EXISTS zeep_system.deploy_provider_config (
-			provider      TEXT NOT NULL DEFAULT 'render',
-			api_key       TEXT NOT NULL,
-			connected_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-			updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+			provider           TEXT NOT NULL DEFAULT 'render',
+			api_key            TEXT NOT NULL,
+			render_project_id  TEXT NOT NULL DEFAULT '',
+			connected_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_deploy_provider_config_singleton
 		 ON zeep_system.deploy_provider_config ((TRUE))`,
+		`ALTER TABLE zeep_system.deploy_provider_config
+		 ADD COLUMN IF NOT EXISTS render_project_id TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE zeep_system.github_templates
 		 ADD COLUMN IF NOT EXISTS render_service_type TEXT NOT NULL DEFAULT '',
 		 ADD COLUMN IF NOT EXISTS build_command       TEXT NOT NULL DEFAULT '',

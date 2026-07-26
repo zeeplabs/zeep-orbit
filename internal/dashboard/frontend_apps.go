@@ -568,7 +568,7 @@ func buildDeployProvider(ctx context.Context, cfg *DeployProviderConfig) (deploy
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: decrypt api key: %w", err)
 	}
-	return render.NewRenderProvider(ctx, apiKey)
+	return render.NewRenderProvider(ctx, apiKey, cfg.RenderProjectID)
 }
 
 func (h *FrontendAppsHandler) attemptDeploy(ctx context.Context, app *FrontendApp, tmpl *GitHubTemplate) {

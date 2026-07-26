@@ -93,11 +93,12 @@ func ValidateAPIKey(ctx context.Context, apiKey string) error {
 }
 
 type RenderProvider struct {
-	client  *Client
-	ownerID string
+	client    *Client
+	ownerID   string
+	projectID string
 }
 
-func NewRenderProvider(ctx context.Context, apiKey string) (*RenderProvider, error) {
+func NewRenderProvider(ctx context.Context, apiKey, projectID string) (*RenderProvider, error) {
 	client := NewClient(apiKey)
 
 	resp, body, err := client.do(ctx, http.MethodGet, "/owners", nil)
@@ -116,8 +117,9 @@ func NewRenderProvider(ctx context.Context, apiKey string) (*RenderProvider, err
 	}
 
 	return &RenderProvider{
-		client:  client,
-		ownerID: owners[0].ID,
+		client:    client,
+		ownerID:   owners[0].ID,
+		projectID: projectID,
 	}, nil
 }
 
@@ -133,12 +135,13 @@ func toEnvVarList(envVars map[string]string) []map[string]string {
 }
 
 type createServiceRequest struct {
-	Type           string             `json:"type"`
-	Name           string             `json:"name"`
-	OwnerID        string             `json:"ownerId"`
-	Repo           string             `json:"repo"`
-	AutoDeploy     string             `json:"autoDeploy"`
-	ServiceDetails interface{}        `json:"serviceDetails"`
+	Type           string              `json:"type"`
+	Name           string              `json:"name"`
+	OwnerID        string              `json:"ownerId"`
+	ProjectID      string              `json:"projectId,omitempty"`
+	Repo           string              `json:"repo"`
+	AutoDeploy     string              `json:"autoDeploy"`
+	ServiceDetails interface{}         `json:"serviceDetails"`
 	EnvVars        []map[string]string `json:"envVars,omitempty"`
 }
 
@@ -184,6 +187,7 @@ func (p *RenderProvider) CreateService(ctx context.Context, params deploy.Create
 		Type:           params.ServiceType,
 		Name:           params.RepoName,
 		OwnerID:        p.ownerID,
+		ProjectID:      p.projectID,
 		Repo:           repoURL,
 		AutoDeploy:     "yes",
 		ServiceDetails: serviceDetails,
