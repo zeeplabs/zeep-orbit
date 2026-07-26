@@ -28,6 +28,11 @@ const (
 
 	installationTokenURLFormat = "https://api.github.com/app/installations/%s/access_tokens"
 	githubAPIVersion           = "2022-11-28"
+
+	// httpClientTimeout bounds outbound calls to the GitHub API, matching the
+	// convention used for other third-party HTTP clients in this codebase
+	// (see internal/auth/google.go, internal/dashboard/google.go).
+	httpClientTimeout = 10 * time.Second
 )
 
 // generateAppJWT creates a signed RS256 JWT for GitHub App authentication.
@@ -97,7 +102,7 @@ func NewInstallationTokenCache(appID string, privateKeyPEM []byte) *Installation
 	return &InstallationTokenCache{
 		AppID:         appID,
 		PrivateKeyPEM: privateKeyPEM,
-		HTTPClient:    http.DefaultClient,
+		HTTPClient:    &http.Client{Timeout: httpClientTimeout},
 	}
 }
 
@@ -175,7 +180,7 @@ func (c *InstallationTokenCache) fetchInstallationToken(installationID string) (
 
 	client := c.HTTPClient
 	if client == nil {
-		client = http.DefaultClient
+		client = &http.Client{Timeout: httpClientTimeout}
 	}
 
 	resp, err := client.Do(req)

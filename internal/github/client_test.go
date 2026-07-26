@@ -138,6 +138,33 @@ func TestVerifyTemplateRepo_RateLimited(t *testing.T) {
 	}
 }
 
+func TestVerifyTemplateRepo_RateLimited429(t *testing.T) {
+	resetAt := time.Now().Add(15 * time.Minute).Unix()
+
+	client := newTestClient(t, func(req *http.Request) (*http.Response, error) {
+		resp := mockJSONResponse(http.StatusTooManyRequests, `{"message":"API rate limit exceeded"}`)
+		resp.Header.Set("X-RateLimit-Remaining", "0")
+		resp.Header.Set("X-RateLimit-Reset", strconv.FormatInt(resetAt, 10))
+		return resp, nil
+	})
+
+	err := client.VerifyTemplateRepo(context.Background(), "acme", "starter")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("expected errors.Is(err, ErrRateLimited) to be true, err = %v", err)
+	}
+
+	var rlErr *RateLimitError
+	if !errors.As(err, &rlErr) {
+		t.Fatalf("expected errors.As to extract *RateLimitError, err = %v", err)
+	}
+	if rlErr.ResetAt.Unix() != resetAt {
+		t.Errorf("ResetAt = %v, want unix %d", rlErr.ResetAt, resetAt)
+	}
+}
+
 func TestCreateRepoFromTemplate_OK(t *testing.T) {
 	client := newTestClient(t, func(req *http.Request) (*http.Response, error) {
 		if req.Method != http.MethodPost {

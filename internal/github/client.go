@@ -42,7 +42,7 @@ func NewClient(cfg AppConfig) *Client {
 	return &Client{
 		tokens:         NewInstallationTokenCache(cfg.AppID, cfg.PrivateKeyPEM),
 		installationID: cfg.InstallationID,
-		httpClient:     http.DefaultClient,
+		httpClient:     &http.Client{Timeout: httpClientTimeout},
 	}
 }
 
@@ -116,6 +116,11 @@ func (c *Client) VerifyTemplateRepo(ctx context.Context, owner, repo string) err
 			return rlErr
 		}
 		return fmt.Errorf("github: insufficient permissions to access repository %s/%s", owner, repo)
+	case http.StatusTooManyRequests:
+		if rlErr := rateLimitErrorFromResponse(resp); rlErr != nil {
+			return rlErr
+		}
+		return unexpectedStatusError(resp, body)
 	default:
 		return unexpectedStatusError(resp, body)
 	}
@@ -208,7 +213,7 @@ func (c *Client) doAuthenticated(ctx context.Context, method, url string, body [
 
 	client := c.httpClient
 	if client == nil {
-		client = http.DefaultClient
+		client = &http.Client{Timeout: httpClientTimeout}
 	}
 
 	resp, err := client.Do(req)
