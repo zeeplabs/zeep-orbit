@@ -65,6 +65,9 @@ interface FrontendApp {
   error_message: string;
   created_by: string;
   created_at: string;
+  deploy_status: string;
+  deploy_url: string;
+  deploy_error_message: string;
 }
 
 interface Template {
@@ -242,6 +245,17 @@ function FrontendCard({ app, index, onSync, onDelete }: FrontendCardProps) {
                 <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-[#EF4444]" title={app.error_message}>
                   <XCircle size={10} />{t("frontendApps.statusFailed", "Failed")}
                 </span>
+              )}
+              {app.status === "ready" && app.deploy_status && app.deploy_status !== "pending" && (
+                app.deploy_status === "ready" ? (
+                  <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-[#3B82F6]" title={app.deploy_url}>
+                    <CheckCircle2 size={10} />Deploy
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-[#EF4444]" title={app.deploy_error_message}>
+                    <XCircle size={10} />Deploy failed
+                  </span>
+                )
               )}
             </div>
           </div>

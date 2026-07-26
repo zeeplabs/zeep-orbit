@@ -36,6 +36,10 @@ interface GitHubTemplate {
   active: boolean;
   created_by: string;
   created_at: string;
+  render_service_type: string;
+  build_command: string;
+  publish_path: string;
+  start_command: string;
 }
 
 export default function GitHubIntegrationPage() {
@@ -475,6 +479,10 @@ function GitHubTemplatesTab() {
   const [githubOwner, setGithubOwner] = useState("");
   const [githubRepo, setGithubRepo] = useState("");
   const [framework, setFramework] = useState("");
+  const [renderServiceType, setRenderServiceType] = useState("");
+  const [buildCommand, setBuildCommand] = useState("");
+  const [publishPath, setPublishPath] = useState("");
+  const [startCommand, setStartCommand] = useState("");
 
   useEffect(() => {
     fetchTemplates();
@@ -505,6 +513,10 @@ function GitHubTemplatesTab() {
     setGithubOwner("");
     setGithubRepo("");
     setFramework("");
+    setRenderServiceType("");
+    setBuildCommand("");
+    setPublishPath("");
+    setStartCommand("");
     setFormError(null);
     setShowModal(true);
   };
@@ -516,6 +528,10 @@ function GitHubTemplatesTab() {
     setGithubOwner(tpl.github_owner);
     setGithubRepo(tpl.github_repo);
     setFramework(tpl.framework);
+    setRenderServiceType(tpl.render_service_type || "");
+    setBuildCommand(tpl.build_command || "");
+    setPublishPath(tpl.publish_path || "");
+    setStartCommand(tpl.start_command || "");
     setFormError(null);
     setShowModal(true);
   };
@@ -530,6 +546,10 @@ function GitHubTemplatesTab() {
         github_owner: githubOwner,
         github_repo: githubRepo,
         framework,
+        render_service_type: renderServiceType,
+        build_command: buildCommand,
+        publish_path: publishPath,
+        start_command: startCommand,
       };
 
       const url = editingTemplate
@@ -804,6 +824,48 @@ function GitHubTemplatesTab() {
                   placeholder="Vite + React"
                   className={inputClass}
                 />
+              </div>
+
+              <div className="border-t border-white/[0.06] pt-4 mt-2">
+                <p className="mb-3 text-[11px] font-medium text-[#64748B] uppercase tracking-wider">{t("github.deployConfig", "Deploy Configuration (Render)")}</p>
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8]">Service Type</label>
+                    <select
+                      value={renderServiceType}
+                      onChange={(e) => setRenderServiceType(e.target.value)}
+                      className="w-full h-9 rounded-lg border border-white/[0.10] bg-white/[0.06] px-3 text-[13px] text-[#F8FAFC] outline-none"
+                    >
+                      <option value="">{t("github.deployNone", "No deploy config")}</option>
+                      <option value="static_site">Static Site</option>
+                      <option value="web_service">Web Service</option>
+                    </select>
+                  </div>
+
+                  {renderServiceType && (
+                    <>
+                      <div>
+                        <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8]">Build Command</label>
+                        <Input value={buildCommand} onChange={(e) => setBuildCommand(e.target.value)}
+                          placeholder="npm run build" className={inputClass} />
+                      </div>
+                      {renderServiceType === "static_site" && (
+                        <div>
+                          <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8]">Publish Path</label>
+                          <Input value={publishPath} onChange={(e) => setPublishPath(e.target.value)}
+                            placeholder="dist" className={inputClass} />
+                        </div>
+                      )}
+                      {renderServiceType === "web_service" && (
+                        <div>
+                          <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8]">Start Command</label>
+                          <Input value={startCommand} onChange={(e) => setStartCommand(e.target.value)}
+                            placeholder="npm start" className={inputClass} />
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
             </div>
 
