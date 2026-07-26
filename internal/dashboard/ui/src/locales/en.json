@@ -373,5 +373,15 @@
   "frontendApps.agentPrompt": "Copy this prompt for your AI agent",
   "frontendApps.syncRetry": "Retry",
   "frontendApps.syncRegenerate": "Regenerate",
-  "frontendApps.noSyncInfo": "No sync information available"
+  "frontendApps.noSyncInfo": "No sync information available",
+  "frontendApps.deleteConfirm": "Delete frontend app?",
+  "frontendApps.deleteConfirmDesc": "This will archive the GitHub repository and revoke its deploy key.",
+  "apps.typeModalTitle": "What type of app do you want to create?",
+  "apps.typeModalDesc": "Choose the type that fits what you need.",
+  "apps.typeBackend": "Backend App",
+  "apps.typeBackendDesc": "Database, API, user authentication, and data management. Ideal for apps that need to store and manage data.",
+  "apps.typeFrontend": "Frontend App",
+  "apps.typeFrontendDesc": "Website or web app with automatic GitHub repository and deployment. Ideal for landing pages, dashboards, and static sites.",
+  "apps.backendSection": "Backend Apps",
+  "apps.frontendSection": "Frontend Apps"
 }
