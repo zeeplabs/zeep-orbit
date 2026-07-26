@@ -159,6 +159,32 @@ func redactGitHubConfig(cfg *GitHubAppConfig) map[string]any {
 	}
 }
 
+// GetConfig handles GET /dashboard/api/github/config. It returns the
+// non-sensitive fields so the superadmin can see what's currently saved.
+func (h *GitHubConfigHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	if user.Role != "superadmin" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+
+	cfg, err := GetGitHubConfig(r.Context(), h.pool)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	if cfg == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"configured": false})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, redactGitHubConfig(cfg))
+}
+
 // Status handles GET /dashboard/api/github/status.
 func (h *GitHubConfigHandler) Status(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())

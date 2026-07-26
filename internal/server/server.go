@@ -204,6 +204,7 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Delete("/api/data-browser/row", dashH.DataBrowserDelete)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/apps/{id}/auth/providers", dashH.ListAppProviders)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/apps/{id}/auth/providers", dashH.UpdateAppProviders)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/github/config", githubConfigH.GetConfig)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/github/config", githubConfigH.UpsertConfig)
 		r.With(dashboard.RequireAuth(pool)).Delete("/api/github/config", githubConfigH.DeleteConfig)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/github/status", githubConfigH.Status)

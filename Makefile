@@ -22,7 +22,7 @@ lint:
 	go vet ./...
 
 run:
-	go run ./cmd/zeep serve
+	go run ./cmd/zeep serve --port=8081
 
 helm-lint:
 	helm lint charts/zeep-orbit/
