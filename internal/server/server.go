@@ -229,6 +229,7 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Put("/api/frontend-apps/{id}/custom-domain", frontendAppsH.SetCustomDomain)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/deploy-provider/status", deployProviderH.Status)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/deploy-provider/config", deployProviderH.UpsertConfig)
+		r.With(dashboard.RequireAuth(pool)).Put("/api/deploy-provider/config", deployProviderH.UpdateFields)
 		r.Handle("/*", dashboard.StaticHandler())
 	})
 

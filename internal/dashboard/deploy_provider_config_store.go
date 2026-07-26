@@ -37,6 +37,22 @@ func UpsertDeployProviderConfig(ctx context.Context, pool *db.Pool, provider, ap
 	return nil
 }
 
+func UpdateDeployProviderConfigFields(ctx context.Context, pool *db.Pool, renderProjectID, baseDomain string) error {
+	tag, err := pool.Exec(ctx,
+		`UPDATE zeep_system.deploy_provider_config
+		 SET render_project_id = $1, base_domain = $2, updated_at = now()
+		 WHERE (TRUE)`,
+		renderProjectID, baseDomain,
+	)
+	if err != nil {
+		return fmt.Errorf("dashboard: update deploy provider config fields: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func GetDeployProviderConfig(ctx context.Context, pool *db.Pool) (*DeployProviderConfig, error) {
 	var cfg DeployProviderConfig
 	err := pool.QueryRow(ctx,

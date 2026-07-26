@@ -942,13 +942,13 @@ function DeployTab() {
     setMessage(null);
     try {
       const res = await fetch("/dashboard/api/deploy-provider/config", {
-        method: "POST", credentials: "include",
+        method: "PUT", credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ api_key: apiKey, render_project_id: renderProjectId, base_domain: baseDomain }),
       });
       const data = await res.json();
-      if (!res.ok) { setMessage(data.error || "Failed to connect"); setMessageType("error"); return; }
-      setMessage("Provider connected successfully");
+      if (!res.ok) { setMessage(data.error || "Failed"); setMessageType("error"); return; }
+      setMessage(status?.connected ? "Settings updated" : "Provider connected successfully");
       setMessageType("success");
       setApiKey("");
       await fetchStatus();
@@ -1000,11 +1000,11 @@ function DeployTab() {
             <p className="mt-1 text-[11px] text-[#64748B]">{t("deploy.baseDomainHint", "Users can pick a subdomain and the full domain will be configured on Render. Leave empty to use Render's default URL.")}</p>
           </div>
           {message && <p className={`text-[12px] ${messageType === "error" ? "text-[#EF4444]" : "text-[#22C55E]"}`}>{message}</p>}
-          <Button onClick={handleSave} disabled={saving || !apiKey.trim()}
+          <Button onClick={handleSave} disabled={saving || (!status?.connected && !apiKey.trim())}
             className="gap-2 rounded-xl border-0 text-white font-semibold disabled:opacity-40"
             style={{ background: "linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))" }}>
             {saving ? <><Loader2 size={14} className="animate-spin" /> {t("brand.saving")}</>
-              : <><Save size={14} /> {status?.connected ? t("deploy.update", "Update Key") : t("deploy.connect", "Connect Render")}</>}
+              : <><Save size={14} /> {status?.connected ? t("deploy.save", "Save") : t("deploy.connect", "Connect Render")}</>}
           </Button>
         </div>
       </div>
