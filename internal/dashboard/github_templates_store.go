@@ -10,41 +10,59 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
 
-// GitHubTemplate represents a template row from zeep_system.github_templates.
 type GitHubTemplate struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	GitHubOwner string    `json:"github_owner"`
-	GitHubRepo  string    `json:"github_repo"`
-	Framework   string    `json:"framework"`
-	Active      bool      `json:"active"`
-	CreatedBy   string    `json:"created_by"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID                string    `json:"id"`
+	Name              string    `json:"name"`
+	Description       string    `json:"description"`
+	GitHubOwner       string    `json:"github_owner"`
+	GitHubRepo        string    `json:"github_repo"`
+	Framework         string    `json:"framework"`
+	Active            bool      `json:"active"`
+	CreatedBy         string    `json:"created_by"`
+	CreatedAt         time.Time `json:"created_at"`
+	RenderServiceType string    `json:"render_service_type"`
+	BuildCommand      string    `json:"build_command"`
+	PublishPath       string    `json:"publish_path"`
+	StartCommand      string    `json:"start_command"`
 }
 
-// GitHubTemplateInput is the input struct for Create and Update operations.
 type GitHubTemplateInput struct {
-	Name        string
-	Description string
-	GitHubOwner string
-	GitHubRepo  string
-	Framework   string
-	CreatedBy   string
+	Name              string
+	Description       string
+	GitHubOwner       string
+	GitHubRepo        string
+	Framework         string
+	CreatedBy         string
+	RenderServiceType string
+	BuildCommand      string
+	PublishPath       string
+	StartCommand      string
 }
 
-// ListGitHubTemplates lists all GitHub templates.
-// If onlyActive is true, returns only rows where active = true.
-// If onlyActive is false, returns all templates regardless of active status.
+const githubTemplateCols = `id, name, description, github_owner, github_repo, framework, active, created_by, created_at,
+	COALESCE(render_service_type, ''), COALESCE(build_command, ''), COALESCE(publish_path, ''), COALESCE(start_command, '')`
+
+func scanTemplate(t *GitHubTemplate, row pgx.Row) error {
+	return row.Scan(&t.ID, &t.Name, &t.Description, &t.GitHubOwner, &t.GitHubRepo,
+		&t.Framework, &t.Active, &t.CreatedBy, &t.CreatedAt,
+		&t.RenderServiceType, &t.BuildCommand, &t.PublishPath, &t.StartCommand)
+}
+
+func scanTemplateRows(t *GitHubTemplate, rows pgx.Rows) error {
+	return rows.Scan(&t.ID, &t.Name, &t.Description, &t.GitHubOwner, &t.GitHubRepo,
+		&t.Framework, &t.Active, &t.CreatedBy, &t.CreatedAt,
+		&t.RenderServiceType, &t.BuildCommand, &t.PublishPath, &t.StartCommand)
+}
+
 func ListGitHubTemplates(ctx context.Context, pool *db.Pool, onlyActive bool) ([]GitHubTemplate, error) {
 	var query string
 	if onlyActive {
-		query = `SELECT id, name, description, github_owner, github_repo, framework, active, created_by, created_at
+		query = `SELECT ` + githubTemplateCols + `
 		         FROM zeep_system.github_templates
 		         WHERE active = true
 		         ORDER BY created_at DESC`
 	} else {
-		query = `SELECT id, name, description, github_owner, github_repo, framework, active, created_by, created_at
+		query = `SELECT ` + githubTemplateCols + `
 		         FROM zeep_system.github_templates
 		         ORDER BY created_at DESC`
 	}
@@ -58,7 +76,7 @@ func ListGitHubTemplates(ctx context.Context, pool *db.Pool, onlyActive bool) ([
 	var templates []GitHubTemplate
 	for rows.Next() {
 		var t GitHubTemplate
-		if err := rows.Scan(&t.ID, &t.Name, &t.Description, &t.GitHubOwner, &t.GitHubRepo, &t.Framework, &t.Active, &t.CreatedBy, &t.CreatedAt); err != nil {
+		if err := scanTemplateRows(&t, rows); err != nil {
 			return nil, fmt.Errorf("dashboard: list github templates scan: %w", err)
 		}
 		templates = append(templates, t)
@@ -66,62 +84,54 @@ func ListGitHubTemplates(ctx context.Context, pool *db.Pool, onlyActive bool) ([
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("dashboard: list github templates rows: %w", err)
 	}
-
-	// Return empty slice instead of nil for JSON serialization.
 	if templates == nil {
 		templates = make([]GitHubTemplate, 0)
 	}
-
 	return templates, nil
 }
 
-// CreateGitHubTemplate inserts a new GitHub template with active defaulting to true.
-// Returns the created template row with ID and CreatedAt populated.
 func CreateGitHubTemplate(ctx context.Context, pool *db.Pool, input GitHubTemplateInput) (*GitHubTemplate, error) {
 	var t GitHubTemplate
-	err := pool.QueryRow(ctx,
-		`INSERT INTO zeep_system.github_templates (name, description, github_owner, github_repo, framework, created_by)
-		 VALUES ($1, $2, $3, $4, $5, $6)
-		 RETURNING id, name, description, github_owner, github_repo, framework, active, created_by, created_at`,
-		input.Name, input.Description, input.GitHubOwner, input.GitHubRepo, input.Framework, input.CreatedBy,
-	).Scan(&t.ID, &t.Name, &t.Description, &t.GitHubOwner, &t.GitHubRepo, &t.Framework, &t.Active, &t.CreatedBy, &t.CreatedAt)
+	err := scanTemplate(&t,
+		pool.QueryRow(ctx,
+			`INSERT INTO zeep_system.github_templates
+			 (name, description, github_owner, github_repo, framework, created_by,
+			  render_service_type, build_command, publish_path, start_command)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			 RETURNING `+githubTemplateCols,
+			input.Name, input.Description, input.GitHubOwner, input.GitHubRepo, input.Framework, input.CreatedBy,
+			input.RenderServiceType, input.BuildCommand, input.PublishPath, input.StartCommand,
+		))
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: create github template: %w", err)
 	}
-
 	return &t, nil
 }
 
-// UpdateGitHubTemplate updates name, description, github_owner, github_repo, and framework for a given template ID.
-// Does not update active, created_by, or created_at.
-// Returns an error if the template does not exist.
 func UpdateGitHubTemplate(ctx context.Context, pool *db.Pool, id string, input GitHubTemplateInput) (*GitHubTemplate, error) {
 	var t GitHubTemplate
-	err := pool.QueryRow(ctx,
-		`UPDATE zeep_system.github_templates
-		 SET name = $2, description = $3, github_owner = $4, github_repo = $5, framework = $6
-		 WHERE id = $1
-		 RETURNING id, name, description, github_owner, github_repo, framework, active, created_by, created_at`,
-		id, input.Name, input.Description, input.GitHubOwner, input.GitHubRepo, input.Framework,
-	).Scan(&t.ID, &t.Name, &t.Description, &t.GitHubOwner, &t.GitHubRepo, &t.Framework, &t.Active, &t.CreatedBy, &t.CreatedAt)
+	err := scanTemplate(&t,
+		pool.QueryRow(ctx,
+			`UPDATE zeep_system.github_templates
+			 SET name = $2, description = $3, github_owner = $4, github_repo = $5, framework = $6,
+			     render_service_type = $7, build_command = $8, publish_path = $9, start_command = $10
+			 WHERE id = $1
+			 RETURNING `+githubTemplateCols,
+			id, input.Name, input.Description, input.GitHubOwner, input.GitHubRepo, input.Framework,
+			input.RenderServiceType, input.BuildCommand, input.PublishPath, input.StartCommand,
+		))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, fmt.Errorf("dashboard: update github template: %w", err)
 	}
-
 	return &t, nil
 }
 
-// SetGitHubTemplateActive soft-toggles the active flag for a given template ID.
-// Never deletes the row; only updates the active column.
-// Returns an error if the template does not exist.
 func SetGitHubTemplateActive(ctx context.Context, pool *db.Pool, id string, active bool) error {
 	tag, err := pool.Exec(ctx,
-		`UPDATE zeep_system.github_templates
-		 SET active = $2
-		 WHERE id = $1`,
+		`UPDATE zeep_system.github_templates SET active = $2 WHERE id = $1`,
 		id, active,
 	)
 	if err != nil {

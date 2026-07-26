@@ -3,6 +3,7 @@ package dashboard
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -11,6 +12,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/zeeplabs/zeep-orbit/internal/crypto"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
+	"github.com/zeeplabs/zeep-orbit/internal/deploy"
+	"github.com/zeeplabs/zeep-orbit/internal/deploy/render"
 	"github.com/zeeplabs/zeep-orbit/internal/github"
 	"github.com/zeeplabs/zeep-orbit/internal/sshkey"
 )
@@ -39,8 +42,9 @@ func NewFrontendAppsHandler(pool *db.Pool) *FrontendAppsHandler {
 }
 
 type frontendAppCreateBody struct {
-	Name       string `json:"name"`
-	TemplateID string `json:"template_id"`
+	Name          string `json:"name"`
+	TemplateID    string `json:"template_id"`
+	BackendAppID  string `json:"backend_app_id"`
 }
 
 func (h *FrontendAppsHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -174,6 +178,7 @@ func (h *FrontendAppsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Status:        status,
 		ErrorMessage:  errMsg,
 		CreatedBy:     user.Email,
+		BackendAppID:  body.BackendAppID,
 	})
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
@@ -188,6 +193,9 @@ func (h *FrontendAppsHandler) Create(w http.ResponseWriter, r *http.Request) {
 				h.setupSync(r.Context(), ghClient, app)
 			}
 		}
+
+		// T-10: Deploy step — create service on the connected provider.
+		h.attemptDeploy(r.Context(), app, tmpl)
 	}
 
 	meta, _ := json.Marshal(map[string]string{
@@ -324,6 +332,15 @@ func (h *FrontendAppsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 				if sc, scErr := GetSyncCredential(r.Context(), h.pool, app.ID); scErr == nil && sc.GithubKeyID != nil {
 					_ = client.RevokeDeployKey(r.Context(), owner, repo, *sc.GithubKeyID)
 				}
+			}
+		}
+	}
+
+	// T-12: Best-effort deploy service removal.
+	if app.DeployServiceID != "" {
+		if dcfg, dcfErr := GetDeployProviderConfig(r.Context(), h.pool); dcfErr == nil && dcfg != nil {
+			if provider, provErr := buildDeployProvider(r.Context(), dcfg); provErr == nil {
+				_ = provider.DeleteService(r.Context(), app.DeployServiceID)
 			}
 		}
 	}
@@ -544,4 +561,110 @@ func (h *FrontendAppsHandler) setupSync(ctx context.Context, client *github.Clie
 	}
 
 	_ = UpdateSyncCredentialSuccess(ctx, h.pool, app.ID, keyID, pub, encrypted)
+}
+
+func buildDeployProvider(ctx context.Context, cfg *DeployProviderConfig) (deploy.DeployProvider, error) {
+	apiKey, err := crypto.Decrypt(cfg.APIKey)
+	if err != nil {
+		return nil, fmt.Errorf("dashboard: decrypt api key: %w", err)
+	}
+	return render.NewRenderProvider(ctx, apiKey)
+}
+
+func (h *FrontendAppsHandler) attemptDeploy(ctx context.Context, app *FrontendApp, tmpl *GitHubTemplate) {
+	if tmpl.RenderServiceType == "" {
+		return
+	}
+
+	dcfg, err := GetDeployProviderConfig(ctx, h.pool)
+	if err != nil || dcfg == nil {
+		_, _ = UpdateFrontendAppDeploy(ctx, h.pool, app.ID, "", "", "failed", "deploy provider not connected")
+		return
+	}
+
+	provider, err := buildDeployProvider(ctx, dcfg)
+	if err != nil {
+		_, _ = UpdateFrontendAppDeploy(ctx, h.pool, app.ID, "", "", "failed", err.Error())
+		return
+	}
+
+	owner, repoName := parseGitHubOwnerRepo(app.GithubRepoURL)
+	if owner == "" || repoName == "" {
+		_, _ = UpdateFrontendAppDeploy(ctx, h.pool, app.ID, "", "", "failed", "cannot parse owner/repo from github url")
+		return
+	}
+
+	params := deploy.CreateServiceParams{
+		RepoOwner:    owner,
+		RepoName:     repoName,
+		ServiceType:  tmpl.RenderServiceType,
+		BuildCommand: tmpl.BuildCommand,
+		PublishPath:  tmpl.PublishPath,
+		StartCommand: tmpl.StartCommand,
+		EnvVars:      make(map[string]string),
+	}
+
+	_ = params
+
+	info, err := provider.CreateService(ctx, params)
+	if err != nil {
+		_, _ = UpdateFrontendAppDeploy(ctx, h.pool, app.ID, "", "", "failed", err.Error())
+		return
+	}
+
+	_, _ = UpdateFrontendAppDeploy(ctx, h.pool, app.ID, info.ServiceID, info.URL, "ready", "")
+}
+
+func (h *FrontendAppsHandler) DeployRetry(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		return
+	}
+
+	app, err := GetFrontendApp(r.Context(), h.pool, id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+
+	if app.DeployStatus == "ready" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "deploy already configured"})
+		return
+	}
+
+	templates, err := ListGitHubTemplates(r.Context(), h.pool, true)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	var tmpl *GitHubTemplate
+	for i := range templates {
+		if templates[i].ID == app.TemplateID {
+			tmpl = &templates[i]
+			break
+		}
+	}
+	if tmpl == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "template not available"})
+		return
+	}
+
+	h.attemptDeploy(r.Context(), app, tmpl)
+
+	meta, _ := json.Marshal(map[string]string{"frontend_app_id": id})
+	h.audit(r.Context(), user.ID, user.Email, "frontend_app.deploy.retry", "frontend_app", app.ID, app.Name, meta, r.RemoteAddr)
+
+	updated, _ := GetFrontendApp(r.Context(), h.pool, id)
+	if updated != nil {
+		writeJSON(w, http.StatusOK, updated)
+	} else {
+		writeJSON(w, http.StatusOK, map[string]string{"deploy_status": "failed"})
+	}
 }

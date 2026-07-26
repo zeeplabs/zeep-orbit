@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -38,11 +39,15 @@ func NewGitHubTemplatesHandler(pool *db.Pool) *GitHubTemplatesHandler {
 }
 
 type githubTemplateRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	GitHubOwner string `json:"github_owner"`
-	GitHubRepo  string `json:"github_repo"`
-	Framework   string `json:"framework"`
+	Name              string `json:"name"`
+	Description       string `json:"description"`
+	GitHubOwner       string `json:"github_owner"`
+	GitHubRepo        string `json:"github_repo"`
+	Framework         string `json:"framework"`
+	RenderServiceType string `json:"render_service_type"`
+	BuildCommand      string `json:"build_command"`
+	PublishPath       string `json:"publish_path"`
+	StartCommand      string `json:"start_command"`
 }
 
 // buildVerifiedClient reads the current GitHub App config, requires that the
@@ -133,12 +138,20 @@ func (h *GitHubTemplatesHandler) Create(w http.ResponseWriter, r *http.Request) 
 	}
 
 	input := GitHubTemplateInput{
-		Name:        body.Name,
-		Description: body.Description,
-		GitHubOwner: body.GitHubOwner,
-		GitHubRepo:  body.GitHubRepo,
-		Framework:   body.Framework,
-		CreatedBy:   user.ID,
+		Name:              body.Name,
+		Description:       body.Description,
+		GitHubOwner:       body.GitHubOwner,
+		GitHubRepo:        body.GitHubRepo,
+		Framework:         body.Framework,
+		CreatedBy:         user.ID,
+		RenderServiceType: body.RenderServiceType,
+		BuildCommand:      body.BuildCommand,
+		PublishPath:       body.PublishPath,
+		StartCommand:      body.StartCommand,
+	}
+	if err := validateDeployConfig(body.RenderServiceType, body.BuildCommand, body.PublishPath, body.StartCommand); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
 	}
 	created, err := CreateGitHubTemplate(r.Context(), h.pool, input)
 	if err != nil {
@@ -190,11 +203,19 @@ func (h *GitHubTemplatesHandler) Update(w http.ResponseWriter, r *http.Request) 
 	}
 
 	input := GitHubTemplateInput{
-		Name:        body.Name,
-		Description: body.Description,
-		GitHubOwner: body.GitHubOwner,
-		GitHubRepo:  body.GitHubRepo,
-		Framework:   body.Framework,
+		Name:              body.Name,
+		Description:       body.Description,
+		GitHubOwner:       body.GitHubOwner,
+		GitHubRepo:        body.GitHubRepo,
+		Framework:         body.Framework,
+		RenderServiceType: body.RenderServiceType,
+		BuildCommand:      body.BuildCommand,
+		PublishPath:       body.PublishPath,
+		StartCommand:      body.StartCommand,
+	}
+	if err := validateDeployConfig(body.RenderServiceType, body.BuildCommand, body.PublishPath, body.StartCommand); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
 	}
 	updated, err := UpdateGitHubTemplate(r.Context(), h.pool, id, input)
 	if err != nil {
@@ -294,4 +315,23 @@ func (h *GitHubTemplatesHandler) SetActive(w http.ResponseWriter, r *http.Reques
 // the primary operation the caller already committed to.
 func (h *GitHubTemplatesHandler) audit(ctx context.Context, userID, userEmail, action, resourceType, resourceID, resourceName string, metadata json.RawMessage, ip string) {
 	_ = InsertAuditLog(ctx, h.pool, userID, userEmail, action, resourceType, resourceID, resourceName, metadata, ip)
+}
+
+func validateDeployConfig(serviceType, buildCommand, publishPath, startCommand string) error {
+	if serviceType == "" {
+		return nil
+	}
+	if serviceType != "static_site" && serviceType != "web_service" {
+		return fmt.Errorf("invalid render_service_type: must be 'static_site' or 'web_service'")
+	}
+	if buildCommand == "" {
+		return fmt.Errorf("build_command is required when render_service_type is set")
+	}
+	if serviceType == "static_site" && publishPath == "" {
+		return fmt.Errorf("publish_path is required for static_site")
+	}
+	if serviceType == "web_service" && startCommand == "" {
+		return fmt.Errorf("start_command is required for web_service")
+	}
+	return nil
 }

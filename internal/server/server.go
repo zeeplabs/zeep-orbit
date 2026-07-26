@@ -65,7 +65,8 @@ func New(reg *registry.Registry, pool *db.Pool, port int) (*Server, error) {
 	githubConfigH := dashboard.NewGitHubConfigHandler(pool)
 	githubTemplatesH := dashboard.NewGitHubTemplatesHandler(pool)
 	frontendAppsH := dashboard.NewFrontendAppsHandler(pool)
-	r := newRouter(reg, h, pool, logger, dashH, githubConfigH, githubTemplatesH, frontendAppsH)
+	deployProviderH := dashboard.NewDeployProviderConfigHandler(pool)
+	r := newRouter(reg, h, pool, logger, dashH, githubConfigH, githubTemplatesH, frontendAppsH, deployProviderH)
 
 	s := &Server{
 		httpServer: &http.Server{
@@ -128,7 +129,7 @@ func buildLogger() (*zap.Logger, error) {
 }
 
 // newRouter builds the chi.Mux with all routes and middleware.
-func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Logger, dashH *dashboard.Handler, githubConfigH *dashboard.GitHubConfigHandler, githubTemplatesH *dashboard.GitHubTemplatesHandler, frontendAppsH *dashboard.FrontendAppsHandler) *chi.Mux {
+func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Logger, dashH *dashboard.Handler, githubConfigH *dashboard.GitHubConfigHandler, githubTemplatesH *dashboard.GitHubTemplatesHandler, frontendAppsH *dashboard.FrontendAppsHandler, deployProviderH *dashboard.DeployProviderConfigHandler) *chi.Mux {
 	logBuf := dashH.Logs
 	r := chi.NewRouter()
 
@@ -224,6 +225,9 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Post("/api/frontend-apps/{id}/reveal-key", frontendAppsH.RevealKey)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/frontend-apps/{id}/sync/retry", frontendAppsH.SyncRetry)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/frontend-apps/{id}/sync/regenerate", frontendAppsH.SyncRegenerate)
+		r.With(dashboard.RequireAuth(pool)).Post("/api/frontend-apps/{id}/deploy/retry", frontendAppsH.DeployRetry)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/deploy-provider/status", deployProviderH.Status)
+		r.With(dashboard.RequireAuth(pool)).Post("/api/deploy-provider/config", deployProviderH.UpsertConfig)
 		r.Handle("/*", dashboard.StaticHandler())
 	})
 
