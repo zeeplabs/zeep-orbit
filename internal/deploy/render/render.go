@@ -65,8 +65,10 @@ func (c *Client) do(ctx context.Context, method, path string, body interface{}) 
 }
 
 type ownerResponse struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	Owner struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	} `json:"owner"`
 }
 
 func ValidateAPIKey(ctx context.Context, apiKey string) error {
@@ -118,7 +120,7 @@ func NewRenderProvider(ctx context.Context, apiKey, projectID string) (*RenderPr
 
 	return &RenderProvider{
 		client:    client,
-		ownerID:   owners[0].ID,
+		ownerID:   owners[0].Owner.ID,
 		projectID: projectID,
 	}, nil
 }
@@ -137,7 +139,7 @@ func toEnvVarList(envVars map[string]string) []map[string]string {
 type createServiceRequest struct {
 	Type           string              `json:"type"`
 	Name           string              `json:"name"`
-	OwnerID        string              `json:"ownerID"`
+	OwnerID        string              `json:"ownerId"`
 	ProjectID      string              `json:"projectId,omitempty"`
 	Repo           string              `json:"repo"`
 	AutoDeploy     string              `json:"autoDeploy"`
