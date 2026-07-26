@@ -221,11 +221,11 @@ function FrontendCard({ app, index, onSync, onDelete, onDeployRetry, onSetDomain
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease, delay: index * 0.07 }}
-      className="group relative rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5 transition-all duration-200 hover:bg-white/[0.06] brand-border-hover"
+      className="group relative flex flex-col rounded-2xl border border-white/[0.06] bg-white/[0.03] p-5 transition-all duration-200 hover:bg-white/[0.06] brand-border-hover"
     >
       <div className="absolute left-5 right-5 top-0 h-[2px] rounded-full brand-accent-bar opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
 
-      {/* Header: name + date */}
+      {/* HEADER */}
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0">
           <h3 className="text-sm font-bold text-[#F8FAFC] truncate">{app.name}</h3>
@@ -234,87 +234,89 @@ function FrontendCard({ app, index, onSync, onDelete, onDeployRetry, onSetDomain
         <span className="text-[10px] text-[#64748B] shrink-0 mt-0.5">{createdAt}</span>
       </div>
 
-      {/* Status row */}
-      <div className="flex flex-wrap items-center gap-2 mb-3">
-        {/* Repo status */}
-        <span className={cn(
-          "inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full",
-          repoReady ? "bg-[#22C55E]/10 text-[#22C55E]" : "bg-[#EF4444]/10 text-[#EF4444]",
-        )}>
-          <span className={cn("size-1.5 rounded-full", repoReady ? "bg-[#22C55E]" : "bg-[#EF4444]")} />
-          {repoReady ? t("frontendApps.repo", "Repo ready") : t("frontendApps.repoFailed", "Repo failed")}
-        </span>
-
-        {/* Deploy status */}
-        {!deployPending && (
+      {/* CONTENT */}
+      <div className="flex-1 space-y-2.5 mb-3">
+        <div className="flex flex-wrap items-center gap-2">
           <span className={cn(
             "inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full",
-            deployReady ? "bg-[#3B82F6]/10 text-[#3B82F6]" : "bg-[#EF4444]/10 text-[#EF4444]",
+            repoReady ? "bg-[#22C55E]/10 text-[#22C55E]" : "bg-[#EF4444]/10 text-[#EF4444]",
           )}>
-            <span className={cn("size-1.5 rounded-full", deployReady ? "bg-[#3B82F6]" : "bg-[#EF4444]")} />
-            {deployReady ? t("frontendApps.deployed", "Deployed") : t("frontendApps.deployFailed", "Deploy failed")}
+            <span className={cn("size-1.5 rounded-full", repoReady ? "bg-[#22C55E]" : "bg-[#EF4444]")} />
+            {repoReady ? t("frontendApps.repo", "Repo ready") : t("frontendApps.repoFailed", "Repo failed")}
           </span>
+
+          {!deployPending && (
+            <span className={cn(
+              "inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full",
+              deployReady ? "bg-[#3B82F6]/10 text-[#3B82F6]" : "bg-[#EF4444]/10 text-[#EF4444]",
+            )}>
+              <span className={cn("size-1.5 rounded-full", deployReady ? "bg-[#3B82F6]" : "bg-[#EF4444]")} />
+              {deployReady ? t("frontendApps.deployed", "Deployed") : t("frontendApps.deployFailed", "Deploy failed")}
+            </span>
+          )}
+
+          <Badge className="gap-1 text-[10px]" variant="outline"
+            style={{ borderColor: "rgba(var(--brand-primary-rgb), 0.15)", backgroundColor: "rgba(var(--brand-primary-rgb), 0.08)", color: "var(--brand-light)" }}>
+            {app.template_name}
+          </Badge>
+        </div>
+
+        {deployFailed && app.deploy_error_message && (
+          <div className="p-2.5 rounded-lg bg-[#EF4444]/5 border border-[#EF4444]/10 text-[11px] text-[#EF4444]/90 leading-relaxed line-clamp-2"
+            title={app.deploy_error_message}>
+            {app.deploy_error_message}
+          </div>
         )}
 
-        {/* Template badge */}
-        <Badge className="gap-1 text-[10px]" variant="outline"
-          style={{ borderColor: "rgba(var(--brand-primary-rgb), 0.15)", backgroundColor: "rgba(var(--brand-primary-rgb), 0.08)", color: "var(--brand-light)" }}>
-          {app.template_name}
-        </Badge>
+        {deployReady && domain && (
+          <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-[#3B82F6]/5 border border-[#3B82F6]/10">
+            <a href={app.custom_domain ? `https://${app.custom_domain}` : app.deploy_url}
+              target="_blank" rel="noopener noreferrer"
+              className="text-[12px] font-medium text-[#3B82F6] hover:underline truncate">
+              {domain}
+            </a>
+            <button onClick={() => onSetDomain(app)} title={t("frontendApps.editDomain", "Edit domain")}
+              className="text-[#64748B] hover:text-[#94A3B8] shrink-0 cursor-pointer">
+              <Pencil size={12} />
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Deploy error message */}
-      {deployFailed && app.deploy_error_message && (
-        <div className="mb-3 p-2.5 rounded-lg bg-[#EF4444]/5 border border-[#EF4444]/10 text-[11px] text-[#EF4444]/90 leading-relaxed line-clamp-2"
-          title={app.deploy_error_message}>
-          {app.deploy_error_message}
+      {/* FOOTER */}
+      <div className="flex items-center justify-end gap-1 pt-2 border-t border-white/[0.04]">
+        <div className="flex items-center gap-1 flex-1">
+          {repoReady && (
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+              <Button variant="outline" size="icon" onClick={() => onSync(app)} title="Sync"
+                className="size-7 rounded-lg border-white/[0.10] bg-white/[0.04] text-[#3B82F6] hover:bg-[#3B82F6]/10 hover:text-[#60A5FA] cursor-pointer">
+                <Key size={12} strokeWidth={1.5} />
+              </Button>
+            </motion.div>
+          )}
+          {!repoReady && (
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+              <Button variant="outline" size="icon" onClick={() => onSync(app)} title="Retry"
+                className="size-7 rounded-lg border-white/[0.10] bg-white/[0.04] text-[#F59E0B] hover:bg-[#F59E0B]/10 cursor-pointer">
+                <RotateCcw size={12} strokeWidth={1.5} />
+              </Button>
+            </motion.div>
+          )}
+          {deployFailed && (
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+              <Button variant="outline" size="icon" onClick={() => onDeployRetry(app)} title="Retry deploy"
+                className="size-7 rounded-lg border-white/[0.10] bg-white/[0.04] text-[#F59E0B] hover:bg-[#F59E0B]/10 cursor-pointer">
+                <Rocket size={12} strokeWidth={1.5} />
+              </Button>
+            </motion.div>
+          )}
         </div>
-      )}
-
-      {/* Domain URL */}
-      {deployReady && domain && (
-        <div className="flex items-center justify-between gap-2 mb-3 p-2.5 rounded-lg bg-[#3B82F6]/5 border border-[#3B82F6]/10">
-          <a href={app.custom_domain ? `https://${app.custom_domain}` : app.deploy_url}
-            target="_blank" rel="noopener noreferrer"
-            className="text-[12px] font-medium text-[#3B82F6] hover:underline truncate">
-            {domain}
-          </a>
-          <button onClick={() => onSetDomain(app)} title={t("frontendApps.editDomain", "Edit domain")}
-            className="text-[#64748B] hover:text-[#94A3B8] shrink-0">
-            <Pencil size={12} />
-          </button>
-        </div>
-      )}
-
-      {/* Actions */}
-      <div className="flex items-center gap-1 pt-1 border-t border-white/[0.04]">
-        {repoReady && (
-          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-            onClick={() => onSync(app)} title={t("frontendApps.sync", "Sync")}
-            className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-medium text-[#94A3B8] hover:bg-white/[0.06] hover:text-[#F8FAFC] transition-colors">
-            <Key size={12} />Sync
-          </motion.button>
-        )}
-        {!repoReady && (
-          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-            onClick={() => onSync(app)} title={t("frontendApps.retry", "Retry")}
-            className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-medium text-[#F59E0B] hover:bg-[#F59E0B]/10 transition-colors">
-            <RotateCcw size={12} />Retry
-          </motion.button>
-        )}
-        {deployFailed && (
-          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-            onClick={() => onDeployRetry(app)} title={t("frontendApps.deployRetry", "Retry deploy")}
-            className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-medium text-[#F59E0B] hover:bg-[#F59E0B]/10 transition-colors">
-            <Rocket size={12} />Deploy Retry
-          </motion.button>
-        )}
-        <div className="flex-1" />
-        <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-          onClick={() => onDelete(app)} title={t("frontendApps.delete", "Delete")}
-          className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium text-[#EF4444]/70 hover:bg-[#EF4444]/10 hover:text-[#EF4444] transition-colors">
-          <Trash2 size={12} />
-        </motion.button>
+        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+          <Button variant="outline" size="icon" onClick={() => onDelete(app)} title="Deletar"
+            className="size-7 rounded-lg border-red-500/20 bg-red-500/[0.06] text-red-400 hover:bg-red-500/10 hover:text-red-400 cursor-pointer">
+            <Trash2 size={12} strokeWidth={1.5} />
+          </Button>
+        </motion.div>
       </div>
     </motion.div>
   );
