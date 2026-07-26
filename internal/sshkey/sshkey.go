@@ -3,7 +3,6 @@ package sshkey
 import (
 	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/x509"
 	"encoding/pem"
 	"fmt"
 
@@ -23,14 +22,11 @@ func GenerateKeyPair() (publicKey string, privateKey string, err error) {
 	publicKey = string(ssh.MarshalAuthorizedKey(sshPub))
 	publicKey = publicKey[:len(publicKey)-1] // trim trailing newline added by MarshalAuthorizedKey
 
-	privBytes, err := x509.MarshalPKCS8PrivateKey(priv)
+	block, err := ssh.MarshalPrivateKey(priv, "")
 	if err != nil {
 		return "", "", fmt.Errorf("sshkey: marshal private key: %w", err)
 	}
-	privateKey = string(pem.EncodeToMemory(&pem.Block{
-		Type:  "PRIVATE KEY",
-		Bytes: privBytes,
-	}))
+	privateKey = string(pem.EncodeToMemory(block))
 
 	return publicKey, privateKey, nil
 }

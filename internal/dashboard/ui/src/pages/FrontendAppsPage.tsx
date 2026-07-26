@@ -238,8 +238,8 @@ export default function FrontendAppsPage() {
     }
   };
 
-  const cloneCommand = syncModalApp
-    ? `git clone git@github.com:${syncModalApp.slug}.git`
+  const cloneCommand = syncModalApp?.github_repo_url
+    ? `git clone ${syncModalApp.github_repo_url.replace("https://github.com/", "git@github.com:")}.git`
     : "";
 
   const agentPrompt = syncModalApp

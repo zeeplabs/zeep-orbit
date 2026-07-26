@@ -18,11 +18,11 @@ func TestGenerateKeyPair(t *testing.T) {
 		t.Errorf("public key too short: %d chars", len(pub))
 	}
 
-	if !strings.HasPrefix(priv, "-----BEGIN PRIVATE KEY-----") {
-		t.Errorf("private key should be PEM-encoded, got prefix: %s", priv[:50])
+	if !strings.HasPrefix(priv, "-----BEGIN OPENSSH PRIVATE KEY-----") {
+		t.Errorf("private key should be OpenSSH format, got prefix: %s", priv[:50])
 	}
-	if !strings.Contains(priv, "-----END PRIVATE KEY-----") {
-		t.Error("private key missing PEM footer")
+	if !strings.Contains(priv, "-----END OPENSSH PRIVATE KEY-----") {
+		t.Error("private key missing OpenSSH PEM footer")
 	}
 }
 
