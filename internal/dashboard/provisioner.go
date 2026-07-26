@@ -121,6 +121,30 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 		 ON zeep_system.system_config ((TRUE))`,
 		`INSERT INTO zeep_system.system_config (soft_delete_enabled)
 		 SELECT false WHERE NOT EXISTS (SELECT 1 FROM zeep_system.system_config)`,
+		`CREATE TABLE IF NOT EXISTS zeep_system.github_app_config (
+			app_id           TEXT NOT NULL,
+			client_id        TEXT NOT NULL,
+			client_secret    TEXT NOT NULL,
+			private_key      TEXT NOT NULL,
+			webhook_secret   TEXT NOT NULL,
+			org_login        TEXT NOT NULL DEFAULT '',
+			installation_id  BIGINT,
+			installed_at     TIMESTAMPTZ,
+			updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_github_app_config_singleton
+		 ON zeep_system.github_app_config ((TRUE))`,
+		`CREATE TABLE IF NOT EXISTS zeep_system.github_templates (
+			id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			name         TEXT NOT NULL,
+			description  TEXT NOT NULL DEFAULT '',
+			github_owner TEXT NOT NULL,
+			github_repo  TEXT NOT NULL,
+			framework    TEXT NOT NULL DEFAULT '',
+			active       BOOLEAN NOT NULL DEFAULT true,
+			created_by   TEXT NOT NULL,
+			created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
 	}
 
 	for _, stmt := range stmts {
