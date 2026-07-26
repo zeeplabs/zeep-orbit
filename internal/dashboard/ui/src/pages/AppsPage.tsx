@@ -166,11 +166,12 @@ function AppCard({ app, index, isSuperadmin, onEdit, onDelete, onUsers }: AppCar
       <div className="flex items-center justify-between gap-2 pt-2 border-t border-white/[0.04]">
         <span className="text-[10px] text-[#64748B]">{createdAt}</span>
         <div className="flex gap-1">
-          <Button variant="outline" size="icon" onClick={() => onUsers(app)} title="Usuários"
-            className="size-7 rounded-lg border-white/[0.10] bg-white/[0.04] text-[#94A3B8] hover:bg-white/[0.08] hover:text-white cursor-pointer">
-            <Users size={12} strokeWidth={1.5} />
-          </Button>
-        </motion.div>
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Button variant="outline" size="icon" onClick={() => onUsers(app)} title="Usuários"
+              className="size-7 rounded-lg border-white/[0.10] bg-white/[0.04] text-[#94A3B8] hover:bg-white/[0.08] hover:text-white cursor-pointer">
+              <Users size={12} strokeWidth={1.5} />
+            </Button>
+          </motion.div>
         <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
           <Button variant="outline" size="icon" onClick={() => window.open(`/docs/${app.name}`, '_blank')} title="API Docs"
             className="size-7 rounded-lg border-white/[0.10] bg-white/[0.04] text-[#94A3B8] hover:bg-white/[0.08] hover:text-white cursor-pointer">
@@ -648,7 +649,7 @@ AFTER CLONE
               </div>
 
               {frontendApps.length > 0 && (
-                <>
+                <div className="mt-8">
                   {hasBoth && <SectionHeader icon={Globe} label={t("apps.frontendSection", "Frontend Apps")} />}
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-4 mt-2">
                     {frontendApps.map((app, i) => (
@@ -659,7 +660,7 @@ AFTER CLONE
                         onSetDomain={openDomainModal} />
                     ))}
                   </div>
-                </>
+                </div>
               )}
             </motion.div>
           )}
