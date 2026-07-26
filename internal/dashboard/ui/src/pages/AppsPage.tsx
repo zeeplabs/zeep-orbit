@@ -269,7 +269,9 @@ function FrontendCard({ app, index, onSync, onDelete, onDeployRetry, onSetDomain
         )}
 
         {deployReady && domain && (
-          <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-[#3B82F6]/5 border border-[#3B82F6]/10">
+          <div className="space-y-1">
+            <span className="text-[10px] font-medium text-[#64748B] uppercase tracking-wider">{t("frontendApps.customDomain", "Custom Domain")}</span>
+            <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-[#3B82F6]/5 border border-[#3B82F6]/10">
             <a href={app.custom_domain ? `https://${app.custom_domain}` : app.deploy_url}
               target="_blank" rel="noopener noreferrer"
               className="text-[12px] font-medium text-[#3B82F6] hover:underline truncate">
@@ -279,6 +281,7 @@ function FrontendCard({ app, index, onSync, onDelete, onDeployRetry, onSetDomain
               className="text-[#64748B] hover:text-[#94A3B8] shrink-0 cursor-pointer">
               <Pencil size={12} />
             </button>
+          </div>
           </div>
         )}
       </div>
