@@ -137,7 +137,7 @@ func toEnvVarList(envVars map[string]string) []map[string]string {
 type createServiceRequest struct {
 	Type           string              `json:"type"`
 	Name           string              `json:"name"`
-	OwnerID        string              `json:"ownerId"`
+	OwnerID        string              `json:"ownerID"`
 	ProjectID      string              `json:"projectId,omitempty"`
 	Repo           string              `json:"repo"`
 	AutoDeploy     string              `json:"autoDeploy"`
