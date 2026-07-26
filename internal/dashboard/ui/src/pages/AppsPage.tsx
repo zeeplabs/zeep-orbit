@@ -207,11 +207,14 @@ interface FrontendCardProps {
 function FrontendCard({ app, index, onSync, onDelete, onDeployRetry, onSetDomain }: FrontendCardProps) {
   const { t } = useTranslation();
   const createdAt = new Date(app.created_at).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
+    day: "2-digit", month: "short", year: "numeric",
   });
-  const initial = app.name.charAt(0).toUpperCase();
+
+  const repoReady = app.status === "ready";
+  const deployReady = app.deploy_status === "ready";
+  const deployFailed = app.deploy_status === "failed";
+  const deployPending = app.deploy_status === "pending" || !app.deploy_status;
+  const domain = app.custom_domain || (app.deploy_url?.startsWith("https://") ? app.deploy_url.replace("https://", "") : app.deploy_url);
 
   return (
     <motion.div
@@ -222,97 +225,96 @@ function FrontendCard({ app, index, onSync, onDelete, onDeployRetry, onSetDomain
     >
       <div className="absolute left-5 right-5 top-0 h-[2px] rounded-full brand-accent-bar opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
 
-      <div className="flex items-center gap-3.5">
-        <div
-          className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.06] text-[15px] font-extrabold"
-          style={{
-            background: "linear-gradient(to bottom right, rgba(34, 197, 94, 0.15), rgba(16, 185, 129, 0.15))",
-            color: "#22C55E",
-          }}
-        >
-          <Globe size={18} strokeWidth={2} />
+      {/* Header: name + date */}
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="min-w-0">
+          <h3 className="text-sm font-bold text-[#F8FAFC] truncate">{app.name}</h3>
+          <code className="text-[11px] text-[#64748B]">{app.slug}</code>
         </div>
-        <div className="min-w-0 flex-1 flex items-center justify-between gap-2">
-          <div className="min-w-0">
-            <h3 className="truncate text-sm font-bold text-[#F8FAFC]">{app.name}</h3>
-            <div className="flex flex-wrap gap-1.5 mt-1">
-              <code className="text-[10px] text-[#64748B] bg-white/[0.04] px-1.5 py-0.5 rounded">{app.slug}</code>
-              <Badge className="gap-1 text-[10px]" variant="outline"
-                style={{ borderColor: "rgba(var(--brand-primary-rgb), 0.15)", backgroundColor: "rgba(var(--brand-primary-rgb), 0.08)", color: "var(--brand-light)" }}>
-                {app.template_name}
-              </Badge>
-              {app.status === "ready" ? (
-                <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-[#22C55E]">
-                  <CheckCircle2 size={10} />{t("frontendApps.statusReady", "Ready")}
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-[#EF4444]" title={app.error_message}>
-                  <XCircle size={10} />{t("frontendApps.statusFailed", "Failed")}
-                </span>
-              )}
-              {app.status === "ready" && app.deploy_status && app.deploy_status !== "pending" && (
-                app.deploy_status === "ready" ? (
-                  <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-[#3B82F6]" title={app.deploy_url}>
-                    <CheckCircle2 size={10} />Deploy
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-[#EF4444]" title={app.deploy_error_message}>
-                    <XCircle size={10} />Deploy failed
-                  </span>
-                )
-              )}
-              {app.deploy_status === "ready" && (app.custom_domain || app.deploy_url) && (
-                <div className="flex items-center gap-1 mt-1">
-                  <a href={app.custom_domain ? `https://${app.custom_domain}` : app.deploy_url} target="_blank" rel="noopener noreferrer"
-                    className="text-[10px] text-[#3B82F6] hover:underline">
-                    {app.custom_domain || app.deploy_url.replace("https://", "")}
-                  </a>
-                  <button
-                    onClick={() => onSetDomain(app)}
-                    title="Set custom domain"
-                    className="text-[#64748B] hover:text-[#94A3B8]"
-                  >
-                    <Pencil size={10} />
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-          <span className="text-[10px] text-[#64748B] tracking-wide shrink-0 whitespace-nowrap">{createdAt}</span>
-        </div>
+        <span className="text-[10px] text-[#64748B] shrink-0 mt-0.5">{createdAt}</span>
       </div>
 
-      <div className="mt-3 flex items-center justify-end gap-1">
-        {app.status === "ready" && (
-          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Button variant="outline" size="icon" onClick={() => onSync(app)} title="Sync"
-              className="size-7 rounded-lg border-white/[0.10] bg-white/[0.04] text-[#3B82F6] hover:bg-[#3B82F6]/10 hover:text-[#60A5FA]">
-              <Key size={12} strokeWidth={1.5} />
-            </Button>
-          </motion.div>
+      {/* Status row */}
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        {/* Repo status */}
+        <span className={cn(
+          "inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full",
+          repoReady ? "bg-[#22C55E]/10 text-[#22C55E]" : "bg-[#EF4444]/10 text-[#EF4444]",
+        )}>
+          <span className={cn("size-1.5 rounded-full", repoReady ? "bg-[#22C55E]" : "bg-[#EF4444]")} />
+          {repoReady ? t("frontendApps.repo", "Repo ready") : t("frontendApps.repoFailed", "Repo failed")}
+        </span>
+
+        {/* Deploy status */}
+        {!deployPending && (
+          <span className={cn(
+            "inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full",
+            deployReady ? "bg-[#3B82F6]/10 text-[#3B82F6]" : "bg-[#EF4444]/10 text-[#EF4444]",
+          )}>
+            <span className={cn("size-1.5 rounded-full", deployReady ? "bg-[#3B82F6]" : "bg-[#EF4444]")} />
+            {deployReady ? t("frontendApps.deployed", "Deployed") : t("frontendApps.deployFailed", "Deploy failed")}
+          </span>
         )}
-        {app.status === "failed" && (
-          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Button variant="outline" size="icon" onClick={() => onSync(app)} title="Retry"
-              className="size-7 rounded-lg border-white/[0.10] bg-white/[0.04] text-[#F59E0B] hover:bg-[#F59E0B]/10">
-              <RotateCcw size={12} strokeWidth={1.5} />
-            </Button>
-          </motion.div>
+
+        {/* Template badge */}
+        <Badge className="gap-1 text-[10px]" variant="outline"
+          style={{ borderColor: "rgba(var(--brand-primary-rgb), 0.15)", backgroundColor: "rgba(var(--brand-primary-rgb), 0.08)", color: "var(--brand-light)" }}>
+          {app.template_name}
+        </Badge>
+      </div>
+
+      {/* Deploy error message */}
+      {deployFailed && app.deploy_error_message && (
+        <div className="mb-3 p-2.5 rounded-lg bg-[#EF4444]/5 border border-[#EF4444]/10 text-[11px] text-[#EF4444]/90 leading-relaxed line-clamp-2"
+          title={app.deploy_error_message}>
+          {app.deploy_error_message}
+        </div>
+      )}
+
+      {/* Domain URL */}
+      {deployReady && domain && (
+        <div className="flex items-center justify-between gap-2 mb-3 p-2.5 rounded-lg bg-[#3B82F6]/5 border border-[#3B82F6]/10">
+          <a href={app.custom_domain ? `https://${app.custom_domain}` : app.deploy_url}
+            target="_blank" rel="noopener noreferrer"
+            className="text-[12px] font-medium text-[#3B82F6] hover:underline truncate">
+            {domain}
+          </a>
+          <button onClick={() => onSetDomain(app)} title={t("frontendApps.editDomain", "Edit domain")}
+            className="text-[#64748B] hover:text-[#94A3B8] shrink-0">
+            <Pencil size={12} />
+          </button>
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="flex items-center gap-1 pt-1 border-t border-white/[0.04]">
+        {repoReady && (
+          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+            onClick={() => onSync(app)} title={t("frontendApps.sync", "Sync")}
+            className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-medium text-[#94A3B8] hover:bg-white/[0.06] hover:text-[#F8FAFC] transition-colors">
+            <Key size={12} />Sync
+          </motion.button>
         )}
-        {app.status === "ready" && app.deploy_status === "failed" && (
-          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Button variant="outline" size="icon" onClick={() => onDeployRetry(app)} title="Retry deploy"
-              className="size-7 rounded-lg border-white/[0.10] bg-white/[0.04] text-[#F59E0B] hover:bg-[#F59E0B]/10">
-              <Rocket size={12} strokeWidth={1.5} />
-            </Button>
-          </motion.div>
+        {!repoReady && (
+          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+            onClick={() => onSync(app)} title={t("frontendApps.retry", "Retry")}
+            className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-medium text-[#F59E0B] hover:bg-[#F59E0B]/10 transition-colors">
+            <RotateCcw size={12} />Retry
+          </motion.button>
         )}
-        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-          <Button variant="outline" size="icon" onClick={() => onDelete(app)} title="Deletar"
-            className="size-7 rounded-lg border-red-500/20 bg-red-500/[0.06] text-red-400 hover:bg-red-500/10 hover:text-red-400">
-            <Trash2 size={12} strokeWidth={1.5} />
-          </Button>
-        </motion.div>
+        {deployFailed && (
+          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+            onClick={() => onDeployRetry(app)} title={t("frontendApps.deployRetry", "Retry deploy")}
+            className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-medium text-[#F59E0B] hover:bg-[#F59E0B]/10 transition-colors">
+            <Rocket size={12} />Deploy Retry
+          </motion.button>
+        )}
+        <div className="flex-1" />
+        <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+          onClick={() => onDelete(app)} title={t("frontendApps.delete", "Delete")}
+          className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium text-[#EF4444]/70 hover:bg-[#EF4444]/10 hover:text-[#EF4444] transition-colors">
+          <Trash2 size={12} />
+        </motion.button>
       </div>
     </motion.div>
   );
