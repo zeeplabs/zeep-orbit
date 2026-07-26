@@ -20,6 +20,7 @@ import {
   XCircle,
   RotateCcw,
   Loader2,
+  Rocket,
 } from "lucide-react";
 import { useApps, useDeleteApp, AppDef } from "../lib/api";
 import DeleteConfirmDialog from "../components/DeleteConfirmDialog";
@@ -198,9 +199,10 @@ interface FrontendCardProps {
   index: number;
   onSync: (app: FrontendApp) => void;
   onDelete: (app: FrontendApp) => void;
+  onDeployRetry: (app: FrontendApp) => void;
 }
 
-function FrontendCard({ app, index, onSync, onDelete }: FrontendCardProps) {
+function FrontendCard({ app, index, onSync, onDelete, onDeployRetry }: FrontendCardProps) {
   const { t } = useTranslation();
   const createdAt = new Date(app.created_at).toLocaleDateString("pt-BR", {
     day: "2-digit",
@@ -277,6 +279,14 @@ function FrontendCard({ app, index, onSync, onDelete }: FrontendCardProps) {
             <Button variant="outline" size="icon" onClick={() => onSync(app)} title="Retry"
               className="size-7 rounded-lg border-white/[0.10] bg-white/[0.04] text-[#F59E0B] hover:bg-[#F59E0B]/10">
               <RotateCcw size={12} strokeWidth={1.5} />
+            </Button>
+          </motion.div>
+        )}
+        {app.status === "ready" && app.deploy_status === "failed" && (
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Button variant="outline" size="icon" onClick={() => onDeployRetry(app)} title="Retry deploy"
+              className="size-7 rounded-lg border-white/[0.10] bg-white/[0.04] text-[#F59E0B] hover:bg-[#F59E0B]/10">
+              <Rocket size={12} strokeWidth={1.5} />
             </Button>
           </motion.div>
         )}
@@ -438,6 +448,11 @@ export default function AppsPage() {
     setFeDeleteTarget(null);
   };
 
+  const handleDeployRetry = async (app: FrontendApp) => {
+    await fetch(`/dashboard/api/frontend-apps/${app.id}/deploy/retry`, { method: "POST", credentials: "include" });
+    fetchFrontendApps();
+  };
+
   // Sync
   const openSync = async (app: FrontendApp) => {
     setSyncApp(app); setSyncInfo(null); setRevealedKey(null); setSyncLoading(true);
@@ -580,7 +595,8 @@ AFTER CLONE
                     {frontendApps.map((app, i) => (
                       <FrontendCard key={app.id} app={app} index={i}
                         onSync={openSync}
-                        onDelete={(a) => setFeDeleteTarget(a)} />
+                        onDelete={(a) => setFeDeleteTarget(a)}
+                        onDeployRetry={handleDeployRetry} />
                     ))}
                   </div>
                 </>
