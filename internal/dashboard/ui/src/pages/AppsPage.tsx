@@ -573,7 +573,7 @@ export default function AppsPage() {
     : "";
 
   const agentPrompt = syncApp && revealedKey
-    ? `You are configuring SSH-based Git access for a frontend app managed by Zeep Orbit.
+    ? `You are configuring SSH-based Git access for a frontend app managed by Orbit.
 The app "${syncApp.name}" has a GitHub repository. Your goal is to clone it and start working.
 
 ---
