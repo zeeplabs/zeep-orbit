@@ -207,10 +207,17 @@ func (p *RenderProvider) CreateService(ctx context.Context, params deploy.Create
 		if err := json.Unmarshal(body, &parsed); err != nil {
 			return deploy.ServiceInfo{}, fmt.Errorf("render: parse create service response: %w", err)
 		}
-		return deploy.ServiceInfo{
+		info := deploy.ServiceInfo{
 			ServiceID: parsed.Service.ID,
 			URL:       parsed.Service.ServiceDetails.URL,
-		}, nil
+		}
+
+		// Assign to project if configured, ignore failure (best-effort).
+		if p.projectID != "" {
+			_ = p.assignToProject(ctx, parsed.Service.ID)
+		}
+
+		return info, nil
 	}
 
 	if resp.StatusCode == http.StatusNotFound {
@@ -236,4 +243,17 @@ func (p *RenderProvider) DeleteService(ctx context.Context, serviceID string) er
 		return nil // already deleted — not an error for best-effort
 	}
 	return fmt.Errorf("render: delete service failed (status %d): %s", resp.StatusCode, string(body))
+}
+
+func (p *RenderProvider) assignToProject(ctx context.Context, serviceID string) error {
+	resp, body, err := p.client.do(ctx, http.MethodPatch, "/services/"+serviceID, map[string]string{
+		"projectId": p.projectID,
+	})
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+	return fmt.Errorf("render: assign to project failed (status %d): %s", resp.StatusCode, string(body))
 }
