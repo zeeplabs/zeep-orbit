@@ -489,7 +489,7 @@ AFTER CLONE
 
       {/* Sync dialog */}
       <Dialog open={!!syncModalApp} onOpenChange={() => { setSyncModalApp(null); setRevealedKey(null); }}>
-        <DialogContent className="bg-[#0F0F17] border-white/[0.08] text-[#F8FAFC] max-w-lg">
+        <DialogContent className="bg-[#0F0F17] border-white/[0.08] text-[#F8FAFC] max-w-xl">
           <DialogHeader>
             <DialogTitle>{t("frontendApps.syncTitle", "Sync Setup")}{syncModalApp ? ` — ${syncModalApp.name}` : ""}</DialogTitle>
             <DialogDescription className="text-[#94A3B8]">
@@ -502,7 +502,7 @@ AFTER CLONE
               <Loader2 className="h-6 w-6 animate-spin text-[#64748B]" />
             </div>
           ) : syncInfo ? (
-            <div className="space-y-4">
+            <div className="space-y-4 min-w-0">
               <div className="flex items-center justify-between p-3 rounded-lg bg-white/[0.04] border border-white/[0.06]">
                 <span className="text-sm text-[#94A3B8]">{t("frontendApps.syncStatus", "Sync Status")}</span>
                 {syncInfo.sync_status === "ready" ? (
@@ -533,14 +533,14 @@ AFTER CLONE
               <div className="space-y-2">
                 <Label className="text-[#94A3B8] text-xs">{t("frontendApps.cloneCommand", "Clone command")}</Label>
                 <div className="flex items-center gap-2">
-                  <code className="flex-1 text-xs text-[#94A3B8] bg-[#0F0F17] border border-white/[0.08] rounded px-3 py-2 font-mono">
+                  <code className="flex-1 text-xs text-[#94A3B8] bg-[#0F0F17] border border-white/[0.08] rounded px-3 py-2 font-mono break-all">
                     {cloneCommand}
                   </code>
                   <Button
                     size="sm"
                     variant="ghost"
                     onClick={() => { navigator.clipboard.writeText(cloneCommand); toast.success("Copied!"); }}
-                    className="h-8 text-xs text-[#64748B] hover:text-[#94A3B8]"
+                    className="h-8 text-xs text-[#64748B] hover:text-[#94A3B8] shrink-0"
                   >
                     <Copy className="h-3.5 w-3.5" />
                   </Button>
@@ -563,8 +563,8 @@ AFTER CLONE
                 <div className="space-y-3">
                   <div>
                     <Label className="text-[#94A3B8] text-xs">{t("frontendApps.privateKey", "Private Key")}</Label>
-                    <div className="relative mt-1">
-                      <code className="block text-xs text-[#F8FAFC] bg-[#0F0F17] border border-white/[0.08] rounded p-3 font-mono whitespace-pre-wrap max-h-32 overflow-auto">
+                    <div className="relative mt-1 overflow-hidden rounded border border-white/[0.08]">
+                      <code className="block text-xs text-[#F8FAFC] bg-[#0F0F17] rounded p-3 pr-10 font-mono whitespace-pre-wrap break-all max-h-32 overflow-auto">
                         {revealedKey}
                       </code>
                       <Button
@@ -580,8 +580,8 @@ AFTER CLONE
 
                   <div>
                     <Label className="text-[#94A3B8] text-xs">{t("frontendApps.agentPrompt", "Copy this prompt for your AI agent")}</Label>
-                    <div className="relative mt-1">
-                      <code className="block text-xs text-[#94A3B8] bg-[#0F0F17] border border-white/[0.08] rounded p-3 font-mono whitespace-pre-wrap max-h-48 overflow-auto">
+                    <div className="relative mt-1 overflow-hidden rounded border border-white/[0.08]">
+                      <code className="block text-xs text-[#94A3B8] bg-[#0F0F17] rounded p-3 pr-10 font-mono whitespace-pre-wrap break-all max-h-48 overflow-auto">
                         {agentPrompt}
                       </code>
                       <Button
