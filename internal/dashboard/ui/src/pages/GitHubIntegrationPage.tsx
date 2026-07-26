@@ -998,7 +998,7 @@ function DeployTab() {
             <input type="text" value={baseDomain} onChange={(e) => setBaseDomain(e.target.value)}
               placeholder="meusite.com" className={inputClass} />
             <p className="mt-1 text-[11px] text-[#64748B]">{t("deploy.baseDomainHint", "Users can pick a subdomain and the full domain will be configured on Render. Leave empty to use Render's default URL.")}</p>
-            <p className="mt-1 text-[11px] text-[#64748B]">{t("deploy.dnsHint", "Important: set up a wildcard CNAME record *.yourdomain.com → Render at your DNS provider for auto-verification.")}</p>
+            <p className="mt-1 text-[11px] text-[#64748B]">{t("deploy.dnsHint", "Each subdomain needs a CNAME pointing to the app's Render URL. The exact record is shown in the domain modal when configuring.")}</p>
           </div>
           {message && <p className={`text-[12px] ${messageType === "error" ? "text-[#EF4444]" : "text-[#22C55E]"}`}>{message}</p>}
           <Button onClick={handleSave} disabled={saving || (!status?.connected && !apiKey.trim())}

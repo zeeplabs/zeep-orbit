@@ -261,11 +261,11 @@ function FrontendCard({ app, index, onSync, onDelete, onDeployRetry, onSetDomain
                   </span>
                 )
               )}
-              {app.deploy_status === "ready" && app.deploy_url && (
+              {app.deploy_status === "ready" && (app.custom_domain || app.deploy_url) && (
                 <div className="flex items-center gap-1 mt-1">
-                  <a href={app.deploy_url} target="_blank" rel="noopener noreferrer"
+                  <a href={app.custom_domain ? `https://${app.custom_domain}` : app.deploy_url} target="_blank" rel="noopener noreferrer"
                     className="text-[10px] text-[#3B82F6] hover:underline">
-                    {app.deploy_url.replace("https://", "")}
+                    {app.custom_domain || app.deploy_url.replace("https://", "")}
                   </a>
                   <button
                     onClick={() => onSetDomain(app)}
@@ -904,9 +904,9 @@ AFTER CLONE
                     {domainSub || "..."}.{baseDomain}
                   </div>
                 </div>
-                <p className="text-[10px] text-[#64748B] text-center">
-                  {t("frontendApps.dnsHint", "One-time setup: superadmin must add a wildcard CNAME record at the DNS provider:")}<br/>
-                  <code className="text-[#94A3B8]">*.{baseDomain} → Render</code>
+                <p className="text-[10px] text-[#64748B] text-center mt-2">
+                  {t("frontendApps.dnsHint", "DNS setup: add this CNAME record at your DNS provider:")}<br/>
+                  <code className="text-[#94A3B8]">{domainSub || "..."}.{baseDomain} → {domainApp?.deploy_url?.replace("https://", "") || "..."}</code>
                 </p>
               </>
             )}

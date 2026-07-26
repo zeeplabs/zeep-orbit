@@ -611,20 +611,19 @@ func (h *FrontendAppsHandler) attemptDeploy(ctx context.Context, app *FrontendAp
 		return
 	}
 
-	deployURL := info.URL
-	customDomain := app.CustomDomain
-
-	if customDomain != "" {
-		deployURL = "https://" + customDomain
-	} else if dcfg.BaseDomain != "" && subdomain != "" && info.ServiceID != "" {
+	// Add custom domain if base_domain and subdomain are configured.
+	customDomain := ""
+	if dcfg.BaseDomain != "" && subdomain != "" && info.ServiceID != "" {
 		customDomain = subdomain + "." + dcfg.BaseDomain
 		if rp, ok := provider.(*render.RenderProvider); ok {
 			_ = rp.AddCustomDomain(ctx, info.ServiceID, customDomain)
 		}
-		deployURL = "https://" + customDomain
 	}
 
-	_, _ = UpdateFrontendAppDeploy(ctx, h.pool, app.ID, info.ServiceID, deployURL, "ready", "")
+	_, _ = UpdateFrontendAppDeploy(ctx, h.pool, app.ID, info.ServiceID, info.URL, "ready", "")
+	if customDomain != "" {
+		_ = UpdateFrontendAppDomain(ctx, h.pool, app.ID, customDomain, "https://"+customDomain)
+	}
 }
 
 func (h *FrontendAppsHandler) DeployRetry(w http.ResponseWriter, r *http.Request) {
