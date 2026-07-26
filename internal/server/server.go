@@ -63,7 +63,8 @@ func New(reg *registry.Registry, pool *db.Pool, port int) (*Server, error) {
 	h := NewHandler(pool, reg)
 	dashH := dashboard.NewHandler(pool, reg, logger)
 	githubConfigH := dashboard.NewGitHubConfigHandler(pool)
-	r := newRouter(reg, h, pool, logger, dashH, githubConfigH)
+	githubTemplatesH := dashboard.NewGitHubTemplatesHandler(pool)
+	r := newRouter(reg, h, pool, logger, dashH, githubConfigH, githubTemplatesH)
 
 	s := &Server{
 		httpServer: &http.Server{
@@ -126,7 +127,7 @@ func buildLogger() (*zap.Logger, error) {
 }
 
 // newRouter builds the chi.Mux with all routes and middleware.
-func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Logger, dashH *dashboard.Handler, githubConfigH *dashboard.GitHubConfigHandler) *chi.Mux {
+func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Logger, dashH *dashboard.Handler, githubConfigH *dashboard.GitHubConfigHandler, githubTemplatesH *dashboard.GitHubTemplatesHandler) *chi.Mux {
 	logBuf := dashH.Logs
 	r := chi.NewRouter()
 
@@ -207,6 +208,11 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Delete("/api/github/config", githubConfigH.DeleteConfig)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/github/status", githubConfigH.Status)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/github/install/start", githubConfigH.InstallStart)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/github/templates", githubTemplatesH.List)
+		r.With(dashboard.RequireAuth(pool)).Post("/api/github/templates", githubTemplatesH.Create)
+		r.With(dashboard.RequireAuth(pool)).Put("/api/github/templates/{id}", githubTemplatesH.Update)
+		r.With(dashboard.RequireAuth(pool)).Delete("/api/github/templates/{id}", githubTemplatesH.Delete)
+		r.With(dashboard.RequireAuth(pool)).Put("/api/github/templates/{id}/active", githubTemplatesH.SetActive)
 		r.Handle("/*", dashboard.StaticHandler())
 	})
 
