@@ -69,6 +69,7 @@ interface FrontendApp {
   deploy_status: string;
   deploy_url: string;
   deploy_error_message: string;
+  custom_domain: string;
 }
 
 interface Template {
