@@ -121,17 +121,22 @@ func (c *Client) VerifyTemplateRepo(ctx context.Context, owner, repo string) err
 	}
 }
 
-// CreateRepoFromTemplate creates a new private repository named newRepoSlug
-// from the given template repository, returning the new repository's
-// canonical web URL.
+// CreateRepoFromTemplate creates a new private repository named newRepoSlug,
+// owned by templateOwner, from the given template repository, returning the
+// new repository's canonical web URL. The request explicitly sets "owner" in
+// the request body: GitHub's generate endpoint defaults to the authenticated
+// user when owner is omitted, but installation access tokens have no
+// authenticated-user context, so omitting it fails with 422 "Invalid owner."
 func (c *Client) CreateRepoFromTemplate(ctx context.Context, templateOwner, templateRepo, newRepoSlug string) (string, error) {
 	url := fmt.Sprintf("%s/repos/%s/%s/generate", githubAPIBaseURL, templateOwner, templateRepo)
 
 	reqBody, err := json.Marshal(struct {
 		Name    string `json:"name"`
+		Owner   string `json:"owner"`
 		Private bool   `json:"private"`
 	}{
 		Name:    newRepoSlug,
+		Owner:   templateOwner,
 		Private: true,
 	})
 	if err != nil {
