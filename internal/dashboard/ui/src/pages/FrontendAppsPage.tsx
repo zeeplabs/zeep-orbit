@@ -247,6 +247,16 @@ export default function FrontendAppsPage() {
 The app "${syncModalApp.name}" has a GitHub repository that already exists. Your goal is to clone it using a one-time deploy key and start working on the code.
 
 ---
+BEFORE YOU START
+---
+Ask the user:
+- Where should the project be cloned? (e.g. ~/projects, ~/Desktop, or a specific path)
+- What do they want to build or change in this app? (e.g. add a landing page, change the theme, fix a bug)
+- Any other preferences? (framework version, libraries to use, design system)
+
+Wait for the user's answers before proceeding. Do NOT clone to a default or temporary directory unless explicitly asked.
+
+---
 CONTEXT
 ---
 - A deploy key (SSH key pair) was generated specifically for this repository.
@@ -257,8 +267,9 @@ CONTEXT
 ---
 STEPS
 ---
+(Execute these steps after the user tells you where to clone.)
+
 Step 1 — Write the private key to disk:
-  Run the following command in your shell:
   cat > ~/.ssh/id_ed25519_${syncModalApp.slug} << 'KEYEOF'
 ${revealedKey || "[click 'Reveal Key' to display]"}
 KEYEOF
@@ -275,14 +286,15 @@ Host github.com-${syncModalApp.slug}
     IdentitiesOnly yes
 SSHEOF
 
-Step 4 — Clone the repository using the deploy key:
-  GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519_${syncModalApp.slug} -o StrictHostKeyChecking=accept-new" ${cloneCommand}
+Step 4 — Clone the repository into the directory the user chose:
+  GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519_${syncModalApp.slug} -o StrictHostKeyChecking=accept-new" ${cloneCommand} <user-chosen-path>
 
 ---
 AFTER CLONE
 ---
-- cd into the cloned directory and start working.
-- Use 'git push' normally — the SSH config will route authentication through the deploy key automatically.`
+- cd into the cloned directory and start working on what the user asked for.
+- Use 'git push' normally — the SSH config will route authentication through the deploy key automatically.
+- Commit and push your changes so the user can deploy.`
     : "";
 
   return (
