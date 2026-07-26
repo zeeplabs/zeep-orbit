@@ -885,26 +885,16 @@ AFTER CLONE
         onCancel={() => setDeleteTarget(null)}
       />
 
-      {/* Frontend delete dialog (simple) */}
-      <Dialog open={!!feDeleteTarget} onOpenChange={() => setFeDeleteTarget(null)}>
-        <DialogContent className="bg-[#0F0F17] border-white/[0.08] text-[#F8FAFC] max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{t("frontendApps.deleteConfirm", "Delete frontend app?")}</DialogTitle>
-            <DialogDescription className="text-[#94A3B8]">
-              {t("frontendApps.deleteConfirmDesc", "This will archive the GitHub repository and revoke its deploy key.")}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setFeDeleteTarget(null)} className="text-[#94A3B8]">{t("frontendApps.cancel", "Cancel")}</Button>
-            <Button onClick={() => feDeleteTarget && handleFeDelete(feDeleteTarget.id)}
-              disabled={deletingFe !== null}
-              className="bg-[#EF4444] hover:bg-[#DC2626] text-white">
-              {deletingFe ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-              {t("frontendApps.delete", "Delete")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Frontend delete dialog */}
+      <DeleteConfirmDialog
+        open={!!feDeleteTarget}
+        appName={feDeleteTarget?.name ?? ""}
+        loading={!!deletingFe}
+        titleKey="frontendApps.deleteConfirmTitle"
+        descKey="frontendApps.deleteConfirmDesc"
+        onConfirm={() => feDeleteTarget && handleFeDelete(feDeleteTarget.id)}
+        onCancel={() => setFeDeleteTarget(null)}
+      />
       {/* Domain modal */}
       <Dialog open={!!domainApp} onOpenChange={() => { setDomainApp(null); setDomainSub(""); }}>
         <DialogContent className="bg-[#0F0F17] border-white/[0.08] text-[#F8FAFC] max-w-sm">

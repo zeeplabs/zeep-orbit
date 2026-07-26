@@ -16,29 +16,29 @@ interface Props {
   loading: boolean
   onConfirm: () => void
   onCancel: () => void
+  titleKey?: string
+  descKey?: string
 }
 
-export default function DeleteConfirmDialog({ open, appName, loading, onConfirm, onCancel }: Props) {
+export default function DeleteConfirmDialog({ open, appName, loading, onConfirm, onCancel, titleKey, descKey }: Props) {
   const { t } = useTranslation()
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) onCancel() }}>
       <DialogContent className="max-w-[420px] border border-white/[0.10] bg-[#0D0D14]/60 backdrop-blur-xl rounded-2xl p-0 gap-0 [&>button]:text-[#94A3B8] [&>button]:hover:text-[#F8FAFC] [&>button]:hover:bg-white/[0.08]"
         style={{ boxShadow: '0 0 40px rgba(var(--brand-primary-rgb), 0.10)' }}
       >
-        {/* inner bezel */}
         <div className="bg-white/[0.04] shadow-[inset_0_1px_1px_rgba(255,255,255,0.10)] rounded-[calc(1rem-2px)] px-7 pb-6 pt-7">
           <DialogHeader className="mb-0">
-            {/* icon */}
             <div className="w-11 h-11 rounded-xl bg-red-500/[0.12] border border-red-500/[0.20] flex items-center justify-center mb-[18px]">
               <AlertTriangle size={20} strokeWidth={1.5} className="text-red-500" />
             </div>
 
             <DialogTitle className="text-base font-bold text-[#F8FAFC] mb-2">
-              {t("apps.deleteTitle")}
+              {titleKey ? t(titleKey) : t("apps.deleteTitle")}
             </DialogTitle>
 
             <DialogDescription className="text-[13px] text-[#94A3B8] leading-relaxed mb-6">
-              <Trans i18nKey="apps.deleteDesc" values={{ name: appName }} />
+              {descKey ? t(descKey) : <Trans i18nKey="apps.deleteDesc" values={{ name: appName }} />}
             </DialogDescription>
           </DialogHeader>
 
