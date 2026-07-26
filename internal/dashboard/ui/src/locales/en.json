@@ -359,5 +359,19 @@
   "frontendApps.formTemplate": "Template",
   "frontendApps.selectTemplate": "Select a template...",
   "frontendApps.cancel": "Cancel",
-  "frontendApps.creating": "Create"
+  "frontendApps.creating": "Create",
+  "frontendApps.sync": "Sync",
+  "frontendApps.syncTitle": "Sync Setup",
+  "frontendApps.syncDesc": "Configure SSH access so your AI agent can push code to this repository.",
+  "frontendApps.syncStatus": "Sync Status",
+  "frontendApps.syncReady": "Ready",
+  "frontendApps.syncPending": "Pending",
+  "frontendApps.syncFailed": "Failed",
+  "frontendApps.cloneCommand": "Clone command",
+  "frontendApps.revealKey": "Reveal Private Key",
+  "frontendApps.privateKey": "Private Key",
+  "frontendApps.agentPrompt": "Copy this prompt for your AI agent",
+  "frontendApps.syncRetry": "Retry",
+  "frontendApps.syncRegenerate": "Regenerate",
+  "frontendApps.noSyncInfo": "No sync information available"
 }

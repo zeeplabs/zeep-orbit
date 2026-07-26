@@ -359,5 +359,19 @@
   "frontendApps.formTemplate": "Template",
   "frontendApps.selectTemplate": "Selecione um template...",
   "frontendApps.cancel": "Cancelar",
-  "frontendApps.creating": "Criar"
+  "frontendApps.creating": "Criar",
+  "frontendApps.sync": "Sync",
+  "frontendApps.syncTitle": "Configurar Sync",
+  "frontendApps.syncDesc": "Configure o acesso SSH para que seu agente de IA possa enviar código para este repositório.",
+  "frontendApps.syncStatus": "Status do Sync",
+  "frontendApps.syncReady": "Pronto",
+  "frontendApps.syncPending": "Pendente",
+  "frontendApps.syncFailed": "Falhou",
+  "frontendApps.cloneCommand": "Comando clone",
+  "frontendApps.revealKey": "Revelar Chave Privada",
+  "frontendApps.privateKey": "Chave Privada",
+  "frontendApps.agentPrompt": "Copie este prompt para seu agente de IA",
+  "frontendApps.syncRetry": "Tentar de novo",
+  "frontendApps.syncRegenerate": "Regenerar",
+  "frontendApps.noSyncInfo": "Nenhuma informação de sync disponível"
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { Globe, Plus, RotateCcw, Trash2, Loader2, CheckCircle2, XCircle } from "lucide-react";
+import { Globe, Plus, RotateCcw, Trash2, Loader2, CheckCircle2, XCircle, Key, Copy, AlertTriangle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { toast } from "sonner";
 
 const EASE = [0.32, 0.72, 0, 1] as const;
 
@@ -48,6 +49,12 @@ interface Template {
   active: boolean;
 }
 
+interface SyncInfo {
+  sync_status: string;
+  public_key: string;
+  error_message: string;
+}
+
 export default function FrontendAppsPage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
@@ -64,6 +71,13 @@ export default function FrontendAppsPage() {
 
   const [deleting, setDeleting] = useState<string | null>(null);
   const [retrying, setRetrying] = useState<string | null>(null);
+
+  // Sync state
+  const [syncModalApp, setSyncModalApp] = useState<FrontendApp | null>(null);
+  const [syncInfo, setSyncInfo] = useState<SyncInfo | null>(null);
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [revealedKey, setRevealedKey] = useState<string | null>(null);
+  const [revealing, setRevealing] = useState(false);
 
   const fetchApps = async () => {
     try {
@@ -150,6 +164,106 @@ export default function FrontendAppsPage() {
     }
   };
 
+  const openSync = async (app: FrontendApp) => {
+    setSyncModalApp(app);
+    setSyncInfo(null);
+    setRevealedKey(null);
+    setSyncLoading(true);
+    try {
+      const res = await fetch(`/dashboard/api/frontend-apps/${app.id}/sync`, {
+        credentials: "include",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSyncInfo(data);
+      }
+    } finally {
+      setSyncLoading(false);
+    }
+  };
+
+  const handleReveal = async () => {
+    if (!syncModalApp) return;
+    setRevealing(true);
+    try {
+      const res = await fetch(`/dashboard/api/frontend-apps/${syncModalApp.id}/reveal-key`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRevealedKey(data.private_key);
+      }
+    } catch {
+      toast.error("Failed to reveal key");
+    } finally {
+      setRevealing(false);
+    }
+  };
+
+  const handleSyncRetry = async () => {
+    if (!syncModalApp) return;
+    setSyncLoading(true);
+    try {
+      const res = await fetch(`/dashboard/api/frontend-apps/${syncModalApp.id}/sync/retry`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSyncInfo({ sync_status: data.sync_status, public_key: data.public_key || "", error_message: data.error_message || "" });
+        toast.success("Sync retry completed");
+      }
+    } finally {
+      setSyncLoading(false);
+    }
+  };
+
+  const handleSyncRegenerate = async () => {
+    if (!syncModalApp) return;
+    setSyncLoading(true);
+    setRevealedKey(null);
+    try {
+      const res = await fetch(`/dashboard/api/frontend-apps/${syncModalApp.id}/sync/regenerate`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSyncInfo({ sync_status: data.sync_status, public_key: data.public_key || "", error_message: data.error_message || "" });
+        toast.success("Credential regenerated");
+      }
+    } finally {
+      setSyncLoading(false);
+    }
+  };
+
+  const cloneCommand = syncModalApp
+    ? `git clone git@github.com:${syncModalApp.slug}.git`
+    : "";
+
+  const agentPrompt = syncModalApp
+    ? `Setup SSH for git access to frontend app "${syncModalApp.name}":
+
+1. Write the private key below to ~/.ssh/id_ed25519_${syncModalApp.slug}:
+${revealedKey || "[click 'Reveal Key' to show]"}
+
+2. Set correct permissions:
+   chmod 600 ~/.ssh/id_ed25519_${syncModalApp.slug}
+
+3. Add to ~/.ssh/config:
+Host github.com-${syncModalApp.slug}
+    HostName github.com
+    IdentityFile ~/.ssh/id_ed25519_${syncModalApp.slug}
+    IdentitiesOnly yes
+
+4. Clone the repository:
+   GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519_${syncModalApp.slug}" ${cloneCommand}`.replace(
+      /github\.com-([^:]+)/,
+      "github.com-$1"
+    )
+    : "";
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -231,6 +345,17 @@ export default function FrontendAppsPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1">
+                      {app.status === "ready" && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => openSync(app)}
+                          className="h-8 text-xs text-[#3B82F6] hover:text-[#60A5FA] hover:bg-[#3B82F6]/10"
+                        >
+                          <Key className="h-3.5 w-3.5" />
+                          <span className="ml-1">{t("frontendApps.sync", "Sync")}</span>
+                        </Button>
+                      )}
                       {app.status === "failed" && (
                         <Button
                           size="sm"
@@ -269,6 +394,7 @@ export default function FrontendAppsPage() {
         </div>
       )}
 
+      {/* Create dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent className="bg-[#0F0F17] border-white/[0.08] text-[#F8FAFC] max-w-md">
           <DialogHeader>
@@ -325,6 +451,149 @@ export default function FrontendAppsPage() {
               {t("frontendApps.creating", "Create")}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Sync dialog */}
+      <Dialog open={!!syncModalApp} onOpenChange={() => { setSyncModalApp(null); setRevealedKey(null); }}>
+        <DialogContent className="bg-[#0F0F17] border-white/[0.08] text-[#F8FAFC] max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("frontendApps.syncTitle", "Sync Setup")}{syncModalApp ? ` — ${syncModalApp.name}` : ""}</DialogTitle>
+            <DialogDescription className="text-[#94A3B8]">
+              {t("frontendApps.syncDesc", "Configure SSH access so your AI agent can push code to this repository.")}
+            </DialogDescription>
+          </DialogHeader>
+
+          {syncLoading ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-6 w-6 animate-spin text-[#64748B]" />
+            </div>
+          ) : syncInfo ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-3 rounded-lg bg-white/[0.04] border border-white/[0.06]">
+                <span className="text-sm text-[#94A3B8]">{t("frontendApps.syncStatus", "Sync Status")}</span>
+                {syncInfo.sync_status === "ready" ? (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-[#22C55E]">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    {t("frontendApps.syncReady", "Ready")}
+                  </span>
+                ) : syncInfo.sync_status === "pending" ? (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-[#F59E0B]">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    {t("frontendApps.syncPending", "Pending")}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-[#EF4444]">
+                    <XCircle className="h-3.5 w-3.5" />
+                    {t("frontendApps.syncFailed", "Failed")}
+                  </span>
+                )}
+              </div>
+
+              {syncInfo.error_message && (
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-[#EF4444]/10 border border-[#EF4444]/20 text-xs text-[#EF4444]">
+                  <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                  <span>{syncInfo.error_message}</span>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label className="text-[#94A3B8] text-xs">{t("frontendApps.cloneCommand", "Clone command")}</Label>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-xs text-[#94A3B8] bg-[#0F0F17] border border-white/[0.08] rounded px-3 py-2 font-mono">
+                    {cloneCommand}
+                  </code>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => { navigator.clipboard.writeText(cloneCommand); toast.success("Copied!"); }}
+                    className="h-8 text-xs text-[#64748B] hover:text-[#94A3B8]"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+
+              {syncInfo.sync_status === "ready" && !revealedKey && (
+                <Button
+                  onClick={handleReveal}
+                  disabled={revealing}
+                  className="w-full bg-[#3B82F6] hover:bg-[#2563EB] text-white"
+                >
+                  {revealing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  <Key className="h-4 w-4 mr-2" />
+                  {t("frontendApps.revealKey", "Reveal Private Key")}
+                </Button>
+              )}
+
+              {revealedKey && (
+                <div className="space-y-3">
+                  <div>
+                    <Label className="text-[#94A3B8] text-xs">{t("frontendApps.privateKey", "Private Key")}</Label>
+                    <div className="relative mt-1">
+                      <code className="block text-xs text-[#F8FAFC] bg-[#0F0F17] border border-white/[0.08] rounded p-3 font-mono whitespace-pre-wrap max-h-32 overflow-auto">
+                        {revealedKey}
+                      </code>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => { navigator.clipboard.writeText(revealedKey); toast.success("Key copied!"); }}
+                        className="absolute top-1 right-1 h-7 text-xs text-[#64748B] hover:text-[#94A3B8]"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label className="text-[#94A3B8] text-xs">{t("frontendApps.agentPrompt", "Copy this prompt for your AI agent")}</Label>
+                    <div className="relative mt-1">
+                      <code className="block text-xs text-[#94A3B8] bg-[#0F0F17] border border-white/[0.08] rounded p-3 font-mono whitespace-pre-wrap max-h-48 overflow-auto">
+                        {agentPrompt}
+                      </code>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => { navigator.clipboard.writeText(agentPrompt); toast.success("Prompt copied!"); }}
+                        className="absolute top-1 right-1 h-7 text-xs text-[#64748B] hover:text-[#94A3B8]"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                {(syncInfo.sync_status === "pending" || syncInfo.sync_status === "failed") && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleSyncRetry}
+                    className="text-xs border-white/[0.08] text-[#F59E0B] hover:bg-[#F59E0B]/10"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                    {t("frontendApps.syncRetry", "Retry")}
+                  </Button>
+                )}
+                {syncInfo.sync_status === "ready" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleSyncRegenerate}
+                    className="text-xs border-white/[0.08] text-[#F59E0B] hover:bg-[#F59E0B]/10"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                    {t("frontendApps.syncRegenerate", "Regenerate")}
+                  </Button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-10 text-sm text-[#64748B]">
+              {t("frontendApps.noSyncInfo", "No sync information available")}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </motion.div>
