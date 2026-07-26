@@ -309,6 +309,51 @@ func (c *Client) ArchiveRepo(ctx context.Context, owner, repo string) error {
 	return unexpectedStatusError(resp, body)
 }
 
+func (c *Client) AddDeployKey(ctx context.Context, owner, repo, title, publicKey string) (int64, error) {
+	url := fmt.Sprintf("%s/repos/%s/%s/keys", githubAPIBaseURL, owner, repo)
+
+	reqBody, err := json.Marshal(map[string]interface{}{
+		"title":    title,
+		"key":      publicKey,
+		"read_only": false,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("github: marshal deploy key request body: %w", err)
+	}
+
+	resp, body, err := c.doAuthenticated(ctx, http.MethodPost, url, reqBody)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusCreated {
+		var parsed struct {
+			ID int64 `json:"id"`
+		}
+		if err := json.Unmarshal(body, &parsed); err != nil {
+			return 0, fmt.Errorf("github: parse deploy key response: %w", err)
+		}
+		return parsed.ID, nil
+	}
+	return 0, unexpectedStatusError(resp, body)
+}
+
+func (c *Client) RevokeDeployKey(ctx context.Context, owner, repo string, keyID int64) error {
+	url := fmt.Sprintf("%s/repos/%s/%s/keys/%d", githubAPIBaseURL, owner, repo, keyID)
+
+	resp, body, err := c.doAuthenticated(ctx, http.MethodDelete, url, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNoContent {
+		return nil
+	}
+	return unexpectedStatusError(resp, body)
+}
+
 // doAuthenticated builds and executes an authenticated GitHub API request,
 // returning the raw response (caller must close the body) along with the
 // already-read body bytes for convenience. It does not inspect status codes

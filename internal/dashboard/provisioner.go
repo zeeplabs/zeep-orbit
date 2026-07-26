@@ -166,6 +166,17 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 		)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_frontend_apps_slug
 		 ON zeep_system.frontend_apps (slug) WHERE archived_at IS NULL`,
+		`CREATE TABLE IF NOT EXISTS zeep_system.frontend_app_sync_credentials (
+			id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			frontend_app_id        UUID NOT NULL UNIQUE REFERENCES zeep_system.frontend_apps(id),
+			github_key_id          BIGINT,
+			public_key             TEXT NOT NULL DEFAULT '',
+			private_key_encrypted  TEXT NOT NULL DEFAULT '',
+			sync_status            TEXT NOT NULL DEFAULT 'pending',
+			error_message          TEXT NOT NULL DEFAULT '',
+			created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
 	}
 
 	for _, stmt := range stmts {
