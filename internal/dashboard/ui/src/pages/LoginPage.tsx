@@ -84,7 +84,7 @@ export default function LoginPage() {
             {t("login.title")}
           </h1>
           <p className="text-[13px] text-[#94A3B8] mt-0.5">
-            {t("login.title")}
+            {t("login.subtitle")}
           </p>
         </div>
 
