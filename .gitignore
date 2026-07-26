@@ -8,3 +8,4 @@ internal/dashboard/static/
 docs/node_modules/
 docs/build/
 docs/.docusaurus/
+.worktrees/
