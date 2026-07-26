@@ -143,7 +143,6 @@ function AppCard({ app, index, isSuperadmin, onEdit, onDelete, onUsers }: AppCar
             </span>
           )}
         </div>
-        <span className="text-[10px] text-[#64748B] shrink-0">{createdAt}</span>
       </div>
 
       {/* CONTENT */}
@@ -164,8 +163,9 @@ function AppCard({ app, index, isSuperadmin, onEdit, onDelete, onUsers }: AppCar
       </div>
 
       {/* FOOTER */}
-      <div className="flex items-center justify-end gap-1 pt-2 border-t border-white/[0.04]">
-        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+      <div className="flex items-center justify-between gap-2 pt-2 border-t border-white/[0.04]">
+        <span className="text-[10px] text-[#64748B]">{createdAt}</span>
+        <div className="flex gap-1">
           <Button variant="outline" size="icon" onClick={() => onUsers(app)} title="Usuários"
             className="size-7 rounded-lg border-white/[0.10] bg-white/[0.04] text-[#94A3B8] hover:bg-white/[0.08] hover:text-white cursor-pointer">
             <Users size={12} strokeWidth={1.5} />
@@ -189,6 +189,7 @@ function AppCard({ app, index, isSuperadmin, onEdit, onDelete, onUsers }: AppCar
             <Trash2 size={12} strokeWidth={1.5} />
           </Button>
         </motion.div>
+        </div>
       </div>
     </motion.div>
   );
