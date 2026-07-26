@@ -14,6 +14,7 @@ import {
   Settings,
   User,
   Lock,
+  Link2,
 } from "lucide-react";
 import ChangePasswordModal from "./ChangePasswordModal";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -49,6 +50,7 @@ function navItems(user: User | null, t: (k: string) => string): NavItem[] {
   if (user?.role === "superadmin") {
     items.splice(2, 0, { icon: Users, label: t("nav.users"), path: "/usuarios" });
     items.splice(3, 0, { icon: Shield, label: t("nav.audit"), path: "/auditoria" });
+    items.splice(4, 0, { icon: Link2, label: t("nav.integrations"), path: "/integracoes/github" });
     items.push({
       icon: Settings,
       label: t("nav.settings"),

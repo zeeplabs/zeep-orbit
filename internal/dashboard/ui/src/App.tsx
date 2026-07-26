@@ -13,6 +13,7 @@ import BrandSettingsPage from './pages/BrandSettingsPage'
 import UsersPage from './pages/UsersPage'
 import LogsPage from './pages/LogsPage'
 import AuditLogPage from './pages/AuditLogPage'
+import GitHubIntegrationPage from './pages/GitHubIntegrationPage'
 import SdkPage from './pages/SdkPage'
 import AppUsersPage from './pages/AppUsersPage'
 import DataBrowserPage from './pages/DataBrowserPage'
@@ -114,6 +115,7 @@ function App() {
           <Route path="/usuarios" element={<UsersPage />} />
           <Route path="/logs" element={<LogsPage />} />
           <Route path="/auditoria" element={<AuditLogPage />} />
+          <Route path="/integracoes/github" element={<GitHubIntegrationPage />} />
           <Route path="/sdks" element={<SdkPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/apps" replace />} />

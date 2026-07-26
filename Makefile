@@ -22,7 +22,7 @@ lint:
 	go vet ./...
 
 run:
-	go run ./cmd/zeep
+	go run ./cmd/zeep serve
 
 helm-lint:
 	helm lint charts/zeep-orbit/
