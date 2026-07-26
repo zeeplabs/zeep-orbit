@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -82,6 +83,12 @@ type InstallationTokenCache struct {
 
 	mu      sync.RWMutex
 	entries map[string]installationTokenEntry
+
+	// group collapses concurrent Token() misses/renewals for the same
+	// installationID into a single in-flight fetchInstallationToken call,
+	// so a burst of concurrent callers doesn't each fire its own JWT sign +
+	// HTTP exchange against GitHub. Zero value is ready to use.
+	group singleflight.Group
 }
 
 // NewInstallationTokenCache builds a cache for the given App ID and PEM
@@ -103,6 +110,10 @@ type installationTokenResponse struct {
 // reusing a cached token when it is still fresh and otherwise generating a
 // new App JWT and exchanging it with GitHub for a fresh installation token.
 func (c *InstallationTokenCache) Token(installationID string) (string, error) {
+	if installationID == "" {
+		return "", fmt.Errorf("github: installationID must not be empty")
+	}
+
 	c.mu.RLock()
 	entry, ok := c.entries[installationID]
 	c.mu.RUnlock()
@@ -110,19 +121,41 @@ func (c *InstallationTokenCache) Token(installationID string) (string, error) {
 		return entry.token, nil
 	}
 
-	entry, err := c.fetchInstallationToken(installationID)
+	// singleflight.Do collapses concurrent callers keyed on installationID
+	// into one in-flight fetch: if two goroutines both observe a stale/missing
+	// entry above, only the first actually reaches fetchInstallationToken —
+	// the rest block here and share its result, avoiding redundant JWT
+	// signing + HTTP calls against GitHub.
+	v, err, _ := c.group.Do(installationID, func() (interface{}, error) {
+		// Re-check freshness now that we hold the singleflight slot: another
+		// goroutine may have just completed a fetch and populated the cache
+		// while we were waiting to enter this function.
+		c.mu.RLock()
+		e, ok := c.entries[installationID]
+		c.mu.RUnlock()
+		if ok && e.fresh() {
+			return e, nil
+		}
+
+		e, err := c.fetchInstallationToken(installationID)
+		if err != nil {
+			return installationTokenEntry{}, err
+		}
+
+		c.mu.Lock()
+		if c.entries == nil {
+			c.entries = make(map[string]installationTokenEntry)
+		}
+		c.entries[installationID] = e
+		c.mu.Unlock()
+
+		return e, nil
+	})
 	if err != nil {
 		return "", err
 	}
 
-	c.mu.Lock()
-	if c.entries == nil {
-		c.entries = make(map[string]installationTokenEntry)
-	}
-	c.entries[installationID] = entry
-	c.mu.Unlock()
-
-	return entry.token, nil
+	return v.(installationTokenEntry).token, nil
 }
 
 func (c *InstallationTokenCache) fetchInstallationToken(installationID string) (installationTokenEntry, error) {

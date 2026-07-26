@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -186,6 +187,71 @@ func TestInstallationTokenCache_ExpiredForcesRenewal(t *testing.T) {
 	}
 	if got := atomic.LoadInt32(&callCount); got != 2 {
 		t.Fatalf("expected 2 HTTP calls (initial + forced renewal), got %d", got)
+	}
+}
+
+func TestInstallationTokenCache_ConcurrentMissCollapsesToOneFetch(t *testing.T) {
+	keyPEM := generateTestPrivateKeyPEM(t)
+
+	var callCount int32
+	release := make(chan struct{})
+	client := newMockClient(func(req *http.Request) (*http.Response, error) {
+		atomic.AddInt32(&callCount, 1)
+		// Block until every goroutine has had a chance to call Token(), so a
+		// buggy implementation without singleflight would fire one HTTP
+		// call per goroutine instead of collapsing them into one.
+		<-release
+		return mockJSONResponse(http.StatusCreated, fmt.Sprintf(
+			`{"token":"shared-token","expires_at":%q}`,
+			time.Now().Add(1*time.Hour).Format(time.RFC3339),
+		)), nil
+	})
+
+	cache := &InstallationTokenCache{
+		AppID:         "app-1",
+		PrivateKeyPEM: keyPEM,
+		HTTPClient:    client,
+	}
+
+	const n = 20
+	results := make([]string, n)
+	errs := make([]error, n)
+
+	var wg sync.WaitGroup
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func(i int) {
+			defer wg.Done()
+			results[i], errs[i] = cache.Token("install-1")
+		}(i)
+	}
+
+	// Give every goroutine a chance to reach the HTTP call (or block on the
+	// singleflight slot) before letting the single in-flight request finish.
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+	wg.Wait()
+
+	if got := atomic.LoadInt32(&callCount); got != 1 {
+		t.Fatalf("expected exactly 1 HTTP call for %d concurrent misses on the same installationID, got %d", n, got)
+	}
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("goroutine %d: Token() returned error: %v", i, err)
+		}
+		if results[i] != "shared-token" {
+			t.Errorf("goroutine %d: token = %q, want %q", i, results[i], "shared-token")
+		}
+	}
+}
+
+func TestInstallationTokenCache_EmptyInstallationID(t *testing.T) {
+	keyPEM := generateTestPrivateKeyPEM(t)
+	cache := &InstallationTokenCache{AppID: "app-1", PrivateKeyPEM: keyPEM}
+
+	_, err := cache.Token("")
+	if err == nil {
+		t.Fatal("expected error for empty installationID, got nil")
 	}
 }
 
