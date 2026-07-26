@@ -368,6 +368,7 @@
   "frontendApps.syncPending": "Pending",
   "frontendApps.syncFailed": "Failed",
   "frontendApps.cloneCommand": "Clone command",
+  "frontendApps.copy": "Copy",
   "frontendApps.revealKey": "Reveal Private Key",
   "frontendApps.privateKey": "Private Key",
   "frontendApps.agentPrompt": "Copy this prompt for your AI agent",

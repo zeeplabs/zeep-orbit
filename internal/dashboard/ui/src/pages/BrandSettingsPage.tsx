@@ -297,7 +297,7 @@ function GoogleAuthProviderCard() {
             <div className="relative">
               <Input type={showSecret ? "text" : "password"} value={clientSecret} onChange={(e) => setClientSecret(e.target.value)}
                 placeholder={config?.config_set ? t("settings.googleClientSecretPlaceholder") : t("settings.googleClientSecretPlaceholderNew")} className={inputClass + " pr-10"} />
-              <button type="button" onClick={() => setShowSecret(!showSecret)}
+              <button type="button" title="Show/hide secret" onClick={() => setShowSecret(!showSecret)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#F8FAFC] bg-none border-none cursor-pointer">
                 {showSecret ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>

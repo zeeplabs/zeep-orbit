@@ -703,6 +703,7 @@ AFTER CLONE
                 <div className="flex items-center gap-2">
                   <code className="flex-1 text-xs text-[#94A3B8] bg-[#0F0F17] border border-white/[0.08] rounded px-3 py-2 font-mono break-all">{cloneCommand}</code>
                   <Button size="sm" variant="ghost" onClick={() => { navigator.clipboard.writeText(cloneCommand); toast.success("Copied!"); }}
+                    title={t("frontendApps.copy", "Copy")}
                     className="h-8 text-xs text-[#64748B] hover:text-[#94A3B8] shrink-0"><Globe className="h-3.5 w-3.5" /></Button>
                 </div>
               </div>
@@ -728,6 +729,7 @@ AFTER CLONE
                       <code className="block text-xs text-[#94A3B8] bg-[#0F0F17] rounded p-3 pr-10 font-mono whitespace-pre-wrap break-all max-h-48 overflow-auto">{agentPrompt}</code>
                       <Button size="sm" variant="ghost"
                         onClick={() => { navigator.clipboard.writeText(agentPrompt); toast.success("Prompt copied!"); }}
+                        title={t("frontendApps.copy", "Copy")}
                         className="absolute top-1 right-1 h-7 text-xs text-[#64748B] hover:text-[#94A3B8]"><Globe className="h-3.5 w-3.5" /></Button>
                     </div>
                   </div>

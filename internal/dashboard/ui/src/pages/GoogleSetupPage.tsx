@@ -122,6 +122,7 @@ export default function GoogleSetupPage() {
             />
             <button
               type="button"
+              title="Show/hide password"
               onClick={() => setShowPassword(!showPassword)}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70 transition-colors"
             >

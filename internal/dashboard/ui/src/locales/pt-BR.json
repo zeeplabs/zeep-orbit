@@ -368,6 +368,7 @@
   "frontendApps.syncPending": "Pendente",
   "frontendApps.syncFailed": "Falhou",
   "frontendApps.cloneCommand": "Comando clone",
+  "frontendApps.copy": "Copiar",
   "frontendApps.revealKey": "Revelar Chave Privada",
   "frontendApps.privateKey": "Chave Privada",
   "frontendApps.agentPrompt": "Copie este prompt para seu agente de IA",

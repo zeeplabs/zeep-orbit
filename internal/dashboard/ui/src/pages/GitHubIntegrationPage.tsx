@@ -315,6 +315,7 @@ function GitHubConfigTab() {
               />
               <button
                 type="button"
+                title="Show/hide secret"
                 onClick={() => setShowSecret(!showSecret)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#F8FAFC] bg-none border-none cursor-pointer"
               >
@@ -340,6 +341,7 @@ function GitHubConfigTab() {
               />
               <button
                 type="button"
+                title="Show/hide private key"
                 onClick={() => setShowPrivateKey(!showPrivateKey)}
                 className="absolute right-3 top-3 text-[#64748B] hover:text-[#F8FAFC] bg-none border-none cursor-pointer"
               >

@@ -189,6 +189,7 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
                       />
                       <button
                         type="button"
+                        title="Show/hide current password"
                         onClick={() => setShowCurrent(!showCurrent)}
                         style={{
                           position: "absolute",
@@ -222,6 +223,7 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
                     />
                     <button
                       type="button"
+                      title="Show/hide new password"
                       onClick={() => setShowNew(!showNew)}
                       style={{
                         position: "absolute",
@@ -254,6 +256,7 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
                     />
                     <button
                       type="button"
+                      title="Show/hide confirm password"
                       onClick={() => setShowConfirm(!showConfirm)}
                       style={{
                         position: "absolute",

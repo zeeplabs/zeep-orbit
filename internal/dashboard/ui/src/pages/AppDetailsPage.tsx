@@ -314,6 +314,7 @@ function LoginTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]>
                   />
                   <button
                     type="button"
+                    title="Show/hide secret"
                     onClick={() => setShowGoogleSecret(!showGoogleSecret)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#F8FAFC] bg-transparent border-none cursor-pointer"
                   >
@@ -488,6 +489,7 @@ function StorageTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"
                     />
                     <button
                       type="button"
+                      title="Show/hide secret"
                       onClick={() => setShowStorageSecret(!showStorageSecret)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#F8FAFC] bg-transparent border-none cursor-pointer"
                     >
@@ -558,6 +560,7 @@ function ApiTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]> }
             </code>
             <button
               type="button"
+              title="Copy to clipboard"
               onClick={() => navigator.clipboard.writeText(`${window.location.origin}/${app.name}`)}
               className="shrink-0 p-1.5 rounded-lg hover:bg-white/[0.08] text-[#94A3B8] hover:text-[#F8FAFC] transition-colors"
             >
@@ -679,6 +682,7 @@ function TokensTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]
             <code className="text-sm text-[#B3D1FF] break-all font-mono flex-1">{revealedSecret}</code>
             <button
               type="button"
+              title="Copy to clipboard"
               onClick={() => navigator.clipboard.writeText(revealedSecret)}
               className="shrink-0 p-1.5 rounded-lg hover:bg-white/[0.08] text-[#94A3B8] hover:text-[#F8FAFC] transition-colors bg-transparent border-none cursor-pointer"
             >
@@ -716,6 +720,7 @@ function TokensTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]
                   {!t.revoked_at && (
                     <button
                       type="button"
+                      title="Revoke token"
                       onClick={() => revokeToken.mutate(t.id)}
                       className="p-1.5 rounded-lg hover:bg-white/[0.08] text-[#94A3B8] hover:text-red-400 transition-colors bg-transparent border-none cursor-pointer"
                     >
@@ -865,6 +870,7 @@ function TokenRevealModal({ jwt, onClose }: { jwt: string; onClose: () => void }
           <code className="text-sm text-[#B3D1FF] break-all font-mono flex-1 max-h-32 overflow-y-auto">{jwt}</code>
           <button
             type="button"
+            title="Copy to clipboard"
             onClick={() => { navigator.clipboard.writeText(jwt); setCopied(true); }}
             className="shrink-0 p-2 rounded-lg hover:bg-white/[0.08] text-[#94A3B8] hover:text-[#F8FAFC] transition-colors bg-transparent border-none cursor-pointer"
           >

@@ -266,6 +266,7 @@ export default function AuditLogPage() {
           </span>
           <div className="flex items-center gap-2">
             <button
+              title="Previous page"
               onClick={() => setPage(Math.max(0, page - 1))}
               disabled={page === 0}
               className="h-8 w-8 flex items-center justify-center rounded-lg border border-white/[0.10] bg-white/[0.06] text-[#94A3B8] hover:text-[#F8FAFC] disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
@@ -276,6 +277,7 @@ export default function AuditLogPage() {
               {page + 1} / {totalPages}
             </span>
             <button
+              title="Next page"
               onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
               disabled={page >= totalPages - 1}
               className="h-8 w-8 flex items-center justify-center rounded-lg border border-white/[0.10] bg-white/[0.06] text-[#94A3B8] hover:text-[#F8FAFC] disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"

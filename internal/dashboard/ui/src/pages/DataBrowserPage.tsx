@@ -647,6 +647,7 @@ export default function DataBrowserPage() {
                         </span>
                         <span style={{ color: "var(--text)" }}>{r.value}</span>
                         <button
+                          title="Remove filter"
                           onClick={() => removeFilterRule(r.col)}
                           style={{
                             marginLeft: 4,
@@ -1095,6 +1096,7 @@ export default function DataBrowserPage() {
                   Editar registro
                 </span>
                 <button
+                  title="Close"
                   onClick={closeModal}
                   style={{
                     padding: 4,

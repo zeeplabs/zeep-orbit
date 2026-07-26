@@ -270,6 +270,7 @@ export default function TableCard({
                 </div>
                 <button
                   type="button"
+                  title="Remove column"
                   onClick={() => removeColumn(ci)}
                   disabled={columns.length <= 1}
                   className={cn(
