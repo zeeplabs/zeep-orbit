@@ -45,6 +45,7 @@ function navItems(user: User | null, t: (k: string) => string): NavItem[] {
     { icon: Grid, label: t("nav.apps"), path: "/apps" },
     { icon: Database, label: t("nav.dataBrowser"), path: "/data-browser" },
     { icon: Code2, label: "SDKs", path: "/sdks" },
+    { icon: Globe, label: t("nav.frontendApps"), path: "/frontend-apps" },
     { icon: Activity, label: t("nav.logs"), path: "/logs" },
   ];
   if (user?.role === "superadmin") {
