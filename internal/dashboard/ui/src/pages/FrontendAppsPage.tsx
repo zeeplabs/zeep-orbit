@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { Globe, Plus, RotateCcw, Trash2, Loader2, ExternalLink, CheckCircle2, XCircle } from "lucide-react";
+import { Globe, Plus, RotateCcw, Trash2, Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -227,17 +227,6 @@ export default function FrontendAppsPage() {
                         <XCircle className="h-3.5 w-3.5" />
                         {t("frontendApps.statusFailed", "Failed")}
                       </span>
-                    )}
-                    {app.github_repo_url && (
-                      <a
-                        href={app.github_repo_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block text-xs text-[#3B82F6] hover:underline mt-0.5"
-                      >
-                        <ExternalLink className="h-3 w-3 inline mr-0.5" />
-                        {t("frontendApps.openRepo", "Open repo")}
-                      </a>
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">
