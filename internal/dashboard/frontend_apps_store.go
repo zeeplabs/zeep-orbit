@@ -190,6 +190,22 @@ func UpdateFrontendAppDeploy(ctx context.Context, pool *db.Pool, id, deployServi
 	return &a, nil
 }
 
+func UpdateFrontendAppDomain(ctx context.Context, pool *db.Pool, id, customDomain, deployURL string) error {
+	tag, err := pool.Exec(ctx,
+		`UPDATE zeep_system.frontend_apps
+		 SET custom_domain = $2, deploy_url = $3
+		 WHERE id = $1 AND archived_at IS NULL`,
+		id, customDomain, deployURL,
+	)
+	if err != nil {
+		return fmt.Errorf("dashboard: update frontend app domain: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func ArchiveFrontendApp(ctx context.Context, pool *db.Pool, id string) error {
 	tag, err := pool.Exec(ctx,
 		`UPDATE zeep_system.frontend_apps

@@ -226,6 +226,7 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Post("/api/frontend-apps/{id}/sync/retry", frontendAppsH.SyncRetry)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/frontend-apps/{id}/sync/regenerate", frontendAppsH.SyncRegenerate)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/frontend-apps/{id}/deploy/retry", frontendAppsH.DeployRetry)
+		r.With(dashboard.RequireAuth(pool)).Put("/api/frontend-apps/{id}/custom-domain", frontendAppsH.SetCustomDomain)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/deploy-provider/status", deployProviderH.Status)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/deploy-provider/config", deployProviderH.UpsertConfig)
 		r.Handle("/*", dashboard.StaticHandler())

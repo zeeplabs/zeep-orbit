@@ -680,3 +680,70 @@ func (h *FrontendAppsHandler) DeployRetry(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusOK, map[string]string{"deploy_status": "failed"})
 	}
 }
+
+func (h *FrontendAppsHandler) SetCustomDomain(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	_ = user
+
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 2048)
+	var body struct {
+		Subdomain string `json:"subdomain"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Subdomain == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "subdomain required"})
+		return
+	}
+
+	app, err := GetFrontendApp(r.Context(), h.pool, id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+
+	if app.DeployServiceID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "app has no deploy service"})
+		return
+	}
+
+	dcfg, err := GetDeployProviderConfig(r.Context(), h.pool)
+	if err != nil || dcfg == nil || dcfg.BaseDomain == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "base domain not configured"})
+		return
+	}
+
+	customDomain := body.Subdomain + "." + dcfg.BaseDomain
+	deployURL := "https://" + customDomain
+
+	provider, err := buildDeployProvider(r.Context(), dcfg)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	if rp, ok := provider.(*render.RenderProvider); ok {
+		if err := rp.AddCustomDomain(r.Context(), app.DeployServiceID, customDomain); err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
+	if err := UpdateFrontendAppDomain(r.Context(), h.pool, app.ID, customDomain, deployURL); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"custom_domain": customDomain,
+		"deploy_url":    deployURL,
+	})
+}

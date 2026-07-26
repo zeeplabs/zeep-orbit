@@ -201,9 +201,10 @@ interface FrontendCardProps {
   onSync: (app: FrontendApp) => void;
   onDelete: (app: FrontendApp) => void;
   onDeployRetry: (app: FrontendApp) => void;
+  onSetDomain: (app: FrontendApp, subdomain: string) => void;
 }
 
-function FrontendCard({ app, index, onSync, onDelete, onDeployRetry }: FrontendCardProps) {
+function FrontendCard({ app, index, onSync, onDelete, onDeployRetry, onSetDomain }: FrontendCardProps) {
   const { t } = useTranslation();
   const createdAt = new Date(app.created_at).toLocaleDateString("pt-BR", {
     day: "2-digit",
@@ -261,10 +262,19 @@ function FrontendCard({ app, index, onSync, onDelete, onDeployRetry }: FrontendC
                 )
               )}
               {app.deploy_status === "ready" && app.deploy_url && (
-                <a href={app.deploy_url} target="_blank" rel="noopener noreferrer"
-                  className="block text-[10px] text-[#3B82F6] hover:underline mt-1">
-                  {app.deploy_url.replace("https://", "")}
-                </a>
+                <div className="flex items-center gap-1 mt-1">
+                  <a href={app.deploy_url} target="_blank" rel="noopener noreferrer"
+                    className="text-[10px] text-[#3B82F6] hover:underline">
+                    {app.deploy_url.replace("https://", "")}
+                  </a>
+                  <button
+                    onClick={(e) => { e.preventDefault(); const s = prompt("Set subdomain:", app.custom_domain?.split(".")[0] || ""); if (s) onSetDomain(app, s); }}
+                    title="Set custom domain"
+                    className="text-[#64748B] hover:text-[#94A3B8]"
+                  >
+                    <Pencil size={10} />
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -461,6 +471,15 @@ export default function AppsPage() {
     fetchFrontendApps();
   };
 
+  const handleSetDomain = async (app: FrontendApp, subdomain: string) => {
+    await fetch(`/dashboard/api/frontend-apps/${app.id}/custom-domain`, {
+      method: "PUT", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subdomain }),
+    });
+    fetchFrontendApps();
+  };
+
   // Sync
   const openSync = async (app: FrontendApp) => {
     setSyncApp(app); setSyncInfo(null); setRevealedKey(null); setSyncLoading(true);
@@ -604,7 +623,8 @@ AFTER CLONE
                       <FrontendCard key={app.id} app={app} index={i}
                         onSync={openSync}
                         onDelete={(a) => setFeDeleteTarget(a)}
-                        onDeployRetry={handleDeployRetry} />
+                        onDeployRetry={handleDeployRetry}
+                        onSetDomain={handleSetDomain} />
                     ))}
                   </div>
                 </>
