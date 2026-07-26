@@ -243,25 +243,46 @@ export default function FrontendAppsPage() {
     : "";
 
   const agentPrompt = syncModalApp
-    ? `Setup SSH for git access to frontend app "${syncModalApp.name}":
+    ? `You are configuring SSH-based Git access for a frontend app managed by Zeep Orbit.
+The app "${syncModalApp.name}" has a GitHub repository that already exists. Your goal is to clone it using a one-time deploy key and start working on the code.
 
-1. Write the private key below to ~/.ssh/id_ed25519_${syncModalApp.slug}:
-${revealedKey || "[click 'Reveal Key' to show]"}
+---
+CONTEXT
+---
+- A deploy key (SSH key pair) was generated specifically for this repository.
+- The private key below grants push access. Keep it secure — only write it to disk when needed.
+- The SSH key has no passphrase. Strict file permissions (600) are required.
+- After cloning, you should build and develop the app as if it were any other local project.
 
-2. Set correct permissions:
-   chmod 600 ~/.ssh/id_ed25519_${syncModalApp.slug}
+---
+STEPS
+---
+Step 1 — Write the private key to disk:
+  Run the following command in your shell:
+  cat > ~/.ssh/id_ed25519_${syncModalApp.slug} << 'KEYEOF'
+${revealedKey || "[click 'Reveal Key' to display]"}
+KEYEOF
 
-3. Add to ~/.ssh/config:
+Step 2 — Set correct permissions:
+  chmod 600 ~/.ssh/id_ed25519_${syncModalApp.slug}
+
+Step 3 — Add an SSH host entry so Git uses this key for the target repo only:
+  cat >> ~/.ssh/config << 'SSHEOF'
+
 Host github.com-${syncModalApp.slug}
     HostName github.com
     IdentityFile ~/.ssh/id_ed25519_${syncModalApp.slug}
     IdentitiesOnly yes
+SSHEOF
 
-4. Clone the repository:
-   GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519_${syncModalApp.slug}" ${cloneCommand}`.replace(
-      /github\.com-([^:]+)/,
-      "github.com-$1"
-    )
+Step 4 — Clone the repository using the deploy key:
+  GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519_${syncModalApp.slug} -o StrictHostKeyChecking=accept-new" ${cloneCommand}
+
+---
+AFTER CLONE
+---
+- cd into the cloned directory and start working.
+- Use 'git push' normally — the SSH config will route authentication through the deploy key automatically.`
     : "";
 
   return (
