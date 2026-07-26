@@ -372,6 +372,7 @@
   "frontendApps.cloneCommand": "Comando clone",
   "frontendApps.copy": "Copiar",
   "frontendApps.viewInstructions": "Ver instruções de uso",
+  "frontendApps.syncReadyDesc": "Um prompt pronto para uso foi gerado. Clique abaixo para obter as instruções completas para o seu agente de IA (Claude Code, Codex, OpenCode, etc).",
   "frontendApps.privateKey": "Chave Privada",
   "frontendApps.agentPrompt": "Copie este prompt para seu agente de IA",
   "frontendApps.syncRetry": "Tentar de novo",

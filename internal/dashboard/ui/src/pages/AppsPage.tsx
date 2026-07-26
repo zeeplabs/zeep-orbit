@@ -803,10 +803,13 @@ AFTER CLONE
               </div>
 
               {syncInfo.sync_status === "ready" && !revealedKey && (
-                <Button onClick={handleReveal} disabled={revealing} className="w-full bg-[#3B82F6] hover:bg-[#2563EB] text-white">
-                  {revealing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  <Key className="h-4 w-4 mr-2" />{t("frontendApps.viewInstructions", "View usage instructions")}
-                </Button>
+                <>
+                  <p className="text-xs text-[#94A3B8] text-center">{t("frontendApps.syncReadyDesc", "A ready-to-use prompt was generated. Click below to get the complete instructions for your AI agent (Claude Code, Codex, OpenCode, etc).")}</p>
+                  <Button onClick={handleReveal} disabled={revealing} className="w-full bg-[#3B82F6] hover:bg-[#2563EB] text-white">
+                    {revealing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    <Key className="h-4 w-4 mr-2" />{t("frontendApps.viewInstructions", "View usage instructions")}
+                  </Button>
+                </>
               )}
 
               {revealedKey && (

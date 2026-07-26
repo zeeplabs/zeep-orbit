@@ -370,6 +370,7 @@
   "frontendApps.cloneCommand": "Clone command",
   "frontendApps.copy": "Copy",
   "frontendApps.viewInstructions": "View usage instructions",
+  "frontendApps.syncReadyDesc": "A ready-to-use prompt was generated. Click below to get the complete instructions for your AI agent (Claude Code, Codex, OpenCode, etc).",
   "frontendApps.privateKey": "Private Key",
   "frontendApps.agentPrompt": "Copy this prompt for your AI agent",
   "frontendApps.syncRetry": "Retry",
