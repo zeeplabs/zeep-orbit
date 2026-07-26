@@ -21,6 +21,7 @@ func NewDeployProviderConfigHandler(pool *db.Pool) *DeployProviderConfigHandler 
 type deployProviderConfigBody struct {
 	APIKey           string `json:"api_key"`
 	RenderProjectID  string `json:"render_project_id"`
+	BaseDomain       string `json:"base_domain"`
 }
 
 func (h *DeployProviderConfigHandler) Status(w http.ResponseWriter, r *http.Request) {
@@ -44,6 +45,7 @@ func (h *DeployProviderConfigHandler) Status(w http.ResponseWriter, r *http.Requ
 		"connected":         true,
 		"provider":          cfg.Provider,
 		"render_project_id": cfg.RenderProjectID,
+		"base_domain":       cfg.BaseDomain,
 	})
 }
 
@@ -80,7 +82,7 @@ func (h *DeployProviderConfigHandler) UpsertConfig(w http.ResponseWriter, r *htt
 		return
 	}
 
-	if err := UpsertDeployProviderConfig(r.Context(), h.pool, "render", encrypted, body.RenderProjectID); err != nil {
+	if err := UpsertDeployProviderConfig(r.Context(), h.pool, "render", encrypted, body.RenderProjectID, body.BaseDomain); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 		return
 	}

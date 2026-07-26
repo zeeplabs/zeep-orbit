@@ -26,7 +26,8 @@ type FrontendApp struct {
 	DeployServiceID    string     `json:"deploy_service_id,omitempty"`
 	DeployURL          string     `json:"deploy_url,omitempty"`
 	DeployStatus       string     `json:"deploy_status,omitempty"`
-	DeployErrorMessage string     `json:"deploy_error_message,omitempty"`
+	DeployErrorMessage string `json:"deploy_error_message,omitempty"`
+	CustomDomain       string `json:"custom_domain,omitempty"`
 }
 
 type FrontendAppInput struct {
@@ -48,24 +49,26 @@ const faExtraColsSelect = `COALESCE(fa.backend_app_id::text, ''),
 	COALESCE(fa.deploy_service_id, ''),
 	COALESCE(fa.deploy_url, ''),
 	COALESCE(fa.deploy_status, 'pending'),
-	COALESCE(fa.deploy_error_message, '')`
+	COALESCE(fa.deploy_error_message, ''),
+	COALESCE(fa.custom_domain, '')`
 
 const faExtraColsReturning = `COALESCE(backend_app_id::text, ''),
 	COALESCE(deploy_service_id, ''),
 	COALESCE(deploy_url, ''),
 	COALESCE(deploy_status, 'pending'),
-	COALESCE(deploy_error_message, '')`
+	COALESCE(deploy_error_message, ''),
+	COALESCE(custom_domain, '')`
 
 func scanApp(a *FrontendApp, row pgx.Row) error {
 	return row.Scan(&a.ID, &a.Name, &a.Slug, &a.TemplateID, &a.TemplateName,
 		&a.GithubRepoURL, &a.Status, &a.ErrorMessage, &a.CreatedBy, &a.CreatedAt, &a.ArchivedAt,
-		&a.BackendAppID, &a.DeployServiceID, &a.DeployURL, &a.DeployStatus, &a.DeployErrorMessage)
+		&a.BackendAppID, &a.DeployServiceID, &a.DeployURL, &a.DeployStatus, &a.DeployErrorMessage, &a.CustomDomain)
 }
 
 func scanAppRows(a *FrontendApp, rows pgx.Rows) error {
 	return rows.Scan(&a.ID, &a.Name, &a.Slug, &a.TemplateID, &a.TemplateName,
 		&a.GithubRepoURL, &a.Status, &a.ErrorMessage, &a.CreatedBy, &a.CreatedAt, &a.ArchivedAt,
-		&a.BackendAppID, &a.DeployServiceID, &a.DeployURL, &a.DeployStatus, &a.DeployErrorMessage)
+		&a.BackendAppID, &a.DeployServiceID, &a.DeployURL, &a.DeployStatus, &a.DeployErrorMessage, &a.CustomDomain)
 }
 
 func CreateFrontendApp(ctx context.Context, pool *db.Pool, input FrontendAppInput) (*FrontendApp, error) {

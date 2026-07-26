@@ -917,8 +917,9 @@ function DeployTab() {
   const { t } = useTranslation();
   const [apiKey, setApiKey] = useState("");
   const [renderProjectId, setRenderProjectId] = useState("");
+  const [baseDomain, setBaseDomain] = useState("");
   const [saving, setSaving] = useState(false);
-  const [status, setStatus] = useState<{ connected: boolean; provider: string; render_project_id?: string } | null>(null);
+  const [status, setStatus] = useState<{ connected: boolean; provider: string; render_project_id?: string; base_domain?: string } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [messageType, setMessageType] = useState<"success" | "error">("success");
 
@@ -931,6 +932,7 @@ function DeployTab() {
         const data = await res.json();
         setStatus(data);
         if (data.render_project_id) setRenderProjectId(data.render_project_id);
+        if (data.base_domain) setBaseDomain(data.base_domain);
       }
     } catch {}
   };
@@ -942,7 +944,7 @@ function DeployTab() {
       const res = await fetch("/dashboard/api/deploy-provider/config", {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ api_key: apiKey, render_project_id: renderProjectId }),
+        body: JSON.stringify({ api_key: apiKey, render_project_id: renderProjectId, base_domain: baseDomain }),
       });
       const data = await res.json();
       if (!res.ok) { setMessage(data.error || "Failed to connect"); setMessageType("error"); return; }
@@ -990,6 +992,12 @@ function DeployTab() {
             <input type="text" value={renderProjectId} onChange={(e) => setRenderProjectId(e.target.value)}
               placeholder="prj-..." className={inputClass} />
             <p className="mt-1 text-[11px] text-[#64748B]">{t("deploy.projectIdHint", "All services created via Zeep Orbit will be grouped under this project. Leave empty to use the default workspace.")}</p>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">{t("deploy.baseDomain", "Base Domain (optional)")}</label>
+            <input type="text" value={baseDomain} onChange={(e) => setBaseDomain(e.target.value)}
+              placeholder="meusite.com" className={inputClass} />
+            <p className="mt-1 text-[11px] text-[#64748B]">{t("deploy.baseDomainHint", "Users can pick a subdomain and the full domain will be configured on Render. Leave empty to use Render's default URL.")}</p>
           </div>
           {message && <p className={`text-[12px] ${messageType === "error" ? "text-[#EF4444]" : "text-[#22C55E]"}`}>{message}</p>}
           <Button onClick={handleSave} disabled={saving || !apiKey.trim()}

@@ -259,6 +259,12 @@ function FrontendCard({ app, index, onSync, onDelete, onDeployRetry }: FrontendC
                   </span>
                 )
               )}
+              {app.deploy_status === "ready" && app.deploy_url && (
+                <a href={app.deploy_url} target="_blank" rel="noopener noreferrer"
+                  className="block text-[10px] text-[#3B82F6] hover:underline mt-1">
+                  {app.deploy_url.replace("https://", "")}
+                </a>
+              )}
             </div>
           </div>
           <span className="text-[10px] text-[#64748B] tracking-wide shrink-0 whitespace-nowrap">{createdAt}</span>
@@ -383,6 +389,7 @@ export default function AppsPage() {
   const [showFeCreate, setShowFeCreate] = useState(false);
   const [newFeName, setNewFeName] = useState("");
   const [newFeTemplateId, setNewFeTemplateId] = useState("");
+  const [newFeSubdomain, setNewFeSubdomain] = useState("");
   const [feCreating, setFeCreating] = useState(false);
   const [feCreateError, setFeCreateError] = useState<string | null>(null);
 
@@ -431,11 +438,11 @@ export default function AppsPage() {
       const res = await fetch("/dashboard/api/frontend-apps", {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newFeName, template_id: newFeTemplateId }),
+        body: JSON.stringify({ name: newFeName, template_id: newFeTemplateId, subdomain: newFeSubdomain }),
       });
       const data = await res.json();
       if (!res.ok) { setFeCreateError(data.error || "Failed"); return; }
-      setShowFeCreate(false); setNewFeName(""); setNewFeTemplateId("");
+      setShowFeCreate(false); setNewFeName(""); setNewFeTemplateId(""); setNewFeSubdomain("");
       await fetchFrontendApps();
       qc.invalidateQueries({ queryKey: ["frontend-apps"] });
       if (data.status === "failed") setFeCreateError(`Repo creation failed: ${data.error_message}`);
@@ -633,7 +640,7 @@ AFTER CLONE
             </button>
 
             <button
-              onClick={() => { setShowTypeModal(false); setShowFeCreate(true); setFeCreateError(null); setNewFeName(""); setNewFeTemplateId(""); fetchTemplates(); }}
+              onClick={() => { setShowTypeModal(false); setShowFeCreate(true); setFeCreateError(null); setNewFeName(""); setNewFeTemplateId(""); setNewFeSubdomain(""); fetchTemplates(); }}
               className="w-full text-left p-4 rounded-xl border border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.06] hover:border-[rgba(34,197,94,0.25)] transition-all group"
             >
               <div className="flex items-center gap-3 mb-1.5">
@@ -681,6 +688,11 @@ AFTER CLONE
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div>
+              <Label htmlFor="fe-subdomain" className="text-[#94A3B8] text-xs">{t("frontendApps.formSubdomain", "Subdomain (optional)")}</Label>
+              <Input id="fe-subdomain" value={newFeSubdomain} onChange={(e) => setNewFeSubdomain(e.target.value)}
+                placeholder="meuapp" className="mt-1 bg-white/[0.04] border-white/[0.08] text-[#F8FAFC]" />
             </div>
             {feCreateError && <p className="text-xs text-[#EF4444]">{feCreateError}</p>}
           </div>

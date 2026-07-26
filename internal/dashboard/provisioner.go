@@ -187,7 +187,8 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_deploy_provider_config_singleton
 		 ON zeep_system.deploy_provider_config ((TRUE))`,
 		`ALTER TABLE zeep_system.deploy_provider_config
-		 ADD COLUMN IF NOT EXISTS render_project_id TEXT NOT NULL DEFAULT ''`,
+		 ADD COLUMN IF NOT EXISTS render_project_id TEXT NOT NULL DEFAULT '',
+		 ADD COLUMN IF NOT EXISTS base_domain       TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE zeep_system.github_templates
 		 ADD COLUMN IF NOT EXISTS render_service_type TEXT NOT NULL DEFAULT '',
 		 ADD COLUMN IF NOT EXISTS build_command       TEXT NOT NULL DEFAULT '',
@@ -198,7 +199,8 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 		 ADD COLUMN IF NOT EXISTS deploy_service_id     TEXT NOT NULL DEFAULT '',
 		 ADD COLUMN IF NOT EXISTS deploy_url            TEXT NOT NULL DEFAULT '',
 		 ADD COLUMN IF NOT EXISTS deploy_status         TEXT NOT NULL DEFAULT 'pending',
-		 ADD COLUMN IF NOT EXISTS deploy_error_message  TEXT NOT NULL DEFAULT ''`,
+		 ADD COLUMN IF NOT EXISTS deploy_error_message  TEXT NOT NULL DEFAULT '',
+		 ADD COLUMN IF NOT EXISTS custom_domain         TEXT NOT NULL DEFAULT ''`,
 	}
 
 	for _, stmt := range stmts {

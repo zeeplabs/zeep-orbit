@@ -257,3 +257,16 @@ func (p *RenderProvider) assignToProject(ctx context.Context, serviceID string) 
 	}
 	return fmt.Errorf("render: assign to project failed (status %d): %s", resp.StatusCode, string(body))
 }
+
+func (p *RenderProvider) AddCustomDomain(ctx context.Context, serviceID, domain string) error {
+	resp, body, err := p.client.do(ctx, http.MethodPost, "/services/"+serviceID+"/custom-domains", map[string]string{
+		"domain": domain,
+	})
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+	return fmt.Errorf("render: add custom domain failed (status %d): %s", resp.StatusCode, string(body))
+}

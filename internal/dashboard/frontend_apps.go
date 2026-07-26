@@ -42,9 +42,10 @@ func NewFrontendAppsHandler(pool *db.Pool) *FrontendAppsHandler {
 }
 
 type frontendAppCreateBody struct {
-	Name          string `json:"name"`
-	TemplateID    string `json:"template_id"`
-	BackendAppID  string `json:"backend_app_id"`
+	Name         string `json:"name"`
+	TemplateID   string `json:"template_id"`
+	BackendAppID string `json:"backend_app_id"`
+	Subdomain    string `json:"subdomain"`
 }
 
 func (h *FrontendAppsHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -195,7 +196,7 @@ func (h *FrontendAppsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// T-10: Deploy step — create service on the connected provider.
-		h.attemptDeploy(r.Context(), app, tmpl)
+		h.attemptDeploy(r.Context(), app, tmpl, body.Subdomain)
 	}
 
 	meta, _ := json.Marshal(map[string]string{
@@ -571,7 +572,7 @@ func buildDeployProvider(ctx context.Context, cfg *DeployProviderConfig) (deploy
 	return render.NewRenderProvider(ctx, apiKey, cfg.RenderProjectID)
 }
 
-func (h *FrontendAppsHandler) attemptDeploy(ctx context.Context, app *FrontendApp, tmpl *GitHubTemplate) {
+func (h *FrontendAppsHandler) attemptDeploy(ctx context.Context, app *FrontendApp, tmpl *GitHubTemplate, subdomain string) {
 	if tmpl.RenderServiceType == "" {
 		return
 	}
@@ -604,15 +605,26 @@ func (h *FrontendAppsHandler) attemptDeploy(ctx context.Context, app *FrontendAp
 		EnvVars:      make(map[string]string),
 	}
 
-	_ = params
-
 	info, err := provider.CreateService(ctx, params)
 	if err != nil {
 		_, _ = UpdateFrontendAppDeploy(ctx, h.pool, app.ID, "", "", "failed", err.Error())
 		return
 	}
 
-	_, _ = UpdateFrontendAppDeploy(ctx, h.pool, app.ID, info.ServiceID, info.URL, "ready", "")
+	deployURL := info.URL
+	customDomain := app.CustomDomain
+
+	if customDomain != "" {
+		deployURL = "https://" + customDomain
+	} else if dcfg.BaseDomain != "" && subdomain != "" && info.ServiceID != "" {
+		customDomain = subdomain + "." + dcfg.BaseDomain
+		if rp, ok := provider.(*render.RenderProvider); ok {
+			_ = rp.AddCustomDomain(ctx, info.ServiceID, customDomain)
+		}
+		deployURL = "https://" + customDomain
+	}
+
+	_, _ = UpdateFrontendAppDeploy(ctx, h.pool, app.ID, info.ServiceID, deployURL, "ready", "")
 }
 
 func (h *FrontendAppsHandler) DeployRetry(w http.ResponseWriter, r *http.Request) {
@@ -656,7 +668,7 @@ func (h *FrontendAppsHandler) DeployRetry(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	h.attemptDeploy(r.Context(), app, tmpl)
+	h.attemptDeploy(r.Context(), app, tmpl, "")
 
 	meta, _ := json.Marshal(map[string]string{"frontend_app_id": id})
 	h.audit(r.Context(), user.ID, user.Email, "frontend_app.deploy.retry", "frontend_app", app.ID, app.Name, meta, r.RemoteAddr)
