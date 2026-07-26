@@ -1,4 +1,4 @@
-# Tasks: MVP Core
+# Tasks: MVP Core — ✅ all complete (M1 shipped)
 
 ## Execution Order
 
@@ -14,7 +14,7 @@ Dependencies listed explicitly.
 **What:** `go mod init`, create directory tree, Makefile, .gitignore, go.mod with all dependencies.
 **Where:** Repository root
 **Done when:** `go build ./...` passes with no errors on empty stubs.
-**Gate:** `go build ./...` green
+**Gate:** ✅ `go build ./...` green
 
 ### T-002: Config types + YAML loader [P with T-001]
 
@@ -25,7 +25,7 @@ Dependencies listed explicitly.
 - Validation: required fields, name regex `^[a-z][a-z0-9-]{0,62}$`, type whitelist, duplicate names
   **Where:** `internal/config/`
   **Done when:** Unit tests cover valid config, missing fields, bad name format, unknown types, duplicate app names.
-  **Gate:** `go test ./internal/config/...` green
+  **Gate:** ✅ `go test ./internal/config/...` green
 
 ---
 
@@ -42,7 +42,7 @@ _Depends on: T-001_
 - Exported `Pool` type
   **Where:** `internal/db/`
   **Done when:** Connects to real PostgreSQL in integration tests (Docker-based test DB).
-  **Gate:** `go test ./internal/db/...` green
+  **Gate:** ✅ `go test ./internal/db/...` green
 
 ### T-004: Schema provisioner [P with T-003]
 
@@ -56,7 +56,7 @@ _Depends on: T-001_
   **Where:** `internal/provisioner/`
   **Depends on:** T-003
   **Done when:** Integration tests: create schema, create table, re-run (idempotent), add column.
-  **Gate:** `go test ./internal/provisioner/...` green
+  **Gate:** ✅ `go test ./internal/provisioner/...` green
 
 ---
 
@@ -75,7 +75,7 @@ _Depends on: T-002_
   **Where:** `internal/registry/`
   **Depends on:** T-002
   **Done when:** Unit tests: load N apps, get existing, get missing, concurrent reads.
-  **Gate:** `go test ./internal/registry/...` green
+  **Gate:** ✅ `go test ./internal/registry/...` green
 
 ---
 
@@ -95,7 +95,7 @@ _Depends on: T-002, T-005_
 - Filter field names validated against known columns (injection prevention)
   **Where:** `internal/query/`
   **Done when:** Unit tests cover all builders, unknown field rejection, injection prevention, edge cases.
-  **Gate:** `go test ./internal/query/...` green
+  **Gate:** ✅ `go test ./internal/query/...` green
 
 ---
 
@@ -115,7 +115,7 @@ _Depends on: T-005, T-006, T-003_
   **Where:** `internal/server/`
   **Depends on:** T-005
   **Done when:** Unit tests: valid token, expired, wrong secret, missing header, unknown app.
-  **Gate:** `go test ./internal/server/ -run TestMiddleware` green
+  **Gate:** ✅ `go test ./internal/server/ -run TestMiddleware` green
 
 ### T-008: CRUD handlers [P with T-007]
 
@@ -127,7 +127,7 @@ _Depends on: T-005, T-006, T-003_
   **Where:** `internal/server/`
   **Depends on:** T-005, T-006, T-003
   **Done when:** Integration tests hit real PostgreSQL for all operations + error cases.
-  **Gate:** `go test ./internal/server/...` green
+  **Gate:** ✅ `go test ./internal/server/...` green
 
 ### T-009: Router + server wiring
 
@@ -141,7 +141,7 @@ _Depends on: T-005, T-006, T-003_
   **Where:** `internal/server/`
   **Depends on:** T-007, T-008
   **Done when:** Server starts, /health returns 200, logs are JSON.
-  **Gate:** Smoke test + `go test ./internal/server/...`
+  **Gate:** ✅ Smoke test + `go test ./internal/server/...`
 
 ---
 
@@ -161,7 +161,7 @@ _Depends on: T-002, T-004, T-009_
   **Where:** `cmd/zeep/`
   **Depends on:** T-002, T-004, T-009
   **Done when:** All four commands work end-to-end against live PostgreSQL.
-  **Gate:** Manual E2E validation checklist (see below)
+  **Gate:** ✅ Manual E2E validation checklist (see below)
 
 ---
 
@@ -179,7 +179,7 @@ _Depends on: T-010_
 - `.env.example` with required vars
   **Where:** Repository root
   **Done when:** `docker compose up && curl localhost:8080/health` returns `{"status":"ok"}`.
-  **Gate:** `docker compose up` → 200 on /health
+  **Gate:** ✅ `docker compose up` → 200 on /health
 
 ---
 

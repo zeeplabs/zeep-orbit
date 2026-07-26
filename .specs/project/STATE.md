@@ -53,7 +53,7 @@ None.
 
 - [x] Decide module name: `github.com/zeeplabs/zeep-orbit`
 - [x] Choose PostgreSQL migration approach: pure SQL files vs. programmatic via `pgx`
-- [ ] Define filtering DSL for query params (PostgREST-compatible vs. custom)
+- [x] Define filtering DSL for query params — PostgREST-compatible chosen: `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `like`, `ilike`, `in`, implemented in `internal/query/builder.go`
 
 ---
 
