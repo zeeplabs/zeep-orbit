@@ -260,7 +260,7 @@ func (p *RenderProvider) assignToProject(ctx context.Context, serviceID string) 
 
 func (p *RenderProvider) AddCustomDomain(ctx context.Context, serviceID, domain string) error {
 	resp, body, err := p.client.do(ctx, http.MethodPost, "/services/"+serviceID+"/custom-domains", map[string]string{
-		"domain": domain,
+		"name": domain,
 	})
 	if err != nil {
 		return err
