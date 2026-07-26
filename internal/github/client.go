@@ -287,6 +287,28 @@ func (c *Client) CreateRepoFromTemplate(ctx context.Context, templateOwner, temp
 	}
 }
 
+// ArchiveRepo marks a repository as archived via PATCH /repos/{owner}/{repo}.
+// This is a best-effort operation — callers should not block on its failure.
+func (c *Client) ArchiveRepo(ctx context.Context, owner, repo string) error {
+	url := fmt.Sprintf("%s/repos/%s/%s", githubAPIBaseURL, owner, repo)
+
+	reqBody, err := json.Marshal(map[string]bool{"archived": true})
+	if err != nil {
+		return fmt.Errorf("github: marshal archive request body: %w", err)
+	}
+
+	resp, body, err := c.doAuthenticated(ctx, http.MethodPatch, url, reqBody)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+	return unexpectedStatusError(resp, body)
+}
+
 // doAuthenticated builds and executes an authenticated GitHub API request,
 // returning the raw response (caller must close the body) along with the
 // already-read body bytes for convenience. It does not inspect status codes

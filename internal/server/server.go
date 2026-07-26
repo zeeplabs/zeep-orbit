@@ -64,7 +64,8 @@ func New(reg *registry.Registry, pool *db.Pool, port int) (*Server, error) {
 	dashH := dashboard.NewHandler(pool, reg, logger)
 	githubConfigH := dashboard.NewGitHubConfigHandler(pool)
 	githubTemplatesH := dashboard.NewGitHubTemplatesHandler(pool)
-	r := newRouter(reg, h, pool, logger, dashH, githubConfigH, githubTemplatesH)
+	frontendAppsH := dashboard.NewFrontendAppsHandler(pool)
+	r := newRouter(reg, h, pool, logger, dashH, githubConfigH, githubTemplatesH, frontendAppsH)
 
 	s := &Server{
 		httpServer: &http.Server{
@@ -127,7 +128,7 @@ func buildLogger() (*zap.Logger, error) {
 }
 
 // newRouter builds the chi.Mux with all routes and middleware.
-func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Logger, dashH *dashboard.Handler, githubConfigH *dashboard.GitHubConfigHandler, githubTemplatesH *dashboard.GitHubTemplatesHandler) *chi.Mux {
+func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Logger, dashH *dashboard.Handler, githubConfigH *dashboard.GitHubConfigHandler, githubTemplatesH *dashboard.GitHubTemplatesHandler, frontendAppsH *dashboard.FrontendAppsHandler) *chi.Mux {
 	logBuf := dashH.Logs
 	r := chi.NewRouter()
 
@@ -214,6 +215,11 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Put("/api/github/templates/{id}", githubTemplatesH.Update)
 		r.With(dashboard.RequireAuth(pool)).Delete("/api/github/templates/{id}", githubTemplatesH.Delete)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/github/templates/{id}/active", githubTemplatesH.SetActive)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/frontend-apps", frontendAppsH.List)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/frontend-apps/{id}", frontendAppsH.Get)
+		r.With(dashboard.RequireAuth(pool)).Post("/api/frontend-apps", frontendAppsH.Create)
+		r.With(dashboard.RequireAuth(pool)).Post("/api/frontend-apps/{id}/retry", frontendAppsH.Retry)
+		r.With(dashboard.RequireAuth(pool)).Delete("/api/frontend-apps/{id}", frontendAppsH.Delete)
 		r.Handle("/*", dashboard.StaticHandler())
 	})
 
