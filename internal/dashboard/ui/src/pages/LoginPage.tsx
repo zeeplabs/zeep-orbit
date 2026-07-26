@@ -80,10 +80,10 @@ export default function LoginPage() {
             alt="Zeep Orbit"
             className="size-42 max-md:size-32 object-contain mb-3"
           />
-          <h1 className="text-lg font-bold text-[#F8FAFC]">
+          <h1 className="text-lg font-bold text-[#F8FAFC] text-center">
             {t("login.title")}
           </h1>
-          <p className="text-[13px] text-[#94A3B8] mt-0.5">
+          <p className="text-[13px] text-[#94A3B8] mt-0.5 text-center">
             {t("login.subtitle")}
           </p>
         </div>
