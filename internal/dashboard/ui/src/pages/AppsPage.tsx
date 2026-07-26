@@ -904,6 +904,10 @@ AFTER CLONE
                     {domainSub || "..."}.{baseDomain}
                   </div>
                 </div>
+                <p className="text-[10px] text-[#64748B] text-center">
+                  {t("frontendApps.dnsHint", "One-time setup: superadmin must add a wildcard CNAME record at the DNS provider:")}<br/>
+                  <code className="text-[#94A3B8]">*.{baseDomain} → Render</code>
+                </p>
               </>
             )}
           </div>
