@@ -44,11 +44,17 @@ type FrontendAppInput struct {
 	DeployErrorMessage string
 }
 
-const faExtraCols = `COALESCE(fa.backend_app_id::text, ''),
+const faExtraColsSelect = `COALESCE(fa.backend_app_id::text, ''),
 	COALESCE(fa.deploy_service_id, ''),
 	COALESCE(fa.deploy_url, ''),
 	COALESCE(fa.deploy_status, 'pending'),
 	COALESCE(fa.deploy_error_message, '')`
+
+const faExtraColsReturning = `COALESCE(backend_app_id::text, ''),
+	COALESCE(deploy_service_id, ''),
+	COALESCE(deploy_url, ''),
+	COALESCE(deploy_status, 'pending'),
+	COALESCE(deploy_error_message, '')`
 
 func scanApp(a *FrontendApp, row pgx.Row) error {
 	return row.Scan(&a.ID, &a.Name, &a.Slug, &a.TemplateID, &a.TemplateName,
@@ -72,7 +78,7 @@ func CreateFrontendApp(ctx context.Context, pool *db.Pool, input FrontendAppInpu
 			 RETURNING id, name, slug, template_id,
 			   (SELECT COALESCE(gt.name, '') FROM zeep_system.github_templates gt WHERE gt.id = template_id),
 			   github_repo_url, status, error_message, created_by, created_at, archived_at,
-			   `+faExtraCols,
+			   `+faExtraColsReturning,
 			input.Name, input.Slug, input.TemplateID,
 			input.GithubRepoURL, input.Status, input.ErrorMessage, input.CreatedBy, input.BackendAppID,
 		))
@@ -89,7 +95,7 @@ func GetFrontendApp(ctx context.Context, pool *db.Pool, id string) (*FrontendApp
 			`SELECT fa.id, fa.name, fa.slug, fa.template_id,
 			 COALESCE(gt.name, ''), fa.github_repo_url, fa.status,
 			 fa.error_message, fa.created_by, fa.created_at, fa.archived_at,
-			 `+faExtraCols+`
+			 `+faExtraColsSelect+`
 			 FROM zeep_system.frontend_apps fa
 			 LEFT JOIN zeep_system.github_templates gt ON gt.id = fa.template_id
 			 WHERE fa.id = $1 AND fa.archived_at IS NULL`,
@@ -109,7 +115,7 @@ func ListFrontendApps(ctx context.Context, pool *db.Pool) ([]FrontendApp, error)
 		`SELECT fa.id, fa.name, fa.slug, fa.template_id,
 		 COALESCE(gt.name, ''), fa.github_repo_url, fa.status,
 		 fa.error_message, fa.created_by, fa.created_at, fa.archived_at,
-		 `+faExtraCols+`
+		 `+faExtraColsSelect+`
 		 FROM zeep_system.frontend_apps fa
 		 LEFT JOIN zeep_system.github_templates gt ON gt.id = fa.template_id
 		 WHERE fa.archived_at IS NULL
@@ -147,7 +153,7 @@ func UpdateFrontendAppStatus(ctx context.Context, pool *db.Pool, id, status, err
 			 RETURNING id, name, slug, template_id,
 			   (SELECT COALESCE(gt.name, '') FROM zeep_system.github_templates gt WHERE gt.id = template_id),
 			   github_repo_url, status, error_message, created_by, created_at, archived_at,
-			   `+faExtraCols,
+			   `+faExtraColsReturning,
 			id, status, errorMessage, repoURL,
 		))
 	if err != nil {
@@ -169,7 +175,7 @@ func UpdateFrontendAppDeploy(ctx context.Context, pool *db.Pool, id, deployServi
 			 RETURNING id, name, slug, template_id,
 			   (SELECT COALESCE(gt.name, '') FROM zeep_system.github_templates gt WHERE gt.id = template_id),
 			   github_repo_url, status, error_message, created_by, created_at, archived_at,
-			   `+faExtraCols,
+			   `+faExtraColsReturning,
 			id, deployServiceID, deployURL, deployStatus, deployErrorMessage,
 		))
 	if err != nil {
