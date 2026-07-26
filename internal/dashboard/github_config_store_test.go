@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -162,6 +163,87 @@ func TestUpsertGitHubConfigPartialUpdatePreservesPrivateKey(t *testing.T) {
 	}
 	if cfg.WebhookSecret != original.WebhookSecret {
 		t.Errorf("WebhookSecret = %q, want preserved %q", cfg.WebhookSecret, original.WebhookSecret)
+	}
+}
+
+// TestUpsertGitHubConfigPartialUpdatePreservesExactCiphertext covers the fix
+// for the Critical review finding: preservation of unchanged secrets must be
+// enforced by the SQL CASE WHEN guard, not a Go-side pre-read that could
+// silently wipe secrets to '' on a transient error. This test asserts the
+// raw stored ciphertext is byte-identical across the partial update (proof
+// the column was left untouched by the database, not merely that it decrypts
+// to the same cleartext by coincidence).
+func TestUpsertGitHubConfigPartialUpdatePreservesExactCiphertext(t *testing.T) {
+	pool := githubTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	original := GitHubAppConfigInput{
+		AppID:         "12345",
+		ClientID:      "Iv1.abc123",
+		ClientSecret:  "original-secret",
+		PrivateKey:    "-----BEGIN RSA PRIVATE KEY-----\nORIGINAL\n-----END RSA PRIVATE KEY-----",
+		WebhookSecret: "original-webhook",
+	}
+	if err := UpsertGitHubConfig(ctx, pool, original); err != nil {
+		t.Fatalf("initial UpsertGitHubConfig: %v", err)
+	}
+
+	var rawSecretBefore, rawKeyBefore, rawWebhookBefore string
+	if err := pool.QueryRow(ctx,
+		`SELECT client_secret, private_key, webhook_secret FROM zeep_system.github_app_config LIMIT 1`,
+	).Scan(&rawSecretBefore, &rawKeyBefore, &rawWebhookBefore); err != nil {
+		t.Fatalf("scan raw row before update: %v", err)
+	}
+
+	// Two consecutive partial updates (only ClientID changes each time) to
+	// confirm the SQL guard holds up across repeated calls, with no Go-side
+	// pre-read involved at all.
+	for i := 0; i < 2; i++ {
+		partial := GitHubAppConfigInput{
+			AppID:    "12345",
+			ClientID: fmt.Sprintf("Iv1.updated-%d", i),
+		}
+		if err := UpsertGitHubConfig(ctx, pool, partial); err != nil {
+			t.Fatalf("partial UpsertGitHubConfig #%d: %v", i, err)
+		}
+	}
+
+	var rawSecretAfter, rawKeyAfter, rawWebhookAfter string
+	if err := pool.QueryRow(ctx,
+		`SELECT client_secret, private_key, webhook_secret FROM zeep_system.github_app_config LIMIT 1`,
+	).Scan(&rawSecretAfter, &rawKeyAfter, &rawWebhookAfter); err != nil {
+		t.Fatalf("scan raw row after update: %v", err)
+	}
+
+	if rawSecretAfter != rawSecretBefore {
+		t.Errorf("client_secret ciphertext changed on partial update: before=%q after=%q", rawSecretBefore, rawSecretAfter)
+	}
+	if rawKeyAfter != rawKeyBefore {
+		t.Errorf("private_key ciphertext changed on partial update: before=%q after=%q", rawKeyBefore, rawKeyAfter)
+	}
+	if rawWebhookAfter != rawWebhookBefore {
+		t.Errorf("webhook_secret ciphertext changed on partial update: before=%q after=%q", rawWebhookBefore, rawWebhookAfter)
+	}
+}
+
+// TestGetGitHubConfigPropagatesRealErrors covers the Important review finding:
+// a genuine query error (as opposed to "no rows yet") must be surfaced to the
+// caller, not folded into the same (nil, nil) "not configured" signal.
+func TestGetGitHubConfigPropagatesRealErrors(t *testing.T) {
+	pool := githubTestPool(t)
+	ctx := context.Background()
+
+	// Force a real query error distinct from "no rows": close the pool so
+	// any subsequent query fails at the connection level.
+	pool.Close()
+
+	cfg, err := GetGitHubConfig(ctx, pool)
+	if err == nil {
+		t.Fatal("expected error from closed pool, got nil")
+	}
+	if cfg != nil {
+		t.Fatalf("expected nil config alongside error, got %+v", cfg)
 	}
 }
 

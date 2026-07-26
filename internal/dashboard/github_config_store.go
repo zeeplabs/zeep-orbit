@@ -2,9 +2,11 @@ package dashboard
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/zeeplabs/zeep-orbit/internal/crypto"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
@@ -59,7 +61,10 @@ func GetGitHubConfig(ctx context.Context, pool *db.Pool) (*GitHubAppConfig, erro
 	).Scan(&row.AppID, &row.ClientID, &row.ClientSecret, &row.PrivateKey, &row.WebhookSecret,
 		&row.OrgLogin, &row.InstallationID, &row.InstalledAt, &row.UpdatedAt)
 	if err != nil {
-		return nil, nil
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("dashboard: get github config: %w", err)
 	}
 
 	return decryptGitHubConfigRow(&row)
@@ -68,27 +73,22 @@ func GetGitHubConfig(ctx context.Context, pool *db.Pool) (*GitHubAppConfig, erro
 // UpsertGitHubConfig creates or updates the singleton github_app_config row,
 // encrypting client_secret, private_key, and webhook_secret. When a sensitive
 // field in the input is empty, the existing encrypted value is preserved.
+//
+// Preservation is enforced in SQL (CASE WHEN $n = '' THEN <existing column>
+// ELSE $n END), not via a Go-side pre-read: a pre-read that fails for reasons
+// other than "no row yet" (connection blip, timeout, context cancellation)
+// must never be allowed to silently wipe an existing secret to empty string.
+// The database itself is the single source of truth for "keep existing".
 func UpsertGitHubConfig(ctx context.Context, pool *db.Pool, input GitHubAppConfigInput) error {
-	var existing githubAppConfigRow
-	hasExisting := true
-	err := pool.QueryRow(ctx,
-		`SELECT client_secret, private_key, webhook_secret
-		 FROM zeep_system.github_app_config
-		 LIMIT 1`,
-	).Scan(&existing.ClientSecret, &existing.PrivateKey, &existing.WebhookSecret)
-	if err != nil {
-		hasExisting = false
-	}
-
-	clientSecretEnc, err := preserveOrEncrypt(input.ClientSecret, hasExisting, existing.ClientSecret)
+	clientSecretEnc, err := encryptIfNonEmpty(input.ClientSecret)
 	if err != nil {
 		return fmt.Errorf("dashboard: encrypt client_secret: %w", err)
 	}
-	privateKeyEnc, err := preserveOrEncrypt(input.PrivateKey, hasExisting, existing.PrivateKey)
+	privateKeyEnc, err := encryptIfNonEmpty(input.PrivateKey)
 	if err != nil {
 		return fmt.Errorf("dashboard: encrypt private_key: %w", err)
 	}
-	webhookSecretEnc, err := preserveOrEncrypt(input.WebhookSecret, hasExisting, existing.WebhookSecret)
+	webhookSecretEnc, err := encryptIfNonEmpty(input.WebhookSecret)
 	if err != nil {
 		return fmt.Errorf("dashboard: encrypt webhook_secret: %w", err)
 	}
@@ -100,9 +100,9 @@ func UpsertGitHubConfig(ctx context.Context, pool *db.Pool, input GitHubAppConfi
 		 ON CONFLICT ((TRUE)) DO UPDATE SET
 		    app_id = $1,
 		    client_id = $2,
-		    client_secret = $3,
-		    private_key = $4,
-		    webhook_secret = $5,
+		    client_secret = CASE WHEN $3 = '' THEN github_app_config.client_secret ELSE $3 END,
+		    private_key = CASE WHEN $4 = '' THEN github_app_config.private_key ELSE $4 END,
+		    webhook_secret = CASE WHEN $5 = '' THEN github_app_config.webhook_secret ELSE $5 END,
 		    updated_at = now()`,
 		input.AppID, input.ClientID, clientSecretEnc, privateKeyEnc, webhookSecretEnc,
 	)
@@ -113,13 +113,11 @@ func UpsertGitHubConfig(ctx context.Context, pool *db.Pool, input GitHubAppConfi
 	return nil
 }
 
-// preserveOrEncrypt encrypts newValue if non-empty; otherwise it returns the
-// existing encrypted value unchanged (no decrypt/re-encrypt round-trip needed).
-func preserveOrEncrypt(newValue string, hasExisting bool, existingEncrypted string) (string, error) {
+// encryptIfNonEmpty encrypts newValue if non-empty; an empty string is passed
+// through unchanged so the SQL CASE WHEN guard in UpsertGitHubConfig can tell
+// "keep existing" apart from a legitimate encrypted value.
+func encryptIfNonEmpty(newValue string) (string, error) {
 	if newValue == "" {
-		if hasExisting {
-			return existingEncrypted, nil
-		}
 		return "", nil
 	}
 	return crypto.Encrypt(newValue)
