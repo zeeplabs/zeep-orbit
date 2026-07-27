@@ -1,6 +1,6 @@
 <p align="center">
   <img src="docs/static/img/orbit-logo.png" alt="Zeep Orbit" width="200" />
-  <p align="center"><strong>One backend for all your AI-generated frontends.</strong></p>
+  <p align="center"><strong>Plataforma completa para times de tecnologia.</strong></p>
 
   <p>
     <a href="https://github.com/zeeplabs/zeep-orbit/actions"><img src="https://github.com/zeeplabs/zeep-orbit/actions/workflows/docker-publish.yml/badge.svg" alt="CI" /></a>
@@ -13,27 +13,20 @@
 
 ---
 
-**Zeep Orbit** is an open-source, self-hosted BaaS (Backend-as-a-Service) platform. It turns a simple schema definition into instant REST APIs + PostgreSQL schemas — designed for AI-generated frontends (Claude Code, Cursor, Lovable, v0) that need a backend without building one from scratch.
+**Zeep Orbit** is an open-source, self-hosted platform that gives your team everything to build and ship apps — backend APIs, frontend deployment, custom domains, and user management — all from one dashboard. No external services, no lock-in. Your infrastructure, your data.
 
 <p align="center">
   <img src="docs/static/img/diagram.svg" alt="Architecture Diagram" width="800" />
 </p>
 
-```yaml
-# apps.yaml → instant APIs
-apps:
-  - name: billing
-    tables:
-      - name: invoices
-        columns:
-          - { name: amount, type: decimal, required: true }
-          - { name: status, type: text, default: "pending" }
-```
-
 ```bash
+# Backend apps — define tables, get instant REST APIs
 docker compose up -d
-curl -H "Authorization: Bearer $TOKEN" localhost:8080/billing/invoices
+curl -H "Authorization: Bearer $TOKEN" localhost:8080/myapp/tasks
 # → {"data":[],"count":0}
+
+# Frontend apps — pick a template, get a live site with a custom domain
+# Connect GitHub, choose Vite + React, deploy to Render in one click
 ```
 
 ---
@@ -42,13 +35,12 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/billing/invoices
 
 - [Features](#-features)
 - [Quick start](#-quick-start)
-  - [Docker](#docker-compose)
+  - [Docker Compose](#docker-compose)
   - [Kubernetes (Helm)](#kubernetes-helm)
   - [Binary](#binary)
 - [Dashboard](#%EF%B8%8F-dashboard)
-- [Configuration](#-configuration)
-  - [Environment variables](#environment-variables)
-  - [apps.yaml](#appsyaml)
+- [Backend Apps](#-backend-apps)
+- [Frontend Apps](#-frontend-apps)
 - [Authentication](#-authentication)
 - [REST API](#-rest-api)
 - [SDK Clients](#-sdk-clients)
@@ -57,6 +49,8 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/billing/invoices
 - [Deployment](#-deployment)
   - [Docker](#docker)
   - [Kubernetes (Helm)](#kubernetes-helm-1)
+- [Configuration](#-configuration)
+- [Changelog](#-changelog)
 - [Roadmap](#%EF%B8%8F-roadmap)
 - [Development](#%EF%B8%8F-development)
 - [Contributing](#-contributing)
@@ -66,54 +60,54 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/billing/invoices
 
 ## ✨ Features
 
+### Backend Apps
+
 | Feature                | Description                                              |
 | ---------------------- | -------------------------------------------------------- |
-| **Schema → REST**      | Define tables in YAML or Dashboard UI → instant CRUD API |
-| **Web Dashboard**      | Premium dark UI to manage apps, tables, data, users      |
+| **Schema → REST**      | Define tables in the dashboard → instant CRUD API        |
 | **Auth by Email**      | Built-in email/password register & login per app         |
 | **Google OAuth**       | Sign in with Google — both dashboard and per-app         |
 | **Row-Level Security** | Auto-filter data by owner (`rls: owner`)                 |
+| **App Tokens**         | JWT management for apps without email auth (create, revoke, refresh) |
 | **Per-App Health**     | `GET /{app}/health` for monitoring and readiness probes  |
 | **Soft Delete**        | Configurable soft delete toggle (dashboard settings)     |
-| **CORS**               | Cross-origin support for SPAs and mobile apps            |
-| **OpenAPI Docs**       | Auto-generated Swagger UI per app                        |
-| **Data Browser**       | GUI to browse, filter, edit, export CSV, delete rows     |
-| **User Management**    | Manage dashboard admins and app users                    |
-| **Audit Logs**         | Action history with filters (who did what, when, IP)     |
+| **Rate Limiting**      | Per-app, per-IP sliding window (configurable RPM)        |
 | **File Storage**       | Per-app S3-compatible storage (DO Spaces, AWS, MinIO)    |
-| **Rate Limiting**      | Per-app, per-IP sliding window (configurable RPM)         |
-| **White-label**        | Custom branding, themes, company name                    |
-| **Prometheus Metrics** | `zeep_http_requests_total`, latency histograms           |
-| **Multi-app**          | One service, N apps, isolated schemas & JWT secrets      |
-| **CLI**                | `zeep serve`, `zeep apply`, `zeep list`, `zeep status`   |
-| **Kubernetes**         | Production-grade Helm chart (HPA, PDB, ingress, IRSA)    |
-| **SDK Clients**        | TypeScript, Go, Python, Rust, Java, PHP                  |
-| **i18n**               | Dashboard in pt-BR / English, language switcher          |
+
+### Frontend Apps
+
+| Feature                  | Description                                              |
+| ------------------------ | -------------------------------------------------------- |
+| **GitHub Integration**   | Connect a GitHub App, manage templates and deploy keys   |
+| **Template System**      | Pre-configured templates (Vite + React + TypeScript)     |
+| **One-Click Deploy**     | Create repo from template, deploy to Render automatically |
+| **Custom Domains**       | Configure custom domain + DNS CNAME for each frontend    |
+| **Sync Credentials**     | Per-app deploy keys for local↔repo sync                  |
+
+### Platform
+
+| Feature                 | Description                                              |
+| ----------------------- | -------------------------------------------------------- |
+| **Web Dashboard**       | Premium dark UI to manage everything                    |
+| **Data Browser**        | GUI to browse, filter, edit, export CSV, delete rows     |
+| **User Management**     | Manage dashboard admins and app users                    |
+| **Audit Logs**          | Action history with filters (who did what, when, IP)     |
+| **CORS**                | Cross-origin support for SPAs and mobile apps            |
+| **OpenAPI Docs**        | Auto-generated Swagger UI per app                        |
+| **White-label**         | Custom branding, themes, company name                    |
+| **Prometheus Metrics**  | `zeep_http_requests_total`, latency histograms           |
+| **Multi-app**           | One service, N apps, isolated schemas & JWT secrets      |
+| **CLI**                 | `zeep serve`, `zeep apply`, `zeep list`, `zeep status`   |
+| **Kubernetes**          | Production-grade Helm chart (HPA, PDB, ingress, IRSA)    |
+| **SDK Clients**         | TypeScript, Go, Python, Rust, Java, PHP                  |
+| **i18n**                | Dashboard in pt-BR / English, language switcher          |
+| **Changelog**           | In-app release history, shipped with the binary          |
 
 ---
 
 ## 🚀 Quick start
 
 ### Docker Compose
-
-```bash
-docker pull ghcr.io/zeeplabs/zeep-orbit:latest
-
-docker run -d \
-  --name zeep-orbit \
-  -p 8080:8080 \
-  -e DATABASE_URL=postgres://user:pass@host:5432/db \
-  -e DASHBOARD_BOOTSTRAP_SECRET=my-secret \
-  ghcr.io/zeeplabs/zeep-orbit:latest
-```
-
-> **Note:** If PostgreSQL is running on the host machine (not in another container), use `host.docker.internal` instead of `localhost` in `DATABASE_URL`.
-
-Then visit **http://localhost:8080/dashboard** to complete the first-time setup.
-
-### Docker Compose
-
-Create a `docker-compose.yml`:
 
 ```yaml
 services:
@@ -150,37 +144,15 @@ volumes:
 docker compose up -d
 ```
 
-### Quick start with Docker
+Then visit **http://localhost:8080/dashboard** to complete the first-time setup.
 
-```bash
-docker pull ghcr.io/zeeplabs/zeep-orbit:latest
-
-# Create a sample apps.yaml
-cat > apps.yaml << 'EOF'
-apps:
-  - name: myapp
-    auth:
-      jwt_secret: my-secret-key
-    tables:
-      - name: items
-        columns:
-          - { name: title, type: text }
-EOF
-
-docker run -d \
-  --name zeep-orbit \
-  -p 8080:8080 \
-  -v $(pwd)/apps.yaml:/app/apps.yaml:ro \
-  -e DATABASE_URL=postgres://user:pass@host:5432/db \
-  -e DASHBOARD_BOOTSTRAP_SECRET=my-secret \
-  ghcr.io/zeeplabs/zeep-orbit:latest
-```
+> **Note:** If PostgreSQL is running on the host machine (not in another container), use `host.docker.internal` instead of `localhost` in `DATABASE_URL`.
 
 ### Binary
 
 ```bash
 go install github.com/zeeplabs/zeep-orbit/cmd/zeep@latest
-zeep serve --config ./apps.yaml
+zeep serve
 ```
 
 ### Kubernetes (Helm)
@@ -191,74 +163,33 @@ helm install zeep-orbit zeeplabs/zeep-orbit \
   --values values.yaml
 ```
 
-→ See the [Kubernetes (Helm)](#kubernetes-helm-1) section under **Deployment** for a full guide with all options.
+→ See the [Kubernetes (Helm)](#kubernetes-helm-1) section under **Deployment** for a full guide.
 
 ---
 
 ## 🖥️ Dashboard
 
-The web dashboard is embedded in the binary and accessible at `/dashboard`. Features:
+The web dashboard is embedded in the binary and accessible at `/dashboard`:
 
-- **Apps** — create, edit, delete apps with dynamic table/column management
+- **Apps** — create backend apps (database + API) or frontend apps (GitHub repo + deploy)
 - **Data Browser** — browse, filter, sort, edit inline, delete, and export CSV
 - **Users** — manage dashboard admins (superadmin/admin roles)
 - **App Users** — view users registered in each app, deactivate accounts, reset sessions
+- **Integrations** — GitHub App config, deploy templates, Render deploy provider
 - **Logs** — real-time request log with metrics breakdown
 - **Audit** — action history with user, action type, resource, IP, and pagination
+- **SDKs** — installation snippets for all 6 official SDKs
 - **Settings** — white-label branding (themes, company name), Google OAuth configuration
+- **Changelog** — release history shipped with the binary, updated on every release
 - **i18n** — dashboard available in pt-BR and English, language switcher in sidebar
 
 ---
 
-## 📋 Configuration
+## 🗄️ Backend Apps
 
-### Environment variables
+Backend apps give you a PostgreSQL schema + instant REST API from a table definition.
 
-| Variable                     | Required | Description                                         |
-| ---------------------------- | -------- | --------------------------------------------------- |
-| `DATABASE_URL`               | ✅       | PostgreSQL connection string                        |
-| `DASHBOARD_BOOTSTRAP_SECRET` | ✅       | First-time admin setup secret                       |
-| `GOOGLE_CLIENT_ID`           | ❌       | Google OAuth Client ID (for dashboard login)        |
-| `GOOGLE_CLIENT_SECRET`       | ❌       | Google OAuth Client Secret                          |
-| `GOOGLE_REDIRECT_URL`        | ❌       | Google OAuth redirect URL                           |
-| `GOOGLE_ALLOWED_DOMAINS`     | ❌       | Comma-separated allowed email domains               |
-| `BRAND_THEME`                | ❌       | Default theme (azure, emerald, ruby, amber, orange) |
-| `BRAND_COMPANY_NAME`         | ❌       | Company name for white-label                        |
-| `LOG_LEVEL`                  | ❌       | Set `debug` for development output                  |
-| `DASHBOARD_LOG_BUFFER_SIZE`  | ❌       | Ring buffer size for log viewer (default: 2000)     |
-
-### apps.yaml
-
-```yaml
-platform:
-  database_url: ${DATABASE_URL}
-
-apps:
-  - name: myapp
-    auth:
-      jwt_secret: ${MYAPP_JWT_SECRET}
-      providers:
-        email: true # enable email/password auth
-    tables:
-      - name: items
-        columns:
-          - { name: title, type: text, required: true }
-          - { name: score, type: decimal }
-```
-
-### Column types
-
-`text`, `integer`, `bigint`, `decimal`, `boolean`, `uuid`, `timestamptz`, `jsonb`
-
-Options: `required` (NOT NULL), `unique`, `default` (SQL expression).
-
-Auto-generated columns: `id` (UUID), `created_at`, `updated_at`, `deleted_at` (nullable, used when soft delete is enabled).
-
----
-
-## 🔐 Authentication
-
-### App-level (for your end-users)
+### Auth
 
 Each app supports configurable login providers:
 
@@ -271,13 +202,7 @@ Each app supports configurable login providers:
 
 After authentication, you receive a JWT token signed with the app's secret.
 
-### Dashboard (admin access)
-
-Dashboard has its own auth system (email/password or Google OAuth), separate from app auth. Two roles: `admin` and `superadmin`.
-
----
-
-## 📡 REST API
+### REST API
 
 | Method    | Path                  | Description                        |
 | --------- | --------------------- | ---------------------------------- |
@@ -298,7 +223,42 @@ Dashboard has its own auth system (email/password or Google OAuth), separate fro
 | GET       | `/{app}/files/{id}/url` | Get signed URL with TTL          |
 | DELETE    | `/{app}/files/{id}`   | Delete file                        |
 
-Query params for list: `?limit=`, `?offset=`, `?field=eq.value`, `?order=field.asc`, `?deleted=true` (show soft-deleted records when soft delete is enabled)
+Query params for list: `?limit=`, `?offset=`, `?field=eq.value`, `?order=field.asc`, `?deleted=true` (soft-deleted records when enabled).
+
+### Column types
+
+`text`, `integer`, `bigint`, `decimal`, `boolean`, `uuid`, `timestamptz`, `jsonb`
+
+Options: `required` (NOT NULL), `unique`, `default` (SQL expression).
+
+Auto-generated columns: `id` (UUID), `created_at`, `updated_at`, `deleted_at` (nullable, used when soft delete is enabled).
+
+### App Tokens
+
+For apps without email/password auth, you can create API tokens with configurable expiration (7d, 30d, 365d, or never). Tokens use JWT with unique `jti` — revocable individually, with a refresh endpoint that extends the expiration. Token revocation is checked per-request via an in-memory cache with immediate invalidation on revoke.
+
+---
+
+## 🖥️ Frontend Apps
+
+Frontend apps let you deploy websites and web apps with zero configuration:
+
+1. **Connect GitHub** — install the Zeep Orbit GitHub App on your organization
+2. **Add a template** — configure a starter repo (e.g. Vite + React + TypeScript)
+3. **Create a frontend app** — pick the template, set a subdomain
+4. **Sync** — receive a deploy key to clone the repo locally and push changes
+5. **Deploy** — automatic deploy to Render with custom domain configured
+
+### Deploy Provider
+
+- **Render** — configure API key, project ID, and base domain. Each frontend app deploys as a Render static site with automatic custom domain setup.
+
+### GitHub Integration
+
+- GitHub App installation with "All repositories" access
+- Template management with deploy configuration fields
+- Per-app deploy keys for secure local↔repo sync
+- Repo archival when deleting frontend apps
 
 ---
 
@@ -367,10 +327,8 @@ Commands:
   status   Check if the server is running
 ```
 
-Example:
-
 ```bash
-zeep serve --config ./apps.yaml --port 8080
+zeep serve --port 8080
 zeep apply                   # idempotent provisioning
 zeep list                    # inspect all apps and tables
 ```
@@ -398,11 +356,9 @@ docker run -e DATABASE_URL=... -p 8080:8080 ghcr.io/zeeplabs/zeep-orbit
 
 The Helm chart includes: HPA, PDB, Ingress, ServiceMonitor, IRSA-ready ServiceAccount, topology spread, and configurable resource limits.
 
-> ⚠️ **Important:** The `zeep serve` command **does not use a config file**. It loads everything from the database. Apps are created and managed through the Dashboard at `/dashboard`. For a standard deployment, **all you need is the database**.
+> **Important:** The `zeep serve` command loads everything from the database. Apps are created and managed through the Dashboard at `/dashboard`. All you need is the database.
 
-#### Dashboard-only — manage apps through the UI
-
-The minimum required to run:
+#### Minimum setup
 
 ```yaml
 # values.yaml
@@ -411,50 +367,27 @@ secrets:
   dashboardBootstrapSecret: "my-admin-secret"
 ```
 
-1. Install with Helm
+1. Install with Helm → `helm install zeep-orbit zeeplabs/zeep-orbit --values values.yaml`
 2. Access `https://your-domain/dashboard`
 3. Use the `dashboardBootstrapSecret` in the bootstrap form
 4. Create admin users and apps through the interface
 
-Apps created in the Dashboard persist in the database and are automatically loaded on every restart.
+Apps created in the Dashboard persist in the database and are loaded on every restart.
 
-#### Env var flow
-
-The chart uses **2 mechanisms** to inject env vars into the pod:
-
-```
-values.yaml
-  ├── brand.*               ──>  direct env in deployment.yaml (BRAND_THEME, BRAND_COMPANY_NAME)
-  └── secrets.*             ──>  Secret injected via envFrom (all keys become env vars)
-       ├── databaseUrl             DATABASE_URL
-       ├── dashboardBootstrapSecret DASHBOARD_BOOTSTRAP_SECRET
-       ├── google.*                GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, etc.
-       ├── apps.*                  <APP>_JWT_SECRET (if defining apps via YAML)
-       └── storage.*               STORAGE_ENDPOINT, STORAGE_BUCKET, etc.
-```
-
-#### Full example (dashboard + pre-defined apps + Google OAuth + storage)
+#### Full example (dashboard + Google OAuth + storage)
 
 ```yaml
 # values.yaml
 secrets:
-  # (required)
   databaseUrl: "postgres://user:pass@host:5432/zeep?sslmode=require"
   dashboardBootstrapSecret: "my-admin-secret"
 
-  # Optional: Google OAuth for dashboard login
   google:
     clientId: "123.apps.googleusercontent.com"
     clientSecret: "GOCSPX-xxxx"
     redirectUrl: "https://orbit.yoursite.com/dashboard/api/auth/google/callback"
     allowedDomains: "yoursite.com"
 
-  # Optional: JWT secrets for apps (pre-create apps via Dashboard)
-  apps:
-    myapp:
-      jwtSecret: "super-secret-jwt"
-
-  # Optional: S3 storage (for file storage in apps)
   storage:
     endpoint: "https://s3.amazonaws.com"
     bucket: "my-bucket"
@@ -467,28 +400,46 @@ brand:
   companyName: "My Company"
 ```
 
-Install:
-
 ```bash
 helm repo add zeeplabs https://zeeplabs.github.io/zeep-orbit/helm
-helm install zeep-orbit zeeplabs/zeep-orbit \
-  --values values.yaml
+helm install zeep-orbit zeeplabs/zeep-orbit --values values.yaml
 ```
-
-After deployment, go to `/dashboard`, bootstrap with the `dashboardBootstrapSecret`, and create your users and apps — all through the interface.
 
 #### Upgrading
 
-To upgrade an existing Helm release:
-
 ```bash
 helm repo update zeeplabs
-helm upgrade zeep-orbit zeeplabs/zeep-orbit \
-  --values values.yaml \
-  --atomic
+helm upgrade zeep-orbit zeeplabs/zeep-orbit --values values.yaml --atomic
 ```
 
-The `--atomic` flag rolls back automatically if the upgrade fails. Always keep your `values.yaml` backed up — it contains your database URL and secrets.
+The `--atomic` flag rolls back automatically if the upgrade fails.
+
+---
+
+## 📋 Configuration
+
+### Environment variables
+
+| Variable                     | Required | Description                                         |
+| ---------------------------- | -------- | --------------------------------------------------- |
+| `DATABASE_URL`               | Yes      | PostgreSQL connection string                        |
+| `DASHBOARD_BOOTSTRAP_SECRET` | Yes      | First-time admin setup secret                       |
+| `GOOGLE_CLIENT_ID`           | No       | Google OAuth Client ID (for dashboard login)        |
+| `GOOGLE_CLIENT_SECRET`       | No       | Google OAuth Client Secret                          |
+| `GOOGLE_REDIRECT_URL`        | No       | Google OAuth redirect URL                           |
+| `GOOGLE_ALLOWED_DOMAINS`     | No       | Comma-separated allowed email domains               |
+| `BRAND_THEME`                | No       | Default theme (azure, emerald, ruby, amber, orange) |
+| `BRAND_COMPANY_NAME`         | No       | Company name for white-label                        |
+| `LOG_LEVEL`                  | No       | Set `debug` for development output                  |
+| `DASHBOARD_LOG_BUFFER_SIZE`  | No       | Ring buffer size for log viewer (default: 2000)     |
+
+---
+
+## 📝 Changelog
+
+Every release of Zeep Orbit ships with an embedded changelog — no external dependencies, no per-instance database. The [changelog](internal/dashboard/changelog.json) is a static JSON file in the repository, embedded in the binary at compile time. Users see the latest updates in the dashboard at `/changelog` automatically on every upgrade.
+
+To add a new entry: edit `internal/dashboard/changelog.json`, add your release to the `entries` array (newest first), commit, and release. That's it.
 
 ---
 
@@ -496,24 +447,27 @@ The `--atomic` flag rolls back automatically if the upgrade fails. Always keep y
 
 | Milestone | Status | Features |
 |---|---|---|
-| **M1 — MVP Core** | 🟢 Done | Schema → REST, CLI, Docker Compose |
-| **M2 — Dashboard** | 🟢 Done | App CRUD, Data Browser, Logs, Users, Auth, White-label |
-| **M3 — Governance** | 🔵 In progress | ✅ Audit Log · ⬜ RBAC · ⬜ SSO |
-| **M4 — Storage & Events** | 🔵 In progress | ✅ S3/File Storage · ⬜ Webhooks · ⬜ Event Bus |
-| **M5 — i18n** | 🟢 Done | pt-BR / English, language switcher |
-| **M6 — SDKs** | 🟢 Done | TS, Go, Python, Rust, Java, PHP clients |
-| **M7 — AI Schema** | 🔵 In progress | ✅ Natural language table creation via AI |
+| **M1 — MVP Core** | Done | Schema → REST, CLI, Docker Compose |
+| **M2 — Dashboard** | Done | App CRUD, Data Browser, Logs, Users, Auth, White-label |
+| **M3 — Governance** | Done | Audit Log, Soft Delete, Rate Limiting, App Tokens |
+| **M4 — Storage & Events** | Done | S3 File Storage, Per-App Storage Config |
+| **M5 — Frontend Deploy** | Done | GitHub Integration, Templates, Render Deploy, Custom Domains |
+| **M6 — i18n** | Done | pt-BR / English, language switcher |
+| **M7 — SDKs** | Done | TS, Go, Python, Rust, Java, PHP clients |
+| **M8 — AI & Automation** | Planned | Natural language schema creation, MCP server |
 
 ### Deferred / Backlog
 
 - Sign in with Apple (per-app)
 - TypeScript SDK code generator (`@zeeptech/orbit-generate`)
-- MCP server for zeep-orbit
 - GraphQL auto-generation
 - Realtime subscriptions (WebSockets)
 - Edge functions
 - Schema change approval workflow
 - Marketplace of app templates
+- Webhooks & Event Bus
+- RBAC with granular permissions
+- SSO / SAML integration
 
 ---
 
@@ -536,21 +490,26 @@ TEST_DATABASE_URL=postgres://user:pass@localhost/testdb go test ./...
 ### Project structure
 
 ```
-cmd/zeep/              CLI entrypoint
+cmd/zeep/                  CLI entrypoint
 internal/
-  auth/                Auth handlers (register, login, Google OAuth)
-  config/              YAML config loader + validation
-  crypto/              AES-256-GCM encryption
-  dashboard/           Web dashboard backend + React UI
-  db/                  pgxpool client
-  docs/                OpenAPI spec generator
-  provisioner/         Schema/table provisioning
-  query/               SQL query builder (injection-safe)
-  registry/            Thread-safe in-memory app registry
-  server/              HTTP router, handlers, middleware
-charts/                Helm chart
-k8s/                   Kustomize manifests
-clients/               SDK clients (TS, Go, Python, Rust, Java, PHP)
+  auth/                    Auth handlers (register, login, Google OAuth)
+  config/                  YAML config loader + validation
+  crypto/                  AES-256-GCM encryption
+  dashboard/               Web dashboard backend + React UI + changelog
+    changelog.json         Release history (embedded in binary)
+  db/                      pgxpool client
+  deploy/                  Deploy provider interface + Render implementation
+  docs/                    OpenAPI spec generator
+  github/                  GitHub App client (repos, deploy keys, templates)
+  provisioner/             Schema/table provisioning
+  query/                   SQL query builder (injection-safe)
+  registry/                Thread-safe in-memory app registry
+  server/                  HTTP router, handlers, middleware
+  sshkey/                  ED25519 key pair generation (OpenSSH native)
+charts/                    Helm chart
+k8s/                       Kustomize manifests
+clients/                   SDK clients (TS, Go, Python, Rust, Java, PHP)
+examples/                  Example apps (Todo app)
 ```
 
 ---
@@ -569,10 +528,10 @@ MIT — see [LICENSE](LICENSE).
 
 ## 🏢 About Zeep Tecnologia
 
-zeep-orbit was created by [Zeep Tecnologia](https://zeeptecnologia.com.br) to solve a real pain we saw everywhere: small businesses, entrepreneurs, and indie developers using AI tools (Claude Code, Cursor, Lovable, v0) to build frontends in minutes — but getting stuck when they need a backend.
+Zeep Orbit was created by [Zeep Tecnologia](https://zeeptecnologia.com.br) to solve what we saw everywhere: teams using AI tools to build frontends in minutes — and getting stuck when they need a backend and deployment.
 
-Spin up a database, write migrations, deploy an API, manage auth, handle secrets — it kills the momentum. And the alternative (Supabase, Firebase) sends your data outside your infrastructure.
+Spin up a database, write migrations, deploy an API, manage auth, handle secrets, configure domains, set up CI/CD — it kills momentum. And alternatives send your data and infrastructure outside your control.
 
-zeep-orbit is our answer: **one binary, your PostgreSQL, infinite apps.** Deploy inside your own infra, connect any frontend, move fast without the backend overhead.
+Zeep Orbit is our answer: **one binary, your PostgreSQL, infinite apps.** Deploy in your own infrastructure, connect any frontend, move fast without the overhead.
 
 We build open-source infrastructure for the AI era. [Join us](https://github.com/zeeplabs/zeep-orbit/discussions).
