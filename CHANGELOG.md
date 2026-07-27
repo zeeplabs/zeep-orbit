@@ -15,6 +15,37 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.4.0] — 2026-07-26
+
+### Added
+
+- **Changelog page** — new `/changelog` page in the dashboard showing full release history (all 12 releases from v0.1.0 to v0.3.0), organized by version with categorized sections (Features, Improvements, Fixes, Security, Breaking Changes). Backed by a static `internal/dashboard/changelog.json` embedded into the Go binary via `//go:embed` — no per-instance database. Sidebar link (Megaphone icon) above the user section, also on mobile bottom bar.
+- **Custom domains for frontend apps** — configure a custom domain directly from the dashboard. Domain modal with live preview of the full domain (subdomain + base domain) and DNS CNAME instructions pointing to the Render service URL. Base domain configured in Integrations → Deploy. Backend integration with Render's custom domain API (`POST /v1/services/{id}/custom-domains`).
+- Inline domain editing on the frontend app card.
+- Deploy retry button on frontend app cards when deploy fails.
+- New `README.pt-BR.md` — GitHub auto-detects user locale and shows the Portuguese version.
+
+### Changed
+
+- **Brand repositioning** — platform identity shifted from "Database-first backend platform" to "The complete platform for tech teams." Login page, onboarding page, and dashboard subtitle updated across pt-BR and English. README rewritten for the full platform scope (backend apps, frontend deploy, SDKs, changelog), roadmap updated (M3-M7 marked done, M8 added).
+- **Card redesign** — both backend and frontend app cards restructured with header/content/footer layout; status rows organized per category; creation date moved to the footer.
+- Loading states and toast notifications added to every async operation.
+- Unified delete confirmation dialog (glass-morphism design) used consistently across all delete actions.
+- Global `cursor-pointer` on all button elements via the shadcn/ui Button base class.
+- Sync modal now shows a description of what the deploy key is for and a "View usage instructions" button, instead of raw key reveal.
+
+### Fixed
+
+- **Login page** — subtitle no longer duplicates the title; both title and subtitle centered.
+- **Render API** — custom domain field corrected to `name` instead of `domain`.
+- **Render API** — PATCH `/v1/services/{id}` used to assign `projectId` after creation.
+- **Render API** — owner object properly unwrapped from `GET /v1/owners` response.
+- **Render API** — request body logged on create service error for debugging.
+- **Frontend** — broken JSX in `AppsPage` causing build failure.
+- **Domains** — subdomain and base domain whitespace trimmed before constructing the full domain URL.
+
+---
+
 ## [0.3.0] — 2026-07-25
 
 ### Added
