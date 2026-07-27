@@ -1,6 +1,6 @@
 <p align="center">
   <img src="docs/static/img/orbit-logo.png" alt="Zeep Orbit" width="200" />
-  <p align="center"><strong>Plataforma completa para times de tecnologia.</strong></p>
+  <p align="center"><strong>The complete platform for tech teams.</strong></p>
 
   <p>
     <a href="https://github.com/zeeplabs/zeep-orbit/actions"><img src="https://github.com/zeeplabs/zeep-orbit/actions/workflows/docker-publish.yml/badge.svg" alt="CI" /></a>
