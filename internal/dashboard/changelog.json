@@ -1,6 +1,50 @@
 {
   "entries": [
     {
+      "version": "v0.4.0",
+      "release_date": "2026-07-26",
+      "title": "Changelog, Brand Repositioning & Deploy Improvements",
+      "summary": "In-app changelog with all release history, brand repositioning to Tech Team Platform, custom domains for frontend apps, and major UI/UX improvements.",
+      "sections": [
+        {
+          "type": "features",
+          "items": [
+            {"description": "Changelog page — embedded JSON with all 12 releases from v0.1.0 to v0.3.0, accessible at /changelog in the dashboard"},
+            {"description": "Custom domains for frontend apps — configure subdomain, live domain preview, DNS CNAME instructions, Render custom domain API integration"},
+            {"description": "Deploy retry button on frontend app cards when deploy fails"},
+            {"description": "Base domain configuration in Render deploy provider settings"},
+            {"description": "README in Portuguese (README.pt-BR.md) — GitHub auto-detects user locale"}
+          ]
+        },
+        {
+          "type": "improvements",
+          "items": [
+            {"description": "Brand repositioning: 'Database-first backend platform' → 'The complete platform for tech teams' across login, onboarding, and app subtitle"},
+            {"description": "README rewritten for full platform scope — backend, frontend deploy, SDKs, and changelog with new roadmap"},
+            {"description": "Frontend app cards redesigned — header/content/footer layout, status rows per category"},
+            {"description": "Backend app cards restructured — cursor-pointer, creation date in footer"},
+            {"description": "Loading states and toast notifications added to all async operations throughout the dashboard"},
+            {"description": "Unified delete confirmation dialog with glass-morphism design"},
+            {"description": "Domain modal with live preview from base domain and DNS CNAME instructions"},
+            {"description": "Sync modal now shows description and 'View usage instructions' button instead of raw key reveal"},
+            {"description": "Global cursor-pointer on all button elements via base class"}
+          ]
+        },
+        {
+          "type": "fixes",
+          "items": [
+            {"description": "Login page — subtitle now properly rendered instead of duplicating the title"},
+            {"description": "Login page — title and subtitle centered"},
+            {"description": "Render API — custom domain field name corrected to 'name' instead of 'domain'"},
+            {"description": "Render API — PATCH service endpoint used to assign projectId after creation"},
+            {"description": "Render API — owner object unwrapping from GET /v1/owners response"},
+            {"description": "Broken JSX in AppsPage causing build failure fixed"},
+            {"description": "Subdomain and base domain whitespace trimmed before constructing domain URL"}
+          ]
+        }
+      ]
+    },
+    {
       "version": "v0.3.0",
       "release_date": "2026-07-25",
       "title": "App Tokens & Security Fixes",
