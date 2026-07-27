@@ -201,17 +201,6 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 		 ADD COLUMN IF NOT EXISTS deploy_status         TEXT NOT NULL DEFAULT 'pending',
 		 ADD COLUMN IF NOT EXISTS deploy_error_message  TEXT NOT NULL DEFAULT '',
 		 ADD COLUMN IF NOT EXISTS custom_domain         TEXT NOT NULL DEFAULT ''`,
-		`CREATE TABLE IF NOT EXISTS zeep_system.changelog_entries (
-			id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			version      TEXT NOT NULL,
-			release_date DATE NOT NULL,
-			title        TEXT NOT NULL DEFAULT '',
-			summary      TEXT NOT NULL DEFAULT '',
-			sections     JSONB NOT NULL DEFAULT '[]',
-			published    BOOLEAN NOT NULL DEFAULT true,
-			created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-			updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
-		)`,
 	}
 
 	for _, stmt := range stmts {
