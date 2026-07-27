@@ -1,34 +1,327 @@
 {
   "entries": [
     {
-      "version": "1.0.0",
-      "release_date": "2026-07-26",
-      "title": "Lançamento inicial",
-      "summary": "",
+      "version": "v0.3.0",
+      "release_date": "2026-07-25",
+      "title": "App Tokens & Security Fixes",
+      "summary": "JWT token management for apps without email auth, plus multiple security fixes found during code review.",
       "sections": [
         {
           "type": "features",
           "items": [
-            {"description": "Autenticação de usuários com e-mail/senha e Google OAuth"},
-            {"description": "Criação de apps backend com API REST automática"},
-            {"description": "Criação de apps frontend com deploy no Render"},
-            {"description": "Integração com GitHub — templates e deploy keys"},
-            {"description": "Data Browser para explorar dados dos apps"},
-            {"description": "Página de changelog para acompanhar novidades"}
+            {"description": "App Tokens — full JWT token management for apps without email/password auth: create tokens with expiration (7d/30d/365d/never), one-time JWT reveal, list with status badges, revoke individually"},
+            {"description": "Regenerate Secret — rotate JWT secret with 2-step confirmation, revokes all existing tokens for the app"},
+            {"description": "Reveal Secret — view the current JWT secret (audit-logged)"},
+            {"description": "Token Refresh endpoint — POST /{app}/auth/token/refresh exchanges a valid app token for a new one with same jti, extending expiration by original duration"},
+            {"description": "JWTMiddleware validates revocation/expiry per-request via in-memory jti cache (30s TTL) with fire-and-forget last_used_at touch"},
+            {"description": "New zeep_system.app_tokens table with full CRUD and cascade delete"}
+          ]
+        },
+        {
+          "type": "security",
+          "items": [
+            {"description": "IDOR fix — RegenerateAppSecret now enforces app ownership check (previously any authenticated dashboard user could rotate any app's JWT secret)"},
+            {"description": "Dead revocation check fix — JWTMiddleware had a nil keyFunc causing the entire DB revocation check to silently never run. Revoked tokens stayed valid until natural expiry"},
+            {"description": "Nil pointer fix — CreateAppToken panicked on registry cache miss. Now reads JWT secret from the already-loaded app row"},
+            {"description": "Stale revocation window fix — JTI cache now invalidated immediately on revoke/regenerate (previously gave revoked tokens up to 30s of extra validity)"},
+            {"description": "Predictable JTI fallback fix — randomJTI now returns an error instead of a fixed deterministic ID when crypto/rand.Read fails"},
+            {"description": "Missing rate limit — token refresh endpoint now rate-limited like register and login"}
+          ]
+        }
+      ]
+    },
+    {
+      "version": "v0.2.0",
+      "release_date": "2026-07-13",
+      "title": "Brand Config Persistence Fix",
+      "summary": "Fixed company name and theme resetting on restart. Removed logo upload feature.",
+      "sections": [
+        {
+          "type": "fixes",
+          "items": [
+            {"description": "Company name and theme no longer reset to defaults on restart — startup seeding now uses dedicated SeedBrandConfig with ON CONFLICT DO NOTHING instead of overwriting saved values"},
+            {"description": "ProvisionZeepSystem wraps all DDL in a single transaction with pg_advisory_xact_lock for safe concurrent pod startup"}
           ]
         },
         {
           "type": "improvements",
           "items": [
-            {"description": "Dashboard consolidado com backends e frontends na mesma tela"},
-            {"description": "Interface redesenhada com glass-morphism e tooltips"}
+            {"description": "Logo upload removed — dashboard and login page use the default Zeep Orbit logo"}
+          ]
+        }
+      ]
+    },
+    {
+      "version": "v0.1.11",
+      "release_date": "2026-07-02",
+      "title": "Google OAuth Fix & API Docs Branding",
+      "summary": "Fixed Google OAuth for multi-replica deployments. Improved API documentation branding.",
+      "sections": [
+        {
+          "type": "fixes",
+          "items": [
+            {"description": "Google OAuth now works with multiple replicas — state param replaced with stateless HMAC-SHA256 signed token, eliminating the need for shared in-memory state or sticky sessions"},
+            {"description": "API docs now show neutral 'API Documentation' title instead of hardcoded 'zeep-orbit API'"}
+          ]
+        },
+        {
+          "type": "improvements",
+          "items": [
+            {"description": "Login page and app subtitle copy updated for clarity"}
+          ]
+        }
+      ]
+    },
+    {
+      "version": "v0.1.10",
+      "release_date": "2026-07-02",
+      "title": "Global S3, Brand Logos, Helm Fixes & i18n",
+      "summary": "Global S3 storage configuration, brand logo uploads, Helm chart fixes, and full dashboard i18n review.",
+      "sections": [
+        {
+          "type": "features",
+          "items": [
+            {"description": "Global S3 Configuration — superadmin sets S3 credentials once; admins only provide a folder name when creating apps"},
+            {"description": "Brand Logos — upload custom login logo and sidebar icon, stored in global S3 bucket. Fallback to built-in SVGs when not configured"},
+            {"description": "Google Setup page — first-time Google login users prompted to set name and password as backup"},
+            {"description": "Public brand config endpoint — GET /dashboard/api/brand/config returns logo URLs unauthenticated"},
+            {"description": "Sonner toasts — replaced native alert() with toast notifications throughout the dashboard"}
           ]
         },
         {
           "type": "fixes",
           "items": [
-            {"description": "Correções no fluxo de deploy do Render"},
-            {"description": "Correções no formato de SSH key para deploy keys do GitHub"}
+            {"description": "Helm chart 404 — chart now packaged and served from the same Pages artifact as the repo"},
+            {"description": "Deployment --config flag — removed invalid --config flag from Helm deployment template"},
+            {"description": "Logo upload overwriting — uploading a new logo no longer clears the other logo"},
+            {"description": "Soft delete overwritten — saving global S3 config no longer resets soft_delete_enabled to false"}
+          ]
+        },
+        {
+          "type": "improvements",
+          "items": [
+            {"description": "Settings page redesigned with tabbed navigation (Branding, Logo, Database, Auth Provider, Storage)"},
+            {"description": "All user-facing strings reviewed and moved to i18n keys"}
+          ]
+        }
+      ]
+    },
+    {
+      "version": "v0.1.9",
+      "release_date": "2026-07-02",
+      "title": "OpenAPI File Endpoints & Todo App Files",
+      "summary": "Auto-generated OpenAPI docs for file endpoints, file management in the Todo example app, and docs refresh.",
+      "sections": [
+        {
+          "type": "features",
+          "items": [
+            {"description": "OpenAPI docs now include file management endpoints for apps with storage enabled (list, upload, get, delete, download, signed URL)"},
+            {"description": "Todo example app now includes a complete file management page with upload progress, file list, signed URL generation, and delete"},
+            {"description": "CI workflows upgraded to Node.js 24"}
+          ]
+        },
+        {
+          "type": "improvements",
+          "items": [
+            {"description": "Docusaurus docs updated with sorting, soft delete, health check docs, and configuration page"}
+          ]
+        }
+      ]
+    },
+    {
+      "version": "v0.1.8",
+      "release_date": "2026-07-01",
+      "title": "Health Endpoint, Soft Delete, CORS & RLS Fix",
+      "summary": "Per-app health endpoint, configurable soft delete, CORS support, hyphens in app names, and RLS fix.",
+      "sections": [
+        {
+          "type": "features",
+          "items": [
+            {"description": "Per-App Health Endpoint — GET /{app}/health for monitoring and readiness checks (no auth required)"},
+            {"description": "Soft Delete — configurable toggle in dashboard. When enabled, DELETE becomes UPDATE SET deleted_at. Use ?deleted=true to view soft-deleted records"},
+            {"description": "CORS support — cross-origin requests from SPAs and mobile apps work out of the box"},
+            {"description": "App names now support hyphens alongside underscores"}
+          ]
+        },
+        {
+          "type": "fixes",
+          "items": [
+            {"description": "RLS 'enabled' now correctly injects owner_id (previously only 'owner' RLS worked, causing INSERT failures)"},
+            {"description": "Improved error messages — HandleCreate now includes the actual pgx error in the response"}
+          ]
+        }
+      ]
+    },
+    {
+      "version": "v0.1.7",
+      "release_date": "2026-07-01",
+      "title": "SDKs Page, Todo Example App & Roadmap",
+      "summary": "New SDKs page in dashboard, complete Todo example app demonstrating SDK usage, and public roadmap.",
+      "sections": [
+        {
+          "type": "features",
+          "items": [
+            {"description": "SDKs Page — installation snippets with copy-to-clipboard for all 6 official SDKs (TypeScript, Go, Python, Rust, Java, PHP)"},
+            {"description": "Todo Example App — complete React + Vite example demonstrating connect, auth, and full CRUD via the TypeScript SDK"},
+            {"description": "Public roadmap added to README with status indicators for milestones M1-M6"}
+          ]
+        }
+      ]
+    },
+    {
+      "version": "v0.1.5",
+      "release_date": "2026-06-29",
+      "title": "Audit Log, File Storage, Rate Limiting & i18n",
+      "summary": "Major feature release: audit logging, per-app S3 file storage, rate limiting, SDK clients, and full dashboard i18n.",
+      "sections": [
+        {
+          "type": "features",
+          "items": [
+            {"description": "Audit Log — track every dashboard action with filters by action type and user. Stored in zeep_system.audit_log"},
+            {"description": "File Storage per App — connect S3-compatible buckets. Full REST API: upload (multipart), list, get, download (signed URL), delete"},
+            {"description": "Rate Limiting per App — per-IP sliding window rate limiting. Configurable requests per minute. Returns 429 when exceeded"},
+            {"description": "SDK Clients — 6 official SDKs with identical API: TypeScript, Go, Python, Rust, Java, PHP"},
+            {"description": "Full dashboard i18n — Portuguese (pt-BR) and English with language switcher saved per user"}
+          ]
+        },
+        {
+          "type": "improvements",
+          "items": [
+            {"description": "Dashboard tabs in app form (Database, Login Providers, Storage S3) routed via ?tab="},
+            {"description": "App owner info shown for superadmin"},
+            {"description": "User name field in onboarding, create user, and table display"},
+            {"description": "Sidebar shows name instead of email"},
+            {"description": "SVG favicon and English as default language"}
+          ]
+        },
+        {
+          "type": "fixes",
+          "items": [
+            {"description": "Login/logout redirect fixes"}
+          ]
+        }
+      ]
+    },
+    {
+      "version": "v0.1.4",
+      "release_date": "2026-06-28",
+      "title": "Navigation Fixes & CI/CD Polish",
+      "summary": "Login/logout flow improvements, root URL redirect, and CI/CD workflow improvements.",
+      "sections": [
+        {
+          "type": "fixes",
+          "items": [
+            {"description": "Login redirect — page navigates to /apps immediately after successful login"},
+            {"description": "Logout redirect — page navigates to /login immediately after logout"},
+            {"description": "Root URL — http://localhost:8080 now redirects to /dashboard"},
+            {"description": "Onboarding password — minimum length aligned to 8 characters"}
+          ]
+        },
+        {
+          "type": "features",
+          "items": [
+            {"description": "Helm chart published via Docker workflow — no more separate chart release"},
+            {"description": "EasyPanel template for one-click deploy"},
+            {"description": "Deployment docs covering EasyPanel, Docker, Helm, and Docker Compose"}
+          ]
+        }
+      ]
+    },
+    {
+      "version": "v0.1.2",
+      "release_date": "2026-06-28",
+      "title": "EasyPanel Template & Helm Fixes",
+      "summary": "EasyPanel one-click deploy template, Helm chart fixes, and CI/CD automation.",
+      "sections": [
+        {
+          "type": "features",
+          "items": [
+            {"description": "EasyPanel template — one-click deploy via easypanel.json"},
+            {"description": "Deployment docs page — step-by-step guide for EasyPanel, Docker, Helm, Docker Compose"},
+            {"description": "Helm chart released — version synced with app release"}
+          ]
+        },
+        {
+          "type": "fixes",
+          "items": [
+            {"description": "Onboarding password minimum length fixed from 12 to 8 characters"},
+            {"description": "Docker publish workflow now triggers only on v* tags, not on push to main"},
+            {"description": "Automatic GitHub Release creation when pushing a tag"}
+          ]
+        }
+      ]
+    },
+    {
+      "version": "v0.1.1",
+      "release_date": "2026-06-28",
+      "title": "Auth Providers & Open Source Polish",
+      "summary": "Google OAuth for dashboard and per-app, user management, open-source documentation, and security fixes.",
+      "sections": [
+        {
+          "type": "features",
+          "items": [
+            {"description": "Dashboard Google OAuth — configure via UI with AES-256-GCM encrypted credentials"},
+            {"description": "Per-App Login Providers — each app can enable email and/or Google OAuth via dashboard"},
+            {"description": "GET /{app}/auth/providers endpoint for frontend to discover active providers"},
+            {"description": "Per-app Google OAuth with JWT return same as email login"},
+            {"description": "Change password — any user can change their own; superadmin can change any user's"},
+            {"description": "App User Management — list, search, deactivate/reactivate accounts, reset sessions"},
+            {"description": "Docusaurus documentation with auto-deploy via GitHub Pages"}
+          ]
+        },
+        {
+          "type": "fixes",
+          "items": [
+            {"description": "Login 500 fix — google_id NULL caused panic (COALESCE fix)"},
+            {"description": "FK violation fix on Data Browser create — owner_id removed from INSERT"},
+            {"description": "React Query cache not clearing when switching users"},
+            {"description": "App Users 500 — active/provider columns missing in existing apps"}
+          ]
+        },
+        {
+          "type": "security",
+          "items": [
+            {"description": "AES-256-GCM encryption for OAuth secrets at rest"}
+          ]
+        },
+        {
+          "type": "improvements",
+          "items": [
+            {"description": "Open source polish: SVG architecture diagram, Playwright E2E tests, README badges, SECURITY.md, CODE_OF_CONDUCT.md, SUPPORT.md"},
+            {"description": "GitHub Discussions enabled"}
+          ]
+        }
+      ]
+    },
+    {
+      "version": "v0.1.0",
+      "release_date": "2026-06-28",
+      "title": "Initial Release",
+      "summary": "First public release of Zeep Orbit — open-source, self-hosted BaaS platform that turns schema definitions into instant REST APIs.",
+      "sections": [
+        {
+          "type": "features",
+          "items": [
+            {"description": "Web Dashboard — premium dark UI with app management, Data Browser, real-time logs, user management, and white-label branding (5 themes)"},
+            {"description": "Authentication — email/password per app with register, login, refresh, logout; Google OAuth for dashboard and per-app; Row-Level Security"},
+            {"description": "REST API — full CRUD per table with filtering, sorting, pagination; auto-generated OpenAPI/Swagger UI per app"},
+            {"description": "CLI — zeep serve, zeep apply, zeep list, zeep status"},
+            {"description": "Multi-stage Docker image (< 20MB, multi-arch: amd64 + arm64)"},
+            {"description": "Production-grade Helm chart (HPA, PDB, Ingress, ServiceMonitor, IRSA)"},
+            {"description": "Prometheus metrics and structured JSON logging via zap"},
+            {"description": "Rate limiting on public auth routes (10 req/min)"},
+            {"description": "Security headers, bcrypt cost 12 for password hashing, CSV formula injection protection"}
+          ]
+        },
+        {
+          "type": "fixes",
+          "items": [
+            {"description": "Login 500 when google_id is NULL"},
+            {"description": "FK violation on Data Browser create (owner_id injection removed)"},
+            {"description": "Race condition on bootstrap endpoint (TOCTOU)"},
+            {"description": "DDL injection prevention on table/column names"},
+            {"description": "JWT secret exposure in API responses"},
+            {"description": "Cache not clearing on user login/logout"}
           ]
         }
       ]
