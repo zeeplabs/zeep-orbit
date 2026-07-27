@@ -66,7 +66,8 @@ func New(reg *registry.Registry, pool *db.Pool, port int) (*Server, error) {
 	githubTemplatesH := dashboard.NewGitHubTemplatesHandler(pool)
 	frontendAppsH := dashboard.NewFrontendAppsHandler(pool)
 	deployProviderH := dashboard.NewDeployProviderConfigHandler(pool)
-	r := newRouter(reg, h, pool, logger, dashH, githubConfigH, githubTemplatesH, frontendAppsH, deployProviderH)
+	changelogH := dashboard.NewChangelogHandler(pool)
+	r := newRouter(reg, h, pool, logger, dashH, githubConfigH, githubTemplatesH, frontendAppsH, deployProviderH, changelogH)
 
 	s := &Server{
 		httpServer: &http.Server{
@@ -129,7 +130,7 @@ func buildLogger() (*zap.Logger, error) {
 }
 
 // newRouter builds the chi.Mux with all routes and middleware.
-func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Logger, dashH *dashboard.Handler, githubConfigH *dashboard.GitHubConfigHandler, githubTemplatesH *dashboard.GitHubTemplatesHandler, frontendAppsH *dashboard.FrontendAppsHandler, deployProviderH *dashboard.DeployProviderConfigHandler) *chi.Mux {
+func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Logger, dashH *dashboard.Handler, githubConfigH *dashboard.GitHubConfigHandler, githubTemplatesH *dashboard.GitHubTemplatesHandler, frontendAppsH *dashboard.FrontendAppsHandler, deployProviderH *dashboard.DeployProviderConfigHandler, changelogH *dashboard.ChangelogHandler) *chi.Mux {
 	logBuf := dashH.Logs
 	r := chi.NewRouter()
 
@@ -230,6 +231,10 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Get("/api/deploy-provider/status", deployProviderH.Status)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/deploy-provider/config", deployProviderH.UpsertConfig)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/deploy-provider/config", deployProviderH.UpdateFields)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/changelog", changelogH.List)
+		r.With(dashboard.RequireAuth(pool)).Post("/api/changelog", changelogH.Create)
+		r.With(dashboard.RequireAuth(pool)).Put("/api/changelog/{id}", changelogH.Update)
+		r.With(dashboard.RequireAuth(pool)).Delete("/api/changelog/{id}", changelogH.Delete)
 		r.Handle("/*", dashboard.StaticHandler())
 	})
 
