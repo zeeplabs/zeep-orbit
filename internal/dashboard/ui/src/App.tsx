@@ -15,6 +15,7 @@ import LogsPage from './pages/LogsPage'
 import AuditLogPage from './pages/AuditLogPage'
 import GitHubIntegrationPage from './pages/GitHubIntegrationPage'
 import SdkPage from './pages/SdkPage'
+import ChangelogPage from './pages/ChangelogPage'
 import AppUsersPage from './pages/AppUsersPage'
 import DataBrowserPage from './pages/DataBrowserPage'
 import { Toaster } from 'sonner'
@@ -117,6 +118,7 @@ function App() {
           <Route path="/auditoria" element={<AuditLogPage />} />
           <Route path="/integracoes/github" element={<GitHubIntegrationPage />} />
           <Route path="/sdks" element={<SdkPage />} />
+          <Route path="/changelog" element={<ChangelogPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/apps" replace />} />
       </Routes>

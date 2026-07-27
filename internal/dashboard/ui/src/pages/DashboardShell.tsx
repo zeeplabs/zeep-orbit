@@ -14,6 +14,7 @@ import {
   Settings,
   User,
   Lock,
+  Megaphone,
   Link2,
 } from "lucide-react";
 import ChangePasswordModal from "./ChangePasswordModal";
@@ -109,6 +110,27 @@ function BottomBar({
           )}
         </NavLink>
       ))}
+      <NavLink
+        to="/changelog"
+        className="flex flex-col items-center justify-center flex-1 no-underline"
+        style={({ isActive }) => ({
+          gap: 2,
+          padding: "4px 8px",
+          color: isActive ? "var(--brand-primary)" : "var(--text-muted)",
+          fontSize: 10,
+          fontWeight: isActive ? 600 : 400,
+          transition: "color 0.15s",
+        })}
+      >
+        {({ isActive }) => (
+          <>
+            <Megaphone size={21} strokeWidth={isActive ? 2 : 1.5} />
+            <span style={{ fontSize: 10, lineHeight: 1, whiteSpace: "nowrap" }}>
+              {t("nav.changelog")}
+            </span>
+          </>
+        )}
+      </NavLink>
       <button
         onClick={onUserClick}
         style={{
@@ -325,6 +347,55 @@ export default function DashboardShell({ user }: { user: User | null }) {
             </NavLink>
           ))}
         </nav>
+
+        {/* Changelog */}
+        <NavLink
+          to="/changelog"
+          style={({ isActive }) => ({
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "9px 12px",
+            borderRadius: 10,
+            border: "none",
+            background: isActive
+              ? "rgba(var(--brand-primary-rgb), 0.12)"
+              : "transparent",
+            color: isActive ? "var(--text)" : "var(--text-muted)",
+            cursor: "pointer",
+            fontSize: 14,
+            textAlign: "left" as const,
+            width: "100%",
+            fontFamily: "inherit",
+            fontWeight: isActive ? 600 : 400,
+            position: "relative" as const,
+            textDecoration: "none",
+            transition: "background 0.15s, color 0.15s",
+            marginBottom: 12,
+          })}
+        >
+          {({ isActive }) => (
+            <>
+              {isActive && (
+                <motion.div
+                  layoutId="nav-active-indicator"
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    top: "20%",
+                    bottom: "20%",
+                    width: 3,
+                    borderRadius: 2,
+                    background: "var(--accent)",
+                  }}
+                  transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
+                />
+              )}
+              <Megaphone size={15} strokeWidth={1.5} />
+              {t("nav.changelog")}
+            </>
+          )}
+        </NavLink>
 
         {/* User */}
         <div
