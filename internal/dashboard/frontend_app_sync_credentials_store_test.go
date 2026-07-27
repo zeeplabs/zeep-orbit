@@ -50,6 +50,7 @@ func syncCredentialsTestPool(t *testing.T) *db.Pool {
 			status TEXT NOT NULL DEFAULT 'ready',
 			error_message TEXT NOT NULL DEFAULT '',
 			created_by TEXT NOT NULL,
+			owner_id UUID REFERENCES zeep_system.dashboard_users(id),
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 			archived_at TIMESTAMPTZ
 		)`,
@@ -96,8 +97,8 @@ func testFrontendApp(t *testing.T, pool *db.Pool, ctx context.Context, slug stri
 
 	var appID string
 	if err := pool.QueryRow(ctx,
-		`INSERT INTO zeep_system.frontend_apps (name, slug, template_id, status, created_by)
-		 VALUES ($1, $2, $3, 'ready', 'test@test.com')
+		`INSERT INTO zeep_system.frontend_apps (name, slug, template_id, status, created_by, owner_id)
+		 VALUES ($1, $2, $3, 'ready', 'test@test.com', 'b0000000-0000-0000-0000-000000000001')
 		 RETURNING id`, "Test App", slug, tmplID,
 	).Scan(&appID); err != nil {
 		t.Fatalf("create app: %v", err)

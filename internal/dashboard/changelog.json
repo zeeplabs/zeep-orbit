@@ -1,0 +1,37 @@
+{
+  "entries": [
+    {
+      "version": "1.0.0",
+      "release_date": "2026-07-26",
+      "title": "Lançamento inicial",
+      "summary": "",
+      "sections": [
+        {
+          "type": "features",
+          "items": [
+            {"description": "Autenticação de usuários com e-mail/senha e Google OAuth"},
+            {"description": "Criação de apps backend com API REST automática"},
+            {"description": "Criação de apps frontend com deploy no Render"},
+            {"description": "Integração com GitHub — templates e deploy keys"},
+            {"description": "Data Browser para explorar dados dos apps"},
+            {"description": "Página de changelog para acompanhar novidades"}
+          ]
+        },
+        {
+          "type": "improvements",
+          "items": [
+            {"description": "Dashboard consolidado com backends e frontends na mesma tela"},
+            {"description": "Interface redesenhada com glass-morphism e tooltips"}
+          ]
+        },
+        {
+          "type": "fixes",
+          "items": [
+            {"description": "Correções no fluxo de deploy do Render"},
+            {"description": "Correções no formato de SSH key para deploy keys do GitHub"}
+          ]
+        }
+      ]
+    }
+  ]
+}

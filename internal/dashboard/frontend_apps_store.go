@@ -26,8 +26,11 @@ type FrontendApp struct {
 	DeployServiceID    string     `json:"deploy_service_id,omitempty"`
 	DeployURL          string     `json:"deploy_url,omitempty"`
 	DeployStatus       string     `json:"deploy_status,omitempty"`
-	DeployErrorMessage string `json:"deploy_error_message,omitempty"`
-	CustomDomain       string `json:"custom_domain,omitempty"`
+	DeployErrorMessage string     `json:"deploy_error_message,omitempty"`
+	CustomDomain       string     `json:"custom_domain,omitempty"`
+	OwnerID            string     `json:"owner_id"`
+	OwnerEmail         string     `json:"owner_email,omitempty"`
+	OwnerName          string     `json:"owner_name,omitempty"`
 }
 
 type FrontendAppInput struct {
@@ -38,6 +41,7 @@ type FrontendAppInput struct {
 	Status             string
 	ErrorMessage       string
 	CreatedBy          string
+	OwnerID            string
 	BackendAppID       string
 	DeployServiceID    string
 	DeployURL          string
@@ -50,25 +54,33 @@ const faExtraColsSelect = `COALESCE(fa.backend_app_id::text, ''),
 	COALESCE(fa.deploy_url, ''),
 	COALESCE(fa.deploy_status, 'pending'),
 	COALESCE(fa.deploy_error_message, ''),
-	COALESCE(fa.custom_domain, '')`
+	COALESCE(fa.custom_domain, ''),
+	COALESCE(fa.owner_id::text, ''),
+	COALESCE(u.email, ''),
+	COALESCE(u.name, '')`
 
 const faExtraColsReturning = `COALESCE(backend_app_id::text, ''),
 	COALESCE(deploy_service_id, ''),
 	COALESCE(deploy_url, ''),
 	COALESCE(deploy_status, 'pending'),
 	COALESCE(deploy_error_message, ''),
-	COALESCE(custom_domain, '')`
+	COALESCE(custom_domain, ''),
+	COALESCE(owner_id::text, ''),
+	(SELECT COALESCE(email, '') FROM zeep_system.dashboard_users WHERE id = owner_id),
+	(SELECT COALESCE(name, '') FROM zeep_system.dashboard_users WHERE id = owner_id)`
 
 func scanApp(a *FrontendApp, row pgx.Row) error {
 	return row.Scan(&a.ID, &a.Name, &a.Slug, &a.TemplateID, &a.TemplateName,
 		&a.GithubRepoURL, &a.Status, &a.ErrorMessage, &a.CreatedBy, &a.CreatedAt, &a.ArchivedAt,
-		&a.BackendAppID, &a.DeployServiceID, &a.DeployURL, &a.DeployStatus, &a.DeployErrorMessage, &a.CustomDomain)
+		&a.BackendAppID, &a.DeployServiceID, &a.DeployURL, &a.DeployStatus, &a.DeployErrorMessage, &a.CustomDomain,
+		&a.OwnerID, &a.OwnerEmail, &a.OwnerName)
 }
 
 func scanAppRows(a *FrontendApp, rows pgx.Rows) error {
 	return rows.Scan(&a.ID, &a.Name, &a.Slug, &a.TemplateID, &a.TemplateName,
 		&a.GithubRepoURL, &a.Status, &a.ErrorMessage, &a.CreatedBy, &a.CreatedAt, &a.ArchivedAt,
-		&a.BackendAppID, &a.DeployServiceID, &a.DeployURL, &a.DeployStatus, &a.DeployErrorMessage, &a.CustomDomain)
+		&a.BackendAppID, &a.DeployServiceID, &a.DeployURL, &a.DeployStatus, &a.DeployErrorMessage, &a.CustomDomain,
+		&a.OwnerID, &a.OwnerEmail, &a.OwnerName)
 }
 
 func CreateFrontendApp(ctx context.Context, pool *db.Pool, input FrontendAppInput) (*FrontendApp, error) {
@@ -76,14 +88,14 @@ func CreateFrontendApp(ctx context.Context, pool *db.Pool, input FrontendAppInpu
 	err := scanApp(&a,
 		pool.QueryRow(ctx,
 			`INSERT INTO zeep_system.frontend_apps
-			 (name, slug, template_id, github_repo_url, status, error_message, created_by, backend_app_id)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, '')::uuid)
+			 (name, slug, template_id, github_repo_url, status, error_message, created_by, owner_id, backend_app_id)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, '')::uuid, NULLIF($9, '')::uuid)
 			 RETURNING id, name, slug, template_id,
 			   (SELECT COALESCE(gt.name, '') FROM zeep_system.github_templates gt WHERE gt.id = template_id),
 			   github_repo_url, status, error_message, created_by, created_at, archived_at,
 			   `+faExtraColsReturning,
 			input.Name, input.Slug, input.TemplateID,
-			input.GithubRepoURL, input.Status, input.ErrorMessage, input.CreatedBy, input.BackendAppID,
+			input.GithubRepoURL, input.Status, input.ErrorMessage, input.CreatedBy, input.OwnerID, input.BackendAppID,
 		))
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: create frontend app: %w", err)
@@ -91,19 +103,37 @@ func CreateFrontendApp(ctx context.Context, pool *db.Pool, input FrontendAppInpu
 	return &a, nil
 }
 
-func GetFrontendApp(ctx context.Context, pool *db.Pool, id string) (*FrontendApp, error) {
+func GetFrontendApp(ctx context.Context, pool *db.Pool, id, userID, role string) (*FrontendApp, error) {
 	var a FrontendApp
-	err := scanApp(&a,
-		pool.QueryRow(ctx,
-			`SELECT fa.id, fa.name, fa.slug, fa.template_id,
-			 COALESCE(gt.name, ''), fa.github_repo_url, fa.status,
-			 fa.error_message, fa.created_by, fa.created_at, fa.archived_at,
-			 `+faExtraColsSelect+`
-			 FROM zeep_system.frontend_apps fa
-			 LEFT JOIN zeep_system.github_templates gt ON gt.id = fa.template_id
-			 WHERE fa.id = $1 AND fa.archived_at IS NULL`,
-			id,
-		))
+	var err error
+
+	if role == "superadmin" {
+		err = scanApp(&a,
+			pool.QueryRow(ctx,
+				`SELECT fa.id, fa.name, fa.slug, fa.template_id,
+				 COALESCE(gt.name, ''), fa.github_repo_url, fa.status,
+				 fa.error_message, fa.created_by, fa.created_at, fa.archived_at,
+				 `+faExtraColsSelect+`
+				 FROM zeep_system.frontend_apps fa
+				 LEFT JOIN zeep_system.github_templates gt ON gt.id = fa.template_id
+				 LEFT JOIN zeep_system.dashboard_users u ON u.id = fa.owner_id
+				 WHERE fa.id = $1 AND fa.archived_at IS NULL`,
+				id,
+			))
+	} else {
+		err = scanApp(&a,
+			pool.QueryRow(ctx,
+				`SELECT fa.id, fa.name, fa.slug, fa.template_id,
+				 COALESCE(gt.name, ''), fa.github_repo_url, fa.status,
+				 fa.error_message, fa.created_by, fa.created_at, fa.archived_at,
+				 `+faExtraColsSelect+`
+				 FROM zeep_system.frontend_apps fa
+				 LEFT JOIN zeep_system.github_templates gt ON gt.id = fa.template_id
+				 LEFT JOIN zeep_system.dashboard_users u ON u.id = fa.owner_id
+				 WHERE fa.id = $1 AND fa.archived_at IS NULL AND fa.owner_id = $2`,
+				id, userID,
+			))
+	}
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -113,17 +143,38 @@ func GetFrontendApp(ctx context.Context, pool *db.Pool, id string) (*FrontendApp
 	return &a, nil
 }
 
-func ListFrontendApps(ctx context.Context, pool *db.Pool) ([]FrontendApp, error) {
-	rows, err := pool.Query(ctx,
-		`SELECT fa.id, fa.name, fa.slug, fa.template_id,
-		 COALESCE(gt.name, ''), fa.github_repo_url, fa.status,
-		 fa.error_message, fa.created_by, fa.created_at, fa.archived_at,
-		 `+faExtraColsSelect+`
-		 FROM zeep_system.frontend_apps fa
-		 LEFT JOIN zeep_system.github_templates gt ON gt.id = fa.template_id
-		 WHERE fa.archived_at IS NULL
-		 ORDER BY fa.created_at DESC`,
+func ListFrontendApps(ctx context.Context, pool *db.Pool, userID, role string) ([]FrontendApp, error) {
+	var (
+		rows pgx.Rows
+		err  error
 	)
+
+	if role == "superadmin" {
+		rows, err = pool.Query(ctx,
+			`SELECT fa.id, fa.name, fa.slug, fa.template_id,
+			 COALESCE(gt.name, ''), fa.github_repo_url, fa.status,
+			 fa.error_message, fa.created_by, fa.created_at, fa.archived_at,
+			 `+faExtraColsSelect+`
+			 FROM zeep_system.frontend_apps fa
+			 LEFT JOIN zeep_system.github_templates gt ON gt.id = fa.template_id
+			 LEFT JOIN zeep_system.dashboard_users u ON u.id = fa.owner_id
+			 WHERE fa.archived_at IS NULL
+			 ORDER BY fa.created_at DESC`,
+		)
+	} else {
+		rows, err = pool.Query(ctx,
+			`SELECT fa.id, fa.name, fa.slug, fa.template_id,
+			 COALESCE(gt.name, ''), fa.github_repo_url, fa.status,
+			 fa.error_message, fa.created_by, fa.created_at, fa.archived_at,
+			 `+faExtraColsSelect+`
+			 FROM zeep_system.frontend_apps fa
+			 LEFT JOIN zeep_system.github_templates gt ON gt.id = fa.template_id
+			 LEFT JOIN zeep_system.dashboard_users u ON u.id = fa.owner_id
+			 WHERE fa.archived_at IS NULL AND fa.owner_id = $1
+			 ORDER BY fa.created_at DESC`,
+			userID,
+		)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: list frontend apps: %w", err)
 	}
@@ -206,7 +257,24 @@ func UpdateFrontendAppDomain(ctx context.Context, pool *db.Pool, id, customDomai
 	return nil
 }
 
-func ArchiveFrontendApp(ctx context.Context, pool *db.Pool, id string) error {
+func ArchiveFrontendApp(ctx context.Context, pool *db.Pool, id, userID, role string) error {
+	if role != "superadmin" {
+		var ownerID string
+		err := pool.QueryRow(ctx,
+			`SELECT COALESCE(owner_id::text, '') FROM zeep_system.frontend_apps
+			 WHERE id = $1 AND archived_at IS NULL`, id,
+		).Scan(&ownerID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("dashboard: archive frontend app check: %w", err)
+		}
+		if ownerID != userID {
+			return ErrNotFound
+		}
+	}
+
 	tag, err := pool.Exec(ctx,
 		`UPDATE zeep_system.frontend_apps
 		 SET archived_at = now()

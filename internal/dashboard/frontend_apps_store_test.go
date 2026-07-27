@@ -28,6 +28,16 @@ func frontendAppsTestPool(t *testing.T) *db.Pool {
 		t.Fatalf("create schema: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS zeep_system.dashboard_users (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			email TEXT UNIQUE NOT NULL,
+			password_hash TEXT NOT NULL DEFAULT '',
+			role TEXT NOT NULL CHECK (role IN ('admin','superadmin')),
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`); err != nil {
+		t.Fatalf("create dashboard_users table: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS zeep_system.github_templates (
 			id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			name         TEXT NOT NULL,
@@ -51,6 +61,7 @@ func frontendAppsTestPool(t *testing.T) *db.Pool {
 			status          TEXT NOT NULL DEFAULT 'ready',
 			error_message   TEXT NOT NULL DEFAULT '',
 			created_by      TEXT NOT NULL,
+			owner_id        UUID REFERENCES zeep_system.dashboard_users(id),
 			created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
 			archived_at     TIMESTAMPTZ
 		)`); err != nil {
@@ -62,11 +73,11 @@ func frontendAppsTestPool(t *testing.T) *db.Pool {
 		t.Fatalf("create unique index: %v", err)
 	}
 
-	if _, err := pool.Exec(ctx, `TRUNCATE zeep_system.frontend_apps, zeep_system.github_templates`); err != nil {
+	if _, err := pool.Exec(ctx, `TRUNCATE zeep_system.frontend_apps, zeep_system.github_templates, zeep_system.dashboard_users`); err != nil {
 		t.Fatalf("truncate tables: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), `TRUNCATE zeep_system.frontend_apps, zeep_system.github_templates`)
+		_, _ = pool.Exec(context.Background(), `TRUNCATE zeep_system.frontend_apps, zeep_system.github_templates, zeep_system.dashboard_users`)
 	})
 
 	return pool
@@ -88,11 +99,24 @@ func testTemplate(t *testing.T, pool *db.Pool, name string) *GitHubTemplate {
 	return tmpl
 }
 
+func testUser(t *testing.T, pool *db.Pool, email, role string) (userID string) {
+	t.Helper()
+	err := pool.QueryRow(context.Background(),
+		`INSERT INTO zeep_system.dashboard_users (email, password_hash, role)
+		 VALUES ($1, '', $2) RETURNING id`, email, role,
+	).Scan(&userID)
+	if err != nil {
+		t.Fatalf("create test user: %v", err)
+	}
+	return userID
+}
+
 func TestCreateFrontendApp(t *testing.T) {
 	pool := frontendAppsTestPool(t)
 	defer pool.Close()
 	ctx := context.Background()
 
+	userID := testUser(t, pool, "user@example.com", "admin")
 	tmpl := testTemplate(t, pool, "React Template")
 
 	input := FrontendAppInput{
@@ -103,6 +127,7 @@ func TestCreateFrontendApp(t *testing.T) {
 		Status:        "ready",
 		ErrorMessage:  "",
 		CreatedBy:     "user@example.com",
+		OwnerID:       userID,
 	}
 
 	app, err := CreateFrontendApp(ctx, pool, input)
@@ -137,6 +162,9 @@ func TestCreateFrontendApp(t *testing.T) {
 	if app.CreatedBy != input.CreatedBy {
 		t.Errorf("CreatedBy = %q, want %q", app.CreatedBy, input.CreatedBy)
 	}
+	if app.OwnerID != userID {
+		t.Errorf("OwnerID = %q, want %q", app.OwnerID, userID)
+	}
 	if app.CreatedAt.IsZero() {
 		t.Error("CreatedAt should be populated")
 	}
@@ -150,6 +178,7 @@ func TestCreateFrontendAppWithFailedStatus(t *testing.T) {
 	defer pool.Close()
 	ctx := context.Background()
 
+	userID := testUser(t, pool, "failed-user@example.com", "admin")
 	tmpl := testTemplate(t, pool, "Failed App Template")
 
 	input := FrontendAppInput{
@@ -159,7 +188,8 @@ func TestCreateFrontendAppWithFailedStatus(t *testing.T) {
 		GithubRepoURL: "",
 		Status:        "failed",
 		ErrorMessage:  "rate limit exceeded",
-		CreatedBy:     "user@example.com",
+		CreatedBy:     "failed-user@example.com",
+		OwnerID:       userID,
 	}
 
 	app, err := CreateFrontendApp(ctx, pool, input)
@@ -180,6 +210,7 @@ func TestGetFrontendApp(t *testing.T) {
 	defer pool.Close()
 	ctx := context.Background()
 
+	userID := testUser(t, pool, "get-user@example.com", "admin")
 	tmpl := testTemplate(t, pool, "Get App Template")
 
 	input := FrontendAppInput{
@@ -188,7 +219,8 @@ func TestGetFrontendApp(t *testing.T) {
 		TemplateID:    tmpl.ID,
 		GithubRepoURL: "https://github.com/test/get-me",
 		Status:        "ready",
-		CreatedBy:     "user@example.com",
+		CreatedBy:     "get-user@example.com",
+		OwnerID:       userID,
 	}
 
 	created, err := CreateFrontendApp(ctx, pool, input)
@@ -196,7 +228,7 @@ func TestGetFrontendApp(t *testing.T) {
 		t.Fatalf("CreateFrontendApp: %v", err)
 	}
 
-	app, err := GetFrontendApp(ctx, pool, created.ID)
+	app, err := GetFrontendApp(ctx, pool, created.ID, userID, "admin")
 	if err != nil {
 		t.Fatalf("GetFrontendApp: %v", err)
 	}
@@ -214,7 +246,9 @@ func TestGetFrontendAppNotFound(t *testing.T) {
 	defer pool.Close()
 	ctx := context.Background()
 
-	_, err := GetFrontendApp(ctx, pool, "00000000-0000-0000-0000-000000000000")
+	userID := testUser(t, pool, "notfound-user@example.com", "admin")
+
+	_, err := GetFrontendApp(ctx, pool, "00000000-0000-0000-0000-000000000000", userID, "admin")
 	if err != ErrNotFound {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
@@ -225,6 +259,7 @@ func TestGetFrontendAppExcludesArchived(t *testing.T) {
 	defer pool.Close()
 	ctx := context.Background()
 
+	userID := testUser(t, pool, "archived-user@example.com", "admin")
 	tmpl := testTemplate(t, pool, "Archived App Template")
 
 	input := FrontendAppInput{
@@ -233,7 +268,8 @@ func TestGetFrontendAppExcludesArchived(t *testing.T) {
 		TemplateID:    tmpl.ID,
 		GithubRepoURL: "",
 		Status:        "ready",
-		CreatedBy:     "user@example.com",
+		CreatedBy:     "archived-user@example.com",
+		OwnerID:       userID,
 	}
 
 	created, err := CreateFrontendApp(ctx, pool, input)
@@ -241,11 +277,11 @@ func TestGetFrontendAppExcludesArchived(t *testing.T) {
 		t.Fatalf("CreateFrontendApp: %v", err)
 	}
 
-	if err := ArchiveFrontendApp(ctx, pool, created.ID); err != nil {
+	if err := ArchiveFrontendApp(ctx, pool, created.ID, userID, "admin"); err != nil {
 		t.Fatalf("ArchiveFrontendApp: %v", err)
 	}
 
-	_, err = GetFrontendApp(ctx, pool, created.ID)
+	_, err = GetFrontendApp(ctx, pool, created.ID, userID, "admin")
 	if err != ErrNotFound {
 		t.Errorf("expected ErrNotFound for archived app, got %v", err)
 	}
@@ -256,31 +292,37 @@ func TestListFrontendApps(t *testing.T) {
 	defer pool.Close()
 	ctx := context.Background()
 
+	userID1 := testUser(t, pool, "u1@e.com", "admin")
+	userID2 := testUser(t, pool, "u2@e.com", "admin")
 	tmpl := testTemplate(t, pool, "List App Template")
 
-	inputs := []FrontendAppInput{
-		{Name: "App 1", Slug: "app-1", TemplateID: tmpl.ID, Status: "ready", CreatedBy: "u1@e.com"},
-		{Name: "App 2", Slug: "app-2", TemplateID: tmpl.ID, Status: "failed", ErrorMessage: "oops", CreatedBy: "u2@e.com"},
-		{Name: "App 3", Slug: "app-3", TemplateID: tmpl.ID, Status: "ready", CreatedBy: "u3@e.com"},
+	inputs := []struct {
+		input   FrontendAppInput
+		ownerID string
+	}{
+		{FrontendAppInput{Name: "App 1", Slug: "app-1", TemplateID: tmpl.ID, Status: "ready", CreatedBy: "u1@e.com"}, userID1},
+		{FrontendAppInput{Name: "App 2", Slug: "app-2", TemplateID: tmpl.ID, Status: "failed", ErrorMessage: "oops", CreatedBy: "u2@e.com"}, userID2},
+		{FrontendAppInput{Name: "App 3", Slug: "app-3", TemplateID: tmpl.ID, Status: "ready", CreatedBy: "u1@e.com"}, userID1},
 	}
 
-	for _, input := range inputs {
-		_, err := CreateFrontendApp(ctx, pool, input)
+	for _, in := range inputs {
+		in.input.OwnerID = in.ownerID
+		_, err := CreateFrontendApp(ctx, pool, in.input)
 		if err != nil {
 			t.Fatalf("CreateFrontendApp: %v", err)
 		}
 	}
 
-	apps, err := ListFrontendApps(ctx, pool)
+	apps, err := ListFrontendApps(ctx, pool, userID1, "admin")
 	if err != nil {
 		t.Fatalf("ListFrontendApps: %v", err)
 	}
 
-	if len(apps) != 3 {
-		t.Errorf("expected 3 apps, got %d", len(apps))
+	if len(apps) != 2 {
+		t.Errorf("expected 2 apps for user1, got %d", len(apps))
 	}
 
-	if apps[0].Name != "App 3" {
+	if len(apps) > 0 && apps[0].Name != "App 3" {
 		t.Errorf("first app Name = %q, want App 3 (DESC order)", apps[0].Name)
 	}
 }
@@ -290,11 +332,12 @@ func TestListFrontendAppsExcludesArchived(t *testing.T) {
 	defer pool.Close()
 	ctx := context.Background()
 
+	userID := testUser(t, pool, "list-exclude@example.com", "admin")
 	tmpl := testTemplate(t, pool, "List Excludes Template")
 
 	inputs := []FrontendAppInput{
-		{Name: "Keep", Slug: "keep", TemplateID: tmpl.ID, Status: "ready", CreatedBy: "u1@e.com"},
-		{Name: "Archive", Slug: "archive", TemplateID: tmpl.ID, Status: "ready", CreatedBy: "u2@e.com"},
+		{Name: "Keep", Slug: "keep", TemplateID: tmpl.ID, Status: "ready", CreatedBy: "list-exclude@example.com", OwnerID: userID},
+		{Name: "Archive", Slug: "archive", TemplateID: tmpl.ID, Status: "ready", CreatedBy: "list-exclude@example.com", OwnerID: userID},
 	}
 
 	var archivedID string
@@ -308,11 +351,11 @@ func TestListFrontendAppsExcludesArchived(t *testing.T) {
 		}
 	}
 
-	if err := ArchiveFrontendApp(ctx, pool, archivedID); err != nil {
+	if err := ArchiveFrontendApp(ctx, pool, archivedID, userID, "admin"); err != nil {
 		t.Fatalf("ArchiveFrontendApp: %v", err)
 	}
 
-	apps, err := ListFrontendApps(ctx, pool)
+	apps, err := ListFrontendApps(ctx, pool, userID, "admin")
 	if err != nil {
 		t.Fatalf("ListFrontendApps: %v", err)
 	}
@@ -330,6 +373,7 @@ func TestUpdateFrontendAppStatus(t *testing.T) {
 	defer pool.Close()
 	ctx := context.Background()
 
+	userID := testUser(t, pool, "status-user@example.com", "admin")
 	tmpl := testTemplate(t, pool, "Update Status Template")
 
 	input := FrontendAppInput{
@@ -339,7 +383,8 @@ func TestUpdateFrontendAppStatus(t *testing.T) {
 		GithubRepoURL: "",
 		Status:        "failed",
 		ErrorMessage:  "original error",
-		CreatedBy:     "user@example.com",
+		CreatedBy:     "status-user@example.com",
+		OwnerID:       userID,
 	}
 
 	created, err := CreateFrontendApp(ctx, pool, input)
@@ -379,6 +424,7 @@ func TestArchiveFrontendApp(t *testing.T) {
 	defer pool.Close()
 	ctx := context.Background()
 
+	userID := testUser(t, pool, "archive-user@example.com", "admin")
 	tmpl := testTemplate(t, pool, "Archive Template")
 
 	input := FrontendAppInput{
@@ -387,7 +433,8 @@ func TestArchiveFrontendApp(t *testing.T) {
 		TemplateID:    tmpl.ID,
 		GithubRepoURL: "",
 		Status:        "ready",
-		CreatedBy:     "user@example.com",
+		CreatedBy:     "archive-user@example.com",
+		OwnerID:       userID,
 	}
 
 	created, err := CreateFrontendApp(ctx, pool, input)
@@ -395,18 +442,18 @@ func TestArchiveFrontendApp(t *testing.T) {
 		t.Fatalf("CreateFrontendApp: %v", err)
 	}
 
-	if err := ArchiveFrontendApp(ctx, pool, created.ID); err != nil {
+	if err := ArchiveFrontendApp(ctx, pool, created.ID, userID, "admin"); err != nil {
 		t.Fatalf("ArchiveFrontendApp: %v", err)
 	}
 
 	// Should not be found by Get (which filters archived_at IS NULL).
-	_, err = GetFrontendApp(ctx, pool, created.ID)
+	_, err = GetFrontendApp(ctx, pool, created.ID, userID, "admin")
 	if err != ErrNotFound {
 		t.Errorf("expected ErrNotFound after archive, got %v", err)
 	}
 
 	// Should not appear in list.
-	apps, err := ListFrontendApps(ctx, pool)
+	apps, err := ListFrontendApps(ctx, pool, userID, "admin")
 	if err != nil {
 		t.Fatalf("ListFrontendApps: %v", err)
 	}
@@ -422,7 +469,9 @@ func TestArchiveFrontendAppNotFound(t *testing.T) {
 	defer pool.Close()
 	ctx := context.Background()
 
-	err := ArchiveFrontendApp(ctx, pool, "00000000-0000-0000-0000-000000000000")
+	userID := testUser(t, pool, "archive-notfound@example.com", "admin")
+
+	err := ArchiveFrontendApp(ctx, pool, "00000000-0000-0000-0000-000000000000", userID, "admin")
 	if err != ErrNotFound {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
@@ -433,6 +482,7 @@ func TestSlugExists(t *testing.T) {
 	defer pool.Close()
 	ctx := context.Background()
 
+	userID := testUser(t, pool, "slug-user@example.com", "admin")
 	tmpl := testTemplate(t, pool, "Slug Template")
 
 	input := FrontendAppInput{
@@ -441,7 +491,8 @@ func TestSlugExists(t *testing.T) {
 		TemplateID:    tmpl.ID,
 		GithubRepoURL: "",
 		Status:        "ready",
-		CreatedBy:     "user@example.com",
+		CreatedBy:     "slug-user@example.com",
+		OwnerID:       userID,
 	}
 
 	_, err := CreateFrontendApp(ctx, pool, input)
@@ -471,6 +522,7 @@ func TestSlugExistsIgnoresArchived(t *testing.T) {
 	defer pool.Close()
 	ctx := context.Background()
 
+	userID := testUser(t, pool, "slug-archived@example.com", "admin")
 	tmpl := testTemplate(t, pool, "Slug Archived Template")
 
 	input := FrontendAppInput{
@@ -479,7 +531,8 @@ func TestSlugExistsIgnoresArchived(t *testing.T) {
 		TemplateID:    tmpl.ID,
 		GithubRepoURL: "",
 		Status:        "ready",
-		CreatedBy:     "user@example.com",
+		CreatedBy:     "slug-archived@example.com",
+		OwnerID:       userID,
 	}
 
 	created, err := CreateFrontendApp(ctx, pool, input)
@@ -487,7 +540,7 @@ func TestSlugExistsIgnoresArchived(t *testing.T) {
 		t.Fatalf("CreateFrontendApp: %v", err)
 	}
 
-	if err := ArchiveFrontendApp(ctx, pool, created.ID); err != nil {
+	if err := ArchiveFrontendApp(ctx, pool, created.ID, userID, "admin"); err != nil {
 		t.Fatalf("ArchiveFrontendApp: %v", err)
 	}
 
@@ -505,6 +558,7 @@ func TestSlugUniqueIndexEnforced(t *testing.T) {
 	defer pool.Close()
 	ctx := context.Background()
 
+	userID := testUser(t, pool, "unique-slug-user@example.com", "admin")
 	tmpl := testTemplate(t, pool, "Unique Slug Template")
 
 	input := FrontendAppInput{
@@ -513,7 +567,8 @@ func TestSlugUniqueIndexEnforced(t *testing.T) {
 		TemplateID:    tmpl.ID,
 		GithubRepoURL: "",
 		Status:        "ready",
-		CreatedBy:     "user@example.com",
+		CreatedBy:     "unique-slug-user@example.com",
+		OwnerID:       userID,
 	}
 
 	_, err := CreateFrontendApp(ctx, pool, input)
@@ -529,6 +584,7 @@ func TestSlugUniqueIndexEnforced(t *testing.T) {
 		GithubRepoURL: "",
 		Status:        "ready",
 		CreatedBy:     "user2@example.com",
+		OwnerID:       userID,
 	})
 	if err == nil {
 		t.Error("expected unique constraint violation, got nil")

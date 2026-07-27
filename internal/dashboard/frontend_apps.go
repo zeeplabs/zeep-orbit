@@ -54,9 +54,8 @@ func (h *FrontendAppsHandler) List(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
-	_ = user
 
-	apps, err := ListFrontendApps(r.Context(), h.pool)
+	apps, err := ListFrontendApps(r.Context(), h.pool, user.ID, user.Role)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 		return
@@ -71,7 +70,6 @@ func (h *FrontendAppsHandler) Get(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
-	_ = user
 
 	id := chi.URLParam(r, "id")
 	if id == "" {
@@ -79,7 +77,7 @@ func (h *FrontendAppsHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app, err := GetFrontendApp(r.Context(), h.pool, id)
+	app, err := GetFrontendApp(r.Context(), h.pool, id, user.ID, user.Role)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
@@ -179,6 +177,7 @@ func (h *FrontendAppsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Status:        status,
 		ErrorMessage:  errMsg,
 		CreatedBy:     user.Email,
+		OwnerID:       user.ID,
 		BackendAppID:  body.BackendAppID,
 	})
 	if err != nil {
@@ -226,7 +225,7 @@ func (h *FrontendAppsHandler) Retry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app, err := GetFrontendApp(r.Context(), h.pool, id)
+	app, err := GetFrontendApp(r.Context(), h.pool, id, user.ID, user.Role)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
@@ -305,13 +304,13 @@ func (h *FrontendAppsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app, err := GetFrontendApp(r.Context(), h.pool, id)
+	app, err := GetFrontendApp(r.Context(), h.pool, id, user.ID, user.Role)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
 
-	if err := ArchiveFrontendApp(r.Context(), h.pool, id); err != nil {
+	if err := ArchiveFrontendApp(r.Context(), h.pool, id, user.ID, user.Role); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 		return
 	}
@@ -443,7 +442,7 @@ func (h *FrontendAppsHandler) SyncRetry(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	app, err := GetFrontendApp(r.Context(), h.pool, id)
+	app, err := GetFrontendApp(r.Context(), h.pool, id, user.ID, user.Role)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
@@ -487,7 +486,7 @@ func (h *FrontendAppsHandler) SyncRegenerate(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	app, err := GetFrontendApp(r.Context(), h.pool, id)
+	app, err := GetFrontendApp(r.Context(), h.pool, id, user.ID, user.Role)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
@@ -639,7 +638,7 @@ func (h *FrontendAppsHandler) DeployRetry(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	app, err := GetFrontendApp(r.Context(), h.pool, id)
+	app, err := GetFrontendApp(r.Context(), h.pool, id, user.ID, user.Role)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
@@ -672,7 +671,7 @@ func (h *FrontendAppsHandler) DeployRetry(w http.ResponseWriter, r *http.Request
 	meta, _ := json.Marshal(map[string]string{"frontend_app_id": id})
 	h.audit(r.Context(), user.ID, user.Email, "frontend_app.deploy.retry", "frontend_app", app.ID, app.Name, meta, r.RemoteAddr)
 
-	updated, _ := GetFrontendApp(r.Context(), h.pool, id)
+	updated, _ := GetFrontendApp(r.Context(), h.pool, id, user.ID, user.Role)
 	if updated != nil {
 		writeJSON(w, http.StatusOK, updated)
 	} else {
@@ -686,7 +685,6 @@ func (h *FrontendAppsHandler) SetCustomDomain(w http.ResponseWriter, r *http.Req
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
-	_ = user
 
 	id := chi.URLParam(r, "id")
 	if id == "" {
@@ -705,7 +703,7 @@ func (h *FrontendAppsHandler) SetCustomDomain(w http.ResponseWriter, r *http.Req
 
 	subdomain := strings.TrimSpace(body.Subdomain)
 
-	app, err := GetFrontendApp(r.Context(), h.pool, id)
+	app, err := GetFrontendApp(r.Context(), h.pool, id, user.ID, user.Role)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return

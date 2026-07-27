@@ -1,1 +1,8 @@
 Task T-01,T-02,T-03: complete (commits dce7efd, review clean)
+Task 1: complete (commits bf97187..119571c, review clean)
+Task 2: complete (commits 119571c..5f453d8, review clean)
+Task 3: complete (commits 5f453d8..75a4a58, review clean)
+Task 4: complete (commits 75a4a58..925eb7a, review clean)
+Task 5: complete (commits 925eb7a..149688b, review clean)
+Task 6: complete (commits 149688b..b42f7ef, review clean)
+Task 7-8: complete (commits b42f7ef..6dcb7fb, review clean)
