@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Plus, Trash2, Table2, Link2, Lock } from "lucide-react";
+import { Plus, Trash2, Table2, Link2, Lock, Info } from "lucide-react";
 import { TableDef, ColumnDef, IndexDef, ReferenceDef } from "../lib/api";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -31,11 +31,17 @@ const ON_DELETE_OPTIONS: { value: NonNullable<ReferenceDef["on_delete"]>; label:
   { value: "set_null", label: "Definir como nulo" },
 ];
 
-const AUTO_COLUMNS = [
+const BASE_AUTO_COLUMNS = [
   { name: "id", type: "uuid", required: true, unique: true },
   { name: "created_at", type: "timestamptz", required: true, unique: false },
   { name: "updated_at", type: "timestamptz", required: true, unique: false },
 ];
+
+const OWNER_ID_AUTO_COLUMN = { name: "owner_id", type: "uuid", required: true, unique: false };
+
+// owner_id só existe quando RLS está ativo (provisioner.go: rls == "owner" || rls == "enabled").
+const autoColumnsFor = (rls: string) =>
+  rls === "enabled" || rls === "owner" ? [...BASE_AUTO_COLUMNS, OWNER_ID_AUTO_COLUMN] : BASE_AUTO_COLUMNS;
 
 const emptyColumn = (): ColumnDef => ({
   name: "",
@@ -312,7 +318,7 @@ export default function TableCard({
         </div>
 
         <div className="flex flex-col gap-2.5 mb-2.5">
-          {AUTO_COLUMNS.map((auto) => (
+          {autoColumnsFor(rls).map((auto) => (
             <div
               key={auto.name}
               className="grid gap-3 items-center max-md:flex max-md:flex-col max-md:gap-2 max-md:p-3 max-md:bg-white/[0.03] max-md:rounded-xl max-md:border max-md:border-white/[0.06]"
@@ -492,6 +498,22 @@ export default function TableCard({
 
         <div className="mt-4 pt-4 border-t border-white/[0.06]">
           <p className="text-[11px] text-[#94A3B8] font-semibold mb-2">Índices</p>
+
+          <div className="flex gap-2 items-start bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2.5 mb-3">
+            <Info size={13} strokeWidth={1.5} className="text-[#94A3B8] shrink-0 mt-0.5" />
+            <p className="text-[11px] text-[#94A3B8] leading-relaxed">
+              Um índice é como o índice remissivo de um livro: em vez do banco ler registro por registro pra achar o
+              que você pediu, ele vai direto ao ponto. Crie um índice em toda coluna que você usa com frequência
+              pra <strong className="text-[#B3D1FF] font-medium">buscar</strong> ou{" "}
+              <strong className="text-[#B3D1FF] font-medium">filtrar</strong> dados — por exemplo, um índice em{" "}
+              <code className="text-[#B3D1FF]">email</code> se o app busca clientes pelo email, ou um índice
+              composto em <code className="text-[#B3D1FF]">org_id + status</code> se você sempre lista pedidos de uma
+              organização filtrando por status. Marque <strong className="text-[#B3D1FF] font-medium">Único</strong>{" "}
+              quando aquele valor (ou combinação de valores) nunca pode se repetir, como um CPF ou um código de
+              cupom — o banco passa a impedir duplicatas sozinho. Sem índice, buscas em tabelas grandes ficam cada
+              vez mais lentas conforme os dados crescem.
+            </p>
+          </div>
 
           <div className="flex flex-col gap-2 mb-2">
             {indexes.map((idx, ii) => (
