@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
+import { useTranslation, Trans } from "react-i18next";
 import { Plus, Trash2, Table2, Link2, Lock, Info } from "lucide-react";
 import { TableDef, ColumnDef, IndexDef, ReferenceDef } from "../lib/api";
 import { cn } from "@/lib/utils";
@@ -24,12 +25,13 @@ const COLUMN_TYPES = [
   "jsonb",
 ];
 
-const ON_DELETE_OPTIONS: { value: NonNullable<ReferenceDef["on_delete"]>; label: string }[] = [
-  { value: "no_action", label: "Nenhuma ação" },
-  { value: "cascade", label: "Cascata (apaga junto)" },
-  { value: "restrict", label: "Restringir (bloqueia exclusão)" },
-  { value: "set_null", label: "Definir como nulo" },
-];
+const ON_DELETE_VALUES: NonNullable<ReferenceDef["on_delete"]>[] = ["no_action", "cascade", "restrict", "set_null"];
+const ON_DELETE_LABEL_KEYS: Record<string, string> = {
+  no_action: "tableCard.onDeleteNoAction",
+  cascade: "tableCard.onDeleteCascade",
+  restrict: "tableCard.onDeleteRestrict",
+  set_null: "tableCard.onDeleteSetNull",
+};
 
 const BASE_AUTO_COLUMNS = [
   { name: "id", type: "uuid", required: true, unique: true },
@@ -89,6 +91,7 @@ export default function TableCard({
   onDiscardDraft,
   onDeleted,
 }: TableCardProps) {
+  const { t } = useTranslation();
   const isDraft = !table.id;
   const [editing, setEditing] = useState(startInEdit);
   const [name, setName] = useState(table.name);
@@ -149,15 +152,15 @@ export default function TableCard({
   async function save() {
     setError(null);
     if (!name.trim()) {
-      setError("Nome da tabela é obrigatório");
+      setError(t("appForm.tableNameRequired"));
       return;
     }
     if (columns.some((c) => !c.name.trim())) {
-      setError("Toda coluna precisa de um nome");
+      setError(t("tableCard.columnsNameRequired"));
       return;
     }
     if (indexes.some((idx) => !idx.name.trim() || idx.columns.length === 0)) {
-      setError("Todo índice precisa de um nome e ao menos uma coluna");
+      setError(t("tableCard.indexInvalid"));
       return;
     }
     setSaving(true);
@@ -172,21 +175,21 @@ export default function TableCard({
       setEditing(false);
       onExitEdit();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao salvar tabela");
+      setError(err instanceof Error ? err.message : t("tableCard.saveError"));
     } finally {
       setSaving(false);
     }
   }
 
   async function remove() {
-    if (!confirm(`Excluir a tabela "${table.name}"? Isso apaga os dados dela.`)) return;
+    if (!confirm(t("tableCard.deleteConfirm", { name: table.name }))) return;
     setDeleting(true);
     setError(null);
     try {
       await onDelete();
       onDeleted();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao excluir tabela");
+      setError(err instanceof Error ? err.message : t("tableCard.deleteError"));
       setDeleting(false);
     }
   }
@@ -207,7 +210,7 @@ export default function TableCard({
             <Table2 size={15} strokeWidth={1.5} className="text-[#B3D1FF] shrink-0" />
             <span className="text-[13px] font-semibold text-[#F8FAFC]">{table.name}</span>
             <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border border-white/[0.10] text-[#94A3B8]">
-              {table.rls === "enabled" ? "Restrito" : "Público"}
+              {table.rls === "enabled" ? t("appForm.tableRestricted") : t("appForm.tablePublic")}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -220,7 +223,7 @@ export default function TableCard({
                 locked ? "text-white/30 cursor-not-allowed" : "text-[#F8FAFC] cursor-pointer hover:bg-white/[0.06]",
               )}
             >
-              Editar
+              {t("tableCard.edit")}
             </button>
             <button
               type="button"
@@ -277,7 +280,7 @@ export default function TableCard({
           value={name}
           disabled={!isDraft}
           onChange={(e) => setName(e.target.value.toLowerCase().replace(/[\s-]+/g, "_"))}
-          placeholder="tabela_1"
+          placeholder={t("appForm.tableName")}
           className="h-8 px-3 py-1.5 text-[13px] bg-white/[0.05] border-white/[0.10] rounded-md text-[#F8FAFC] placeholder:text-white/30 brand-focus"
         />
         <Select value={rls} onValueChange={setRls}>
@@ -286,33 +289,33 @@ export default function TableCard({
           </SelectTrigger>
           <SelectContent className="bg-[#0D0D14] border-white/[0.10] text-[#F8FAFC]">
             <SelectItem value="disabled" className="text-[12px] focus:bg-white/[0.08] focus:text-[#F8FAFC]">
-              Público
+              {t("appForm.tablePublic")}
             </SelectItem>
             <SelectItem
               value="enabled"
               disabled={!authEmailEnabled}
               className="text-[12px] focus:bg-white/[0.08] focus:text-[#F8FAFC]"
             >
-              Restrito
+              {t("appForm.tableRestricted")}
             </SelectItem>
           </SelectContent>
         </Select>
       </div>
       {!authEmailEnabled && (
         <p className="px-4 text-[11px] text-[#94A3B8]">
-          "Restrito" exige autenticação por e-mail ligada para este app.
+          {t("tableCard.restrictedHint")}
         </p>
       )}
 
       <div className="px-4 pb-4">
         <p className="text-[11px] text-[#94A3B8] mb-2">
-          As colunas abaixo são criadas automaticamente e não podem ser editadas ou removidas.
+          {t("tableCard.autoColumnsNote")}
         </p>
         <div className="grid gap-3 mb-1" style={{ gridTemplateColumns: "1fr 140px 80px 80px 32px 40px" }}>
-          <span className="text-[11px] text-[#94A3B8] font-semibold">Nome</span>
-          <span className="text-[11px] text-[#94A3B8] font-semibold">Tipo</span>
-          <span className="text-[11px] text-[#94A3B8] font-semibold text-center">Req.</span>
-          <span className="text-[11px] text-[#94A3B8] font-semibold text-center">Único</span>
+          <span className="text-[11px] text-[#94A3B8] font-semibold">{t("appForm.columnName")}</span>
+          <span className="text-[11px] text-[#94A3B8] font-semibold">{t("appForm.columnType")}</span>
+          <span className="text-[11px] text-[#94A3B8] font-semibold text-center">{t("appForm.columnReq")}</span>
+          <span className="text-[11px] text-[#94A3B8] font-semibold text-center">{t("appForm.columnUnique")}</span>
           <span />
           <span />
         </div>
@@ -357,7 +360,7 @@ export default function TableCard({
                   onChange={(e) =>
                     updateColumn(ci, { name: e.target.value.toLowerCase().replace(/[\s-]+/g, "_") })
                   }
-                  placeholder="nome_coluna"
+                  placeholder={t("tableCard.columnNamePlaceholder")}
                   className="h-8 px-2.5 py-1.5 text-[13px] bg-white/[0.05] border-white/[0.10] rounded-md text-[#F8FAFC] placeholder:text-white/30 brand-focus"
                 />
                 <div className="contents max-md:flex max-md:items-center max-md:gap-2">
@@ -389,7 +392,7 @@ export default function TableCard({
                   </div>
                   <button
                     type="button"
-                    title="Referenciar outra tabela (FK)"
+                    title={t("tableCard.referenceFk")}
                     disabled={otherTables.length === 0}
                     onClick={() =>
                       updateColumn(
@@ -411,7 +414,7 @@ export default function TableCard({
                   </button>
                   <button
                     type="button"
-                    title="Remove column"
+                    title={t("tableCard.removeColumn")}
                     onClick={() => removeColumn(ci)}
                     disabled={columns.length <= 1}
                     className={cn(
@@ -426,7 +429,7 @@ export default function TableCard({
 
               {col.references && (
                 <div className="flex flex-wrap items-center gap-2 mt-2 pl-1">
-                  <span className="text-[11px] text-[#94A3B8]">Referencia</span>
+                  <span className="text-[11px] text-[#94A3B8]">{t("tableCard.references")}</span>
                   <Select
                     value={col.references.table}
                     onValueChange={(val) =>
@@ -434,17 +437,17 @@ export default function TableCard({
                     }
                   >
                     <SelectTrigger className="h-7 w-[140px] text-[12px] bg-white/[0.05] border-white/[0.10] text-[#F8FAFC] rounded-md px-2 brand-focus">
-                      <SelectValue placeholder="tabela" />
+                      <SelectValue placeholder={t("tableCard.tablePlaceholder")} />
                     </SelectTrigger>
                     <SelectContent className="bg-[#0D0D14] border-white/[0.10] text-[#F8FAFC]">
-                      {otherTables.map((t) => (
-                        <SelectItem key={t.name} value={t.name} className="text-[12px] focus:bg-white/[0.08] focus:text-[#F8FAFC]">
-                          {t.name}
+                      {otherTables.map((ot) => (
+                        <SelectItem key={ot.name} value={ot.name} className="text-[12px] focus:bg-white/[0.08] focus:text-[#F8FAFC]">
+                          {ot.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <span className="text-[11px] text-[#94A3B8]">coluna</span>
+                  <span className="text-[11px] text-[#94A3B8]">{t("tableCard.column")}</span>
                   <Select
                     value={col.references.column}
                     onValueChange={(val) => updateColumn(ci, { references: { ...col.references!, column: val } })}
@@ -460,7 +463,7 @@ export default function TableCard({
                       ))}
                     </SelectContent>
                   </Select>
-                  <span className="text-[11px] text-[#94A3B8]">ao excluir</span>
+                  <span className="text-[11px] text-[#94A3B8]">{t("tableCard.onDelete")}</span>
                   <Select
                     value={col.references.on_delete ?? "no_action"}
                     onValueChange={(val) =>
@@ -473,9 +476,9 @@ export default function TableCard({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-[#0D0D14] border-white/[0.10] text-[#F8FAFC]">
-                      {ON_DELETE_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value!} className="text-[12px] focus:bg-white/[0.08] focus:text-[#F8FAFC]">
-                          {opt.label}
+                      {ON_DELETE_VALUES.map((val) => (
+                        <SelectItem key={val} value={val!} className="text-[12px] focus:bg-white/[0.08] focus:text-[#F8FAFC]">
+                          {t(ON_DELETE_LABEL_KEYS[val!])}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -493,25 +496,25 @@ export default function TableCard({
           style={{ color: "var(--brand-light)" }}
         >
           <Plus size={11} strokeWidth={2} />
-          Adicionar Coluna
+          {t("appForm.addColumn")}
         </button>
 
         <div className="mt-4 pt-4 border-t border-white/[0.06]">
-          <p className="text-[11px] text-[#94A3B8] font-semibold mb-2">Índices</p>
+          <p className="text-[11px] text-[#94A3B8] font-semibold mb-2">{t("tableCard.indexesTitle")}</p>
 
           <div className="flex gap-2 items-start bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2.5 mb-3">
             <Info size={13} strokeWidth={1.5} className="text-[#94A3B8] shrink-0 mt-0.5" />
             <p className="text-[11px] text-[#94A3B8] leading-relaxed">
-              Um índice é como o índice remissivo de um livro: em vez do banco ler registro por registro pra achar o
-              que você pediu, ele vai direto ao ponto. Crie um índice em toda coluna que você usa com frequência
-              pra <strong className="text-[#B3D1FF] font-medium">buscar</strong> ou{" "}
-              <strong className="text-[#B3D1FF] font-medium">filtrar</strong> dados — por exemplo, um índice em{" "}
-              <code className="text-[#B3D1FF]">email</code> se o app busca clientes pelo email, ou um índice
-              composto em <code className="text-[#B3D1FF]">org_id + status</code> se você sempre lista pedidos de uma
-              organização filtrando por status. Marque <strong className="text-[#B3D1FF] font-medium">Único</strong>{" "}
-              quando aquele valor (ou combinação de valores) nunca pode se repetir, como um CPF ou um código de
-              cupom — o banco passa a impedir duplicatas sozinho. Sem índice, buscas em tabelas grandes ficam cada
-              vez mais lentas conforme os dados crescem.
+              <Trans
+                i18nKey="tableCard.indexExplainer"
+                components={{
+                  1: <strong className="text-[#B3D1FF] font-medium" />,
+                  3: <strong className="text-[#B3D1FF] font-medium" />,
+                  5: <code className="text-[#B3D1FF]" />,
+                  7: <code className="text-[#B3D1FF]" />,
+                  9: <strong className="text-[#B3D1FF] font-medium" />,
+                }}
+              />
             </p>
           </div>
 
@@ -524,7 +527,7 @@ export default function TableCard({
                 <Input
                   value={idx.name}
                   onChange={(e) => updateIndex(ii, { name: e.target.value.toLowerCase().replace(/[\s-]+/g, "_") })}
-                  placeholder="nome_indice"
+                  placeholder={t("tableCard.indexNamePlaceholder")}
                   className="h-7 w-[160px] px-2 py-1 text-[12px] bg-white/[0.05] border-white/[0.10] rounded-md text-[#F8FAFC] placeholder:text-white/30 brand-focus"
                 />
                 <div className="flex flex-wrap gap-1">
@@ -545,7 +548,7 @@ export default function TableCard({
                   ))}
                 </div>
                 <div className="flex items-center gap-1.5 ml-auto">
-                  <span className="text-[11px] text-[#94A3B8]">Único</span>
+                  <span className="text-[11px] text-[#94A3B8]">{t("tableCard.uniqueLabel")}</span>
                   <Switch
                     checked={!!idx.unique}
                     onCheckedChange={(val) => updateIndex(ii, { unique: val })}
@@ -554,7 +557,7 @@ export default function TableCard({
                 </div>
                 <button
                   type="button"
-                  title="Remove index"
+                  title={t("tableCard.removeIndex")}
                   onClick={() => removeIndex(ii)}
                   className="w-7 h-7 flex items-center justify-center rounded-md border border-red-500/[0.12] bg-red-500/[0.06] text-red-400 cursor-pointer hover:bg-red-500/[0.12] transition-colors"
                 >
@@ -571,7 +574,7 @@ export default function TableCard({
             style={{ color: "var(--brand-light)" }}
           >
             <Plus size={11} strokeWidth={2} />
-            Adicionar Índice
+            {t("tableCard.addIndex")}
           </button>
         </div>
 
@@ -585,7 +588,7 @@ export default function TableCard({
             className="text-[12px] font-semibold px-4 py-1.5 rounded-full text-white cursor-pointer disabled:opacity-50"
             style={{ background: "linear-gradient(to right, var(--brand-primary), var(--brand-secondary))" }}
           >
-            {saving ? "Salvando..." : "Salvar tabela"}
+            {saving ? t("tableCard.savingTable") : t("tableCard.saveTable")}
           </button>
           <button
             type="button"
@@ -593,7 +596,7 @@ export default function TableCard({
             disabled={saving}
             className="text-[12px] font-medium px-4 py-1.5 rounded-full border border-white/[0.10] bg-transparent text-[#94A3B8] cursor-pointer hover:bg-white/[0.06]"
           >
-            Cancelar
+            {t("appForm.cancel")}
           </button>
         </div>
       </div>
