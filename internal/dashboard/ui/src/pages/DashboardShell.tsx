@@ -40,25 +40,41 @@ interface User {
 }
 
 type NavItem = { icon: typeof Grid; label: string; path: string };
+type NavSection = { title: string; items: NavItem[] };
 
-function navItems(user: User | null, t: (k: string) => string): NavItem[] {
-  const items: NavItem[] = [
-    { icon: Grid, label: t("nav.apps"), path: "/apps" },
-    { icon: Database, label: t("nav.dataBrowser"), path: "/data-browser" },
-    { icon: Code2, label: "SDKs", path: "/sdks" },
-    { icon: Activity, label: t("nav.logs"), path: "/logs" },
+function navSections(user: User | null, t: (k: string) => string): NavSection[] {
+  const sections: NavSection[] = [
+    {
+      title: t("nav.sectionGeneral"),
+      items: [
+        { icon: Grid, label: t("nav.apps"), path: "/apps" },
+        { icon: Database, label: t("nav.dataBrowser"), path: "/data-browser" },
+      ],
+    },
+    {
+      title: t("nav.sectionDeployment"),
+      items: [
+        { icon: Activity, label: t("nav.logs"), path: "/logs" },
+        { icon: Code2, label: "SDKs", path: "/sdks" },
+      ],
+    },
   ];
   if (user?.role === "superadmin") {
-    items.splice(2, 0, { icon: Users, label: t("nav.users"), path: "/usuarios" });
-    items.splice(3, 0, { icon: Shield, label: t("nav.audit"), path: "/auditoria" });
-    items.splice(4, 0, { icon: Link2, label: t("nav.integrations"), path: "/integracoes/github" });
-    items.push({
-      icon: Settings,
-      label: t("nav.settings"),
-      path: "/configuracoes",
+    sections.push({
+      title: t("nav.sectionSuperadmin"),
+      items: [
+        { icon: Users, label: t("nav.users"), path: "/usuarios" },
+        { icon: Shield, label: t("nav.audit"), path: "/auditoria" },
+        { icon: Link2, label: t("nav.integrations"), path: "/integracoes/github" },
+        { icon: Settings, label: t("nav.settings"), path: "/configuracoes" },
+      ],
     });
   }
-  return items;
+  return sections;
+}
+
+function navItems(user: User | null, t: (k: string) => string): NavItem[] {
+  return navSections(user, t).flatMap((s) => s.items);
 }
 
 function BottomBar({
@@ -221,6 +237,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
   };
 
   const items = navItems(user, t);
+  const sections = navSections(user, t);
 
   return (
     <div
@@ -294,57 +311,75 @@ export default function DashboardShell({ user }: { user: User | null }) {
 
         {/* Nav */}
         <nav
-          style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}
+          style={{ flex: 1, display: "flex", flexDirection: "column", gap: 14 }}
         >
-          {items.map(({ icon: Icon, label, path }) => (
-            <NavLink
-              key={path}
-              to={path}
-              end={path === "/apps"}
-              style={({ isActive }) => ({
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                padding: "9px 12px",
-                borderRadius: 10,
-                border: "none",
-                background: isActive
-                  ? "rgba(var(--brand-primary-rgb), 0.12)"
-                  : "transparent",
-                color: isActive ? "var(--text)" : "var(--text-muted)",
-                cursor: "pointer",
-                fontSize: 14,
-                textAlign: "left",
-                width: "100%",
-                fontFamily: "inherit",
-                fontWeight: isActive ? 600 : 400,
-                position: "relative",
-                textDecoration: "none",
-                transition: "background 0.15s, color 0.15s",
-              })}
-            >
-              {({ isActive }) => (
-                <>
-                  {isActive && (
-                    <motion.div
-                      layoutId="nav-active-indicator"
-                      style={{
-                        position: "absolute",
-                        left: 0,
-                        top: "20%",
-                        bottom: "20%",
-                        width: 3,
-                        borderRadius: 2,
-                        background: "var(--accent)",
-                      }}
-                      transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
-                    />
+          {sections.map((section) => (
+            <div key={section.title} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                  color: "var(--text-muted)",
+                  padding: "0 12px",
+                  marginBottom: 4,
+                  opacity: 0.6,
+                }}
+              >
+                {section.title}
+              </span>
+              {section.items.map(({ icon: Icon, label, path }) => (
+                <NavLink
+                  key={path}
+                  to={path}
+                  end={path === "/apps"}
+                  style={({ isActive }) => ({
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "9px 12px",
+                    borderRadius: 10,
+                    border: "none",
+                    background: isActive
+                      ? "rgba(var(--brand-primary-rgb), 0.12)"
+                      : "transparent",
+                    color: isActive ? "var(--text)" : "var(--text-muted)",
+                    cursor: "pointer",
+                    fontSize: 14,
+                    textAlign: "left",
+                    width: "100%",
+                    fontFamily: "inherit",
+                    fontWeight: isActive ? 600 : 400,
+                    position: "relative",
+                    textDecoration: "none",
+                    transition: "background 0.15s, color 0.15s",
+                  })}
+                >
+                  {({ isActive }) => (
+                    <>
+                      {isActive && (
+                        <motion.div
+                          layoutId="nav-active-indicator"
+                          style={{
+                            position: "absolute",
+                            left: 0,
+                            top: "20%",
+                            bottom: "20%",
+                            width: 3,
+                            borderRadius: 2,
+                            background: "var(--accent)",
+                          }}
+                          transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
+                        />
+                      )}
+                      <Icon size={15} strokeWidth={1.5} />
+                      {label}
+                    </>
                   )}
-                  <Icon size={15} strokeWidth={1.5} />
-                  {label}
-                </>
-              )}
-            </NavLink>
+                </NavLink>
+              ))}
+            </div>
           ))}
         </nav>
 
