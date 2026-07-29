@@ -68,4 +68,3 @@ func UpsertBrandConfig(ctx context.Context, pool *db.Pool, theme, companyName, l
 	}
 	return &c, nil
 }
-

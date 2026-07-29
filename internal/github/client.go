@@ -313,8 +313,8 @@ func (c *Client) AddDeployKey(ctx context.Context, owner, repo, title, publicKey
 	url := fmt.Sprintf("%s/repos/%s/%s/keys", githubAPIBaseURL, owner, repo)
 
 	reqBody, err := json.Marshal(map[string]interface{}{
-		"title":    title,
-		"key":      publicKey,
+		"title":     title,
+		"key":       publicKey,
 		"read_only": false,
 	})
 	if err != nil {

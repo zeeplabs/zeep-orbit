@@ -15,18 +15,18 @@ import (
 
 // JWTSecret is omitted from JSON when empty (list responses never populate it).
 type AppRow struct {
-	ID               string                   `json:"id"`
-	Name             string                   `json:"name"`
-	JWTSecret        string                   `json:"jwt_secret,omitempty"`
-	AuthEmailEnabled bool                     `json:"auth_email_enabled"`
-	AuthProviders    json.RawMessage          `json:"auth_providers,omitempty"`
-	StorageConfig    *storage.StorageConfig   `json:"storage_config,omitempty"`
-	RateLimit        *config.RateLimitConfig  `json:"rate_limit,omitempty"`
-	OwnerID          string                   `json:"owner_id"`
-	OwnerEmail       string                   `json:"owner_email,omitempty"`
-	OwnerName        string                   `json:"owner_name,omitempty"`
-	CreatedAt        time.Time                `json:"created_at"`
-	Tables           []AppTableRow            `json:"tables"`
+	ID               string                  `json:"id"`
+	Name             string                  `json:"name"`
+	JWTSecret        string                  `json:"jwt_secret,omitempty"`
+	AuthEmailEnabled bool                    `json:"auth_email_enabled"`
+	AuthProviders    json.RawMessage         `json:"auth_providers,omitempty"`
+	StorageConfig    *storage.StorageConfig  `json:"storage_config,omitempty"`
+	RateLimit        *config.RateLimitConfig `json:"rate_limit,omitempty"`
+	OwnerID          string                  `json:"owner_id"`
+	OwnerEmail       string                  `json:"owner_email,omitempty"`
+	OwnerName        string                  `json:"owner_name,omitempty"`
+	CreatedAt        time.Time               `json:"created_at"`
+	Tables           []AppTableRow           `json:"tables"`
 }
 
 // AppTableRow represents a row from zeep_system.app_tables.

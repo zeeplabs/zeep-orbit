@@ -13,9 +13,9 @@ import (
 
 // All read and write operations are protected by RWMutex.
 type Registry struct {
-	mu          sync.RWMutex
-	apps        map[string]*App
-	sysCfg      SystemConfig
+	mu     sync.RWMutex
+	apps   map[string]*App
+	sysCfg SystemConfig
 }
 
 // App represents an application with its schema and tables.
@@ -71,11 +71,11 @@ func (r *Registry) Load(cfg *config.Config) error {
 			cols := make([]Column, 0, len(tblCfg.Columns))
 			for _, colCfg := range tblCfg.Columns {
 				cols = append(cols, Column{
-					Name:     colCfg.Name,
-					Type:     colCfg.Type,
-					Required: colCfg.Required,
-					Default:  colCfg.Default,
-					Unique:   colCfg.Unique,
+					Name:       colCfg.Name,
+					Type:       colCfg.Type,
+					Required:   colCfg.Required,
+					Default:    colCfg.Default,
+					Unique:     colCfg.Unique,
 					RenameFrom: colCfg.RenameFrom,
 				})
 			}
@@ -135,36 +135,36 @@ func (r *Registry) Apps() []*App {
 
 // Replaces any existing state. Safe to call on startup.
 func (r *Registry) LoadFromDB(ctx context.Context, pool *db.Pool) error {
-		type appRow struct {
-			id               string
-			name             string
-			jwtSecret        string
-			authEmailEnabled bool
-			authProviders    []byte
-			storageConfig    []byte
-			rateLimitConfig  []byte
-		}
+	type appRow struct {
+		id               string
+		name             string
+		jwtSecret        string
+		authEmailEnabled bool
+		authProviders    []byte
+		storageConfig    []byte
+		rateLimitConfig  []byte
+	}
 
-		rows, err := pool.Query(ctx,
-			`SELECT id, name, jwt_secret, auth_email_enabled, COALESCE(auth_providers, '{}'), COALESCE(storage_config, '{}'), COALESCE(rate_limit_config, '{}') FROM zeep_system.apps ORDER BY name`,
-		)
+	rows, err := pool.Query(ctx,
+		`SELECT id, name, jwt_secret, auth_email_enabled, COALESCE(auth_providers, '{}'), COALESCE(storage_config, '{}'), COALESCE(rate_limit_config, '{}') FROM zeep_system.apps ORDER BY name`,
+	)
 	if err != nil {
 		return fmt.Errorf("registry: load from db: query apps: %w", err)
 	}
 	defer rows.Close()
 
-		var appRows []appRow
-		for rows.Next() {
-			var a appRow
-			var providersJSON, storageJSON, rateLimitJSON []byte
-			if err := rows.Scan(&a.id, &a.name, &a.jwtSecret, &a.authEmailEnabled, &providersJSON, &storageJSON, &rateLimitJSON); err != nil {
-				return fmt.Errorf("registry: load from db: scan app: %w", err)
-			}
-			a.authProviders = providersJSON
-			a.storageConfig = storageJSON
-			a.rateLimitConfig = rateLimitJSON
-			appRows = append(appRows, a)
+	var appRows []appRow
+	for rows.Next() {
+		var a appRow
+		var providersJSON, storageJSON, rateLimitJSON []byte
+		if err := rows.Scan(&a.id, &a.name, &a.jwtSecret, &a.authEmailEnabled, &providersJSON, &storageJSON, &rateLimitJSON); err != nil {
+			return fmt.Errorf("registry: load from db: scan app: %w", err)
 		}
+		a.authProviders = providersJSON
+		a.storageConfig = storageJSON
+		a.rateLimitConfig = rateLimitJSON
+		appRows = append(appRows, a)
+	}
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("registry: load from db: rows: %w", err)
 	}
@@ -200,11 +200,11 @@ func (r *Registry) LoadFromDB(ctx context.Context, pool *db.Pool) error {
 			regCols := make([]Column, 0, len(cols))
 			for _, c := range cols {
 				regCols = append(regCols, Column{
-					Name:     c.Name,
-					Type:     c.Type,
-					Required: c.Required,
-					Default:  c.Default,
-					Unique:   c.Unique,
+					Name:       c.Name,
+					Type:       c.Type,
+					Required:   c.Required,
+					Default:    c.Default,
+					Unique:     c.Unique,
 					RenameFrom: c.RenameFrom,
 				})
 			}

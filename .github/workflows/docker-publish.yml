@@ -103,22 +103,42 @@ jobs:
           VERSION="${VERSION#v}"
           helm package charts/zeep-orbit --version "$VERSION" --app-version "$VERSION" --destination .helm-packages
 
+      - name: Prepare release body
+        id: notes
+        run: |
+          VERSION="${{ github.ref_name }}"
+          NOTES_FILE=".github/release-notes-${VERSION}.md"
+          OUT="release-body.md"
+
+          if [ -f "$NOTES_FILE" ]; then
+            cp "$NOTES_FILE" "$OUT"
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::${NOTES_FILE} not found — falling back to GitHub's auto-generated notes. See RELEASE.md step 4."
+            > "$OUT"
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          {
+            echo ""
+            echo "## Docker image"
+            echo ""
+            echo '```bash'
+            echo "docker pull ghcr.io/${{ github.repository }}:${VERSION}"
+            echo '```'
+            echo ""
+            echo "## Helm chart"
+            echo ""
+            echo '```bash'
+            echo "helm repo add zeeplabs https://zeeplabs.github.io/zeep-orbit/helm"
+            echo "helm install zeep-orbit zeeplabs/zeep-orbit"
+            echo '```'
+          } >> "$OUT"
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ github.ref_name }}
           files: .helm-packages/*.tgz
-          body: |
-            ## Docker image
-
-            ```bash
-            docker pull ghcr.io/${{ github.repository }}:${{ github.ref_name }}
-            ```
-
-            ## Helm chart
-
-            ```bash
-            helm repo add zeeplabs https://zeeplabs.github.io/zeep-orbit/helm
-            helm install zeep-orbit zeeplabs/zeep-orbit
-            ```
-          generate_release_notes: true
+          body_path: release-body.md
+          generate_release_notes: ${{ steps.notes.outputs.found != 'true' }}

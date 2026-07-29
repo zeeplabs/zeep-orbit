@@ -11,12 +11,12 @@ import (
 )
 
 type DeployProviderConfig struct {
-	Provider         string    `json:"provider"`
-	APIKey           string    `json:"-"`
-	RenderProjectID  string    `json:"render_project_id"`
-	BaseDomain       string    `json:"base_domain"`
-	ConnectedAt      time.Time `json:"connected_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	Provider        string    `json:"provider"`
+	APIKey          string    `json:"-"`
+	RenderProjectID string    `json:"render_project_id"`
+	BaseDomain      string    `json:"base_domain"`
+	ConnectedAt     time.Time `json:"connected_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 func UpsertDeployProviderConfig(ctx context.Context, pool *db.Pool, provider, apiKeyEncrypted, renderProjectID, baseDomain string) error {

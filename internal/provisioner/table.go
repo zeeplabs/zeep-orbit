@@ -58,7 +58,7 @@ func onDeleteSQL(onDelete string) string {
 	}
 }
 
-// Single quotes in DEFAULT value are escaped by doubling them (''). schemaName
+// Single quotes in DEFAULT value are escaped by doubling them (”). schemaName
 // is needed to schema-qualify REFERENCES targets (references are intra-app,
 // so the target table lives in the same schema as this column's table).
 func columnDDL(schemaName string, col config.ColumnConfig) string {
@@ -317,4 +317,3 @@ func (p *Provisioner) applyColumnChanges(ctx context.Context, schemaName, tableN
 
 	return changes, nil
 }
-

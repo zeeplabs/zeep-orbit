@@ -29,17 +29,17 @@ type LogEntry struct {
 }
 
 type LogMetrics struct {
-	TotalRequests   int                  `json:"total_requests"`
-	RequestsPerApp  map[string]int       `json:"requests_per_app"`
-	AvgLatencyMs    int64                `json:"avg_latency_ms"`
-	Errors4xx       int                  `json:"errors_4xx"`
-	Errors5xx       int                  `json:"errors_5xx"`
-	MethodBreakdown map[string]int       `json:"method_breakdown"`
+	TotalRequests   int            `json:"total_requests"`
+	RequestsPerApp  map[string]int `json:"requests_per_app"`
+	AvgLatencyMs    int64          `json:"avg_latency_ms"`
+	Errors4xx       int            `json:"errors_4xx"`
+	Errors5xx       int            `json:"errors_5xx"`
+	MethodBreakdown map[string]int `json:"method_breakdown"`
 }
 
 type RingBuffer struct {
-	mu    sync.RWMutex
-	entries []LogEntry
+	mu       sync.RWMutex
+	entries  []LogEntry
 	capacity int
 	pos      int
 	count    int

@@ -19,8 +19,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
-	"go.uber.org/zap"
-	"golang.org/x/crypto/bcrypt"
 	"github.com/zeeplabs/zeep-orbit/internal/auth"
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
@@ -28,6 +26,8 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/query"
 	"github.com/zeeplabs/zeep-orbit/internal/registry"
 	"github.com/zeeplabs/zeep-orbit/internal/storage"
+	"go.uber.org/zap"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // Handler holds dependencies for dashboard HTTP handlers.
@@ -797,11 +797,11 @@ func (h *Handler) ListApps(w http.ResponseWriter, r *http.Request) {
 // appRequestBody is the JSON body for create/update app requests. Tables are
 // managed one at a time via the /apps/{id}/tables endpoints, not here.
 type appRequestBody struct {
-	Name             string                    `json:"name"`
-	AuthEmailEnabled bool                      `json:"auth_email_enabled"`
-	AuthProviders    json.RawMessage           `json:"auth_providers,omitempty"`
-	StorageConfig    *storage.StorageConfig    `json:"storage_config,omitempty"`
-	RateLimit        *config.RateLimitConfig   `json:"rate_limit,omitempty"`
+	Name             string                  `json:"name"`
+	AuthEmailEnabled bool                    `json:"auth_email_enabled"`
+	AuthProviders    json.RawMessage         `json:"auth_providers,omitempty"`
+	StorageConfig    *storage.StorageConfig  `json:"storage_config,omitempty"`
+	RateLimit        *config.RateLimitConfig `json:"rate_limit,omitempty"`
 }
 
 // tableRequestBody is the JSON body for create/update table requests.
@@ -1538,7 +1538,7 @@ type DataBrowserTableColumn struct {
 
 // DataBrowserTable represents a table in the data browser tree.
 type DataBrowserTable struct {
-	Name    string                 `json:"name"`
+	Name    string                   `json:"name"`
 	Columns []DataBrowserTableColumn `json:"columns"`
 }
 
@@ -2049,10 +2049,10 @@ func (h *Handler) ListAppUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"data":          users,
-		"total":         total,
-		"limit":         limit,
-		"offset":        offset,
+		"data":           users,
+		"total":          total,
+		"limit":          limit,
+		"offset":         offset,
 		"providerCounts": counts,
 	})
 }
@@ -2203,9 +2203,9 @@ func (h *Handler) GetPublicBrandConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 var tokenExpirationOptions = map[string]*time.Duration{
-	"7d":   durationPtr(7 * 24 * time.Hour),
-	"30d":  durationPtr(30 * 24 * time.Hour),
-	"365d": durationPtr(365 * 24 * time.Hour),
+	"7d":    durationPtr(7 * 24 * time.Hour),
+	"30d":   durationPtr(30 * 24 * time.Hour),
+	"365d":  durationPtr(365 * 24 * time.Hour),
 	"never": nil,
 }
 

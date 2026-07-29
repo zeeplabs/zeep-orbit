@@ -1,12 +1,19 @@
-<p align="center">
+<div align="center">
   <img src="docs/static/img/orbit-logo.png" alt="Zeep Orbit" width="200" />
-  <p align="center"><strong>The complete platform for tech teams.</strong></p>
+  <p><strong>The complete platform for tech teams.</strong></p>
 
   <p>
     <a href="https://github.com/zeeplabs/zeep-orbit/actions"><img src="https://github.com/zeeplabs/zeep-orbit/actions/workflows/docker-publish.yml/badge.svg" alt="CI" /></a>
     <a href="https://github.com/zeeplabs/zeep-orbit/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License" /></a>
     <a href="https://go.dev/doc/devel/release"><img src="https://img.shields.io/badge/go-1.26+-00ADD8?logo=go" alt="Go" /></a>
     <a href="https://github.com/zeeplabs/zeep-orbit/releases"><img src="https://img.shields.io/github/v/release/zeeplabs/zeep-orbit" alt="Release" /></a>
+  </p>
+
+  <p>
+    <a href="README.md">🇺🇸 English</a> ·
+    <a href="i18n/README.pt-BR.md">🇧🇷 Português (Brasil)</a> ·
+    <a href="i18n/README.pt-PT.md">🇵🇹 Português (Portugal)</a> ·
+    <a href="i18n/README.es.md">🇪🇸 Español</a>
   </p>
 </div>
 
@@ -101,6 +108,7 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/myapp/tasks
 | **SDK Clients**         | TypeScript, Go, Python, Rust, Java, PHP                  |
 | **i18n**                | Dashboard in pt-BR / English, language switcher          |
 | **Changelog**           | In-app release history, shipped with the binary          |
+| **Update Notifications**| Sidebar alert when a new release is available on GitHub  |
 
 ---
 

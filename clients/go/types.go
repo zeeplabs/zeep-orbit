@@ -35,11 +35,11 @@ type AuthResponse struct {
 }
 
 type AuthUser struct {
-	ID        string     `json:"id"`
-	Email     string     `json:"email"`
-	Name      string     `json:"name,omitempty"`
-	Phone     string     `json:"phone,omitempty"`
-	AvatarURL string     `json:"avatar_url,omitempty"`
+	ID        string `json:"id"`
+	Email     string `json:"email"`
+	Name      string `json:"name,omitempty"`
+	Phone     string `json:"phone,omitempty"`
+	AvatarURL string `json:"avatar_url,omitempty"`
 }
 
 type FileResponse struct {

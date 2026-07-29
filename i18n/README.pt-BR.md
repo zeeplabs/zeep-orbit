@@ -1,12 +1,19 @@
-<p align="center">
-  <img src="docs/static/img/orbit-logo.png" alt="Zeep Orbit" width="200" />
-  <p align="center"><strong>Plataforma completa para times de tecnologia.</strong></p>
+<div align="center">
+  <img src="../docs/static/img/orbit-logo.png" alt="Zeep Orbit" width="200" />
+  <p><strong>Plataforma completa para times de tecnologia.</strong></p>
 
   <p>
     <a href="https://github.com/zeeplabs/zeep-orbit/actions"><img src="https://github.com/zeeplabs/zeep-orbit/actions/workflows/docker-publish.yml/badge.svg" alt="CI" /></a>
     <a href="https://github.com/zeeplabs/zeep-orbit/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License" /></a>
     <a href="https://go.dev/doc/devel/release"><img src="https://img.shields.io/badge/go-1.26+-00ADD8?logo=go" alt="Go" /></a>
     <a href="https://github.com/zeeplabs/zeep-orbit/releases"><img src="https://img.shields.io/github/v/release/zeeplabs/zeep-orbit" alt="Release" /></a>
+  </p>
+
+  <p>
+    <a href="../README.md">🇺🇸 English</a> ·
+    <a href="README.pt-BR.md">🇧🇷 Português (Brasil)</a> ·
+    <a href="README.pt-PT.md">🇵🇹 Português (Portugal)</a> ·
+    <a href="README.es.md">🇪🇸 Español</a>
   </p>
 </div>
 
@@ -15,7 +22,7 @@
 **Zeep Orbit** é uma plataforma open-source e self-hosted que dá ao seu time tudo para criar e publicar apps — APIs backend, deploy de frontend, domínios customizados e gestão de usuários — tudo de um único dashboard. Sem serviços externos, sem lock-in. Sua infraestrutura, seus dados.
 
 <p align="center">
-  <img src="docs/static/img/diagram.svg" alt="Diagrama de Arquitetura" width="800" />
+  <img src="../docs/static/img/diagram.svg" alt="Diagrama de Arquitetura" width="800" />
 </p>
 
 ```bash
@@ -99,6 +106,7 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/meu-app/tarefas
 | **SDK Clients**          | TypeScript, Go, Python, Rust, Java, PHP                  |
 | **i18n**                 | Dashboard em pt-BR / English, seletor de idioma          |
 | **Changelog**            | Histórico de releases no app, embarcado no binário       |
+| **Aviso de Atualização** | Alerta no sidebar quando há novo release no GitHub       |
 
 ---
 
@@ -432,7 +440,7 @@ A flag `--atomic` faz rollback automático se a atualização falhar.
 
 ## 📝 Changelog
 
-Toda release do Zeep Orbit é publicada com um changelog embarcado — sem dependências externas, sem banco por instância. O [changelog](internal/dashboard/changelog.json) é um arquivo JSON estático no repositório, embarcado no binário em tempo de compilação. Usuários veem as atualizações no dashboard em `/changelog` automaticamente a cada upgrade.
+Toda release do Zeep Orbit é publicada com um changelog embarcado — sem dependências externas, sem banco por instância. O [changelog](../internal/dashboard/changelog.json) é um arquivo JSON estático no repositório, embarcado no binário em tempo de compilação. Usuários veem as atualizações no dashboard em `/changelog` automaticamente a cada upgrade.
 
 Para adicionar uma nova entrada: edite `internal/dashboard/changelog.json`, adicione sua release no array `entries` (mais recente primeiro), faça commit e publique a release. Só isso.
 
@@ -511,13 +519,13 @@ examples/                  Apps de exemplo (Todo app)
 
 ## 🤝 Contribuindo
 
-Veja [CONTRIBUTING.md](CONTRIBUTING.md). Toda contribuição é bem-vinda — correções, features, docs, testes.
+Veja [CONTRIBUTING.md](../CONTRIBUTING.md). Toda contribuição é bem-vinda — correções, features, docs, testes.
 
 ---
 
 ## 📄 Licença
 
-MIT — veja [LICENSE](LICENSE).
+MIT — veja [LICENSE](../LICENSE).
 
 ---
 

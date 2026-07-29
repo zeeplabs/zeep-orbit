@@ -330,15 +330,15 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"id":                  id,
-		"email":               email,
-		"phone":               phone,
-		"name":                name,
-		"avatar_url":          avatarURL,
-		"email_confirmed_at":  emailConfirmedAt,
-		"last_sign_in_at":     lastSignInAt,
-		"created_at":          createdAt,
-		"updated_at":          updatedAt,
+		"id":                 id,
+		"email":              email,
+		"phone":              phone,
+		"name":               name,
+		"avatar_url":         avatarURL,
+		"email_confirmed_at": emailConfirmedAt,
+		"last_sign_in_at":    lastSignInAt,
+		"created_at":         createdAt,
+		"updated_at":         updatedAt,
 	})
 }
 

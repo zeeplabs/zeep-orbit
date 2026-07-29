@@ -22,20 +22,20 @@ type AuthProviderRow struct {
 
 // GoogleProviderConfig is the typed config for the "google" provider.
 type GoogleProviderConfig struct {
-	ClientID       string          `json:"client_id"`
-	ClientSecret   string          `json:"client_secret,omitempty"`
-	ClientSecretSet bool           `json:"client_secret_set,omitempty"`
-	RedirectURL    string          `json:"redirect_url"`
-	AllowedDomains json.RawMessage `json:"allowed_domains,omitempty"`
+	ClientID        string          `json:"client_id"`
+	ClientSecret    string          `json:"client_secret,omitempty"`
+	ClientSecretSet bool            `json:"client_secret_set,omitempty"`
+	RedirectURL     string          `json:"redirect_url"`
+	AllowedDomains  json.RawMessage `json:"allowed_domains,omitempty"`
 }
 
 // AuthProviderResponse is the API response for a provider.
 type AuthProviderResponse struct {
-	Provider    string          `json:"provider"`
-	Enabled     bool            `json:"enabled"`
-	Config      json.RawMessage `json:"config,omitempty"`
-	ConfigSet   bool            `json:"config_set"`
-	UpdatedAt   time.Time       `json:"updated_at"`
+	Provider  string          `json:"provider"`
+	Enabled   bool            `json:"enabled"`
+	Config    json.RawMessage `json:"config,omitempty"`
+	ConfigSet bool            `json:"config_set"`
+	UpdatedAt time.Time       `json:"updated_at"`
 }
 
 // authProviderUpsertInput is the JSON body for upserting a provider.
@@ -205,10 +205,10 @@ func googleFallbackConfig() *AuthProviderResponse {
 		}
 	}
 	configJSON, _ := json.Marshal(map[string]any{
-		"client_id":        clientID,
-		"client_secret":    clientSecret,
-		"redirect_url":     redirectURL,
-		"allowed_domains":  domains,
+		"client_id":       clientID,
+		"client_secret":   clientSecret,
+		"redirect_url":    redirectURL,
+		"allowed_domains": domains,
 	})
 
 	return &AuthProviderResponse{
