@@ -546,7 +546,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
         </div>
 
         <p className="text-[11px] text-white/15 text-center pb-3">
-          v{pkg.version}
+          <a href="https://zeeplabs.com.br" target="_blank" rel="noopener noreferrer" className="text-white/15 hover:text-white transition-colors">Zeep Labs</a> - v{pkg.version}
         </p>
       </motion.aside>
 
