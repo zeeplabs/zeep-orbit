@@ -247,7 +247,7 @@ function GoogleAuthProviderCard() {
       if (clientId) configBody.client_id = clientId;
       if (clientSecret) configBody.client_secret = clientSecret;
       if (redirectUrl) configBody.redirect_url = redirectUrl;
-      if (allowedDomains) configBody.allowed_domains = allowedDomains.split(",").map((d) => d.trim()).filter(Boolean);
+      configBody.allowed_domains = allowedDomains ? allowedDomains.split(",").map((d) => d.trim()).filter(Boolean) : [];
 
       const res = await fetch("/dashboard/api/config/auth/providers/google", {
         method: "PUT",

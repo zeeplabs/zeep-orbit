@@ -2,7 +2,8 @@ package dashboard
 
 import (
 	"context"
-	"crypto/rand"
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -12,23 +13,15 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
 
-type googleState struct {
-	token     string
-	expiresAt time.Time
-}
-
 // Config is loaded lazily from DB (with env var fallback) on first request.
 type GoogleOAuthHandler struct {
 	pool       *db.Pool
-	states     map[string]*googleState
-	statesMu   sync.Mutex
 	httpClient *http.Client
 }
 
@@ -36,7 +29,6 @@ type GoogleOAuthHandler struct {
 func NewGoogleOAuthHandler(pool *db.Pool, cfg *config.GoogleOAuthConfig) *GoogleOAuthHandler {
 	return &GoogleOAuthHandler{
 		pool:       pool,
-		states:     make(map[string]*googleState),
 		httpClient: &http.Client{Timeout: 10 * time.Second},
 	}
 }
@@ -84,7 +76,7 @@ func (h *GoogleOAuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	state, err := h.generateState()
+	state, err := signGoogleState([]byte(cfg.ClientSecret))
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
@@ -124,7 +116,7 @@ func (h *GoogleOAuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.validateState(state) {
+	if !verifyGoogleState([]byte(cfg.ClientSecret), state) {
 		h.callbackErrorPage(w, "Sessão expirada ou inválida. Tente novamente.")
 		return
 	}
@@ -189,37 +181,53 @@ func (h *GoogleOAuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/dashboard", http.StatusFound)
 }
 
-func (h *GoogleOAuthHandler) generateState() (string, error) {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("google: generate state: %w", err)
-	}
-	token := base64.RawURLEncoding.EncodeToString(b)
-
-	h.statesMu.Lock()
-	h.states[token] = &googleState{
-		token:     token,
-		expiresAt: time.Now().Add(10 * time.Minute),
-	}
-	h.statesMu.Unlock()
-
-	return token, nil
+// googleStateClaims is the payload embedded in the OAuth "state" param,
+// signed with the configured Google client secret. Stateless (no in-memory
+// map) so the callback validates correctly regardless of which replica
+// handled the earlier /login request — required behind a non-sticky load
+// balancer running multiple replicas.
+type googleStateClaims struct {
+	ExpiresAt int64 `json:"exp"`
 }
 
-func (h *GoogleOAuthHandler) validateState(token string) bool {
-	h.statesMu.Lock()
-	defer h.statesMu.Unlock()
+func signGoogleState(secret []byte) (string, error) {
+	payload, err := json.Marshal(googleStateClaims{
+		ExpiresAt: time.Now().Add(10 * time.Minute).Unix(),
+	})
+	if err != nil {
+		return "", fmt.Errorf("google: marshal state: %w", err)
+	}
+	encoded := base64.RawURLEncoding.EncodeToString(payload)
 
-	s, ok := h.states[token]
-	if !ok {
+	mac := hmac.New(sha256.New, secret)
+	mac.Write([]byte(encoded))
+	sig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+
+	return encoded + "." + sig, nil
+}
+
+func verifyGoogleState(secret []byte, token string) bool {
+	encoded, sig, found := strings.Cut(token, ".")
+	if !found || encoded == "" || sig == "" {
 		return false
 	}
-	delete(h.states, token)
 
-	if time.Now().After(s.expiresAt) {
+	mac := hmac.New(sha256.New, secret)
+	mac.Write([]byte(encoded))
+	expectedSig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	if !hmac.Equal([]byte(sig), []byte(expectedSig)) {
 		return false
 	}
-	return true
+
+	payload, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil {
+		return false
+	}
+	var claims googleStateClaims
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return false
+	}
+	return time.Now().Unix() <= claims.ExpiresAt
 }
 
 type googleTokenResponse struct {

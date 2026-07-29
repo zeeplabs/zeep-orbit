@@ -19,7 +19,7 @@ import ChangelogPage from './pages/ChangelogPage'
 import AppUsersPage from './pages/AppUsersPage'
 import DataBrowserPage from './pages/DataBrowserPage'
 import { Toaster } from 'sonner'
-import { useBootstrapStatus } from './lib/api'
+import { useBootstrapStatus, usePublicConfig } from './lib/api'
 import { THEMES, applyTheme } from './lib/themes'
 
 function LoadingScreen() {
@@ -51,22 +51,16 @@ function RedirectToAppDetails() {
   return <Navigate to={`/apps/${id}`} replace />
 }
 
-function useTheme() {
-  useEffect(() => {
-    fetch('/dashboard/api/config', { cache: 'no-cache' })
-      .then((res) => res.json())
-      .then((config) => {
-        const theme = THEMES[config.theme] || THEMES.azure
-        applyTheme(theme)
-      })
-      .catch(() => {})
-  }, [])
-}
-
 function App() {
   const qc = useQueryClient()
 
-  useTheme()
+  const { data: config, isLoading: configLoading } = usePublicConfig()
+
+  useEffect(() => {
+    if (!config) return
+    const theme = THEMES[config.theme] || THEMES.azure
+    applyTheme(theme)
+  }, [config])
 
   const { data: status, isLoading: statusLoading } = useBootstrapStatus()
 
@@ -81,7 +75,7 @@ function App() {
     enabled: status?.bootstrapped === true,
   })
 
-  if (statusLoading || (status?.bootstrapped && userLoading)) {
+  if (statusLoading || configLoading || (status?.bootstrapped && userLoading)) {
     return <LoadingScreen />
   }
 

@@ -55,6 +55,20 @@ export interface CreateAppInput {
 }
 
 
+export interface PublicConfig {
+  theme: string
+  google_oauth_enabled: boolean
+}
+
+export function usePublicConfig() {
+  return useQuery({
+    queryKey: ['public-config'],
+    queryFn: () =>
+      fetch('/dashboard/api/config').then((r) => r.json()) as Promise<PublicConfig>,
+    staleTime: 60000,
+  })
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, { credentials: 'include', ...init })
   if (!res.ok) {
