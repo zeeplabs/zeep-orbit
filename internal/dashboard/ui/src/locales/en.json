@@ -19,6 +19,8 @@
   "nav.logoutConfirmBtn": "Log Out",
   "nav.loggingOut": "Logging out...",
   "nav.changelog": "Changelog",
+  "nav.updateAvailable": "New version available: {{version}}",
+  "nav.updateAvailableLabel": "New version available",
   "nav.account": "Account",
   "nav.sectionGeneral": "General",
   "nav.sectionDeployment": "Deployment",

@@ -19,6 +19,8 @@
   "nav.logoutConfirmBtn": "Sair",
   "nav.loggingOut": "Saindo...",
   "nav.changelog": "Changelog",
+  "nav.updateAvailable": "Nova versão disponível: {{version}}",
+  "nav.updateAvailableLabel": "Nova versão disponível",
   "nav.account": "Conta",
   "nav.sectionGeneral": "Geral",
   "nav.sectionDeployment": "Implantação",

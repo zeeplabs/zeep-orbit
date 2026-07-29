@@ -16,6 +16,7 @@ import {
   Megaphone,
   Link2,
   Github,
+  ArrowUpCircle,
 } from "lucide-react";
 import ChangePasswordModal from "./ChangePasswordModal";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -175,6 +176,80 @@ function BottomBar({
         <span style={{ fontSize: 10, lineHeight: 1 }}>{t("nav.account")}</span>
       </button>
     </nav>
+  );
+}
+
+function UpdateAvailableBanner() {
+  const { t } = useTranslation();
+  const { data } = useQuery({
+    queryKey: ["version-check"],
+    queryFn: () =>
+      fetch("/dashboard/api/version-check", { credentials: "include" }).then(
+        (r) => r.json(),
+      ) as Promise<{ tag_name: string; html_url: string }>,
+    staleTime: 60 * 60 * 1000,
+    retry: false,
+  });
+
+  if (!data?.tag_name || !data?.html_url) return null;
+  if (data.tag_name.replace(/^v/, "") === pkg.version) return null;
+
+  return (
+    <a
+      href={data.html_url}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={t("nav.updateAvailable", { version: data.tag_name })}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "9px 12px",
+        borderRadius: 10,
+        border: "1px solid rgba(var(--brand-primary-rgb), 0.25)",
+        background: "rgba(var(--brand-primary-rgb), 0.10)",
+        color: "var(--text)",
+        cursor: "pointer",
+        fontSize: 13,
+        textAlign: "left" as const,
+        width: "100%",
+        fontFamily: "inherit",
+        fontWeight: 500,
+        textDecoration: "none",
+        marginBottom: 8,
+        transition: "background 0.15s",
+      }}
+    >
+      <ArrowUpCircle size={15} strokeWidth={1.5} style={{ flexShrink: 0 }} />
+      <span
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 1,
+          overflow: "hidden",
+          minWidth: 0,
+        }}
+      >
+        <span
+          style={{
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {t("nav.updateAvailableLabel")}
+        </span>
+        <span
+          style={{
+            fontSize: 12,
+            fontWeight: 700,
+            color: "var(--brand-light, var(--text))",
+          }}
+        >
+          {data.tag_name}
+        </span>
+      </span>
+    </a>
   );
 }
 
@@ -386,6 +461,8 @@ export default function DashboardShell({ user }: { user: User | null }) {
             </div>
           ))}
         </nav>
+
+        <UpdateAvailableBanner />
 
         {/* Changelog */}
         <NavLink
