@@ -1986,7 +1986,7 @@ func (h *Handler) ListAppUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	schema := "app_" + app.Name
+	schema := schemaNameForDB(app.Name)
 
 	if err := h.prov.EnsureAuthUserColumns(r.Context(), schema); err != nil {
 	}
@@ -2037,7 +2037,7 @@ func (h *Handler) DeactivateAppUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID := chi.URLParam(r, "userId")
-	schema := "app_" + app.Name
+	schema := schemaNameForDB(app.Name)
 	h.prov.EnsureAuthUserColumns(r.Context(), schema)
 	if err := DeactivateAppUser(r.Context(), h.pool, schema, userID); err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -2068,7 +2068,7 @@ func (h *Handler) ActivateAppUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID := chi.URLParam(r, "userId")
-	schema := "app_" + app.Name
+	schema := schemaNameForDB(app.Name)
 	h.prov.EnsureAuthUserColumns(r.Context(), schema)
 	if err := ActivateAppUser(r.Context(), h.pool, schema, userID); err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -2099,11 +2099,11 @@ func (h *Handler) ResetAppUserSessions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID := chi.URLParam(r, "userId")
-	schema := "app_" + app.Name
+	schema := schemaNameForDB(app.Name)
 	h.prov.EnsureAuthUserColumns(r.Context(), schema)
 	if err := ResetAppUserSessions(r.Context(), h.pool, schema, userID); err != nil {
 		if errors.Is(err, ErrNotFound) {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "no sessions found"})
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "no active session found for user"})
 			return
 		}
 		h.writeError(w, r, http.StatusInternalServerError, "failed to reset sessions", err)

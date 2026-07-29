@@ -101,7 +101,7 @@ func buildAuthRouter() http.Handler {
 		r.Post("/refresh", testH.Refresh)
 		r.With(authJWTMiddleware()).Post("/logout", testH.Logout)
 		r.With(authJWTMiddleware()).Get("/me", testH.Me)
-		r.With(authJWTMiddleware()).Put("/me", testH.UpdateMe)
+		r.With(authJWTMiddleware()).Patch("/me", testH.UpdateMe)
 	})
 	return r
 }

@@ -21,12 +21,15 @@ func isPgRelationNotFound(err error) bool {
 
 // AppUserSummary is a row from _auth_users for the dashboard.
 type AppUserSummary struct {
-	ID             string     `json:"id"`
-	Email          string     `json:"email"`
-	Provider       string     `json:"provider"`
-	Active         bool       `json:"active"`
-	LastSignInAt   *time.Time `json:"last_sign_in_at"`
-	CreatedAt      time.Time  `json:"created_at"`
+	ID           string     `json:"id"`
+	Email        string     `json:"email"`
+	Name         *string    `json:"name"`
+	Phone        *string    `json:"phone"`
+	AvatarURL    *string    `json:"avatar_url"`
+	Provider     string     `json:"provider"`
+	Active       bool       `json:"active"`
+	LastSignInAt *time.Time `json:"last_sign_in_at"`
+	CreatedAt    time.Time  `json:"created_at"`
 }
 
 // AppUserProviderCount is a count of users grouped by provider.
@@ -61,7 +64,7 @@ func ListAppUsers(ctx context.Context, pool *db.Pool, schema, search string, lim
 	}
 	queryArgs = append(queryArgs, limit, offset)
 	rows, err := pool.Query(ctx,
-		fmt.Sprintf(`SELECT id, email, provider, active, last_sign_in_at, created_at
+		fmt.Sprintf(`SELECT id, email, name, phone, avatar_url, provider, active, last_sign_in_at, created_at
 		 FROM %q."_auth_users"%s
 		 ORDER BY created_at DESC
 		 LIMIT $%d OFFSET $%d`, schema, where, paramOffset+1, paramOffset+2),
@@ -78,7 +81,7 @@ func ListAppUsers(ctx context.Context, pool *db.Pool, schema, search string, lim
 	var users []*AppUserSummary
 	for rows.Next() {
 		var u AppUserSummary
-		if err := rows.Scan(&u.ID, &u.Email, &u.Provider, &u.Active, &u.LastSignInAt, &u.CreatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Phone, &u.AvatarURL, &u.Provider, &u.Active, &u.LastSignInAt, &u.CreatedAt); err != nil {
 			return nil, 0, fmt.Errorf("dashboard: scan app user: %w", err)
 		}
 		users = append(users, &u)

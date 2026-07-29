@@ -5,6 +5,7 @@ import {
   UseQueryResult,
   UseMutationResult,
 } from '@tanstack/react-query'
+import { toast } from 'sonner'
 
 
 export interface ReferenceDef {
@@ -226,6 +227,9 @@ export function useDeleteUser(): UseMutationResult<void, Error, string> {
 export interface AppUserSummary {
   id: string
   email: string
+  name: string | null
+  phone: string | null
+  avatar_url: string | null
   provider: string
   active: boolean
   last_sign_in_at: string | null
@@ -281,6 +285,9 @@ export function useDeactivateAppUser(): UseMutationResult<
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ['app-users', variables.appId] })
     },
+    onError: (error) => {
+      toast.error(error.message)
+    },
   })
 }
 
@@ -298,6 +305,9 @@ export function useActivateAppUser(): UseMutationResult<
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ['app-users', variables.appId] })
     },
+    onError: (error) => {
+      toast.error(error.message)
+    },
   })
 }
 
@@ -314,6 +324,9 @@ export function useResetAppUserSessions(): UseMutationResult<
       }),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ['app-users', variables.appId] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
     },
   })
 }

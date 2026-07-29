@@ -236,6 +236,7 @@
   "appUsers.deactivateTitle": "Desativar conta",
   "appUsers.activateTitle": "Reativar conta",
   "appUsers.resetTitle": "Resetar sessões",
+  "appUsers.refresh": "Recarregar lista de usuários",
   "dataBrowser.emptySelect": "Selecione uma tabela na árvore ao lado",
   "dataBrowser.edit": "Editar",
   "dataBrowser.delete": "Excluir",

@@ -236,6 +236,7 @@
   "appUsers.deactivateTitle": "Deactivate",
   "appUsers.activateTitle": "Reactivate",
   "appUsers.resetTitle": "Reset Sessions",
+  "appUsers.refresh": "Refresh user list",
   "dataBrowser.emptySelect": "Select a table from the tree",
   "dataBrowser.edit": "Edit",
   "dataBrowser.delete": "Delete",
