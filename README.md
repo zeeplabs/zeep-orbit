@@ -96,7 +96,7 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/myapp/tasks
 | **White-label**         | Custom branding, themes, company name                    |
 | **Prometheus Metrics**  | `zeep_http_requests_total`, latency histograms           |
 | **Multi-app**           | One service, N apps, isolated schemas & JWT secrets      |
-| **CLI**                 | `zeep serve`, `zeep apply`, `zeep list`, `zeep status`   |
+| **CLI**                 | `zeep serve`, `zeep status`                              |
 | **Kubernetes**          | Production-grade Helm chart (HPA, PDB, ingress, IRSA)    |
 | **SDK Clients**         | TypeScript, Go, Python, Rust, Java, PHP                  |
 | **i18n**                | Dashboard in pt-BR / English, language switcher          |
@@ -320,17 +320,15 @@ $rows = $orbit->table('invoices')->findMany(limit: 10);
 
 ```
 Commands:
-  serve    Load config, provision database, start HTTP server
-  apply    Provision schemas and tables, print report
-  list     Print apps, tables, and their API URLs
+  serve    Provision the internal schema, start the HTTP server + Dashboard
   status   Check if the server is running
 ```
 
 ```bash
 zeep serve --port 8080
-zeep apply                   # idempotent provisioning
-zeep list                    # inspect all apps and tables
 ```
+
+Apps and tables are created and managed entirely through the Dashboard (or, going forward, the MCP server) — there's no YAML file to author or `apply` step.
 
 ---
 

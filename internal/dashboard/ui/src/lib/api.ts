@@ -7,12 +7,25 @@ import {
 } from '@tanstack/react-query'
 
 
+export interface ReferenceDef {
+  table: string
+  column: string
+  on_delete?: '' | 'cascade' | 'restrict' | 'set_null' | 'no_action'
+}
+
 export interface ColumnDef {
   name: string
   type: string
   required: boolean
   default: string
   unique: boolean
+  references?: ReferenceDef | null
+}
+
+export interface IndexDef {
+  name: string
+  columns: string[]
+  unique?: boolean
 }
 
 export interface TableDef {
@@ -20,6 +33,7 @@ export interface TableDef {
   name: string
   rls: string
   columns: ColumnDef[]
+  indexes?: IndexDef[]
 }
 
 export interface AppDef {
@@ -129,7 +143,7 @@ export function useCreateAppTable(appId: string): UseMutationResult<TableDef, Er
 
 export function useUpdateAppTable(
   appId: string,
-): UseMutationResult<TableDef, Error, { tableId: string; rls: string; columns: ColumnDef[] }> {
+): UseMutationResult<TableDef, Error, { tableId: string; rls: string; columns: ColumnDef[]; indexes?: IndexDef[] }> {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ tableId, ...input }) =>

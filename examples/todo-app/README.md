@@ -11,25 +11,10 @@ A simple React + Vite todo app that demonstrates how to connect to a **Zeep Orbi
 ## Prerequisites
 
 - A running Zeep Orbit instance (see the [root README](../../README.md))
-- An app with a `todos` table configured. Example `apps.yaml`:
-
-```yaml
-apps:
-  - name: my-app
-    tables:
-      - name: todos
-        columns:
-          - name: title
-            type: text
-            required: true
-          - name: completed
-            type: boolean
-            default: false
-        indexes:
-          - columns: [created_at]
-```
-
-Run `zeep-orbit apply -f apps.yaml` to provision the table.
+- An app named `my-app` with a `todos` table, created through the Dashboard (`/dashboard`):
+  - `title` — `text`, required
+  - `completed` — `boolean`, default `false`
+  - optionally, an index on `created_at` for faster listing
 
 ## Getting Started
 

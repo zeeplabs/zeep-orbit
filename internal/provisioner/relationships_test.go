@@ -9,6 +9,44 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/provisioner"
 )
 
+func TestNumericColumnTypeCreatesDecimal(t *testing.T) {
+	pool := testPool(t)
+	defer pool.Close()
+
+	schema := uniqueSchema("test_numeric")
+	t.Cleanup(func() { dropSchema(t, pool, schema) })
+
+	prov := provisioner.New(pool)
+	cfg := &config.Config{
+		Apps: []config.AppConfig{
+			{
+				Name: schema,
+				Tables: []config.TableConfig{
+					{
+						Name:    "invoices",
+						Columns: []config.ColumnConfig{{Name: "amount", Type: "numeric"}},
+					},
+				},
+			},
+		},
+	}
+
+	if _, err := prov.Apply(context.Background(), cfg); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	var udtName string
+	if err := pool.QueryRow(context.Background(),
+		`SELECT udt_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = 'invoices' AND column_name = 'amount'`,
+		schema,
+	).Scan(&udtName); err != nil {
+		t.Fatalf("query column type: %v", err)
+	}
+	if udtName != "numeric" {
+		t.Errorf("expected column type 'numeric' (from DECIMAL), got %q — 'numeric' input silently became TEXT", udtName)
+	}
+}
+
 func TestForeignKeyCascadeDelete(t *testing.T) {
 	pool := testPool(t)
 	defer pool.Close()

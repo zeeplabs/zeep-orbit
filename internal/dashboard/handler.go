@@ -110,6 +110,18 @@ func validateTableInput(t AppTableRow, authEmailEnabled bool, otherTables []AppT
 		}
 		seenColumns[c.Name] = true
 	}
+
+	// References/indexes can only be validated against the app's full table
+	// set (a reference may point at another table, a cycle spans tables).
+	allTables := make([]config.TableConfig, 0, len(otherTables)+1)
+	allTables = append(allTables, config.TableConfig{Name: t.Name, Columns: t.Columns, Indexes: t.Indexes})
+	for _, other := range otherTables {
+		allTables = append(allTables, config.TableConfig{Name: other.Name, Columns: other.Columns, Indexes: other.Indexes})
+	}
+	if err := config.ValidateTables(allTables); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -761,6 +773,7 @@ type tableRequestBody struct {
 	Name    string                `json:"name"`
 	RLS     string                `json:"rls"`
 	Columns []config.ColumnConfig `json:"columns"`
+	Indexes []config.IndexConfig  `json:"indexes"`
 }
 
 // CreateApp handles POST /dashboard/api/apps
@@ -989,20 +1002,18 @@ func (h *Handler) CreateAppTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	table := AppTableRow{Name: body.Name, RLS: body.RLS, Columns: body.Columns}
+	table := AppTableRow{Name: body.Name, RLS: body.RLS, Columns: body.Columns, Indexes: body.Indexes}
 	if err := validateTableInput(table, app.AuthEmailEnabled, app.Tables); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 
-	row, err := InsertAppTable(r.Context(), h.pool, appID, table)
-	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
-		return
-	}
-
+	// Provision the physical table before persisting its metadata row — if
+	// Apply fails, nothing should be left behind for the dashboard to think
+	// exists (a metadata row with no matching physical table blocks retrying
+	// with the same name and shows a table that errors on every operation).
 	cfg := buildAppConfig(app)
-	cfg.Tables = []config.TableConfig{{Name: row.Name, RLS: row.RLS, Columns: row.Columns}}
+	cfg.Tables = []config.TableConfig{{Name: table.Name, RLS: table.RLS, Columns: table.Columns, Indexes: table.Indexes}}
 	if _, err := h.prov.Apply(r.Context(), &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
 		var typeErr *provisioner.TypeChangeError
 		if errors.As(err, &typeErr) {
@@ -1010,6 +1021,12 @@ func (h *Handler) CreateAppTable(w http.ResponseWriter, r *http.Request) {
 		} else {
 			h.writeError(w, r, http.StatusInternalServerError, "provisioning failed — check server logs for details", err)
 		}
+		return
+	}
+
+	row, err := InsertAppTable(r.Context(), h.pool, appID, table)
+	if err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
@@ -1066,24 +1083,17 @@ func (h *Handler) UpdateAppTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	table := AppTableRow{Name: existingTable.Name, RLS: body.RLS, Columns: body.Columns}
+	table := AppTableRow{Name: existingTable.Name, RLS: body.RLS, Columns: body.Columns, Indexes: body.Indexes}
 	if err := validateTableInput(table, app.AuthEmailEnabled, otherTables); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 
-	row, err := UpdateAppTable(r.Context(), h.pool, appID, tableID, body.RLS, body.Columns)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
-			return
-		}
-		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
-		return
-	}
-
+	// Provision the physical change before persisting metadata — if Apply
+	// fails, the stored columns/indexes must still match what's actually in
+	// Postgres, not a shape the physical table was never migrated to.
 	cfg := buildAppConfig(app)
-	cfg.Tables = []config.TableConfig{{Name: row.Name, RLS: row.RLS, Columns: row.Columns}}
+	cfg.Tables = []config.TableConfig{{Name: table.Name, RLS: table.RLS, Columns: table.Columns, Indexes: table.Indexes}}
 	if _, err := h.prov.Apply(r.Context(), &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
 		var typeErr *provisioner.TypeChangeError
 		if errors.As(err, &typeErr) {
@@ -1091,6 +1101,16 @@ func (h *Handler) UpdateAppTable(w http.ResponseWriter, r *http.Request) {
 		} else {
 			h.writeError(w, r, http.StatusInternalServerError, "provisioning failed — check server logs for details", err)
 		}
+		return
+	}
+
+	row, err := UpdateAppTable(r.Context(), h.pool, appID, tableID, body.RLS, body.Columns, body.Indexes)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
+			return
+		}
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 

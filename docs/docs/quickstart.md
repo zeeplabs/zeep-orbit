@@ -79,7 +79,7 @@ It demonstrates authentication, CRUD operations, and SDK usage against any Orbit
 
 ```bash
 go install github.com/zeeplabs/zeep-orbit/cmd/zeep@latest
-zeep serve --config ./apps.yaml
+DATABASE_URL=postgres://... zeep serve --port 8080
 ```
 
 ## Kubernetes (Helm)
@@ -88,5 +88,5 @@ zeep serve --config ./apps.yaml
 helm repo add zeeplabs https://zeeplabs.github.io/zeep-orbit/helm
 helm install zeep-orbit zeeplabs/zeep-orbit \
   --set secrets.databaseUrl=postgres://... \
-  --set 'secrets.apps.myapp.jwtSecret=...'
+  --set secrets.dashboardBootstrapSecret=...
 ```

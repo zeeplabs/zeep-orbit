@@ -62,6 +62,7 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 			UNIQUE(app_id, name)
 		)`,
+		`ALTER TABLE zeep_system.app_tables ADD COLUMN IF NOT EXISTS indexes JSONB NOT NULL DEFAULT '[]'`,
 		`CREATE TABLE IF NOT EXISTS zeep_system.app_ownership (
 			user_id UUID NOT NULL REFERENCES zeep_system.dashboard_users(id) ON DELETE CASCADE,
 			app_id  UUID NOT NULL REFERENCES zeep_system.apps(id) ON DELETE CASCADE,

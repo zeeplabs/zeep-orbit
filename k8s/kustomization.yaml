@@ -4,10 +4,8 @@ kind: Kustomization
 # Secret NÃO está no GitOps — criar manualmente antes do apply:
 #   kubectl create secret generic zeep-orbit-secret \
 #     --from-literal=DATABASE_URL="postgres://..." \
-#     --from-literal=BILLING_JWT_SECRET="$(openssl rand -base64 32)" \
-#     --from-literal=INVENTORY_JWT_SECRET="$(openssl rand -base64 32)"
+#     --from-literal=DASHBOARD_BOOTSTRAP_SECRET="$(openssl rand -base64 32)"
 # Ver secret.example.yaml para referência de campos.
 resources:
-  - configmap.yaml
   - deployment.yaml
   - service.yaml

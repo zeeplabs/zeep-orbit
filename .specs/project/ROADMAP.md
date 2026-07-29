@@ -25,9 +25,10 @@ Features:
 - [x] TypeScript SDK (`@zeeptech/orbit-client`) — plus Go, Python, Rust, Java, PHP clients, all published
 - [ ] Official prompt snippets for Claude Code / Cursor / Lovable
 - [ ] MCP server for zeep-orbit operations
-- [x] Table relationships (foreign keys) and indexes in schema builder — spec: `.specs/features/schema-relationships-and-indexes/`
+- [x] Table relationships (foreign keys) and indexes in schema builder (backend) — spec: `.specs/features/schema-relationships-and-indexes/`
+- [ ] Table relationships (foreign keys) and indexes in Dashboard UI — spec: `.specs/features/dashboard-relationships-ui/`
 - [x] Web dashboard (app catalog, schema viewer, logs, data browser, SDKs page, API tab)
-- [ ] Helm chart / Kubernetes deploy
+- [x] Helm chart / Kubernetes deploy
 - [x] Schema migrations (alter existing tables safely)
 - [x] Clear user feedback on unsafe/failed column type changes — spec: `.specs/features/column-type-change-feedback/`
 - [x] Filtering: `?{field}=gt.{value}`, `in.`, `like.`

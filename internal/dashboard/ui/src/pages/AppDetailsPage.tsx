@@ -180,6 +180,7 @@ function DatabaseTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data
           <TableCard
             key={t.id}
             table={t}
+            otherTables={app.tables.filter((other) => other.id && other.id !== t.id)}
             authEmailEnabled={app.auth_email_enabled}
             locked={editingKey !== null && editingKey !== t.id}
             startInEdit={false}
@@ -197,6 +198,7 @@ function DatabaseTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data
           <TableCard
             key="draft"
             table={draftTable}
+            otherTables={app.tables.filter((other) => other.id)}
             authEmailEnabled={app.auth_email_enabled}
             locked={false}
             startInEdit

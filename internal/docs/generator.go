@@ -298,7 +298,7 @@ func openAPIType(zeepType string) (typ, format string) {
 		return "integer", "int32"
 	case "bigint":
 		return "integer", "int64"
-	case "decimal":
+	case "decimal", "numeric":
 		return "number", "double"
 	case "boolean":
 		return "boolean", ""

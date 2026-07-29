@@ -29,7 +29,7 @@ func pgType(t string) string {
 		return "INTEGER"
 	case "bigint":
 		return "BIGINT"
-	case "decimal":
+	case "decimal", "numeric":
 		return "DECIMAL"
 	case "boolean":
 		return "BOOLEAN"

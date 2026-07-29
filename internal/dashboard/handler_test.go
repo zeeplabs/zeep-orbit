@@ -67,3 +67,39 @@ func TestValidateTableInputRejectsUnsupportedColumnType(t *testing.T) {
 		t.Fatal("expected error for unsupported column type, got nil")
 	}
 }
+
+func TestValidateTableInputRejectsReferenceToUnknownTable(t *testing.T) {
+	tbl := AppTableRow{
+		Name: "pedidos",
+		Columns: []config.ColumnConfig{
+			{Name: "cliente_id", Type: "uuid", References: &config.ReferenceConfig{Table: "clientes", Column: "id"}},
+		},
+	}
+	if err := validateTableInput(tbl, true, nil); err == nil {
+		t.Fatal("expected error for reference to a table not in the app, got nil")
+	}
+}
+
+func TestValidateTableInputAcceptsValidReference(t *testing.T) {
+	tbl := AppTableRow{
+		Name: "pedidos",
+		Columns: []config.ColumnConfig{
+			{Name: "cliente_id", Type: "uuid", References: &config.ReferenceConfig{Table: "clientes", Column: "id"}},
+		},
+	}
+	others := []AppTableRow{{Name: "clientes", Columns: []config.ColumnConfig{{Name: "id", Type: "uuid"}}}}
+	if err := validateTableInput(tbl, true, others); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+}
+
+func TestValidateTableInputRejectsIndexOnUnknownColumn(t *testing.T) {
+	tbl := AppTableRow{
+		Name:    "clientes",
+		Columns: []config.ColumnConfig{{Name: "nome", Type: "text"}},
+		Indexes: []config.IndexConfig{{Name: "idx_missing", Columns: []string{"does_not_exist"}}},
+	}
+	if err := validateTableInput(tbl, true, nil); err == nil {
+		t.Fatal("expected error for index on unknown column, got nil")
+	}
+}
