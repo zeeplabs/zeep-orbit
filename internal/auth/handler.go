@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/mail"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
@@ -22,6 +24,26 @@ const (
 	bcryptCost = 12
 	refreshTTL = 30 * 24 * time.Hour
 )
+
+func isValidEmail(email string) bool {
+	addr, err := mail.ParseAddress(email)
+	return err == nil && addr.Address == email
+}
+
+func normalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
+// normalizeName title-cases each word: "JULIO augusto" -> "Julio Augusto".
+func normalizeName(name string) string {
+	words := strings.Fields(name)
+	for i, w := range words {
+		r := []rune(strings.ToLower(w))
+		r[0] = unicode.ToUpper(r[0])
+		words[i] = string(r)
+	}
+	return strings.Join(words, " ")
+}
 
 // Handler serves native email/password auth endpoints per app.
 type Handler struct {
@@ -61,8 +83,14 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	body.Email = normalizeEmail(body.Email)
+	body.Name = normalizeName(body.Name)
 	if body.Email == "" || body.Password == "" {
 		writeError(w, http.StatusBadRequest, "email and password required")
+		return
+	}
+	if !isValidEmail(body.Email) {
+		writeError(w, http.StatusBadRequest, "invalid email address")
 		return
 	}
 
@@ -314,7 +342,7 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// UpdateMe handles PUT /{app}/auth/me (requires JWT via AuthJWTMiddleware)
+// UpdateMe handles PATCH /{app}/auth/me (requires JWT via AuthJWTMiddleware)
 func (h *Handler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	app, ok := h.appWithEmail(w, r)
 	if !ok {
@@ -335,6 +363,10 @@ func (h *Handler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
+	}
+	if body.Name != nil {
+		normalized := normalizeName(*body.Name)
+		body.Name = &normalized
 	}
 
 	var id, email string

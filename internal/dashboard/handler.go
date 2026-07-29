@@ -9,11 +9,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/mail"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
@@ -57,6 +59,26 @@ func NewHandler(pool *db.Pool, reg *registry.Registry, logger *zap.Logger) *Hand
 		Logs:   NewRingBuffer(bufSize),
 		logger: logger,
 	}
+}
+
+func isValidEmail(email string) bool {
+	addr, err := mail.ParseAddress(email)
+	return err == nil && addr.Address == email
+}
+
+func normalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
+// normalizeName title-cases each word: "JULIO augusto" -> "Julio Augusto".
+func normalizeName(name string) string {
+	words := strings.Fields(name)
+	for i, w := range words {
+		r := []rune(strings.ToLower(w))
+		r[0] = unicode.ToUpper(r[0])
+		words[i] = string(r)
+	}
+	return strings.Join(words, " ")
 }
 
 var (
@@ -149,8 +171,15 @@ func (h *Handler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	body.Email = normalizeEmail(body.Email)
+	body.Name = normalizeName(body.Name)
+
 	if len(body.Password) < 8 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password must be at least 8 characters"})
+		return
+	}
+	if !isValidEmail(body.Email) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid email address"})
 		return
 	}
 
@@ -674,8 +703,15 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	body.Email = normalizeEmail(body.Email)
+	body.Name = normalizeName(body.Name)
+
 	if body.Email == "" || body.Password == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "email and password are required"})
+		return
+	}
+	if !isValidEmail(body.Email) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid email address"})
 		return
 	}
 	if body.Role != "admin" && body.Role != "superadmin" {

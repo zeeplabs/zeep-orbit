@@ -10,12 +10,12 @@ import {
   Activity,
   Shield,
   Code2,
-  Globe,
   Settings,
   User,
   Lock,
   Megaphone,
   Link2,
+  Github,
 } from "lucide-react";
 import ChangePasswordModal from "./ChangePasswordModal";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -75,6 +75,12 @@ function navSections(user: User | null, t: (k: string) => string): NavSection[] 
 
 function navItems(user: User | null, t: (k: string) => string): NavItem[] {
   return navSections(user, t).flatMap((s) => s.items);
+}
+
+function firstLastName(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length <= 1) return parts[0] || "";
+  return `${parts[0]} ${parts[parts.length - 1]}`;
 }
 
 function BottomBar({
@@ -179,7 +185,6 @@ export default function DashboardShell({ user }: { user: User | null }) {
   const [loggingOut, setLoggingOut] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
-  const [showLanguageMenu, setShowLanguageMenu] = useState(false);
 
   const { data: brandConfig } = useQuery({
     queryKey: ["brand-config"],
@@ -210,7 +215,6 @@ export default function DashboardShell({ user }: { user: User | null }) {
 
   async function saveLanguage(lang: string) {
     setLanguage(lang);
-    setShowLanguageMenu(false);
     try {
       await fetch("/dashboard/api/me/language", {
         method: "PUT",
@@ -439,7 +443,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
             paddingTop: 14,
           }}
         >
-          <div style={{ padding: "0 8px", marginBottom: 10 }}>
+          <div style={{ padding: "0 8px", marginBottom: 10, textAlign: "center" }}>
             <p
               style={{
                 fontSize: 13,
@@ -449,7 +453,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
                 textOverflow: "ellipsis",
               }}
             >
-              {(user as any).name || user.email}
+              {(user as any).name ? firstLastName((user as any).name) : user.email}
             </p>
             <p
               style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}
@@ -457,108 +461,88 @@ export default function DashboardShell({ user }: { user: User | null }) {
               {user.role}
             </p>
           </div>
-          <button
-            onClick={() => setShowChangePassword(true)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "8px 12px",
-              borderRadius: 10,
-              border: "none",
-              background: "transparent",
-              color: "var(--text-muted)",
-              cursor: "pointer",
-              fontSize: 13,
-              width: "100%",
-              fontFamily: "inherit",
-              transition: "color 0.15s",
-            }}
-          >
-            <Lock size={14} strokeWidth={1.5} /> {t("nav.changePassword")}
-          </button>
-          <button
-            onClick={() => setShowLanguageMenu(!showLanguageMenu)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "8px 12px",
-              borderRadius: 10,
-              border: "none",
-              background: "transparent",
-              color: "var(--text-muted)",
-              cursor: "pointer",
-              fontSize: 13,
-              width: "100%",
-              fontFamily: "inherit",
-              transition: "color 0.15s",
-            }}
-          >
-            <Globe size={14} strokeWidth={1.5} /> {i18n.language === "pt-BR" ? "Português" : "English"}
-          </button>
-          {showLanguageMenu && (
-            <div style={{ paddingLeft: 12 }}>
-              <button
-                onClick={() => { saveLanguage("pt-BR"); }}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: "6px 12px",
-                  borderRadius: 8,
-                  border: "none",
-                  background: i18n.language === "pt-BR" ? "rgba(var(--brand-primary-rgb), 0.12)" : "transparent",
-                  color: i18n.language === "pt-BR" ? "var(--text)" : "var(--text-muted)",
-                  cursor: "pointer",
-                  fontSize: 13,
-                  width: "100%",
-                  fontFamily: "inherit",
-                }}
-              >
-                {t("language.ptBR")}
-              </button>
-              <button
-                onClick={() => { saveLanguage("en"); }}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: "6px 12px",
-                  borderRadius: 8,
-                  border: "none",
-                  background: i18n.language === "en" ? "rgba(var(--brand-primary-rgb), 0.12)" : "transparent",
-                  color: i18n.language === "en" ? "var(--text)" : "var(--text-muted)",
-                  cursor: "pointer",
-                  fontSize: 13,
-                  width: "100%",
-                  fontFamily: "inherit",
-                }}
-              >
-                {t("language.en")}
-              </button>
-            </div>
-          )}
-          <button
-            onClick={() => setShowLogoutDialog(true)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "8px 12px",
-              borderRadius: 10,
-              border: "none",
-              background: "transparent",
-              color: "var(--text-muted)",
-              cursor: "pointer",
-              fontSize: 13,
-              width: "100%",
-              fontFamily: "inherit",
-              transition: "color 0.15s",
-            }}
-          >
-            <LogOut size={14} strokeWidth={1.5} /> {t("nav.logout")}
-          </button>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, paddingBottom: 12 }}>
+            <a
+              href="https://github.com/zeeplabs/zeep-orbit"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="GitHub"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 34,
+                height: 34,
+                borderRadius: 10,
+                border: "1px solid var(--border)",
+                background: "rgba(255,255,255,0.04)",
+                color: "var(--text-muted)",
+                cursor: "pointer",
+                textDecoration: "none",
+                transition: "color 0.15s, background 0.15s",
+              }}
+            >
+              <Github size={14} strokeWidth={1.5} />
+            </a>
+            <button
+              onClick={() => setShowChangePassword(true)}
+              title={t("nav.changePassword")}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 34,
+                height: 34,
+                borderRadius: 10,
+                border: "1px solid var(--border)",
+                background: "rgba(255,255,255,0.04)",
+                color: "var(--text-muted)",
+                cursor: "pointer",
+                transition: "color 0.15s, background 0.15s",
+              }}
+            >
+              <Lock size={14} strokeWidth={1.5} />
+            </button>
+            <button
+              onClick={() => saveLanguage(i18n.language === "pt-BR" ? "en" : "pt-BR")}
+              title={i18n.language === "pt-BR" ? t("language.ptBR") : t("language.en")}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 34,
+                height: 34,
+                borderRadius: 10,
+                border: "1px solid var(--border)",
+                background: "rgba(255,255,255,0.04)",
+                cursor: "pointer",
+                fontSize: 15,
+                lineHeight: 1,
+                transition: "background 0.15s",
+              }}
+            >
+              {i18n.language === "pt-BR" ? "🇧🇷" : "🇺🇸"}
+            </button>
+            <button
+              onClick={() => setShowLogoutDialog(true)}
+              title={t("nav.logout")}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 34,
+                height: 34,
+                borderRadius: 10,
+                border: "1px solid var(--border)",
+                background: "rgba(255,255,255,0.04)",
+                color: "var(--text-muted)",
+                cursor: "pointer",
+                transition: "color 0.15s, background 0.15s",
+              }}
+            >
+              <LogOut size={14} strokeWidth={1.5} />
+            </button>
+          </div>
         </div>
 
         <p className="text-[11px] text-white/15 text-center pb-3">

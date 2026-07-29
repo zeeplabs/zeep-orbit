@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { useTranslation, Trans } from "react-i18next";
-import { Plus, Trash2, Table2, Link2, Lock, Info } from "lucide-react";
+import { Plus, Trash2, Table2, Link2, Lock, AlertCircle } from "lucide-react";
 import { TableDef, ColumnDef, IndexDef, ReferenceDef } from "../lib/api";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const COLUMN_TYPES = [
   "text",
@@ -105,6 +112,8 @@ export default function TableCard({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showRelationshipsInfo, setShowRelationshipsInfo] = useState(false);
+  const [showIndexInfo, setShowIndexInfo] = useState(false);
 
   const enterEdit = () => {
     setName(table.name);
@@ -308,9 +317,19 @@ export default function TableCard({
       )}
 
       <div className="px-4 pb-4">
-        <p className="text-[11px] text-[#94A3B8] mb-2">
-          {t("tableCard.autoColumnsNote")}
-        </p>
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <p className="text-[11px] text-[#94A3B8]">
+            {t("tableCard.autoColumnsNote")}
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowRelationshipsInfo(true)}
+            className="flex items-center gap-1 text-[11px] text-[#94A3B8] hover:text-[var(--brand-light)] bg-transparent border-none cursor-pointer shrink-0 transition-colors"
+          >
+            <AlertCircle size={12} strokeWidth={1.5} />
+            {t("tableCard.relationshipsInfoBtn")}
+          </button>
+        </div>
         <div className="grid gap-3 mb-1" style={{ gridTemplateColumns: "1fr 140px 80px 80px 32px 40px" }}>
           <span className="text-[11px] text-[#94A3B8] font-semibold">{t("appForm.columnName")}</span>
           <span className="text-[11px] text-[#94A3B8] font-semibold">{t("appForm.columnType")}</span>
@@ -500,22 +519,16 @@ export default function TableCard({
         </button>
 
         <div className="mt-4 pt-4 border-t border-white/[0.06]">
-          <p className="text-[11px] text-[#94A3B8] font-semibold mb-2">{t("tableCard.indexesTitle")}</p>
-
-          <div className="flex gap-2 items-start bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2.5 mb-3">
-            <Info size={13} strokeWidth={1.5} className="text-[#94A3B8] shrink-0 mt-0.5" />
-            <p className="text-[11px] text-[#94A3B8] leading-relaxed">
-              <Trans
-                i18nKey="tableCard.indexExplainer"
-                components={{
-                  1: <strong className="text-[#B3D1FF] font-medium" />,
-                  3: <strong className="text-[#B3D1FF] font-medium" />,
-                  5: <code className="text-[#B3D1FF]" />,
-                  7: <code className="text-[#B3D1FF]" />,
-                  9: <strong className="text-[#B3D1FF] font-medium" />,
-                }}
-              />
-            </p>
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <p className="text-[11px] text-[#94A3B8] font-semibold">{t("tableCard.indexesTitle")}</p>
+            <button
+              type="button"
+              onClick={() => setShowIndexInfo(true)}
+              className="flex items-center gap-1 text-[11px] text-[#94A3B8] hover:text-[var(--brand-light)] bg-transparent border-none cursor-pointer shrink-0 transition-colors"
+            >
+              <AlertCircle size={12} strokeWidth={1.5} />
+              {t("tableCard.indexInfoBtn")}
+            </button>
           </div>
 
           <div className="flex flex-col gap-2 mb-2">
@@ -600,6 +613,62 @@ export default function TableCard({
           </button>
         </div>
       </div>
+
+      <Dialog open={showRelationshipsInfo} onOpenChange={setShowRelationshipsInfo}>
+        <DialogContent className="max-w-[480px] border border-white/[0.10] bg-[#0D0D14]/60 backdrop-blur-xl rounded-2xl p-0 gap-0">
+          <div className="bg-white/[0.04] shadow-[inset_0_1px_1px_rgba(255,255,255,0.10)] rounded-[calc(1rem-2px)] px-7 pb-6 pt-7">
+            <DialogHeader className="mb-0">
+              <div className="w-11 h-11 rounded-xl bg-white/[0.08] border border-white/[0.10] flex items-center justify-center mb-[18px]">
+                <Link2 size={18} strokeWidth={1.5} className="text-[#94A3B8]" />
+              </div>
+              <DialogTitle className="text-base font-bold text-[#F8FAFC] mb-2">
+                {t("tableCard.relationshipsInfoBtn")}
+              </DialogTitle>
+              <DialogDescription className="text-[13px] text-[#94A3B8] leading-relaxed">
+                <Trans
+                  i18nKey="tableCard.relationshipsExplainer"
+                  components={{
+                    1: <code className="text-[#B3D1FF]" />,
+                    3: <code className="text-[#B3D1FF]" />,
+                    5: <code className="text-[#B3D1FF]" />,
+                    7: <strong className="text-[#B3D1FF] font-medium" />,
+                    9: <strong className="text-[#B3D1FF] font-medium" />,
+                    11: <strong className="text-[#B3D1FF] font-medium" />,
+                    13: <strong className="text-[#B3D1FF] font-medium" />,
+                  }}
+                />
+              </DialogDescription>
+            </DialogHeader>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showIndexInfo} onOpenChange={setShowIndexInfo}>
+        <DialogContent className="max-w-[480px] border border-white/[0.10] bg-[#0D0D14]/60 backdrop-blur-xl rounded-2xl p-0 gap-0">
+          <div className="bg-white/[0.04] shadow-[inset_0_1px_1px_rgba(255,255,255,0.10)] rounded-[calc(1rem-2px)] px-7 pb-6 pt-7">
+            <DialogHeader className="mb-0">
+              <div className="w-11 h-11 rounded-xl bg-white/[0.08] border border-white/[0.10] flex items-center justify-center mb-[18px]">
+                <AlertCircle size={18} strokeWidth={1.5} className="text-[#94A3B8]" />
+              </div>
+              <DialogTitle className="text-base font-bold text-[#F8FAFC] mb-2">
+                {t("tableCard.indexInfoBtn")}
+              </DialogTitle>
+              <DialogDescription className="text-[13px] text-[#94A3B8] leading-relaxed">
+                <Trans
+                  i18nKey="tableCard.indexExplainer"
+                  components={{
+                    1: <strong className="text-[#B3D1FF] font-medium" />,
+                    3: <strong className="text-[#B3D1FF] font-medium" />,
+                    5: <code className="text-[#B3D1FF]" />,
+                    7: <code className="text-[#B3D1FF]" />,
+                    9: <strong className="text-[#B3D1FF] font-medium" />,
+                  }}
+                />
+              </DialogDescription>
+            </DialogHeader>
+          </div>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   );
 }
