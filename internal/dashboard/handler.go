@@ -810,7 +810,12 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 
 	cfg := buildAppConfig(app)
 	if _, err := h.prov.Apply(r.Context(), &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "provisioning failed: "+err.Error(), err)
+		var typeErr *provisioner.TypeChangeError
+		if errors.As(err, &typeErr) {
+			h.writeError(w, r, http.StatusBadRequest, typeErr.Error(), err)
+		} else {
+			h.writeError(w, r, http.StatusInternalServerError, "provisioning failed — check server logs for details", err)
+		}
 		return
 	}
 
@@ -906,7 +911,12 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 
 	cfg := buildAppConfig(app)
 	if _, err := h.prov.Apply(r.Context(), &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "provisioning failed: "+err.Error(), err)
+		var typeErr *provisioner.TypeChangeError
+		if errors.As(err, &typeErr) {
+			h.writeError(w, r, http.StatusBadRequest, typeErr.Error(), err)
+		} else {
+			h.writeError(w, r, http.StatusInternalServerError, "provisioning failed — check server logs for details", err)
+		}
 		return
 	}
 
@@ -994,7 +1004,12 @@ func (h *Handler) CreateAppTable(w http.ResponseWriter, r *http.Request) {
 	cfg := buildAppConfig(app)
 	cfg.Tables = []config.TableConfig{{Name: row.Name, RLS: row.RLS, Columns: row.Columns}}
 	if _, err := h.prov.Apply(r.Context(), &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "provisioning failed: "+err.Error(), err)
+		var typeErr *provisioner.TypeChangeError
+		if errors.As(err, &typeErr) {
+			h.writeError(w, r, http.StatusBadRequest, typeErr.Error(), err)
+		} else {
+			h.writeError(w, r, http.StatusInternalServerError, "provisioning failed — check server logs for details", err)
+		}
 		return
 	}
 
@@ -1070,7 +1085,12 @@ func (h *Handler) UpdateAppTable(w http.ResponseWriter, r *http.Request) {
 	cfg := buildAppConfig(app)
 	cfg.Tables = []config.TableConfig{{Name: row.Name, RLS: row.RLS, Columns: row.Columns}}
 	if _, err := h.prov.Apply(r.Context(), &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "provisioning failed: "+err.Error(), err)
+		var typeErr *provisioner.TypeChangeError
+		if errors.As(err, &typeErr) {
+			h.writeError(w, r, http.StatusBadRequest, typeErr.Error(), err)
+		} else {
+			h.writeError(w, r, http.StatusInternalServerError, "provisioning failed — check server logs for details", err)
+		}
 		return
 	}
 
