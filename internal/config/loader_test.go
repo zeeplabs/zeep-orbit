@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -302,5 +303,206 @@ apps:
 	_, err := Load(path)
 	if err == nil {
 		t.Fatal("expected error for missing env var, got nil")
+	}
+}
+
+const referenceBaseYAML = `
+platform:
+  database_url: "postgres://user:pass@localhost:5432/testdb"
+apps:
+  - name: my-app
+    auth:
+      jwt_secret: "supersecret"
+    tables:
+      - name: customers
+        columns:
+          - name: id
+            type: uuid
+            required: true
+          - name: email
+            type: text
+            unique: true
+          - name: notes
+            type: text
+      - name: orders
+        columns:
+          - name: id
+            type: uuid
+            required: true
+          - name: customer_id
+            type: uuid
+            %s
+`
+
+func TestLoadReferenceValid(t *testing.T) {
+	content := fmt.Sprintf(referenceBaseYAML, `references:
+              table: customers
+              column: id
+              on_delete: cascade`)
+	path := writeYAML(t, content)
+	if _, err := Load(path); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+}
+
+func TestLoadReferenceUnknownTable(t *testing.T) {
+	content := fmt.Sprintf(referenceBaseYAML, `references:
+              table: does_not_exist
+              column: id`)
+	path := writeYAML(t, content)
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for reference to unknown table, got nil")
+	}
+}
+
+func TestLoadReferenceNonUniqueColumn(t *testing.T) {
+	content := fmt.Sprintf(referenceBaseYAML, `references:
+              table: customers
+              column: notes`)
+	path := writeYAML(t, content)
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for reference to non-unique column, got nil")
+	}
+}
+
+func TestLoadReferenceInvalidOnDelete(t *testing.T) {
+	content := fmt.Sprintf(referenceBaseYAML, `references:
+              table: customers
+              column: id
+              on_delete: purge`)
+	path := writeYAML(t, content)
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for invalid on_delete, got nil")
+	}
+}
+
+func TestLoadReferenceSetNullRequiresOptional(t *testing.T) {
+	content := fmt.Sprintf(referenceBaseYAML, `required: true
+            references:
+              table: customers
+              column: id
+              on_delete: set_null`)
+	path := writeYAML(t, content)
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for on_delete=set_null with required=true, got nil")
+	}
+}
+
+func TestLoadReferenceCycleRejected(t *testing.T) {
+	content := `
+platform:
+  database_url: "postgres://user:pass@localhost:5432/testdb"
+apps:
+  - name: my-app
+    auth:
+      jwt_secret: "supersecret"
+    tables:
+      - name: a
+        columns:
+          - name: id
+            type: uuid
+            required: true
+          - name: b_id
+            type: uuid
+            references:
+              table: b
+              column: id
+      - name: b
+        columns:
+          - name: id
+            type: uuid
+            required: true
+          - name: a_id
+            type: uuid
+            references:
+              table: a
+              column: id
+`
+	path := writeYAML(t, content)
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for circular reference, got nil")
+	}
+}
+
+func TestLoadReferenceSelfNotACycle(t *testing.T) {
+	content := `
+platform:
+  database_url: "postgres://user:pass@localhost:5432/testdb"
+apps:
+  - name: my-app
+    auth:
+      jwt_secret: "supersecret"
+    tables:
+      - name: employees
+        columns:
+          - name: id
+            type: uuid
+            required: true
+          - name: manager_id
+            type: uuid
+            references:
+              table: employees
+              column: id
+`
+	path := writeYAML(t, content)
+	if _, err := Load(path); err != nil {
+		t.Fatalf("expected no error for self-reference, got: %v", err)
+	}
+}
+
+func TestLoadIndexValid(t *testing.T) {
+	content := `
+platform:
+  database_url: "postgres://user:pass@localhost:5432/testdb"
+apps:
+  - name: my-app
+    auth:
+      jwt_secret: "supersecret"
+    tables:
+      - name: users
+        columns:
+          - name: id
+            type: uuid
+            required: true
+          - name: email
+            type: text
+        indexes:
+          - name: idx_users_email
+            columns: [email]
+            unique: true
+`
+	path := writeYAML(t, content)
+	if _, err := Load(path); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+}
+
+func TestLoadIndexUnknownColumn(t *testing.T) {
+	content := `
+platform:
+  database_url: "postgres://user:pass@localhost:5432/testdb"
+apps:
+  - name: my-app
+    auth:
+      jwt_secret: "supersecret"
+    tables:
+      - name: users
+        columns:
+          - name: id
+            type: uuid
+            required: true
+        indexes:
+          - name: idx_users_missing
+            columns: [does_not_exist]
+`
+	path := writeYAML(t, content)
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for index on unknown column, got nil")
 	}
 }

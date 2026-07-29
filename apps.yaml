@@ -27,7 +27,15 @@ apps:
         columns:
           - { name: amount,  type: decimal, required: true }
           - { name: method,  type: text,    required: true }
-          - { name: invoice, type: uuid,    required: true }
+          - name: invoice
+            type: uuid
+            required: true
+            references:                                  # FK para outra tabela do mesmo app
+              table: invoices
+              column: id
+              on_delete: cascade                          # cascade | restrict | set_null | no_action (default)
+        indexes:
+          - { name: idx_payments_invoice, columns: [invoice] }
 
   # ─── App sem autenticação de usuários (apenas JWT fixo) ─────────────
   - name: inventory
@@ -43,10 +51,15 @@ apps:
           - { name: unit, type: text, default: "un" }
       - name: movements
         columns:
-          - { name: product,  type: uuid,   required: true }
+          - name: product
+            type: uuid
+            required: true
+            references: { table: products, column: id, on_delete: restrict }
           - { name: quantity, type: integer, required: true }
           - { name: type,     type: text,    required: true }
           - { name: reference, type: text }
+        indexes:
+          - { name: idx_movements_product_type, columns: [product, type] }  # índice composto
 
   # ─── App com object storage para upload de arquivos ─────────────────
   # Requer as variáveis STORAGE_* no .env para funcionar.

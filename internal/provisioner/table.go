@@ -2,8 +2,11 @@ package provisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 )
@@ -41,8 +44,24 @@ func pgType(t string) string {
 	}
 }
 
-// Single quotes in DEFAULT value are escaped by doubling them ('').
-func columnDDL(col config.ColumnConfig) string {
+// onDeleteSQL translates a ReferenceConfig.OnDelete value to its SQL clause.
+func onDeleteSQL(onDelete string) string {
+	switch onDelete {
+	case "cascade":
+		return "CASCADE"
+	case "restrict":
+		return "RESTRICT"
+	case "set_null":
+		return "SET NULL"
+	default:
+		return "NO ACTION"
+	}
+}
+
+// Single quotes in DEFAULT value are escaped by doubling them (''). schemaName
+// is needed to schema-qualify REFERENCES targets (references are intra-app,
+// so the target table lives in the same schema as this column's table).
+func columnDDL(schemaName string, col config.ColumnConfig) string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("%q %s", col.Name, pgType(col.Type)))
 
@@ -55,6 +74,9 @@ func columnDDL(col config.ColumnConfig) string {
 	}
 	if col.Unique {
 		sb.WriteString(" UNIQUE")
+	}
+	if col.References != nil {
+		sb.WriteString(fmt.Sprintf(" REFERENCES %q.%q(%q) ON DELETE %s", schemaName, col.References.Table, col.References.Column, onDeleteSQL(col.References.OnDelete)))
 	}
 
 	return sb.String()
@@ -85,7 +107,7 @@ func (p *Provisioner) createTable(ctx context.Context, schemaName, tableName str
 		if systemColumnNames[col.Name] {
 			continue
 		}
-		colDefs = append(colDefs, columnDDL(col))
+		colDefs = append(colDefs, columnDDL(schemaName, col))
 	}
 
 	if rls == "owner" || rls == "enabled" {
@@ -111,9 +133,49 @@ func (p *Provisioner) createTable(ctx context.Context, schemaName, tableName str
 	return true, nil
 }
 
+// checkDependents returns a description of any foreign key in the same
+// schema that still references tableName, so DropTable can refuse to run
+// instead of silently cascading or failing with a raw Postgres FK-violation
+// error.
+func (p *Provisioner) checkDependents(ctx context.Context, schemaName, tableName string) (string, error) {
+	var dependentTable, dependentColumn string
+	err := p.pool.QueryRow(ctx,
+		`SELECT tc.table_name, kcu.column_name
+		 FROM information_schema.table_constraints tc
+		 JOIN information_schema.key_column_usage kcu
+		   ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+		 JOIN information_schema.constraint_column_usage ccu
+		   ON tc.constraint_name = ccu.constraint_name AND tc.table_schema = ccu.table_schema
+		 WHERE tc.constraint_type = 'FOREIGN KEY'
+		   AND tc.table_schema = $1
+		   AND ccu.table_name = $2
+		   AND tc.table_name != $2
+		 LIMIT 1`,
+		schemaName, tableName,
+	).Scan(&dependentTable, &dependentColumn)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", nil
+		}
+		return "", fmt.Errorf("table: check dependents of %q.%q: %w", schemaName, tableName, err)
+	}
+	return fmt.Sprintf("%s.%s", dependentTable, dependentColumn), nil
+}
+
 // DropTable drops a table if it exists. Used when a single table is removed
-// from an app without touching the app's other tables.
+// from an app without touching the app's other tables. Refuses to drop a
+// table still referenced by another table's foreign key — the dependent FK
+// must be removed first (own apply or prior apply), rather than silently
+// leaving a dangling reference or failing with a raw Postgres error.
 func (p *Provisioner) DropTable(ctx context.Context, schemaName, tableName string) error {
+	dependent, err := p.checkDependents(ctx, schemaName, tableName)
+	if err != nil {
+		return err
+	}
+	if dependent != "" {
+		return fmt.Errorf("table: cannot drop %q.%q: still referenced by %s", schemaName, tableName, dependent)
+	}
+
 	sql := fmt.Sprintf(`DROP TABLE IF EXISTS %q.%q`, schemaName, tableName)
 	if _, err := p.pool.Exec(ctx, sql); err != nil {
 		return fmt.Errorf("table: drop %q.%q: %w", schemaName, tableName, err)
@@ -157,7 +219,7 @@ func (p *Provisioner) addMissingColumns(ctx context.Context, schemaName, tableNa
 		sql := fmt.Sprintf(
 			`ALTER TABLE %q.%q ADD COLUMN IF NOT EXISTS %s`,
 			schemaName, tableName,
-			columnDDL(col),
+			columnDDL(schemaName, col),
 		)
 		if _, err := p.pool.Exec(ctx, sql); err != nil {
 			return nil, fmt.Errorf("table: add column %q to %q.%q: %w", col.Name, schemaName, tableName, err)
