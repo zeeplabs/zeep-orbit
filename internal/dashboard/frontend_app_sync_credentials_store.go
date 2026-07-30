@@ -11,15 +11,15 @@ import (
 )
 
 type SyncCredential struct {
-	ID                   string    `json:"id"`
-	FrontendAppID        string    `json:"frontend_app_id"`
-	GithubKeyID          *int64    `json:"github_key_id,omitempty"`
-	PublicKey            string    `json:"public_key"`
-	PrivateKeyEncrypted  string    `json:"-"`
-	SyncStatus           string    `json:"sync_status"`
-	ErrorMessage         string    `json:"error_message,omitempty"`
-	CreatedAt            time.Time `json:"created_at"`
-	UpdatedAt            time.Time `json:"updated_at"`
+	ID                  string    `json:"id"`
+	FrontendAppID       string    `json:"frontend_app_id"`
+	GithubKeyID         *int64    `json:"github_key_id,omitempty"`
+	PublicKey           string    `json:"public_key"`
+	PrivateKeyEncrypted string    `json:"-"`
+	SyncStatus          string    `json:"sync_status"`
+	ErrorMessage        string    `json:"error_message,omitempty"`
+	CreatedAt           time.Time `json:"created_at"`
+	UpdatedAt           time.Time `json:"updated_at"`
 }
 
 func CreateSyncCredential(ctx context.Context, pool *db.Pool, frontendAppID string) error {

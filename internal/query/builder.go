@@ -68,18 +68,18 @@ var systemFields = map[string]string{
 
 // operatorMap mapeia prefixo de operador → SQL operator.
 var operatorMap = map[string]string{
-	"eq.":   "=",
-	"ne.":   "!=",
-	"gt.":   ">",
-	"gte.":  ">=",
-	"lt.":   "<",
-	"lte.":  "<=",
-	"like.": "LIKE",
+	"eq.":    "=",
+	"ne.":    "!=",
+	"gt.":    ">",
+	"gte.":   ">=",
+	"lt.":    "<",
+	"lte.":   "<=",
+	"like.":  "LIKE",
 	"ilike.": "ILIKE",
 }
 
-//   - order={field}.asc|{field}.desc: sorting; field must exist in the table
-//   - softDelete=true: automatically filters WHERE deleted_at IS NULL (unless ?deleted=true)
+// - order={field}.asc|{field}.desc: sorting; field must exist in the table
+// - softDelete=true: automatically filters WHERE deleted_at IS NULL (unless ?deleted=true)
 func BuildList(schemaName, tableName string, table *registry.Table, params map[string]string, ownerID string, softDelete bool) (*ListQuery, error) {
 	const defaultLimit = 50
 	const maxLimit = 1000

@@ -17,7 +17,7 @@ type GlobalStorageConfig struct {
 }
 
 type SystemConfig struct {
-	SoftDeleteEnabled bool                `json:"soft_delete_enabled"`
+	SoftDeleteEnabled bool                 `json:"soft_delete_enabled"`
 	StorageConfig     *GlobalStorageConfig `json:"storage_config,omitempty"`
 }
 

@@ -21,10 +21,11 @@ func New(pool *db.Pool) *Provisioner {
 
 // Report describes what was created or changed during an Apply.
 type Report struct {
-	SchemasCreated  []string
-	TablesCreated   []string
-	ColumnsAdded    []string
-	ColumnsChanged  []string
+	SchemasCreated []string
+	TablesCreated  []string
+	ColumnsAdded   []string
+	ColumnsChanged []string
+	IndexesCreated []string
 }
 
 // Idempotent: safe to call multiple times with no side effects.
@@ -58,27 +59,37 @@ func (p *Provisioner) Apply(ctx context.Context, cfg *config.Config) (*Report, e
 			report.TablesCreated = append(report.TablesCreated, storageCreated...)
 		}
 
-		for _, table := range app.Tables {
+		orderedTables, err := topoSortTables(app.Tables)
+		if err != nil {
+			return nil, fmt.Errorf("provisioner: app %q: %w", app.Name, err)
+		}
+
+		for _, table := range orderedTables {
 			tableCreated, err := p.createTable(ctx, schemaName, table.Name, table.Columns, table.RLS)
 			if err != nil {
 				return nil, fmt.Errorf("provisioner: app %q table %q: %w", app.Name, table.Name, err)
 			}
-			if tableCreated {
+			if !tableCreated {
+				changed, err := p.applyColumnChanges(ctx, schemaName, table.Name, table.Columns, table.RLS)
+				if err != nil {
+					return nil, fmt.Errorf("provisioner: app %q table %q apply changes: %w", app.Name, table.Name, err)
+				}
+				report.ColumnsChanged = append(report.ColumnsChanged, changed...)
+
+				added, err := p.addMissingColumns(ctx, schemaName, table.Name, table.Columns, table.RLS)
+				if err != nil {
+					return nil, fmt.Errorf("provisioner: app %q table %q add columns: %w", app.Name, table.Name, err)
+				}
+				report.ColumnsAdded = append(report.ColumnsAdded, added...)
+			} else {
 				report.TablesCreated = append(report.TablesCreated, fmt.Sprintf("%s.%s", schemaName, table.Name))
-				continue
 			}
 
-			changed, err := p.applyColumnChanges(ctx, schemaName, table.Name, table.Columns, table.RLS)
+			indexesCreated, err := p.ensureIndexes(ctx, schemaName, table.Name, table.Indexes)
 			if err != nil {
-				return nil, fmt.Errorf("provisioner: app %q table %q apply changes: %w", app.Name, table.Name, err)
+				return nil, fmt.Errorf("provisioner: app %q table %q indexes: %w", app.Name, table.Name, err)
 			}
-			report.ColumnsChanged = append(report.ColumnsChanged, changed...)
-
-			added, err := p.addMissingColumns(ctx, schemaName, table.Name, table.Columns, table.RLS)
-			if err != nil {
-				return nil, fmt.Errorf("provisioner: app %q table %q add columns: %w", app.Name, table.Name, err)
-			}
-			report.ColumnsAdded = append(report.ColumnsAdded, added...)
+			report.IndexesCreated = append(report.IndexesCreated, indexesCreated...)
 		}
 	}
 

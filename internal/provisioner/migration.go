@@ -9,17 +9,43 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 )
 
-// Key = source type, value = allowed target types.
+// Key = source type, value = allowed target types. Every pair here relies on
+// PostgreSQL's implicit/assignment cast via `USING col::type` succeeding for
+// all pre-existing values, not just new ones — see per-entry rationale below.
+// Pairs of pgTypeToUDT not listed were evaluated and excluded (rationale
+// inline at the bottom of this block) rather than omitted by oversight.
 var safeTypeConversions = map[string][]string{
-	"int4":        {"int8", "numeric", "text"},
-	"int8":        {"numeric", "text"},
-	"numeric":     {"text"},
-	"text":        {},
-	"bool":        {"text"},
-	"uuid":        {"text"},
+	// int4 -> int8/numeric: strictly widening, every int4 value fits.
+	// int4 -> text: any integer has an unambiguous decimal representation.
+	"int4": {"int8", "numeric", "text"},
+	// int8 -> numeric: widening (numeric is unbounded precision).
+	// int8 -> text: same rationale as int4 -> text.
+	"int8": {"numeric", "text"},
+	// numeric -> text: always representable; no int8/int4 target because
+	// numeric may hold values or scale that overflow/truncate on downcast.
+	"numeric": {"text"},
+	// text has no safe automatic target: a text column may hold arbitrary
+	// strings, so casting to any narrower type risks a runtime failure that
+	// depends entirely on existing data — left to TypeChangeError's runtime
+	// failure path rather than a false "safe" guarantee here.
+	"text": {},
+	// bool -> text: "true"/"false" is a lossless, unambiguous representation.
+	"bool": {"text"},
+	// uuid -> text: canonical UUID string form is lossless.
+	"uuid": {"text"},
+	// timestamptz -> text: ISO 8601 representation is lossless.
 	"timestamptz": {"text"},
-	"jsonb":       {"text"},
+	// jsonb -> text: serialized JSON text is lossless.
+	"jsonb": {"text"},
 }
+
+// Pairs evaluated and excluded from safeTypeConversions (pgTypeToUDT covers
+// int4, int8, numeric, text, bool, uuid, timestamptz, jsonb):
+//   - numeric/int8 -> int4, numeric -> int8: narrowing, may overflow — unsafe by definition.
+//   - text -> anything: source may contain data incompatible with the target type — unsafe by definition.
+//   - bool/uuid/timestamptz/jsonb -> int4/int8/numeric: no meaningful implicit cast — unsafe by definition.
+//   - bool -> uuid/timestamptz/jsonb, uuid -> bool/timestamptz/jsonb, timestamptz -> bool/uuid/jsonb: unrelated domains — unsafe by definition.
+//   - jsonb -> bool/uuid/timestamptz: would require the JSON value to already encode that exact scalar — not guaranteed, unsafe by definition.
 
 // pgTypeToUDT converts the output of pgType() to udt_name from information_schema.
 func pgTypeToUDT(ddlType string) string {
@@ -131,8 +157,7 @@ func (p *Provisioner) applyTypeChange(ctx context.Context, schemaName, tableName
 
 	safeTargets, ok := safeTypeConversions[currentType]
 	if !ok {
-		return "", fmt.Errorf("cannot change type of %q from %s to %s: source type %s has no defined conversions",
-			col.Name, currentType, desiredType, currentType)
+		return "", &TypeChangeError{Column: col.Name, CurrentType: currentType, DesiredType: desiredType, Reason: ReasonNoConversionsDefined}
 	}
 
 	isSafe := false
@@ -143,8 +168,7 @@ func (p *Provisioner) applyTypeChange(ctx context.Context, schemaName, tableName
 		}
 	}
 	if !isSafe {
-		return "", fmt.Errorf("cannot change type of %q from %s to %s: unsafe conversion (would narrow or lose data)",
-			col.Name, currentType, desiredType)
+		return "", &TypeChangeError{Column: col.Name, CurrentType: currentType, DesiredType: desiredType, Reason: ReasonUnsafeNarrowing}
 	}
 
 	targetType := pgType(col.Type)
@@ -152,7 +176,7 @@ func (p *Provisioner) applyTypeChange(ctx context.Context, schemaName, tableName
 		schemaName, tableName, col.Name, targetType, col.Name, strings.ToLower(targetType))
 
 	if _, err := p.pool.Exec(ctx, sql); err != nil {
-		return "", fmt.Errorf("change type of %q from %s to %s: %w", col.Name, currentType, desiredType, err)
+		return "", &TypeChangeError{Column: col.Name, CurrentType: currentType, DesiredType: desiredType, Reason: ReasonRuntimeFailure, Cause: err}
 	}
 
 	mid := migrationID(schemaName, tableName, "altertype", col.Name, desiredType)

@@ -111,7 +111,7 @@ func (h *Handler) HandleFileUpload(w http.ResponseWriter, r *http.Request) {
 	schemaName := "app_" + app.Config.Name
 	key := fmt.Sprintf("%s/%s%s", schemaName, fileID, ext)
 
-	s3Client, err := 	h.newStorageClient(r.Context(), app)
+	s3Client, err := h.newStorageClient(r.Context(), app)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage client error")
 		return
@@ -280,7 +280,7 @@ func (h *Handler) HandleFileDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s3Client, err := 	h.newStorageClient(r.Context(), app)
+	s3Client, err := h.newStorageClient(r.Context(), app)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage client error")
 		return
@@ -336,7 +336,7 @@ func (h *Handler) HandleFileDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s3Client, err := 	h.newStorageClient(r.Context(), app)
+	s3Client, err := h.newStorageClient(r.Context(), app)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage client error")
 		return
@@ -400,7 +400,7 @@ func (h *Handler) HandleFileSignedURL(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	s3Client, err := 	h.newStorageClient(r.Context(), app)
+	s3Client, err := h.newStorageClient(r.Context(), app)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "storage client error")
 		return

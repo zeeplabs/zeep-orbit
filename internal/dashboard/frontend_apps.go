@@ -282,9 +282,9 @@ func (h *FrontendAppsHandler) Retry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	meta, _ := json.Marshal(map[string]string{
-		"slug":         app.Slug,
-		"github_repo":  repoURL,
-		"new_status":   status,
+		"slug":        app.Slug,
+		"github_repo": repoURL,
+		"new_status":  status,
 	})
 	h.audit(r.Context(), user.ID, user.Email, "frontend_app.retry", "frontend_app", app.ID, app.Name, meta, r.RemoteAddr)
 

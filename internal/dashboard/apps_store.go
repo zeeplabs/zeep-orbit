@@ -15,26 +15,27 @@ import (
 
 // JWTSecret is omitted from JSON when empty (list responses never populate it).
 type AppRow struct {
-	ID               string                   `json:"id"`
-	Name             string                   `json:"name"`
-	JWTSecret        string                   `json:"jwt_secret,omitempty"`
-	AuthEmailEnabled bool                     `json:"auth_email_enabled"`
-	AuthProviders    json.RawMessage          `json:"auth_providers,omitempty"`
-	StorageConfig    *storage.StorageConfig   `json:"storage_config,omitempty"`
-	RateLimit        *config.RateLimitConfig  `json:"rate_limit,omitempty"`
-	OwnerID          string                   `json:"owner_id"`
-	OwnerEmail       string                   `json:"owner_email,omitempty"`
-	OwnerName        string                   `json:"owner_name,omitempty"`
-	CreatedAt        time.Time                `json:"created_at"`
-	Tables           []AppTableRow            `json:"tables"`
+	ID               string                  `json:"id"`
+	Name             string                  `json:"name"`
+	JWTSecret        string                  `json:"jwt_secret,omitempty"`
+	AuthEmailEnabled bool                    `json:"auth_email_enabled"`
+	AuthProviders    json.RawMessage         `json:"auth_providers,omitempty"`
+	StorageConfig    *storage.StorageConfig  `json:"storage_config,omitempty"`
+	RateLimit        *config.RateLimitConfig `json:"rate_limit,omitempty"`
+	OwnerID          string                  `json:"owner_id"`
+	OwnerEmail       string                  `json:"owner_email,omitempty"`
+	OwnerName        string                  `json:"owner_name,omitempty"`
+	CreatedAt        time.Time               `json:"created_at"`
+	Tables           []AppTableRow           `json:"tables"`
 }
 
 // AppTableRow represents a row from zeep_system.app_tables.
 type AppTableRow struct {
-	ID      string              `json:"id"`
-	Name    string              `json:"name"`
-	RLS     string              `json:"rls"`
+	ID      string                `json:"id"`
+	Name    string                `json:"name"`
+	RLS     string                `json:"rls"`
 	Columns []config.ColumnConfig `json:"columns"`
+	Indexes []config.IndexConfig  `json:"indexes"`
 }
 
 // superadmin → all apps; admin → only apps owned by userID or listed in app_ownership.
@@ -318,7 +319,7 @@ func ListOwnedAppNames(ctx context.Context, pool *db.Pool, userID, role string) 
 // loadAppTables fetches all tables for a given app ID from the pool (not in a transaction).
 func loadAppTables(ctx context.Context, pool *db.Pool, appID string) ([]AppTableRow, error) {
 	rows, err := pool.Query(ctx,
-		`SELECT id, name, rls, columns FROM zeep_system.app_tables WHERE app_id = $1 ORDER BY name`,
+		`SELECT id, name, rls, columns, indexes FROM zeep_system.app_tables WHERE app_id = $1 ORDER BY name`,
 		appID,
 	)
 	if err != nil {
@@ -330,42 +331,59 @@ func loadAppTables(ctx context.Context, pool *db.Pool, appID string) ([]AppTable
 
 // InsertAppTable creates a single table for an app and returns the saved row.
 func InsertAppTable(ctx context.Context, pool *db.Pool, appID string, t AppTableRow) (AppTableRow, error) {
+	if t.Indexes == nil {
+		t.Indexes = []config.IndexConfig{}
+	}
 	colsJSON, err := json.Marshal(t.Columns)
 	if err != nil {
 		return AppTableRow{}, fmt.Errorf("dashboard: marshal columns for table %q: %w", t.Name, err)
 	}
+	idxJSON, err := json.Marshal(t.Indexes)
+	if err != nil {
+		return AppTableRow{}, fmt.Errorf("dashboard: marshal indexes for table %q: %w", t.Name, err)
+	}
 	var row AppTableRow
 	err = pool.QueryRow(ctx,
-		`INSERT INTO zeep_system.app_tables (app_id, name, rls, columns)
-		 VALUES ($1, $2, $3, $4)
-		 RETURNING id, name, rls, columns`,
-		appID, t.Name, t.RLS, colsJSON,
-	).Scan(&row.ID, &row.Name, &row.RLS, &colsJSON)
+		`INSERT INTO zeep_system.app_tables (app_id, name, rls, columns, indexes)
+		 VALUES ($1, $2, $3, $4, $5)
+		 RETURNING id, name, rls, columns, indexes`,
+		appID, t.Name, t.RLS, colsJSON, idxJSON,
+	).Scan(&row.ID, &row.Name, &row.RLS, &colsJSON, &idxJSON)
 	if err != nil {
 		return AppTableRow{}, fmt.Errorf("dashboard: insert app table %q: %w", t.Name, err)
 	}
 	if err := json.Unmarshal(colsJSON, &row.Columns); err != nil {
 		return AppTableRow{}, fmt.Errorf("dashboard: unmarshal columns for table %q: %w", t.Name, err)
 	}
+	if err := json.Unmarshal(idxJSON, &row.Indexes); err != nil {
+		return AppTableRow{}, fmt.Errorf("dashboard: unmarshal indexes for table %q: %w", t.Name, err)
+	}
 	return row, nil
 }
 
-// UpdateAppTable updates rls/columns of an existing table. The table name is
-// immutable once created — renaming would require renaming the physical
-// table too, out of scope here.
-func UpdateAppTable(ctx context.Context, pool *db.Pool, appID, tableID, rls string, columns []config.ColumnConfig) (AppTableRow, error) {
+// UpdateAppTable updates rls/columns/indexes of an existing table. The table
+// name is immutable once created — renaming would require renaming the
+// physical table too, out of scope here.
+func UpdateAppTable(ctx context.Context, pool *db.Pool, appID, tableID, rls string, columns []config.ColumnConfig, indexes []config.IndexConfig) (AppTableRow, error) {
+	if indexes == nil {
+		indexes = []config.IndexConfig{}
+	}
 	colsJSON, err := json.Marshal(columns)
 	if err != nil {
 		return AppTableRow{}, fmt.Errorf("dashboard: marshal columns for table %s: %w", tableID, err)
 	}
+	idxJSON, err := json.Marshal(indexes)
+	if err != nil {
+		return AppTableRow{}, fmt.Errorf("dashboard: marshal indexes for table %s: %w", tableID, err)
+	}
 	var row AppTableRow
 	err = pool.QueryRow(ctx,
 		`UPDATE zeep_system.app_tables
-		 SET rls = $3, columns = $4
+		 SET rls = $3, columns = $4, indexes = $5
 		 WHERE id = $1 AND app_id = $2
-		 RETURNING id, name, rls, columns`,
-		tableID, appID, rls, colsJSON,
-	).Scan(&row.ID, &row.Name, &row.RLS, &colsJSON)
+		 RETURNING id, name, rls, columns, indexes`,
+		tableID, appID, rls, colsJSON, idxJSON,
+	).Scan(&row.ID, &row.Name, &row.RLS, &colsJSON, &idxJSON)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return AppTableRow{}, ErrNotFound
@@ -374,6 +392,9 @@ func UpdateAppTable(ctx context.Context, pool *db.Pool, appID, tableID, rls stri
 	}
 	if err := json.Unmarshal(colsJSON, &row.Columns); err != nil {
 		return AppTableRow{}, fmt.Errorf("dashboard: unmarshal columns for table %s: %w", tableID, err)
+	}
+	if err := json.Unmarshal(idxJSON, &row.Indexes); err != nil {
+		return AppTableRow{}, fmt.Errorf("dashboard: unmarshal indexes for table %s: %w", tableID, err)
 	}
 	return row, nil
 }
@@ -403,12 +424,15 @@ func scanAppTableRows(rows pgx.Rows) ([]AppTableRow, error) {
 	result := make([]AppTableRow, 0)
 	for rows.Next() {
 		var t AppTableRow
-		var colsJSON []byte
-		if err := rows.Scan(&t.ID, &t.Name, &t.RLS, &colsJSON); err != nil {
+		var colsJSON, idxJSON []byte
+		if err := rows.Scan(&t.ID, &t.Name, &t.RLS, &colsJSON, &idxJSON); err != nil {
 			return nil, fmt.Errorf("dashboard: scan app table row: %w", err)
 		}
 		if err := json.Unmarshal(colsJSON, &t.Columns); err != nil {
 			return nil, fmt.Errorf("dashboard: unmarshal columns: %w", err)
+		}
+		if err := json.Unmarshal(idxJSON, &t.Indexes); err != nil {
+			return nil, fmt.Errorf("dashboard: unmarshal indexes: %w", err)
 		}
 		result = append(result, t)
 	}

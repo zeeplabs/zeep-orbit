@@ -64,12 +64,6 @@ spec:
             - name: BRAND_COMPANY_NAME
               value: {{ .Values.brand.companyName | quote }}
 
-          volumeMounts:
-            - name: config
-              mountPath: /app/apps.yaml
-              subPath: apps.yaml
-              readOnly: true
-
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
 
@@ -88,11 +82,6 @@ spec:
             initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
             periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
             failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
-
-      volumes:
-        - name: config
-          configMap:
-            name: {{ include "zeep-orbit.fullname" . }}
 
       {{- with .Values.nodeSelector }}
       nodeSelector:

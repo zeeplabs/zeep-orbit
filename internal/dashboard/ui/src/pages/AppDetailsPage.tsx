@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { Trans } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
 import { ArrowLeft, Plus, Eye, EyeOff, Copy, Table2, Key, RefreshCw, X, AlertTriangle } from "lucide-react";
 import {
@@ -23,6 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TableCard from "@/components/TableCard";
 
 export default function AppDetailsPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { id } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -32,13 +33,13 @@ export default function AppDetailsPage() {
   const { data: app, isLoading } = useApp(id!);
 
   if (isLoading) {
-    return <p className="text-sm text-[#94A3B8]">Carregando...</p>;
+    return <p className="text-sm text-[#94A3B8]">{t("app.loading")}</p>;
   }
 
   if (!app) {
     return (
       <div className="rounded-2xl border border-red-500/[0.18] bg-red-500/[0.06] px-6 py-5 text-sm text-red-400">
-        App não encontrado.
+        {t("appForm.notFound")}
       </div>
     );
   }
@@ -55,7 +56,7 @@ export default function AppDetailsPage() {
         className="mb-6 flex items-center gap-2 text-[13px] text-[#94A3B8] hover:text-white transition-colors bg-transparent border-none cursor-pointer"
       >
         <ArrowLeft size={14} strokeWidth={1.5} />
-        Voltar para Apps
+        {t("appForm.back")}
       </button>
 
       <div className="mb-8">
@@ -71,7 +72,7 @@ export default function AppDetailsPage() {
         </span>
         <h2 className="text-[22px] font-extrabold text-[#F8FAFC]">"{app.name}"</h2>
         <p className="mt-1 text-sm text-[#94A3B8]">
-          Cada bloco salva de forma independente — tabelas, uma por vez.
+          {t("appDetails.subtitle")}
         </p>
       </div>
 
@@ -81,31 +82,31 @@ export default function AppDetailsPage() {
             value="database"
             className="rounded-xl px-4 py-2 text-[13px] font-semibold text-[#94A3B8] data-[state=active]:bg-white/[0.08] data-[state=active]:text-[#F8FAFC] data-[state=active]:shadow-none"
           >
-            Banco de Dados
+            {t("appForm.tabDatabase")}
           </TabsTrigger>
           <TabsTrigger
             value="auth"
             className="rounded-xl px-4 py-2 text-[13px] font-semibold text-[#94A3B8] data-[state=active]:bg-white/[0.08] data-[state=active]:text-[#F8FAFC] data-[state=active]:shadow-none"
           >
-            Provedores de Login
+            {t("appForm.tabAuth")}
           </TabsTrigger>
           <TabsTrigger
             value="storage"
             className="rounded-xl px-4 py-2 text-[13px] font-semibold text-[#94A3B8] data-[state=active]:bg-white/[0.08] data-[state=active]:text-[#F8FAFC] data-[state=active]:shadow-none"
           >
-            Storage (S3)
+            {t("appForm.tabStorage")}
           </TabsTrigger>
           <TabsTrigger
             value="api"
             className="rounded-xl px-4 py-2 text-[13px] font-semibold text-[#94A3B8] data-[state=active]:bg-white/[0.08] data-[state=active]:text-[#F8FAFC] data-[state=active]:shadow-none"
           >
-            API
+            {t("appForm.tabApi")}
           </TabsTrigger>
           <TabsTrigger
             value="tokens"
             className="rounded-xl px-4 py-2 text-[13px] font-semibold text-[#94A3B8] data-[state=active]:bg-white/[0.08] data-[state=active]:text-[#F8FAFC] data-[state=active]:shadow-none"
           >
-            Tokens
+            {t("appDetails.tabTokens")}
           </TabsTrigger>
         </TabsList>
 
@@ -134,6 +135,7 @@ function emptyDraftTable(): TableDef {
 }
 
 function DatabaseTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]> }) {
+  const { t } = useTranslation();
   const [draftTable, setDraftTable] = useState<TableDef | null>(null);
   const [editingKey, setEditingKey] = useState<string | null>(null);
 
@@ -154,7 +156,7 @@ function DatabaseTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data
             className="h-6 w-1 rounded-full"
             style={{ background: "linear-gradient(to bottom, var(--brand-primary), var(--brand-secondary))" }}
           />
-          <p className="text-[15px] font-extrabold text-[#F8FAFC]">Tabelas</p>
+          <p className="text-[15px] font-extrabold text-[#F8FAFC]">{t("appForm.tables")}</p>
         </div>
         <button
           type="button"
@@ -163,15 +165,15 @@ function DatabaseTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data
           className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-white/[0.12] bg-white/[0.05] text-[#F8FAFC] text-[13px] font-medium cursor-pointer hover:bg-white/[0.08] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Plus size={14} strokeWidth={2} />
-          Adicionar Tabela
+          {t("appForm.addTable")}
         </button>
       </div>
 
       {app.tables.length === 0 && !draftTable && (
         <div className="flex flex-col items-center justify-center gap-2 py-10 text-center text-[#94A3B8]">
           <Table2 size={18} strokeWidth={1} className="opacity-40" />
-          <p className="text-[13px] font-medium">Nenhuma tabela</p>
-          <p className="text-[11px]">Adicione tabelas para começar a estruturar seu app</p>
+          <p className="text-[13px] font-medium">{t("appForm.noTables")}</p>
+          <p className="text-[11px]">{t("appForm.noTablesDesc")}</p>
         </div>
       )}
 
@@ -180,6 +182,7 @@ function DatabaseTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data
           <TableCard
             key={t.id}
             table={t}
+            otherTables={app.tables.filter((other) => other.id && other.id !== t.id)}
             authEmailEnabled={app.auth_email_enabled}
             locked={editingKey !== null && editingKey !== t.id}
             startInEdit={false}
@@ -197,6 +200,7 @@ function DatabaseTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data
           <TableCard
             key="draft"
             table={draftTable}
+            otherTables={app.tables.filter((other) => other.id)}
             authEmailEnabled={app.auth_email_enabled}
             locked={false}
             startInEdit
@@ -222,6 +226,7 @@ function DatabaseTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data
 }
 
 function LoginTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]> }) {
+  const { t } = useTranslation();
   const updateApp = useUpdateApp();
   const [authEmail, setAuthEmail] = useState(app.auth_email_enabled);
   const [googleEnabled, setGoogleEnabled] = useState(false);
@@ -264,19 +269,19 @@ function LoginTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]>
       await updateApp.mutateAsync(payload as any);
       setSaved(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao salvar");
+      setError(err instanceof Error ? err.message : t("common.errorSaving"));
     }
   }
 
   return (
     <div className="flex flex-col gap-4">
       <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-5 flex flex-col gap-4">
-        <h3 className="text-[13px] font-semibold text-[#94A3B8] uppercase tracking-wider">Provedores de Login</h3>
+        <h3 className="text-[13px] font-semibold text-[#94A3B8] uppercase tracking-wider">{t("appForm.authProviders")}</h3>
 
         <div className="flex items-center justify-between">
           <div className="flex flex-col gap-0.5">
-            <p className="text-sm font-semibold text-[#F8FAFC]">E-mail</p>
-            <p className="text-xs text-[#94A3B8]">Registro e login via email/senha</p>
+            <p className="text-sm font-semibold text-[#F8FAFC]">{t("appForm.email")}</p>
+            <p className="text-xs text-[#94A3B8]">{t("appForm.emailDesc")}</p>
           </div>
           <Switch checked={authEmail} onCheckedChange={setAuthEmail} className="shrink-0" />
         </div>
@@ -286,30 +291,30 @@ function LoginTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]>
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <div className="flex flex-col gap-0.5">
-              <p className="text-sm font-semibold text-[#F8FAFC]">Google</p>
-              <p className="text-xs text-[#94A3B8]">Login via conta Google</p>
+              <p className="text-sm font-semibold text-[#F8FAFC]">{t("appForm.google")}</p>
+              <p className="text-xs text-[#94A3B8]">{t("appForm.googleDesc")}</p>
             </div>
             <Switch checked={googleEnabled} onCheckedChange={setGoogleEnabled} className="shrink-0" />
           </div>
           {googleEnabled && (
             <div className="flex flex-col gap-3 border-t border-white/[0.06] pt-3">
               <div>
-                <Label className="text-[12px] font-medium text-[#94A3B8]">Client ID</Label>
+                <Label className="text-[12px] font-medium text-[#94A3B8]">{t("appForm.googleClientId")}</Label>
                 <Input
                   value={googleClientId}
                   onChange={(e) => setGoogleClientId(e.target.value)}
-                  placeholder="Google OAuth Client ID"
+                  placeholder={t("appDetails.googleClientIdPlaceholder")}
                   className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus mt-1"
                 />
               </div>
               <div>
-                <Label className="text-[12px] font-medium text-[#94A3B8]">Client Secret</Label>
+                <Label className="text-[12px] font-medium text-[#94A3B8]">{t("appForm.googleClientSecret")}</Label>
                 <div className="relative mt-1">
                   <Input
                     type={showGoogleSecret ? "text" : "password"}
                     value={googleClientSecret}
                     onChange={(e) => setGoogleClientSecret(e.target.value)}
-                    placeholder="Client Secret"
+                    placeholder={t("appDetails.googleClientSecretPlaceholder")}
                     className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus w-full pr-10"
                   />
                   <button
@@ -323,24 +328,24 @@ function LoginTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]>
                 </div>
               </div>
               <div>
-                <Label className="text-[12px] font-medium text-[#94A3B8]">Redirect URL</Label>
+                <Label className="text-[12px] font-medium text-[#94A3B8]">{t("appForm.googleRedirectUrl")}</Label>
                 <Input
                   value={googleRedirectUrl}
                   onChange={(e) => setGoogleRedirectUrl(e.target.value)}
                   placeholder={`https://seu-dominio.com/${app.name}/auth/google/callback`}
                   className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus mt-1"
                 />
-                <p className="text-[11px] text-[#64748B] mt-1">Configure este URL no Google Cloud Console</p>
+                <p className="text-[11px] text-[#64748B] mt-1">{t("appForm.googleRedirectHint")}</p>
               </div>
               <div>
-                <Label className="text-[12px] font-medium text-[#94A3B8]">Domínios permitidos</Label>
+                <Label className="text-[12px] font-medium text-[#94A3B8]">{t("appForm.googleDomains")}</Label>
                 <Input
                   value={googleAllowedDomains}
                   onChange={(e) => setGoogleAllowedDomains(e.target.value)}
-                  placeholder="zeeplabs.com, zeepfly.com"
+                  placeholder="zeeplabs.com, zeepfy.com"
                   className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus mt-1"
                 />
-                <p className="text-[11px] text-[#64748B] mt-1">Separados por vírgula. Vazio = qualquer domínio.</p>
+                <p className="text-[11px] text-[#64748B] mt-1">{t("appForm.googleDomainsHint")}</p>
               </div>
             </div>
           )}
@@ -354,6 +359,7 @@ function LoginTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]>
 }
 
 function StorageTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]> }) {
+  const { t } = useTranslation();
   const updateApp = useUpdateApp();
   const [globalStorage, setGlobalStorage] = useState(false);
   const [storageEnabled, setStorageEnabled] = useState(false);
@@ -409,29 +415,29 @@ function StorageTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"
       await updateApp.mutateAsync(payload as any);
       setSaved(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao salvar");
+      setError(err instanceof Error ? err.message : t("common.errorSaving"));
     }
   }
 
   return (
     <div className="flex flex-col gap-4">
       <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-5 flex flex-col gap-4">
-        <h3 className="text-[13px] font-semibold text-[#94A3B8] uppercase tracking-wider">Storage (S3)</h3>
+        <h3 className="text-[13px] font-semibold text-[#94A3B8] uppercase tracking-wider">{t("appForm.storageTitle")}</h3>
         <div className="flex items-center justify-between">
           <div className="flex flex-col gap-0.5">
-            <p className="text-sm font-semibold text-[#F8FAFC]">Habilitar storage</p>
-            <p className="text-xs text-[#94A3B8]">Permite upload de arquivos para este app</p>
+            <p className="text-sm font-semibold text-[#F8FAFC]">{t("appDetails.storageEnableTitle")}</p>
+            <p className="text-xs text-[#94A3B8]">{t("appDetails.storageEnableDesc")}</p>
           </div>
           <Switch checked={storageEnabled} onCheckedChange={setStorageEnabled} className="shrink-0" />
         </div>
         {storageEnabled && (
           <div className="flex flex-col gap-3 border-t border-white/[0.06] pt-3">
             <div>
-              <Label className="text-[12px] font-medium text-[#94A3B8]">Bucket</Label>
+              <Label className="text-[12px] font-medium text-[#94A3B8]">{t("appForm.storageBucket")}</Label>
               {globalStorage ? (
                 <>
                   <p className="text-[11px] text-[#94A3B8] mt-1 mb-1">
-                    Usando o storage global configurado pela plataforma.
+                    {t("appForm.storageGlobalHint")}
                   </p>
                   <Input
                     value={app.name}
@@ -451,7 +457,7 @@ function StorageTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"
             {!globalStorage && (
               <>
                 <div>
-                  <Label className="text-[12px] font-medium text-[#94A3B8]">Region</Label>
+                  <Label className="text-[12px] font-medium text-[#94A3B8]">{t("appForm.storageRegion")}</Label>
                   <Input
                     value={storageRegion}
                     onChange={(e) => setStorageRegion(e.target.value)}
@@ -460,7 +466,7 @@ function StorageTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"
                   />
                 </div>
                 <div>
-                  <Label className="text-[12px] font-medium text-[#94A3B8]">Endpoint</Label>
+                  <Label className="text-[12px] font-medium text-[#94A3B8]">{t("appForm.storageEndpoint")}</Label>
                   <Input
                     value={storageEndpoint}
                     onChange={(e) => setStorageEndpoint(e.target.value)}
@@ -469,7 +475,7 @@ function StorageTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"
                   />
                 </div>
                 <div>
-                  <Label className="text-[12px] font-medium text-[#94A3B8]">Access Key ID</Label>
+                  <Label className="text-[12px] font-medium text-[#94A3B8]">{t("appForm.storageAccessKey")}</Label>
                   <Input
                     value={storageAccessKey}
                     onChange={(e) => setStorageAccessKey(e.target.value)}
@@ -478,7 +484,7 @@ function StorageTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"
                   />
                 </div>
                 <div>
-                  <Label className="text-[12px] font-medium text-[#94A3B8]">Secret Access Key</Label>
+                  <Label className="text-[12px] font-medium text-[#94A3B8]">{t("appForm.storageSecretKey")}</Label>
                   <div className="relative mt-1">
                     <Input
                       type={showStorageSecret ? "text" : "password"}
@@ -517,6 +523,7 @@ function StorageTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"
 }
 
 function ApiTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]> }) {
+  const { t } = useTranslation();
   const updateApp = useUpdateApp();
   const [rateLimitEnabled, setRateLimitEnabled] = useState(false);
   const [rateLimitRPM, setRateLimitRPM] = useState(60);
@@ -543,7 +550,7 @@ function ApiTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]> }
       } as any);
       setSaved(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao salvar");
+      setError(err instanceof Error ? err.message : t("common.errorSaving"));
     }
   }
 
@@ -551,7 +558,7 @@ function ApiTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]> }
     <div className="flex flex-col gap-4">
       <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-5 flex flex-col gap-4">
         <h3 className="text-[13px] font-semibold text-[#94A3B8] uppercase tracking-wider">
-          Base da API
+          {t("appDetails.apiBaseTitle")}
         </h3>
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-2 bg-black/30 rounded-xl px-4 py-3">
@@ -571,18 +578,18 @@ function ApiTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]> }
       </div>
 
       <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-5 flex flex-col gap-4">
-        <h3 className="text-[13px] font-semibold text-[#94A3B8] uppercase tracking-wider">API</h3>
+        <h3 className="text-[13px] font-semibold text-[#94A3B8] uppercase tracking-wider">{t("appDetails.apiSectionTitle")}</h3>
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <div className="flex flex-col gap-0.5">
-              <p className="text-sm font-semibold text-[#F8FAFC]">Rate Limit</p>
-              <p className="text-xs text-[#94A3B8]">Limitar requisições por minuto por IP para este app</p>
+              <p className="text-sm font-semibold text-[#F8FAFC]">{t("appDetails.rateLimitTitle")}</p>
+              <p className="text-xs text-[#94A3B8]">{t("appDetails.rateLimitDesc")}</p>
             </div>
             <Switch checked={rateLimitEnabled} onCheckedChange={setRateLimitEnabled} className="shrink-0" />
           </div>
           {rateLimitEnabled && (
             <div className="flex flex-col gap-2 border-t border-white/[0.06] pt-3">
-              <Label className="text-[12px] font-medium text-[#94A3B8]">Requests per minute</Label>
+              <Label className="text-[12px] font-medium text-[#94A3B8]">{t("appDetails.requestsPerMinute")}</Label>
               <Input
                 type="number"
                 min={1}
@@ -591,7 +598,7 @@ function ApiTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]> }
                 onChange={(e) => setRateLimitRPM(parseInt(e.target.value) || 60)}
                 className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus w-32"
               />
-              <p className="text-[11px] text-[#94A3B8]">Máximo de requisições por IP a cada 60 segundos</p>
+              <p className="text-[11px] text-[#94A3B8]">{t("appDetails.rateLimitHint")}</p>
             </div>
           )}
         </div>
@@ -604,6 +611,7 @@ function ApiTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]> }
 }
 
 function TokensTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]> }) {
+  const { t } = useTranslation();
   const { data: tokens, isLoading } = useAppTokens(app.id);
   const createToken = useCreateAppToken(app.id);
   const revokeToken = useRevokeAppToken(app.id);
@@ -616,15 +624,15 @@ function TokensTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]
   if (app.auth_email_enabled) {
     return (
       <div className="rounded-2xl border border-yellow-500/[0.18] bg-yellow-500/[0.06] px-6 py-5 text-sm text-yellow-400">
-        App tokens estão disponíveis apenas para apps sem autenticação por e-mail.
+        {t("appDetails.tokensAuthWarning")}
       </div>
     );
   }
 
-  const statusBadge = (t: AppToken) => {
-    if (t.revoked_at) return <span className="text-[11px] font-medium text-red-400 bg-red-500/[0.12] px-2 py-0.5 rounded-full">Revogado</span>;
-    if (t.expires_at && new Date(t.expires_at) < new Date()) return <span className="text-[11px] font-medium text-yellow-400 bg-yellow-500/[0.12] px-2 py-0.5 rounded-full">Expirado</span>;
-    return <span className="text-[11px] font-medium text-emerald-400 bg-emerald-500/[0.12] px-2 py-0.5 rounded-full">Ativo</span>;
+  const statusBadge = (tok: AppToken) => {
+    if (tok.revoked_at) return <span className="text-[11px] font-medium text-red-400 bg-red-500/[0.12] px-2 py-0.5 rounded-full">{t("appDetails.tokenRevoked")}</span>;
+    if (tok.expires_at && new Date(tok.expires_at) < new Date()) return <span className="text-[11px] font-medium text-yellow-400 bg-yellow-500/[0.12] px-2 py-0.5 rounded-full">{t("appDetails.tokenExpired")}</span>;
+    return <span className="text-[11px] font-medium text-emerald-400 bg-emerald-500/[0.12] px-2 py-0.5 rounded-full">{t("appDetails.tokenActive")}</span>;
   };
 
   return (
@@ -635,7 +643,7 @@ function TokensTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]
             className="h-6 w-1 rounded-full"
             style={{ background: "linear-gradient(to bottom, var(--brand-primary), var(--brand-secondary))" }}
           />
-          <p className="text-[15px] font-extrabold text-[#F8FAFC]">Access Tokens</p>
+          <p className="text-[15px] font-extrabold text-[#F8FAFC]">{t("appDetails.tokensTitle")}</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -643,21 +651,21 @@ function TokensTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]
             onClick={() => setShowRegenerateConfirm(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-white/[0.12] bg-white/[0.05] text-[#94A3B8] text-[13px] font-medium cursor-pointer hover:text-white transition-colors"
           >
-            <RefreshCw size={14} /> Regenerar Secret
+            <RefreshCw size={14} /> {t("appDetails.regenerateSecret")}
           </button>
           <button
             type="button"
             onClick={() => setShowCreate(true)}
             className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-white/[0.12] bg-white/[0.05] text-[#F8FAFC] text-[13px] font-medium cursor-pointer hover:bg-white/[0.08] transition-colors"
           >
-            <Plus size={14} /> Novo Token
+            <Plus size={14} /> {t("appDetails.newToken")}
           </button>
         </div>
       </div>
 
       <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-4">
         <div className="flex items-center justify-between mb-2">
-          <p className="text-[12px] font-semibold text-[#94A3B8] uppercase tracking-wider">JWT Secret</p>
+          <p className="text-[12px] font-semibold text-[#94A3B8] uppercase tracking-wider">{t("appDetails.jwtSecretLabel")}</p>
           <button
             type="button"
             onClick={async () => {
@@ -674,7 +682,7 @@ function TokensTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]
             className="flex items-center gap-1 text-[11px] text-[#94A3B8] hover:text-white bg-transparent border-none cursor-pointer"
           >
             {revealedSecret ? <EyeOff size={13} /> : <Eye size={13} />}
-            {revealedSecret ? "Ocultar" : "Revelar"}
+            {revealedSecret ? t("appDetails.hide") : t("appDetails.reveal")}
           </button>
         </div>
         {revealedSecret ? (
@@ -690,38 +698,40 @@ function TokensTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]
             </button>
           </div>
         ) : (
-          <p className="text-xs text-[#64748B]">O secret é usado para assinar JWTs. Clique em "Revelar" para vê-lo.</p>
+          <p className="text-xs text-[#64748B]">{t("appDetails.jwtSecretHint")}</p>
         )}
       </div>
 
       <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-4">
-        <p className="text-[12px] font-semibold text-[#94A3B8] uppercase tracking-wider mb-3">Tokens</p>
+        <p className="text-[12px] font-semibold text-[#94A3B8] uppercase tracking-wider mb-3">{t("appDetails.tokensListTitle")}</p>
         {isLoading ? (
-          <p className="text-sm text-[#94A3B8]">Carregando...</p>
+          <p className="text-sm text-[#94A3B8]">{t("app.loading")}</p>
         ) : !tokens || tokens.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 py-8 text-center text-[#94A3B8]">
             <Key size={18} className="opacity-40" />
-            <p className="text-[13px] font-medium">Nenhum token</p>
-            <p className="text-[11px]">Crie um token para gerar um JWT</p>
+            <p className="text-[13px] font-medium">{t("appDetails.noTokens")}</p>
+            <p className="text-[11px]">{t("appDetails.noTokensDesc")}</p>
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            {tokens.map((t) => (
-              <div key={t.id} className="flex items-center justify-between bg-black/20 rounded-xl px-4 py-3">
+            {tokens.map((tok) => (
+              <div key={tok.id} className="flex items-center justify-between bg-black/20 rounded-xl px-4 py-3">
                 <div className="flex flex-col gap-0.5 min-w-0">
-                  <p className="text-sm font-semibold text-[#F8FAFC] truncate">{t.name}</p>
+                  <p className="text-sm font-semibold text-[#F8FAFC] truncate">{tok.name}</p>
                   <p className="text-[11px] text-[#64748B]">
-                    {t.expires_at ? `Expira ${new Date(t.expires_at).toLocaleDateString()}` : "Nunca expira"}
-                    {t.last_used_at && ` · Último uso ${new Date(t.last_used_at).toLocaleDateString()}`}
+                    {tok.expires_at
+                      ? t("appDetails.tokenExpires", { date: new Date(tok.expires_at).toLocaleDateString() })
+                      : t("appDetails.tokenNeverExpires")}
+                    {tok.last_used_at && ` ${t("appDetails.tokenLastUsed", { date: new Date(tok.last_used_at).toLocaleDateString() })}`}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  {statusBadge(t)}
-                  {!t.revoked_at && (
+                  {statusBadge(tok)}
+                  {!tok.revoked_at && (
                     <button
                       type="button"
                       title="Revoke token"
-                      onClick={() => revokeToken.mutate(t.id)}
+                      onClick={() => revokeToken.mutate(tok.id)}
                       className="p-1.5 rounded-lg hover:bg-white/[0.08] text-[#94A3B8] hover:text-red-400 transition-colors bg-transparent border-none cursor-pointer"
                     >
                       <X size={14} />
@@ -750,10 +760,10 @@ function TokensTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]
           <div className="bg-[#0F172A] border border-white/[0.08] rounded-2xl p-6 max-w-md w-full mx-4">
             <div className="flex items-center gap-3 mb-4">
               <AlertTriangle size={20} className="text-yellow-400" />
-              <p className="text-[15px] font-bold text-[#F8FAFC]">Regenerar JWT Secret</p>
+              <p className="text-[15px] font-bold text-[#F8FAFC]">{t("appDetails.regenerateTitle")}</p>
             </div>
             <p className="text-sm text-[#94A3B8] mb-6">
-              Todos os tokens existentes serão imediatamente invalidados. Esta ação não pode ser desfeita.
+              {t("appDetails.regenerateDesc")}
             </p>
             <div className="flex items-center justify-end gap-3">
               <button
@@ -761,7 +771,7 @@ function TokensTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]
                 onClick={() => setShowRegenerateConfirm(false)}
                 className="px-4 py-2 rounded-full border border-white/[0.12] text-[13px] text-[#94A3B8] cursor-pointer bg-transparent hover:text-white transition-colors"
               >
-                Cancelar
+                {t("appForm.cancel")}
               </button>
               <button
                 type="button"
@@ -777,7 +787,7 @@ function TokensTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]
                 className="px-4 py-2 rounded-full text-[13px] font-semibold text-white cursor-pointer disabled:opacity-50"
                 style={{ background: "linear-gradient(to right, #EF4444, #DC2626)" }}
               >
-                {regenerateSecret.isPending ? "Regenerando..." : "Confirmar Regeneração"}
+                {regenerateSecret.isPending ? t("appDetails.regenerating") : t("appDetails.regenerateConfirm")}
               </button>
             </div>
           </div>
@@ -788,6 +798,7 @@ function TokensTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]
 }
 
 function CreateTokenModal({ appId, onClose, onCreated }: { appId: string; onClose: () => void; onCreated: (jwt: string) => void }) {
+  const { t } = useTranslation();
   const createToken = useCreateAppToken(appId);
   const [name, setName] = useState("");
   const [expiration, setExpiration] = useState("30d");
@@ -799,35 +810,35 @@ function CreateTokenModal({ appId, onClose, onCreated }: { appId: string; onClos
       const res = await createToken.mutateAsync({ name, expiration: expiration as any });
       onCreated(res.token);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao criar token");
+      setError(err instanceof Error ? err.message : t("tableCard.saveError"));
     }
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className="bg-[#0F172A] border border-white/[0.08] rounded-2xl p-6 max-w-md w-full mx-4">
-        <p className="text-[15px] font-bold text-[#F8FAFC] mb-4">Novo Token</p>
+        <p className="text-[15px] font-bold text-[#F8FAFC] mb-4">{t("appDetails.newToken")}</p>
         <div className="flex flex-col gap-3">
           <div>
-            <Label className="text-[12px] font-medium text-[#94A3B8]">Nome</Label>
+            <Label className="text-[12px] font-medium text-[#94A3B8]">{t("appDetails.newTokenNameLabel")}</Label>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Ex: Production frontend"
+              placeholder={t("appDetails.newTokenNamePlaceholder")}
               className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] placeholder:text-white/30 brand-focus mt-1"
             />
           </div>
           <div>
-            <Label className="text-[12px] font-medium text-[#94A3B8]">Expiração</Label>
+            <Label className="text-[12px] font-medium text-[#94A3B8]">{t("appDetails.expirationLabel")}</Label>
             <select
               value={expiration}
               onChange={(e) => setExpiration(e.target.value)}
               className="h-10 rounded-md bg-white/[0.05] border border-white/[0.10] text-[#F8FAFC] brand-focus mt-1 w-full px-3"
             >
-              <option value="7d">7 dias</option>
-              <option value="30d">30 dias</option>
-              <option value="365d">365 dias</option>
-              <option value="never">Nunca expira</option>
+              <option value="7d">{t("appDetails.expiration7d")}</option>
+              <option value="30d">{t("appDetails.expiration30d")}</option>
+              <option value="365d">{t("appDetails.expiration365d")}</option>
+              <option value="never">{t("appDetails.tokenNeverExpires")}</option>
             </select>
           </div>
           {error && <p className="text-xs text-red-400">{error}</p>}
@@ -838,7 +849,7 @@ function CreateTokenModal({ appId, onClose, onCreated }: { appId: string; onClos
             onClick={onClose}
             className="px-4 py-2 rounded-full border border-white/[0.12] text-[13px] text-[#94A3B8] cursor-pointer bg-transparent hover:text-white transition-colors"
           >
-            Cancelar
+            {t("appForm.cancel")}
           </button>
           <button
             type="button"
@@ -847,7 +858,7 @@ function CreateTokenModal({ appId, onClose, onCreated }: { appId: string; onClos
             className="px-4 py-2 rounded-full text-[13px] font-semibold text-white cursor-pointer disabled:opacity-50"
             style={{ background: "linear-gradient(to right, var(--brand-primary), var(--brand-secondary))" }}
           >
-            {createToken.isPending ? "Criando..." : "Criar Token"}
+            {createToken.isPending ? t("appDetails.creatingToken") : t("appDetails.createToken")}
           </button>
         </div>
       </div>
@@ -856,6 +867,7 @@ function CreateTokenModal({ appId, onClose, onCreated }: { appId: string; onClos
 }
 
 function TokenRevealModal({ jwt, onClose }: { jwt: string; onClose: () => void }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
   return (
@@ -863,9 +875,9 @@ function TokenRevealModal({ jwt, onClose }: { jwt: string; onClose: () => void }
       <div className="bg-[#0F172A] border border-white/[0.08] rounded-2xl p-6 max-w-lg w-full mx-4">
         <div className="flex items-center gap-3 mb-4">
           <Key size={20} className="text-[var(--brand-light)]" />
-          <p className="text-[15px] font-bold text-[#F8FAFC]">Token Criado</p>
+          <p className="text-[15px] font-bold text-[#F8FAFC]">{t("appDetails.tokenCreatedTitle")}</p>
         </div>
-        <p className="text-xs text-yellow-400 mb-3">Copie este token agora. Não será possível vê-lo novamente.</p>
+        <p className="text-xs text-yellow-400 mb-3">{t("appDetails.tokenCreatedWarning")}</p>
         <div className="flex items-center gap-2 bg-black/30 rounded-xl px-4 py-3">
           <code className="text-sm text-[#B3D1FF] break-all font-mono flex-1 max-h-32 overflow-y-auto">{jwt}</code>
           <button
@@ -877,7 +889,7 @@ function TokenRevealModal({ jwt, onClose }: { jwt: string; onClose: () => void }
             <Copy size={16} />
           </button>
         </div>
-        {copied && <p className="text-[11px] text-emerald-400 mt-2">Copiado!</p>}
+        {copied && <p className="text-[11px] text-emerald-400 mt-2">{t("appDetails.copied")}</p>}
         <div className="flex justify-end mt-4">
           <button
             type="button"
@@ -885,7 +897,7 @@ function TokenRevealModal({ jwt, onClose }: { jwt: string; onClose: () => void }
             className="px-4 py-2 rounded-full text-[13px] font-semibold text-white cursor-pointer"
             style={{ background: "linear-gradient(to right, var(--brand-primary), var(--brand-secondary))" }}
           >
-            Fechar
+            {t("appDetails.close")}
           </button>
         </div>
       </div>
@@ -894,6 +906,7 @@ function TokenRevealModal({ jwt, onClose }: { jwt: string; onClose: () => void }
 }
 
 function SaveBar({ onSave, saving, saved }: { onSave: () => void; saving: boolean; saved: boolean }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-3">
       <button
@@ -903,9 +916,9 @@ function SaveBar({ onSave, saving, saved }: { onSave: () => void; saving: boolea
         className="text-[13px] font-semibold px-5 py-2.5 rounded-full text-white cursor-pointer disabled:opacity-50"
         style={{ background: "linear-gradient(to right, var(--brand-primary), var(--brand-secondary))" }}
       >
-        {saving ? "Salvando..." : "Salvar"}
+        {saving ? t("appDetails.saving") : t("appDetails.save")}
       </button>
-      {saved && !saving && <span className="text-xs text-[#94A3B8]">Salvo.</span>}
+      {saved && !saving && <span className="text-xs text-[#94A3B8]">{t("appDetails.saved")}</span>}
     </div>
   );
 }

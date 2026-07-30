@@ -2,9 +2,12 @@ package dashboard
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
@@ -47,6 +50,7 @@ func githubHandlerTestPool(t *testing.T) *db.Pool {
 	truncate := func() {
 		_, _ = pool.Exec(context.Background(), `TRUNCATE zeep_system.audit_log`)
 		_, _ = pool.Exec(context.Background(), `TRUNCATE zeep_system.github_app_config`)
+		_, _ = pool.Exec(context.Background(), `TRUNCATE zeep_system.github_templates CASCADE`)
 		_, _ = pool.Exec(context.Background(), `TRUNCATE zeep_system.dashboard_users CASCADE`)
 	}
 	truncate()
@@ -78,7 +82,6 @@ func mockJSONResp(status int, body string) *http.Response {
 func newGitHubTestHandler(pool *db.Pool, httpClient *http.Client) *GitHubConfigHandler {
 	return &GitHubConfigHandler{
 		pool:       pool,
-		states:     make(map[string]*githubInstallState),
 		httpClient: httpClient,
 	}
 }
@@ -478,9 +481,9 @@ func TestInstallCallback_PersistsInstallationAndAudits(t *testing.T) {
 	})
 	h := newGitHubTestHandler(pool, client)
 
-	state, err := h.generateState()
+	state, err := signGitHubState([]byte(keyPEM))
 	if err != nil {
-		t.Fatalf("generateState: %v", err)
+		t.Fatalf("signGitHubState: %v", err)
 	}
 
 	q := url.Values{}
@@ -524,7 +527,16 @@ func TestInstallCallback_PersistsInstallationAndAudits(t *testing.T) {
 	}
 }
 
-func TestInstallCallback_RejectsReusedState(t *testing.T) {
+// The install-flow state is now a stateless signed token (verified against
+// the App's private key, time-limited only) instead of a single-use
+// in-memory map entry — same trade-off already accepted for the Google OAuth
+// login flow (google.go), required so the callback validates correctly
+// regardless of which replica handled the earlier /install/start request
+// behind a non-sticky, multi-replica load balancer. This means a state token
+// is no longer rejected on reuse within its validity window; only expiry (see
+// TestInstallCallback_RejectsExpiredState) and signature mismatch (see
+// TestInstallCallback_RejectsInvalidState) are checked.
+func TestInstallCallback_AllowsStateReuseWithinExpiryWindow(t *testing.T) {
 	pool := githubHandlerTestPool(t)
 	defer pool.Close()
 	keyPEM := genTestKeyPEM(t)
@@ -540,9 +552,9 @@ func TestInstallCallback_RejectsReusedState(t *testing.T) {
 	})
 	h := newGitHubTestHandler(pool, client)
 
-	state, err := h.generateState()
+	state, err := signGitHubState([]byte(keyPEM))
 	if err != nil {
-		t.Fatalf("generateState: %v", err)
+		t.Fatalf("signGitHubState: %v", err)
 	}
 	q := url.Values{}
 	q.Set("installation_id", "999")
@@ -557,8 +569,42 @@ func TestInstallCallback_RejectsReusedState(t *testing.T) {
 
 	w2 := httptest.NewRecorder()
 	h.InstallCallback(w2, httptest.NewRequest(http.MethodGet, path, nil))
-	if w2.Code != http.StatusBadRequest {
-		t.Fatalf("replayed callback: status = %d, want 400 (reused state must be rejected)", w2.Code)
+	if w2.Code != http.StatusFound {
+		t.Fatalf("replayed callback: status = %d, want 302 (stateless token has no single-use tracking)", w2.Code)
+	}
+}
+
+func TestInstallCallback_RejectsExpiredState(t *testing.T) {
+	pool := githubHandlerTestPool(t)
+	defer pool.Close()
+	keyPEM := genTestKeyPEM(t)
+
+	if err := UpsertGitHubConfig(context.Background(), pool, GitHubAppConfigInput{
+		AppID: "12345", AppSlug: "my-app", ClientID: "Iv1.abc", PrivateKey: keyPEM,
+	}); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
+	h := newGitHubTestHandler(pool, nil)
+
+	payload, err := json.Marshal(githubStateClaims{ExpiresAt: time.Now().Add(-1 * time.Minute).Unix()})
+	if err != nil {
+		t.Fatalf("marshal claims: %v", err)
+	}
+	encoded := base64.RawURLEncoding.EncodeToString(payload)
+	mac := hmac.New(sha256.New, []byte(keyPEM))
+	mac.Write([]byte(encoded))
+	sig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	expiredState := encoded + "." + sig
+
+	q := url.Values{}
+	q.Set("installation_id", "999")
+	q.Set("state", expiredState)
+	req := httptest.NewRequest(http.MethodGet, "/api/github/install/callback?"+q.Encode(), nil)
+	w := httptest.NewRecorder()
+	h.InstallCallback(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (expired state must be rejected)", w.Code)
 	}
 }
 

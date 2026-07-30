@@ -29,16 +29,18 @@ import {
   DataBrowserTable,
 } from "../lib/api";
 
-const FILTER_OPERATORS = [
-  { value: "eq", label: "=" },
-  { value: "ne", label: "≠" },
-  { value: "gt", label: ">" },
-  { value: "gte", label: ">=" },
-  { value: "lt", label: "<" },
-  { value: "lte", label: "<=" },
-  { value: "ilike", label: "contém" },
-  { value: "like", label: "LIKE" },
-];
+function filterOperators(t: (key: string) => string) {
+  return [
+    { value: "eq", label: "=" },
+    { value: "ne", label: "≠" },
+    { value: "gt", label: ">" },
+    { value: "gte", label: ">=" },
+    { value: "lt", label: "<" },
+    { value: "lte", label: "<=" },
+    { value: "ilike", label: t("dataBrowser.opContains") },
+    { value: "like", label: "LIKE" },
+  ];
+}
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -120,6 +122,7 @@ function EmptyState({ message }: { message: string }) {
 
 export default function DataBrowserPage() {
   const { t } = useTranslation();
+  const filterOps = filterOperators(t);
   const [expandedApps, setExpandedApps] = useState<Set<string>>(new Set());
   const [selectedTable, setSelectedTable] = useState<{
     app: string;
@@ -355,7 +358,7 @@ export default function DataBrowserPage() {
         </div>
         {appsLoading ? (
           <div style={{ padding: "12px", color: "var(--text-muted)", fontSize: 13 }}>
-            Carregando...
+            {t("app.loading")}
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -496,7 +499,7 @@ export default function DataBrowserPage() {
                   }}
                 >
                   <Filter size={14} style={{ marginRight: 6 }} />
-                  Filtros
+                  {t("dataBrowser.filters")}
                   {activeFilterCount > 0 && (
                     <span
                       style={{
@@ -591,7 +594,7 @@ export default function DataBrowserPage() {
                       cursor: "pointer",
                     }}
                   >
-                    {FILTER_OPERATORS.map((op) => (
+                    {filterOps.map((op) => (
                       <option key={op.value} value={op.value}>{op.label}</option>
                     ))}
                   </select>
@@ -600,7 +603,7 @@ export default function DataBrowserPage() {
                     value={draftValue}
                     onChange={(e) => setDraftValue(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") addFilterRule(); }}
-                    placeholder="valor"
+                    placeholder={t("dataBrowser.valuePlaceholder")}
                     style={{
                       padding: "5px 10px",
                       borderRadius: 6,
@@ -620,7 +623,7 @@ export default function DataBrowserPage() {
                     disabled={!draftCol || !draftValue.trim()}
                     style={{ fontSize: 12 }}
                   >
-                    + Adicionar
+                    + {t("dataBrowser.addFilter")}
                   </Button>
                 </div>
 
@@ -643,11 +646,11 @@ export default function DataBrowserPage() {
                       >
                         <span style={{ fontWeight: 600, color: "var(--brand-primary)" }}>{r.col}</span>
                         <span style={{ color: "var(--text-muted)", margin: "0 1px" }}>
-                          {FILTER_OPERATORS.find((o) => o.value === r.op)?.label}
+                          {filterOps.find((o) => o.value === r.op)?.label}
                         </span>
                         <span style={{ color: "var(--text)" }}>{r.value}</span>
                         <button
-                          title="Remove filter"
+                          title={t("dataBrowser.removeFilter")}
                           onClick={() => removeFilterRule(r.col)}
                           style={{
                             marginLeft: 4,
@@ -675,7 +678,7 @@ export default function DataBrowserPage() {
                         padding: "2px 6px",
                       }}
                     >
-                      Limpar tudo
+                      {t("dataBrowser.clearFilters")}
                     </button>
                   </div>
                 )}
@@ -708,7 +711,7 @@ export default function DataBrowserPage() {
                           fontSize: 12,
                         }}
                       >
-                        Ações
+                        {t("dataBrowser.actions")}
                       </th>
                       {columns.map((col) => (
                         <th
@@ -761,7 +764,7 @@ export default function DataBrowserPage() {
                             fontSize: 13,
                           }}
                         >
-                          Nenhum registro encontrado
+                          {t("dataBrowser.noRecords")}
                         </td>
                       </tr>
                     ) : (
@@ -873,7 +876,7 @@ export default function DataBrowserPage() {
                 <TableSkeleton cols={columns.length} />
               ) : data.length === 0 ? (
                 <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>
-                  Nenhum registro encontrado
+                  {t("dataBrowser.noRecords")}
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -966,7 +969,7 @@ export default function DataBrowserPage() {
                           }}
                         >
                           <Pencil size={12} />
-                          Editar
+                          {t("dataBrowser.edit")}
                         </button>
                         <button
                           onClick={() => setDeleteConfirmId(String(row["id"]))}
@@ -986,7 +989,7 @@ export default function DataBrowserPage() {
                           }}
                         >
                           <Trash2 size={12} />
-                          Excluir
+                          {t("dataBrowser.delete")}
                         </button>
                       </div>
                     </div>
@@ -1009,8 +1012,11 @@ export default function DataBrowserPage() {
                 }}
               >
                 <span>
-                  {pageOffset + 1}–{Math.min(pageOffset + limit, totalCount)} de{" "}
-                  {totalCount}
+                  {t("dataBrowser.pageRange", {
+                    from: pageOffset + 1,
+                    to: Math.min(pageOffset + limit, totalCount),
+                    total: totalCount,
+                  })}
                 </span>
                 <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                   <Button
@@ -1021,7 +1027,7 @@ export default function DataBrowserPage() {
                     style={{ padding: "4px 8px", height: "auto" }}
                   >
                     <ChevronLeft size={14} />
-                    Anterior
+                    {t("dataBrowser.previous")}
                   </Button>
                   <span style={{ padding: "0 8px", fontSize: 11 }}>
                     {currentPage} / {totalPages}
@@ -1033,7 +1039,7 @@ export default function DataBrowserPage() {
                     onClick={() => setPageOffset(pageOffset + limit)}
                     style={{ padding: "4px 8px", height: "auto" }}
                   >
-                    Próximo
+                    {t("dataBrowser.next")}
                     <ChevronRightIcon size={14} />
                   </Button>
                 </div>
@@ -1093,10 +1099,10 @@ export default function DataBrowserPage() {
                 }}
               >
                 <span style={{ fontSize: 15, fontWeight: 600 }}>
-                  Editar registro
+                  {t("dataBrowser.editRecordTitle")}
                 </span>
                 <button
-                  title="Close"
+                  title={t("appDetails.close")}
                   onClick={closeModal}
                   style={{
                     padding: 4,
@@ -1210,13 +1216,13 @@ export default function DataBrowserPage() {
                 }}
               >
                 <Button variant="ghost" size="sm" onClick={closeModal} disabled={isSaving}>
-                  Cancelar
+                  {t("appForm.cancel")}
                 </Button>
                 <Button size="sm" onClick={handleSave} disabled={isSaving}>
                   {isSaving ? (
                     <>
                       <Loader2 size={14} style={{ marginRight: 6, animation: "spin 1s linear infinite" }} />
-                      Saving...
+                      {t("dataBrowser.saving")}
                     </>
                   ) : (
                     t("dataBrowser.save")
@@ -1288,10 +1294,10 @@ export default function DataBrowserPage() {
                 </div>
                 <div>
                   <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>
-                    Excluir registro
+                    {t("dataBrowser.deleteRecordTitle")}
                   </div>
                   <div style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.4 }}>
-                    Tem certeza que deseja excluir este registro? Esta ação não pode ser desfeita.
+                    {t("dataBrowser.deleteConfirmMsg")}
                   </div>
                 </div>
               </div>
@@ -1310,7 +1316,7 @@ export default function DataBrowserPage() {
                   onClick={() => setDeleteConfirmId(null)}
                   disabled={deleteRow.isPending}
                 >
-                  Cancelar
+                  {t("appForm.cancel")}
                 </Button>
                 <Button
                   size="sm"
@@ -1325,12 +1331,12 @@ export default function DataBrowserPage() {
                   {deleteRow.isPending ? (
                     <>
                       <Loader2 size={14} style={{ marginRight: 6, animation: "spin 1s linear infinite" }} />
-                      Excluindo...
+                      {t("dataBrowser.deleting")}
                     </>
                   ) : (
                     <>
                       <Trash2 size={14} style={{ marginRight: 6 }} />
-                      Excluir
+                      {t("dataBrowser.delete")}
                     </>
                   )}
                 </Button>

@@ -159,8 +159,8 @@ type webServiceDetails struct {
 
 type createServiceResponse struct {
 	Service struct {
-		ID           string `json:"id"`
-		ServiceSlug  string `json:"slug"`
+		ID             string `json:"id"`
+		ServiceSlug    string `json:"slug"`
 		ServiceDetails struct {
 			URL string `json:"url"`
 		} `json:"serviceDetails"`

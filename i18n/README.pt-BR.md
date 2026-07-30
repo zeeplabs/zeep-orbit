@@ -1,12 +1,19 @@
-<p align="center">
-  <img src="docs/static/img/orbit-logo.png" alt="Zeep Orbit" width="200" />
-  <p align="center"><strong>Plataforma completa para times de tecnologia.</strong></p>
+<div align="center">
+  <img src="../docs/static/img/orbit-logo.png" alt="Zeep Orbit" width="200" />
+  <p><strong>Plataforma completa para times de tecnologia.</strong></p>
 
   <p>
     <a href="https://github.com/zeeplabs/zeep-orbit/actions"><img src="https://github.com/zeeplabs/zeep-orbit/actions/workflows/docker-publish.yml/badge.svg" alt="CI" /></a>
     <a href="https://github.com/zeeplabs/zeep-orbit/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License" /></a>
     <a href="https://go.dev/doc/devel/release"><img src="https://img.shields.io/badge/go-1.26+-00ADD8?logo=go" alt="Go" /></a>
     <a href="https://github.com/zeeplabs/zeep-orbit/releases"><img src="https://img.shields.io/github/v/release/zeeplabs/zeep-orbit" alt="Release" /></a>
+  </p>
+
+  <p>
+    <a href="../README.md">🇺🇸 English</a> ·
+    <a href="README.pt-BR.md">🇧🇷 Português (Brasil)</a> ·
+    <a href="README.pt-PT.md">🇵🇹 Português (Portugal)</a> ·
+    <a href="README.es.md">🇪🇸 Español</a>
   </p>
 </div>
 
@@ -15,7 +22,7 @@
 **Zeep Orbit** é uma plataforma open-source e self-hosted que dá ao seu time tudo para criar e publicar apps — APIs backend, deploy de frontend, domínios customizados e gestão de usuários — tudo de um único dashboard. Sem serviços externos, sem lock-in. Sua infraestrutura, seus dados.
 
 <p align="center">
-  <img src="docs/static/img/diagram.svg" alt="Diagrama de Arquitetura" width="800" />
+  <img src="../docs/static/img/diagram.svg" alt="Diagrama de Arquitetura" width="800" />
 </p>
 
 ```bash
@@ -94,11 +101,12 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/meu-app/tarefas
 | **White-label**          | Branding customizado, temas, nome da empresa             |
 | **Métricas Prometheus**  | `zeep_http_requests_total`, histogramas de latência      |
 | **Multi-app**            | Um serviço, N apps, schemas e JWT isolados               |
-| **CLI**                  | `zeep serve`, `zeep apply`, `zeep list`, `zeep status`   |
+| **CLI**                  | `zeep serve`, `zeep status`                              |
 | **Kubernetes**           | Helm chart produção (HPA, PDB, ingress, IRSA)            |
 | **SDK Clients**          | TypeScript, Go, Python, Rust, Java, PHP                  |
 | **i18n**                 | Dashboard em pt-BR / English, seletor de idioma          |
 | **Changelog**            | Histórico de releases no app, embarcado no binário       |
+| **Aviso de Atualização** | Alerta no sidebar quando há novo release no GitHub       |
 
 ---
 
@@ -252,10 +260,29 @@ Apps frontend permitem publicar sites e web apps sem configuração:
 
 ### Integração GitHub
 
-- Instalação do GitHub App com acesso "All repositories"
-- Gestão de templates com campos de configuração de deploy
-- Deploy keys por app para sincronização segura local↔repo
-- Arquivamento do repositório ao excluir apps frontend
+O Zeep Orbit conecta no GitHub via **GitHub App** — nunca OAuth ou personal access token, então nenhuma credencial pessoal fica armazenada. Cada instância self-hosted cria e conecta o próprio App na própria org do GitHub (é um produto self-hosted: uma instância, uma empresa, um App — não existe App compartilhado/central pra instalar).
+
+**1. Crie o GitHub App** — `https://github.com/organizations/<sua-org>/settings/apps/new` (ou nas configurações de desenvolvedor da sua conta pessoal, se não usar org):
+
+| Campo | Valor |
+|---|---|
+| GitHub App name | Qualquer nome único (precisa ser único em todo o GitHub), ex: `acme-zeep-orbit` |
+| Homepage URL | URL da sua instância, ou este repo |
+| Callback URL | Deixe vazio — não é usado, esse fluxo nunca faz OAuth de login de usuário |
+| Setup URL | `https://<sua-instancia>/dashboard/api/github/install/callback` |
+| Webhook → Active | Desmarcado — nenhum evento de webhook é consumido hoje |
+| Repository permissions → Administration | Read and write |
+| Where can this GitHub App be installed | Only on this account |
+
+Gere uma **private key** na página de configurações do App (baixa um arquivo `.pem`) e anote **App ID**, **App slug**, **Client ID** e **Client Secret**.
+
+**2. Configure no dashboard** — vá em **Integrações → GitHub** e cole App ID, App slug, Client ID, Client Secret, e o conteúdo completo do arquivo `.pem` da private key. Webhook Secret pode ser qualquer valor (reservado pra uso futuro — não validado hoje).
+
+**3. Instale** — clique em **Instalar**, que roda o fluxo nativo de instalação do GitHub. Sempre escolha **"Only select repositories"** e marque os repos que essa instância deve gerenciar — a API cria repos novos e gerencia deploy keys só dentro desse escopo, nunca "All repositories".
+
+**4. Adicione um repositório template** — na aba **Templates**, cadastre um repo marcado como **Template repository** no GitHub (`Settings → Template repository` no próprio repo). É esse repo que é clonado toda vez que alguém cria um novo app frontend.
+
+Depois de conectado, deploy keys são gerenciadas automaticamente por app frontend, e repos são arquivados (não excluídos) quando um app frontend é removido.
 
 ---
 
@@ -318,17 +345,15 @@ $rows = $orbit->table('invoices')->findMany(limit: 10);
 
 ```
 Comandos:
-  serve    Carrega config, provisiona banco, inicia servidor HTTP
-  apply    Provisiona schemas e tabelas, exibe relatório
-  list     Lista apps, tabelas e URLs da API
+  serve    Provisiona o schema interno, inicia servidor HTTP + Dashboard
   status   Verifica se o servidor está rodando
 ```
 
 ```bash
 zeep serve --port 8080
-zeep apply                   # provisionamento idempotente
-zeep list                    # inspecionar apps e tabelas
 ```
+
+Apps e tabelas são criados e gerenciados inteiramente pelo Dashboard (e, futuramente, pelo servidor MCP) — não há arquivo YAML pra escrever nem passo de `apply`.
 
 ---
 
@@ -434,7 +459,7 @@ A flag `--atomic` faz rollback automático se a atualização falhar.
 
 ## 📝 Changelog
 
-Toda release do Zeep Orbit é publicada com um changelog embarcado — sem dependências externas, sem banco por instância. O [changelog](internal/dashboard/changelog.json) é um arquivo JSON estático no repositório, embarcado no binário em tempo de compilação. Usuários veem as atualizações no dashboard em `/changelog` automaticamente a cada upgrade.
+Toda release do Zeep Orbit é publicada com um changelog embarcado — sem dependências externas, sem banco por instância. O [changelog](../internal/dashboard/changelog.json) é um arquivo JSON estático no repositório, embarcado no binário em tempo de compilação. Usuários veem as atualizações no dashboard em `/changelog` automaticamente a cada upgrade.
 
 Para adicionar uma nova entrada: edite `internal/dashboard/changelog.json`, adicione sua release no array `entries` (mais recente primeiro), faça commit e publique a release. Só isso.
 
@@ -513,13 +538,13 @@ examples/                  Apps de exemplo (Todo app)
 
 ## 🤝 Contribuindo
 
-Veja [CONTRIBUTING.md](CONTRIBUTING.md). Toda contribuição é bem-vinda — correções, features, docs, testes.
+Veja [CONTRIBUTING.md](../CONTRIBUTING.md). Toda contribuição é bem-vinda — correções, features, docs, testes.
 
 ---
 
 ## 📄 Licença
 
-MIT — veja [LICENSE](LICENSE).
+MIT — veja [LICENSE](../LICENSE).
 
 ---
 

@@ -11,10 +11,10 @@ import (
 )
 
 type perAppLimiter struct {
-	mu       sync.Mutex
-	entries  map[string]*rlEntry
-	max      int
-	window   time.Duration
+	mu      sync.Mutex
+	entries map[string]*rlEntry
+	max     int
+	window  time.Duration
 }
 
 type rlEntry struct {
@@ -23,7 +23,7 @@ type rlEntry struct {
 }
 
 type AppRateLimiter struct {
-	mu      sync.RWMutex
+	mu       sync.RWMutex
 	limiters map[string]*perAppLimiter
 }
 

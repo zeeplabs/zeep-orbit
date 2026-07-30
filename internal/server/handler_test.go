@@ -134,7 +134,6 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-
 // The route does not use JWTMiddleware: it injects the app directly into context.
 func buildHandlerRouter(h *Handler) http.Handler {
 	app, _ := testReg.Get("testhandler")

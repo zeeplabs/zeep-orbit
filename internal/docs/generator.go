@@ -298,7 +298,7 @@ func openAPIType(zeepType string) (typ, format string) {
 		return "integer", "int32"
 	case "bigint":
 		return "integer", "int64"
-	case "decimal":
+	case "decimal", "numeric":
 		return "number", "double"
 	case "boolean":
 		return "boolean", ""
@@ -479,6 +479,7 @@ func addAuthPaths(spec *Spec, appName string, security []map[string][]string) {
 		Properties: map[string]schemaOrRef{
 			"id":         {Type: "string", Format: "uuid"},
 			"email":      {Type: "string"},
+			"phone":      {Type: "string"},
 			"name":       {Type: "string"},
 			"avatar_url": {Type: "string"},
 			"created_at": {Type: "string", Format: "date-time"},
@@ -495,6 +496,7 @@ func addAuthPaths(spec *Spec, appName string, security []map[string][]string) {
 				"email":    {Type: "string"},
 				"password": {Type: "string"},
 				"name":     {Type: "string"},
+				"phone":    {Type: "string"},
 			},
 			Required: []string{"email", "password"},
 		})},
@@ -561,6 +563,7 @@ func addAuthPaths(spec *Spec, appName string, security []map[string][]string) {
 				Type: "object",
 				Properties: map[string]schemaOrRef{
 					"name":       {Type: "string"},
+					"phone":      {Type: "string"},
 					"avatar_url": {Type: "string"},
 				},
 			})},

@@ -2,21 +2,46 @@
 
 Step-by-step to create a new Zeep Orbit release.
 
+## 0. Open a release branch and PR into `main`
+
+Day-to-day work happens on `develop`. Releases are cut from `main`, but never by pushing straight to it — go through a release branch + PR so CI runs and the version-bump diff gets reviewed before it lands.
+
+```bash
+git checkout develop
+git pull origin develop
+git checkout -b release-v0.4.1
+git push origin release-v0.4.1
+```
+
+Open a PR `release-v0.4.1` → `main`. Do steps 1-4 below as commits on this branch (either locally before pushing, or as follow-up commits on the open PR). Once CI is green and the PR is reviewed, merge it using **"Rebase and merge"** — not "Create a merge commit" — to keep `main`'s history linear (it has no merge commits today).
+
+After the PR merges, `main` has everything needed for the release. Continue from step 5 (tag).
+
 ## 1. Update version files
 
 ### charts/zeep-orbit/Chart.yaml
 
 ```yaml
-version: 0.1.10      # bump this
-appVersion: "0.1.10" # keep in sync with the release version
+version: 0.4.1      # bump this
+appVersion: "0.4.1" # keep in sync with the release version
 ```
+
+### internal/dashboard/ui/package.json
+
+```json
+{
+  "version": "0.4.1"
+}
+```
+
+This is the version shown in the dashboard UI (login page footer, sidebar) and is what the sidebar's update-available banner compares against the latest GitHub release tag — if it's not bumped, the banner keeps nagging users who are already on the new version.
 
 ## 2. Update CHANGELOG.md
 
 Move unreleased changes to a new version section at the top of `CHANGELOG.md`:
 
 ```markdown
-## [0.1.10] — 2026-07-02
+## [0.4.1] — 2026-07-30
 
 ### Added
 - ...
@@ -24,41 +49,63 @@ Move unreleased changes to a new version section at the top of `CHANGELOG.md`:
 ### Fixed
 - ...
 
-## [0.1.9] — 2026-07-02
+## [0.4.0] — 2026-07-26
 ...
 ```
 
-## 3. Commit and push
+## 3. Add an entry to the in-app changelog
+
+Edit `internal/dashboard/changelog.json` and add the new release to the `entries` array (newest first). This is what renders on the dashboard's `/changelog` page — it's embedded into the Go binary at compile time (`//go:embed`), so it must be updated in the same commit as the code that ships, not as an afterthought.
+
+```json
+{
+  "version": "0.4.1",
+  "date": "2026-07-30",
+  "type": "patch",
+  "title": "...",
+  "description": "...",
+  "highlights": ["...", "..."]
+}
+```
+
+## 4. Write release notes
+
+Create `.github/release-notes-v0.4.1.md` summarizing the release for humans (features, fixes, breaking changes, upgrade instructions). This is separate from the changelog files above — it's what actually becomes the **GitHub Release body** (see step 7): the `docker-publish.yml` release job reads `.github/release-notes-<tag>.md` and uses it verbatim (plus a Docker/Helm snippet appended automatically). If the file is missing for a given tag, CI falls back to GitHub's auto-generated notes instead — so skipping this step doesn't fail the release, it just publishes generic auto-generated notes.
+
+## 5. Commit, push, and merge the release PR
 
 ```bash
 git add -A
-git commit -m "chore: bump version to 0.1.10"
-git push origin main
+git commit -m "release: bump to v0.4.1"
+git push origin release-v0.4.1
 ```
 
-> **Note:** Pushing to `main` triggers `docs.yml` which packages the Helm chart and publishes it to `https://zeeplabs.github.io/zeep-orbit/helm/`. The chart version comes from `Chart.yaml`.
+Merge the PR into `main` once CI is green (rebase and merge — see step 0).
 
-## 4. Create and push tag
+> **Note:** Landing on `main` triggers `docs.yml`, which packages the Helm chart and publishes it to `https://zeeplabs.github.io/zeep-orbit/helm/`. The chart version comes from `Chart.yaml`.
+
+## 6. Create and push tag
 
 ```bash
-git tag v0.1.10
-git push origin v0.1.10
+git tag v0.4.1
+git push origin v0.4.1
 ```
 
-## 5. CI does the rest
+## 7. CI does the rest
 
-Pushing the tag triggers:
+Pushing the tag triggers `docker-publish.yml`:
 
-| Workflow | What it does |
-|----------|-------------|
-| `docker-publish.yml` | Test → Build multi-arch Docker image → Push to GHCR |
-| Same workflow | Package Helm chart → Attach `.tgz` to GitHub Release |
+| Step | What it does |
+|------|-------------|
+| Test | Runs Go + frontend test suites |
+| Build | Multi-arch Docker image, pushed to GHCR |
+| Release | Creates the GitHub Release (tag `v0.4.1`), packages the Helm chart `.tgz` and attaches it |
 
-The Helm chart repository at `https://zeeplabs.github.io/zeep-orbit/helm/` is updated automatically by `docs.yml` when the `Chart.yaml` version is bumped and pushed to `main`.
+The Helm chart repository at `https://zeeplabs.github.io/zeep-orbit/helm/` is updated separately by `docs.yml` when `Chart.yaml`'s version is bumped and pushed to `main` (step 5/6 above) — it does not wait for the tag.
 
-## 6. Publish SDK Clients
+## 8. Publish SDK Clients
 
-Publish updated client packages after each release:
+Publish updated client packages after each release (only if the SDKs actually changed — not every release touches them):
 
 ### TypeScript (`@zeeptech/orbit-client`)
 
@@ -118,11 +165,13 @@ cd clients/php
 # Publish to Packagist via GitHub webhook or manual push
 ```
 
-## 7. Verify
+## 9. Verify
 
-- [ ] Docker image: `docker pull ghcr.io/zeeplabs/zeep-orbit:v0.1.10`
+- [ ] Docker image: `docker pull ghcr.io/zeeplabs/zeep-orbit:v0.4.1`
 - [ ] GitHub Release: https://github.com/zeeplabs/zeep-orbit/releases
 - [ ] Helm chart: `helm repo update zeeplabs && helm search repo zeeplabs/zeep-orbit --versions`
+- [ ] Dashboard `/changelog` page shows the new entry
+- [ ] Dashboard sidebar update banner no longer shows (fresh deploy on the new version)
 - [ ] npm: `npm view @zeeptech/orbit-client versions`
 - [ ] Go: `go list -m github.com/zeeplabs/orbit-go@latest`
 - [ ] PyPI: `pip install zeeplabs-orbit-client==0.1.0`
@@ -130,11 +179,16 @@ cd clients/php
 
 ## Checklist
 
+- [ ] Release branch `release-vX.Y.Z` created from `develop`
+- [ ] `charts/zeep-orbit/Chart.yaml` version bumped (`version` + `appVersion`)
+- [ ] `internal/dashboard/ui/package.json` version bumped
 - [ ] `CHANGELOG.md` updated
-- [ ] `charts/zeep-orbit/Chart.yaml` version bumped
-- [ ] All changes committed and pushed to `main`
-- [ ] Tag pushed to GitHub (`git push origin v0.1.10`)
+- [ ] `internal/dashboard/changelog.json` entry added
+- [ ] `.github/release-notes-vX.Y.Z.md` written
+- [ ] PR opened, CI green, reviewed
+- [ ] PR merged into `main` via **rebase and merge** (no merge commit)
+- [ ] Tag pushed to GitHub (`git push origin v0.4.1`)
 - [ ] CI workflows passed
 - [ ] Docker pull works
 - [ ] Helm install works (`helm repo update && helm install zeeplabs/zeep-orbit`)
-- [ ] SDK clients published (TS / Go / Python / Rust / Java / PHP)
+- [ ] SDK clients published, if changed (TS / Go / Python / Rust / Java / PHP)

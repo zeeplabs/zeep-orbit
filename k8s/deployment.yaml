@@ -21,7 +21,7 @@ spec:
           # image: ghcr.io/zeeplabs/zeep-orbit@sha256:<digest>
           image: ghcr.io/zeeplabs/zeep-orbit:latest
           imagePullPolicy: Always
-          args: ["serve", "--config", "/app/apps.yaml"]
+          args: ["serve"]
           ports:
             - containerPort: 8080
               protocol: TCP
@@ -33,11 +33,6 @@ spec:
               value: "azure"
             - name: BRAND_COMPANY_NAME
               value: "Zeep Tecnologia"
-          volumeMounts:
-            - name: config
-              mountPath: /app/apps.yaml
-              subPath: apps.yaml
-              readOnly: true
           resources:
             requests:
               memory: "32Mi"
@@ -59,7 +54,3 @@ spec:
             initialDelaySeconds: 3
             periodSeconds: 5
             failureThreshold: 2
-      volumes:
-        - name: config
-          configMap:
-            name: zeep-orbit-config

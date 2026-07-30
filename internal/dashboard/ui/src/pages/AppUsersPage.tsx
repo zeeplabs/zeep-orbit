@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
-import { Users, Search, X, ShieldOff, RefreshCw, CheckCircle, ArrowLeft, Loader2 } from "lucide-react";
+import { Users, Search, X, ShieldOff, RefreshCw, CheckCircle, ArrowLeft, Loader2, RotateCw } from "lucide-react";
 import {
   useAppUsers,
   useDeactivateAppUser,
@@ -53,7 +53,7 @@ export default function AppUsersPage() {
   const [page, setPage] = useState(0);
   const pageSize = 50;
 
-  const { data, isLoading, error } = useAppUsers(id || "", debouncedSearch || undefined, pageSize, page * pageSize);
+  const { data, isLoading, isFetching, error, refetch } = useAppUsers(id || "", debouncedSearch || undefined, pageSize, page * pageSize);
   const deactivate = useDeactivateAppUser();
   const activate = useActivateAppUser();
   const resetSessions = useResetAppUserSessions();
@@ -78,85 +78,95 @@ export default function AppUsersPage() {
   return (
     <motion.div {...fadeUp}>
       {/* Header */}
-      <div className="mb-8">
-        <Link
-          to="/apps"
-          className="inline-flex items-center gap-1.5 text-[12px] text-[#94A3B8] hover:text-[#F8FAFC] no-underline mb-4 transition-colors"
-        >
-          <ArrowLeft size={14} />
-          Voltar para Apps
-        </Link>
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <span
-              className="mb-3 inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em]"
-              style={{
-                borderColor: 'rgba(var(--brand-primary-rgb), 0.2)',
-                backgroundColor: 'rgba(var(--brand-primary-rgb), 0.12)',
-                color: 'var(--brand-light)',
-              }}
-            >
-              <Users size={12} strokeWidth={1.5} />
-              Usuários do App
-            </span>
-            <h2 className="mb-1.5 text-[28px] font-extrabold leading-tight">
-              Usuários
-            </h2>
-            <p className="text-sm text-[#94A3B8]">
-              Gerencie os usuários registrados neste app
-            </p>
-          </div>
+      <div className="mb-6">
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <Link
+            to="/apps"
+            className="inline-flex items-center gap-1.5 text-[12px] text-[#94A3B8] hover:text-[#F8FAFC] no-underline transition-colors"
+          >
+            <ArrowLeft size={14} />
+            Voltar para Apps
+          </Link>
+          <span
+            className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em]"
+            style={{
+              borderColor: 'rgba(var(--brand-primary-rgb), 0.2)',
+              backgroundColor: 'rgba(var(--brand-primary-rgb), 0.12)',
+              color: 'var(--brand-light)',
+            }}
+          >
+            <Users size={12} strokeWidth={1.5} />
+            Usuários do App
+          </span>
         </div>
+        <h2 className="mb-1.5 text-[28px] font-extrabold leading-tight">
+          Usuários
+        </h2>
+        <p className="text-sm text-[#94A3B8]">
+          Gerencie os usuários registrados neste app
+        </p>
       </div>
 
-      {/* Provider counts */}
-      {providerCounts.length > 0 && (
-        <div className="flex gap-3 mb-6 flex-wrap">
-          {providerCounts.map((pc) => (
-            <div
-              key={pc.provider}
-              className="flex items-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-2.5"
-            >
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-[#94A3B8]">
-                {pc.provider}
-              </span>
-              <span className="text-[18px] font-bold text-[#F8FAFC]">{pc.count}</span>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Toolbar: provider counts + search + refresh */}
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        {providerCounts.length > 0 && (
+          <div className="flex gap-2 flex-wrap">
+            {providerCounts.map((pc) => (
+              <div
+                key={pc.provider}
+                className="flex items-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3.5 py-2"
+              >
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-[#94A3B8]">
+                  {pc.provider}
+                </span>
+                <span className="text-[15px] font-bold text-[#F8FAFC]">{pc.count}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
-      {/* Search */}
-      <div className="mb-6 flex gap-2">
-        <div className="relative flex-1 max-w-sm">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#64748B]" />
-          <Input
-            type="text"
-            placeholder={t("appUsers.search")}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
-            className="h-10 rounded-md border-white/[0.10] bg-white/[0.06] text-[13px] text-[#F8FAFC] placeholder:text-[#64748B] pl-9 pr-9"
-          />
-          {search && (
-            <button
-              title="Clear search"
-              onClick={clearSearch}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#F8FAFC] bg-none border-none cursor-pointer"
-            >
-              <X size={14} />
-            </button>
-          )}
+        <div className="flex flex-1 items-center gap-2 min-w-[240px]">
+          <div className="relative flex-1 max-w-sm">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#64748B]" />
+            <Input
+              type="text"
+              placeholder={t("appUsers.search")}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
+              className="h-10 rounded-md border-white/[0.10] bg-white/[0.06] text-[13px] text-[#F8FAFC] placeholder:text-[#64748B] pl-9 pr-9"
+            />
+            {search && (
+              <button
+                title="Clear search"
+                onClick={clearSearch}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#F8FAFC] bg-none border-none cursor-pointer"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          <Button
+            size="sm"
+            onClick={handleSearch}
+            className="h-10 rounded-xl border-0 text-white font-semibold shrink-0"
+            style={{
+              background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))',
+            }}
+          >
+            Buscar
+          </Button>
         </div>
+
         <Button
-          size="sm"
-          onClick={handleSearch}
-          className="rounded-xl border-0 text-white font-semibold"
-          style={{
-            background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))',
-          }}
+          variant="outline"
+          size="icon"
+          onClick={() => refetch()}
+          disabled={isFetching}
+          title={t("appUsers.refresh")}
+          className="size-10 shrink-0 rounded-xl border-white/[0.10] bg-white/[0.04] text-[#94A3B8] hover:bg-white/[0.08] hover:text-[#F8FAFC]"
         >
-          Buscar
+          <RotateCw size={15} className={isFetching ? "animate-spin" : ""} />
         </Button>
       </div>
 
@@ -216,7 +226,9 @@ export default function AppUsersPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-white/[0.06]">
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">Nome</th>
                     <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">Email</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">Telefone</th>
                     <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">Provider</th>
                     <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">Status</th>
                     <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">Último acesso</th>
@@ -238,7 +250,18 @@ export default function AppUsersPage() {
                         className="group border-b border-white/[0.04] last:border-0 hover:bg-white/[0.03]"
                       >
                         <td className="px-4 py-3.5">
-                          <span className="text-[13px] font-medium text-[#F8FAFC]">{u.email}</span>
+                          <div className="flex items-center gap-2">
+                            {u.avatar_url ? (
+                              <img src={u.avatar_url} alt="" className="size-6 rounded-full object-cover" />
+                            ) : null}
+                            <span className="text-[13px] font-medium text-[#F8FAFC]">{u.name || "—"}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span className="text-[13px] text-[#94A3B8]">{u.email}</span>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span className="text-[13px] text-[#94A3B8]">{u.phone || "—"}</span>
                         </td>
                         <td className="px-4 py-3.5">
                           <Badge variant="outline" className="text-[11px] border-white/[0.10] bg-white/[0.04] text-[#94A3B8]">
@@ -327,7 +350,15 @@ export default function AppUsersPage() {
                   >
                     <div className="flex items-center justify-between mb-3">
                       <div>
-                        <p className="text-[13px] font-medium text-[#F8FAFC]">{u.email}</p>
+                        <div className="flex items-center gap-2">
+                          {u.avatar_url ? (
+                            <img src={u.avatar_url} alt="" className="size-6 rounded-full object-cover" />
+                          ) : null}
+                          <p className="text-[13px] font-medium text-[#F8FAFC]">{u.name || u.email}</p>
+                        </div>
+                        <p className="text-[11px] text-[#64748B] mt-0.5">
+                          {u.email}{u.phone ? ` · ${u.phone}` : ""}
+                        </p>
                         <div className="flex items-center gap-2 mt-1">
                           <Badge variant="outline" className="text-[10px] border-white/[0.10] bg-white/[0.04] text-[#94A3B8]">
                             {u.provider}

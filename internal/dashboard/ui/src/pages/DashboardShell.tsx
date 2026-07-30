@@ -10,12 +10,13 @@ import {
   Activity,
   Shield,
   Code2,
-  Globe,
   Settings,
   User,
   Lock,
   Megaphone,
   Link2,
+  Github,
+  ArrowUpCircle,
 } from "lucide-react";
 import ChangePasswordModal from "./ChangePasswordModal";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -40,25 +41,47 @@ interface User {
 }
 
 type NavItem = { icon: typeof Grid; label: string; path: string };
+type NavSection = { title: string; items: NavItem[] };
 
-function navItems(user: User | null, t: (k: string) => string): NavItem[] {
-  const items: NavItem[] = [
-    { icon: Grid, label: t("nav.apps"), path: "/apps" },
-    { icon: Database, label: t("nav.dataBrowser"), path: "/data-browser" },
-    { icon: Code2, label: "SDKs", path: "/sdks" },
-    { icon: Activity, label: t("nav.logs"), path: "/logs" },
+function navSections(user: User | null, t: (k: string) => string): NavSection[] {
+  const sections: NavSection[] = [
+    {
+      title: t("nav.sectionGeneral"),
+      items: [
+        { icon: Grid, label: t("nav.apps"), path: "/apps" },
+        { icon: Database, label: t("nav.dataBrowser"), path: "/data-browser" },
+      ],
+    },
+    {
+      title: t("nav.sectionDeployment"),
+      items: [
+        { icon: Activity, label: t("nav.logs"), path: "/logs" },
+        { icon: Code2, label: "SDKs", path: "/sdks" },
+      ],
+    },
   ];
   if (user?.role === "superadmin") {
-    items.splice(2, 0, { icon: Users, label: t("nav.users"), path: "/usuarios" });
-    items.splice(3, 0, { icon: Shield, label: t("nav.audit"), path: "/auditoria" });
-    items.splice(4, 0, { icon: Link2, label: t("nav.integrations"), path: "/integracoes/github" });
-    items.push({
-      icon: Settings,
-      label: t("nav.settings"),
-      path: "/configuracoes",
+    sections.push({
+      title: t("nav.sectionSuperadmin"),
+      items: [
+        { icon: Users, label: t("nav.users"), path: "/usuarios" },
+        { icon: Shield, label: t("nav.audit"), path: "/auditoria" },
+        { icon: Link2, label: t("nav.integrations"), path: "/integracoes/github" },
+        { icon: Settings, label: t("nav.settings"), path: "/configuracoes" },
+      ],
     });
   }
-  return items;
+  return sections;
+}
+
+function navItems(user: User | null, t: (k: string) => string): NavItem[] {
+  return navSections(user, t).flatMap((s) => s.items);
+}
+
+function firstLastName(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length <= 1) return parts[0] || "";
+  return `${parts[0]} ${parts[parts.length - 1]}`;
 }
 
 function BottomBar({
@@ -156,6 +179,80 @@ function BottomBar({
   );
 }
 
+function UpdateAvailableBanner() {
+  const { t } = useTranslation();
+  const { data } = useQuery({
+    queryKey: ["version-check"],
+    queryFn: () =>
+      fetch("/dashboard/api/version-check", { credentials: "include" }).then(
+        (r) => r.json(),
+      ) as Promise<{ tag_name: string; html_url: string }>,
+    staleTime: 60 * 60 * 1000,
+    retry: false,
+  });
+
+  if (!data?.tag_name || !data?.html_url) return null;
+  if (data.tag_name.replace(/^v/, "") === pkg.version) return null;
+
+  return (
+    <a
+      href={data.html_url}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={t("nav.updateAvailable", { version: data.tag_name })}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "9px 12px",
+        borderRadius: 10,
+        border: "1px solid rgba(var(--brand-primary-rgb), 0.25)",
+        background: "rgba(var(--brand-primary-rgb), 0.10)",
+        color: "var(--text)",
+        cursor: "pointer",
+        fontSize: 13,
+        textAlign: "left" as const,
+        width: "100%",
+        fontFamily: "inherit",
+        fontWeight: 500,
+        textDecoration: "none",
+        marginBottom: 8,
+        transition: "background 0.15s",
+      }}
+    >
+      <ArrowUpCircle size={15} strokeWidth={1.5} style={{ flexShrink: 0 }} />
+      <span
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 1,
+          overflow: "hidden",
+          minWidth: 0,
+        }}
+      >
+        <span
+          style={{
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {t("nav.updateAvailableLabel")}
+        </span>
+        <span
+          style={{
+            fontSize: 12,
+            fontWeight: 700,
+            color: "var(--brand-light, var(--text))",
+          }}
+        >
+          {data.tag_name}
+        </span>
+      </span>
+    </a>
+  );
+}
+
 export default function DashboardShell({ user }: { user: User | null }) {
   const qc = useQueryClient();
   const { t, i18n } = useTranslation();
@@ -163,7 +260,6 @@ export default function DashboardShell({ user }: { user: User | null }) {
   const [loggingOut, setLoggingOut] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
-  const [showLanguageMenu, setShowLanguageMenu] = useState(false);
 
   const { data: brandConfig } = useQuery({
     queryKey: ["brand-config"],
@@ -194,7 +290,6 @@ export default function DashboardShell({ user }: { user: User | null }) {
 
   async function saveLanguage(lang: string) {
     setLanguage(lang);
-    setShowLanguageMenu(false);
     try {
       await fetch("/dashboard/api/me/language", {
         method: "PUT",
@@ -221,6 +316,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
   };
 
   const items = navItems(user, t);
+  const sections = navSections(user, t);
 
   return (
     <div
@@ -294,59 +390,79 @@ export default function DashboardShell({ user }: { user: User | null }) {
 
         {/* Nav */}
         <nav
-          style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}
+          style={{ flex: 1, display: "flex", flexDirection: "column", gap: 14 }}
         >
-          {items.map(({ icon: Icon, label, path }) => (
-            <NavLink
-              key={path}
-              to={path}
-              end={path === "/apps"}
-              style={({ isActive }) => ({
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                padding: "9px 12px",
-                borderRadius: 10,
-                border: "none",
-                background: isActive
-                  ? "rgba(var(--brand-primary-rgb), 0.12)"
-                  : "transparent",
-                color: isActive ? "var(--text)" : "var(--text-muted)",
-                cursor: "pointer",
-                fontSize: 14,
-                textAlign: "left",
-                width: "100%",
-                fontFamily: "inherit",
-                fontWeight: isActive ? 600 : 400,
-                position: "relative",
-                textDecoration: "none",
-                transition: "background 0.15s, color 0.15s",
-              })}
-            >
-              {({ isActive }) => (
-                <>
-                  {isActive && (
-                    <motion.div
-                      layoutId="nav-active-indicator"
-                      style={{
-                        position: "absolute",
-                        left: 0,
-                        top: "20%",
-                        bottom: "20%",
-                        width: 3,
-                        borderRadius: 2,
-                        background: "var(--accent)",
-                      }}
-                      transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
-                    />
+          {sections.map((section) => (
+            <div key={section.title} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                  color: "var(--text-muted)",
+                  padding: "0 12px",
+                  marginBottom: 4,
+                  opacity: 0.6,
+                }}
+              >
+                {section.title}
+              </span>
+              {section.items.map(({ icon: Icon, label, path }) => (
+                <NavLink
+                  key={path}
+                  to={path}
+                  end={path === "/apps"}
+                  style={({ isActive }) => ({
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "9px 12px",
+                    borderRadius: 10,
+                    border: "none",
+                    background: isActive
+                      ? "rgba(var(--brand-primary-rgb), 0.12)"
+                      : "transparent",
+                    color: isActive ? "var(--text)" : "var(--text-muted)",
+                    cursor: "pointer",
+                    fontSize: 14,
+                    textAlign: "left",
+                    width: "100%",
+                    fontFamily: "inherit",
+                    fontWeight: isActive ? 600 : 400,
+                    position: "relative",
+                    textDecoration: "none",
+                    transition: "background 0.15s, color 0.15s",
+                  })}
+                >
+                  {({ isActive }) => (
+                    <>
+                      {isActive && (
+                        <motion.div
+                          layoutId="nav-active-indicator"
+                          style={{
+                            position: "absolute",
+                            left: 0,
+                            top: "20%",
+                            bottom: "20%",
+                            width: 3,
+                            borderRadius: 2,
+                            background: "var(--accent)",
+                          }}
+                          transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
+                        />
+                      )}
+                      <Icon size={15} strokeWidth={1.5} />
+                      {label}
+                    </>
                   )}
-                  <Icon size={15} strokeWidth={1.5} />
-                  {label}
-                </>
-              )}
-            </NavLink>
+                </NavLink>
+              ))}
+            </div>
           ))}
         </nav>
+
+        <UpdateAvailableBanner />
 
         {/* Changelog */}
         <NavLink
@@ -404,7 +520,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
             paddingTop: 14,
           }}
         >
-          <div style={{ padding: "0 8px", marginBottom: 10 }}>
+          <div style={{ padding: "0 8px", marginBottom: 10, textAlign: "center" }}>
             <p
               style={{
                 fontSize: 13,
@@ -414,7 +530,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
                 textOverflow: "ellipsis",
               }}
             >
-              {(user as any).name || user.email}
+              {(user as any).name ? firstLastName((user as any).name) : user.email}
             </p>
             <p
               style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}
@@ -422,112 +538,92 @@ export default function DashboardShell({ user }: { user: User | null }) {
               {user.role}
             </p>
           </div>
-          <button
-            onClick={() => setShowChangePassword(true)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "8px 12px",
-              borderRadius: 10,
-              border: "none",
-              background: "transparent",
-              color: "var(--text-muted)",
-              cursor: "pointer",
-              fontSize: 13,
-              width: "100%",
-              fontFamily: "inherit",
-              transition: "color 0.15s",
-            }}
-          >
-            <Lock size={14} strokeWidth={1.5} /> {t("nav.changePassword")}
-          </button>
-          <button
-            onClick={() => setShowLanguageMenu(!showLanguageMenu)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "8px 12px",
-              borderRadius: 10,
-              border: "none",
-              background: "transparent",
-              color: "var(--text-muted)",
-              cursor: "pointer",
-              fontSize: 13,
-              width: "100%",
-              fontFamily: "inherit",
-              transition: "color 0.15s",
-            }}
-          >
-            <Globe size={14} strokeWidth={1.5} /> {i18n.language === "pt-BR" ? "Português" : "English"}
-          </button>
-          {showLanguageMenu && (
-            <div style={{ paddingLeft: 12 }}>
-              <button
-                onClick={() => { saveLanguage("pt-BR"); }}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: "6px 12px",
-                  borderRadius: 8,
-                  border: "none",
-                  background: i18n.language === "pt-BR" ? "rgba(var(--brand-primary-rgb), 0.12)" : "transparent",
-                  color: i18n.language === "pt-BR" ? "var(--text)" : "var(--text-muted)",
-                  cursor: "pointer",
-                  fontSize: 13,
-                  width: "100%",
-                  fontFamily: "inherit",
-                }}
-              >
-                {t("language.ptBR")}
-              </button>
-              <button
-                onClick={() => { saveLanguage("en"); }}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: "6px 12px",
-                  borderRadius: 8,
-                  border: "none",
-                  background: i18n.language === "en" ? "rgba(var(--brand-primary-rgb), 0.12)" : "transparent",
-                  color: i18n.language === "en" ? "var(--text)" : "var(--text-muted)",
-                  cursor: "pointer",
-                  fontSize: 13,
-                  width: "100%",
-                  fontFamily: "inherit",
-                }}
-              >
-                {t("language.en")}
-              </button>
-            </div>
-          )}
-          <button
-            onClick={() => setShowLogoutDialog(true)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "8px 12px",
-              borderRadius: 10,
-              border: "none",
-              background: "transparent",
-              color: "var(--text-muted)",
-              cursor: "pointer",
-              fontSize: 13,
-              width: "100%",
-              fontFamily: "inherit",
-              transition: "color 0.15s",
-            }}
-          >
-            <LogOut size={14} strokeWidth={1.5} /> {t("nav.logout")}
-          </button>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, paddingBottom: 12 }}>
+            <a
+              href="https://github.com/zeeplabs/zeep-orbit"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="GitHub"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 34,
+                height: 34,
+                borderRadius: 10,
+                border: "1px solid var(--border)",
+                background: "rgba(255,255,255,0.04)",
+                color: "var(--text-muted)",
+                cursor: "pointer",
+                textDecoration: "none",
+                transition: "color 0.15s, background 0.15s",
+              }}
+            >
+              <Github size={14} strokeWidth={1.5} />
+            </a>
+            <button
+              onClick={() => setShowChangePassword(true)}
+              title={t("nav.changePassword")}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 34,
+                height: 34,
+                borderRadius: 10,
+                border: "1px solid var(--border)",
+                background: "rgba(255,255,255,0.04)",
+                color: "var(--text-muted)",
+                cursor: "pointer",
+                transition: "color 0.15s, background 0.15s",
+              }}
+            >
+              <Lock size={14} strokeWidth={1.5} />
+            </button>
+            <button
+              onClick={() => saveLanguage(i18n.language === "pt-BR" ? "en" : "pt-BR")}
+              title={i18n.language === "pt-BR" ? t("language.ptBR") : t("language.en")}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 34,
+                height: 34,
+                borderRadius: 10,
+                border: "1px solid var(--border)",
+                background: "rgba(255,255,255,0.04)",
+                cursor: "pointer",
+                fontSize: 15,
+                lineHeight: 1,
+                transition: "background 0.15s",
+              }}
+            >
+              {i18n.language === "pt-BR" ? "🇧🇷" : "🇺🇸"}
+            </button>
+            <button
+              onClick={() => setShowLogoutDialog(true)}
+              title={t("nav.logout")}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 34,
+                height: 34,
+                borderRadius: 10,
+                border: "1px solid var(--border)",
+                background: "rgba(255,255,255,0.04)",
+                color: "var(--text-muted)",
+                cursor: "pointer",
+                transition: "color 0.15s, background 0.15s",
+              }}
+            >
+              <LogOut size={14} strokeWidth={1.5} />
+            </button>
+          </div>
         </div>
 
         <p className="text-[11px] text-white/15 text-center pb-3">
-          v{pkg.version}
+          <a href="https://zeeplabs.com.br" target="_blank" rel="noopener noreferrer" className="text-white/15 hover:text-white transition-colors">Zeep Labs</a> - v{pkg.version}
         </p>
       </motion.aside>
 

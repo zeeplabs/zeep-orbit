@@ -54,6 +54,9 @@ func TestMain(m *testing.M) {
 			"avatar_url"         TEXT,
 			"email_confirmed_at" TIMESTAMPTZ,
 			"last_sign_in_at"    TIMESTAMPTZ,
+			"active"             BOOLEAN     NOT NULL DEFAULT true,
+			"provider"           TEXT        NOT NULL DEFAULT 'email',
+			"google_id"          TEXT,
 			"created_at"         TIMESTAMPTZ NOT NULL DEFAULT now(),
 			"updated_at"         TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
@@ -101,7 +104,7 @@ func buildAuthRouter() http.Handler {
 		r.Post("/refresh", testH.Refresh)
 		r.With(authJWTMiddleware()).Post("/logout", testH.Logout)
 		r.With(authJWTMiddleware()).Get("/me", testH.Me)
-		r.With(authJWTMiddleware()).Put("/me", testH.UpdateMe)
+		r.With(authJWTMiddleware()).Patch("/me", testH.UpdateMe)
 	})
 	return r
 }

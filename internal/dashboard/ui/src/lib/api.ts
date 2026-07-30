@@ -5,14 +5,29 @@ import {
   UseQueryResult,
   UseMutationResult,
 } from '@tanstack/react-query'
+import { toast } from 'sonner'
 
+
+export interface ReferenceDef {
+  table: string
+  column: string
+  on_delete?: '' | 'cascade' | 'restrict' | 'set_null' | 'no_action'
+}
 
 export interface ColumnDef {
   name: string
   type: string
   required: boolean
   default: string
+  default_is_expression?: boolean
   unique: boolean
+  references?: ReferenceDef | null
+}
+
+export interface IndexDef {
+  name: string
+  columns: string[]
+  unique?: boolean
 }
 
 export interface TableDef {
@@ -20,6 +35,7 @@ export interface TableDef {
   name: string
   rls: string
   columns: ColumnDef[]
+  indexes?: IndexDef[]
 }
 
 export interface AppDef {
@@ -39,6 +55,20 @@ export interface CreateAppInput {
   auth_email_enabled: boolean
 }
 
+
+export interface PublicConfig {
+  theme: string
+  google_oauth_enabled: boolean
+}
+
+export function usePublicConfig() {
+  return useQuery({
+    queryKey: ['public-config'],
+    queryFn: () =>
+      fetch('/dashboard/api/config').then((r) => r.json()) as Promise<PublicConfig>,
+    staleTime: 60000,
+  })
+}
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, { credentials: 'include', ...init })
@@ -129,7 +159,7 @@ export function useCreateAppTable(appId: string): UseMutationResult<TableDef, Er
 
 export function useUpdateAppTable(
   appId: string,
-): UseMutationResult<TableDef, Error, { tableId: string; rls: string; columns: ColumnDef[] }> {
+): UseMutationResult<TableDef, Error, { tableId: string; rls: string; columns: ColumnDef[]; indexes?: IndexDef[] }> {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ tableId, ...input }) =>
@@ -212,6 +242,9 @@ export function useDeleteUser(): UseMutationResult<void, Error, string> {
 export interface AppUserSummary {
   id: string
   email: string
+  name: string | null
+  phone: string | null
+  avatar_url: string | null
   provider: string
   active: boolean
   last_sign_in_at: string | null
@@ -267,6 +300,9 @@ export function useDeactivateAppUser(): UseMutationResult<
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ['app-users', variables.appId] })
     },
+    onError: (error) => {
+      toast.error(error.message)
+    },
   })
 }
 
@@ -284,6 +320,9 @@ export function useActivateAppUser(): UseMutationResult<
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ['app-users', variables.appId] })
     },
+    onError: (error) => {
+      toast.error(error.message)
+    },
   })
 }
 
@@ -300,6 +339,9 @@ export function useResetAppUserSessions(): UseMutationResult<
       }),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ['app-users', variables.appId] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
     },
   })
 }

@@ -9,16 +9,16 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/mail"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
-	"go.uber.org/zap"
-	"golang.org/x/crypto/bcrypt"
 	"github.com/zeeplabs/zeep-orbit/internal/auth"
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
@@ -26,6 +26,8 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/query"
 	"github.com/zeeplabs/zeep-orbit/internal/registry"
 	"github.com/zeeplabs/zeep-orbit/internal/storage"
+	"go.uber.org/zap"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // Handler holds dependencies for dashboard HTTP handlers.
@@ -57,6 +59,26 @@ func NewHandler(pool *db.Pool, reg *registry.Registry, logger *zap.Logger) *Hand
 		Logs:   NewRingBuffer(bufSize),
 		logger: logger,
 	}
+}
+
+func isValidEmail(email string) bool {
+	addr, err := mail.ParseAddress(email)
+	return err == nil && addr.Address == email
+}
+
+func normalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
+// normalizeName title-cases each word: "JULIO augusto" -> "Julio Augusto".
+func normalizeName(name string) string {
+	words := strings.Fields(name)
+	for i, w := range words {
+		r := []rune(strings.ToLower(w))
+		r[0] = unicode.ToUpper(r[0])
+		words[i] = string(r)
+	}
+	return strings.Join(words, " ")
 }
 
 var (
@@ -110,6 +132,18 @@ func validateTableInput(t AppTableRow, authEmailEnabled bool, otherTables []AppT
 		}
 		seenColumns[c.Name] = true
 	}
+
+	// References/indexes can only be validated against the app's full table
+	// set (a reference may point at another table, a cycle spans tables).
+	allTables := make([]config.TableConfig, 0, len(otherTables)+1)
+	allTables = append(allTables, config.TableConfig{Name: t.Name, Columns: t.Columns, Indexes: t.Indexes})
+	for _, other := range otherTables {
+		allTables = append(allTables, config.TableConfig{Name: other.Name, Columns: other.Columns, Indexes: other.Indexes})
+	}
+	if err := config.ValidateTables(allTables); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -137,8 +171,15 @@ func (h *Handler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	body.Email = normalizeEmail(body.Email)
+	body.Name = normalizeName(body.Name)
+
 	if len(body.Password) < 8 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password must be at least 8 characters"})
+		return
+	}
+	if !isValidEmail(body.Email) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid email address"})
 		return
 	}
 
@@ -662,8 +703,15 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	body.Email = normalizeEmail(body.Email)
+	body.Name = normalizeName(body.Name)
+
 	if body.Email == "" || body.Password == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "email and password are required"})
+		return
+	}
+	if !isValidEmail(body.Email) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid email address"})
 		return
 	}
 	if body.Role != "admin" && body.Role != "superadmin" {
@@ -749,11 +797,11 @@ func (h *Handler) ListApps(w http.ResponseWriter, r *http.Request) {
 // appRequestBody is the JSON body for create/update app requests. Tables are
 // managed one at a time via the /apps/{id}/tables endpoints, not here.
 type appRequestBody struct {
-	Name             string                    `json:"name"`
-	AuthEmailEnabled bool                      `json:"auth_email_enabled"`
-	AuthProviders    json.RawMessage           `json:"auth_providers,omitempty"`
-	StorageConfig    *storage.StorageConfig    `json:"storage_config,omitempty"`
-	RateLimit        *config.RateLimitConfig   `json:"rate_limit,omitempty"`
+	Name             string                  `json:"name"`
+	AuthEmailEnabled bool                    `json:"auth_email_enabled"`
+	AuthProviders    json.RawMessage         `json:"auth_providers,omitempty"`
+	StorageConfig    *storage.StorageConfig  `json:"storage_config,omitempty"`
+	RateLimit        *config.RateLimitConfig `json:"rate_limit,omitempty"`
 }
 
 // tableRequestBody is the JSON body for create/update table requests.
@@ -761,6 +809,7 @@ type tableRequestBody struct {
 	Name    string                `json:"name"`
 	RLS     string                `json:"rls"`
 	Columns []config.ColumnConfig `json:"columns"`
+	Indexes []config.IndexConfig  `json:"indexes"`
 }
 
 // CreateApp handles POST /dashboard/api/apps
@@ -810,7 +859,12 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 
 	cfg := buildAppConfig(app)
 	if _, err := h.prov.Apply(r.Context(), &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "provisioning failed: "+err.Error(), err)
+		var typeErr *provisioner.TypeChangeError
+		if errors.As(err, &typeErr) {
+			h.writeError(w, r, http.StatusBadRequest, typeErr.Error(), err)
+		} else {
+			h.writeError(w, r, http.StatusInternalServerError, "provisioning failed — check server logs for details", err)
+		}
 		return
 	}
 
@@ -906,7 +960,12 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 
 	cfg := buildAppConfig(app)
 	if _, err := h.prov.Apply(r.Context(), &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "provisioning failed: "+err.Error(), err)
+		var typeErr *provisioner.TypeChangeError
+		if errors.As(err, &typeErr) {
+			h.writeError(w, r, http.StatusBadRequest, typeErr.Error(), err)
+		} else {
+			h.writeError(w, r, http.StatusInternalServerError, "provisioning failed — check server logs for details", err)
+		}
 		return
 	}
 
@@ -979,22 +1038,31 @@ func (h *Handler) CreateAppTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	table := AppTableRow{Name: body.Name, RLS: body.RLS, Columns: body.Columns}
+	table := AppTableRow{Name: body.Name, RLS: body.RLS, Columns: body.Columns, Indexes: body.Indexes}
 	if err := validateTableInput(table, app.AuthEmailEnabled, app.Tables); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Provision the physical table before persisting its metadata row — if
+	// Apply fails, nothing should be left behind for the dashboard to think
+	// exists (a metadata row with no matching physical table blocks retrying
+	// with the same name and shows a table that errors on every operation).
+	cfg := buildAppConfig(app)
+	cfg.Tables = []config.TableConfig{{Name: table.Name, RLS: table.RLS, Columns: table.Columns, Indexes: table.Indexes}}
+	if _, err := h.prov.Apply(r.Context(), &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
+		var typeErr *provisioner.TypeChangeError
+		if errors.As(err, &typeErr) {
+			h.writeError(w, r, http.StatusBadRequest, typeErr.Error(), err)
+		} else {
+			h.writeError(w, r, http.StatusInternalServerError, "provisioning failed — check server logs for details", err)
+		}
 		return
 	}
 
 	row, err := InsertAppTable(r.Context(), h.pool, appID, table)
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
-		return
-	}
-
-	cfg := buildAppConfig(app)
-	cfg.Tables = []config.TableConfig{{Name: row.Name, RLS: row.RLS, Columns: row.Columns}}
-	if _, err := h.prov.Apply(r.Context(), &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "provisioning failed: "+err.Error(), err)
 		return
 	}
 
@@ -1051,26 +1119,34 @@ func (h *Handler) UpdateAppTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	table := AppTableRow{Name: existingTable.Name, RLS: body.RLS, Columns: body.Columns}
+	table := AppTableRow{Name: existingTable.Name, RLS: body.RLS, Columns: body.Columns, Indexes: body.Indexes}
 	if err := validateTableInput(table, app.AuthEmailEnabled, otherTables); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 
-	row, err := UpdateAppTable(r.Context(), h.pool, appID, tableID, body.RLS, body.Columns)
+	// Provision the physical change before persisting metadata — if Apply
+	// fails, the stored columns/indexes must still match what's actually in
+	// Postgres, not a shape the physical table was never migrated to.
+	cfg := buildAppConfig(app)
+	cfg.Tables = []config.TableConfig{{Name: table.Name, RLS: table.RLS, Columns: table.Columns, Indexes: table.Indexes}}
+	if _, err := h.prov.Apply(r.Context(), &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
+		var typeErr *provisioner.TypeChangeError
+		if errors.As(err, &typeErr) {
+			h.writeError(w, r, http.StatusBadRequest, typeErr.Error(), err)
+		} else {
+			h.writeError(w, r, http.StatusInternalServerError, "provisioning failed — check server logs for details", err)
+		}
+		return
+	}
+
+	row, err := UpdateAppTable(r.Context(), h.pool, appID, tableID, body.RLS, body.Columns, body.Indexes)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
 			return
 		}
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
-		return
-	}
-
-	cfg := buildAppConfig(app)
-	cfg.Tables = []config.TableConfig{{Name: row.Name, RLS: row.RLS, Columns: row.Columns}}
-	if _, err := h.prov.Apply(r.Context(), &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "provisioning failed: "+err.Error(), err)
 		return
 	}
 
@@ -1462,7 +1538,7 @@ type DataBrowserTableColumn struct {
 
 // DataBrowserTable represents a table in the data browser tree.
 type DataBrowserTable struct {
-	Name    string                 `json:"name"`
+	Name    string                   `json:"name"`
 	Columns []DataBrowserTableColumn `json:"columns"`
 }
 
@@ -1946,7 +2022,7 @@ func (h *Handler) ListAppUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	schema := "app_" + app.Name
+	schema := schemaNameForDB(app.Name)
 
 	if err := h.prov.EnsureAuthUserColumns(r.Context(), schema); err != nil {
 	}
@@ -1973,10 +2049,10 @@ func (h *Handler) ListAppUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"data":          users,
-		"total":         total,
-		"limit":         limit,
-		"offset":        offset,
+		"data":           users,
+		"total":          total,
+		"limit":          limit,
+		"offset":         offset,
 		"providerCounts": counts,
 	})
 }
@@ -1997,7 +2073,7 @@ func (h *Handler) DeactivateAppUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID := chi.URLParam(r, "userId")
-	schema := "app_" + app.Name
+	schema := schemaNameForDB(app.Name)
 	h.prov.EnsureAuthUserColumns(r.Context(), schema)
 	if err := DeactivateAppUser(r.Context(), h.pool, schema, userID); err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -2028,7 +2104,7 @@ func (h *Handler) ActivateAppUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID := chi.URLParam(r, "userId")
-	schema := "app_" + app.Name
+	schema := schemaNameForDB(app.Name)
 	h.prov.EnsureAuthUserColumns(r.Context(), schema)
 	if err := ActivateAppUser(r.Context(), h.pool, schema, userID); err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -2059,11 +2135,11 @@ func (h *Handler) ResetAppUserSessions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID := chi.URLParam(r, "userId")
-	schema := "app_" + app.Name
+	schema := schemaNameForDB(app.Name)
 	h.prov.EnsureAuthUserColumns(r.Context(), schema)
 	if err := ResetAppUserSessions(r.Context(), h.pool, schema, userID); err != nil {
 		if errors.Is(err, ErrNotFound) {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "no sessions found"})
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "no active session found for user"})
 			return
 		}
 		h.writeError(w, r, http.StatusInternalServerError, "failed to reset sessions", err)
@@ -2127,9 +2203,9 @@ func (h *Handler) GetPublicBrandConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 var tokenExpirationOptions = map[string]*time.Duration{
-	"7d":   durationPtr(7 * 24 * time.Hour),
-	"30d":  durationPtr(30 * 24 * time.Hour),
-	"365d": durationPtr(365 * 24 * time.Hour),
+	"7d":    durationPtr(7 * 24 * time.Hour),
+	"30d":   durationPtr(30 * 24 * time.Hour),
+	"365d":  durationPtr(365 * 24 * time.Hour),
 	"never": nil,
 }
 

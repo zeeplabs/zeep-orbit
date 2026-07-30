@@ -43,11 +43,11 @@ func githubTemplatesTestPool(t *testing.T) *db.Pool {
 	}
 
 	// Clean slate for each test.
-	if _, err := pool.Exec(ctx, `TRUNCATE zeep_system.github_templates`); err != nil {
+	if _, err := pool.Exec(ctx, `TRUNCATE zeep_system.github_templates CASCADE`); err != nil {
 		t.Fatalf("truncate table: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), `TRUNCATE zeep_system.github_templates`)
+		_, _ = pool.Exec(context.Background(), `TRUNCATE zeep_system.github_templates CASCADE`)
 	})
 
 	return pool

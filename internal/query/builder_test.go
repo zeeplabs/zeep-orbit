@@ -56,10 +56,10 @@ func TestBuildList_Basic(t *testing.T) {
 func TestBuildList_WithFilters(t *testing.T) {
 	tbl := testTable()
 	params := map[string]string{
-		"status":  "eq.paid",
-		"order":   "amount.desc",
-		"limit":   "10",
-		"offset":  "5",
+		"status": "eq.paid",
+		"order":  "amount.desc",
+		"limit":  "10",
+		"offset": "5",
 	}
 	q, err := BuildList("app_billing", "invoices", tbl, params, "", false)
 	if err != nil {
@@ -359,8 +359,8 @@ func TestBuildUpdate_Valid(t *testing.T) {
 func TestBuildUpdate_UnknownField(t *testing.T) {
 	tbl := testTable()
 	body := map[string]any{
-		"status":    "paid",
-		"evil_col":  "1=1",
+		"status":   "paid",
+		"evil_col": "1=1",
 	}
 	_, err := BuildUpdate("app_billing", "invoices", tbl, "uuid-1", body, "")
 	if err == nil {

@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Eye, EyeOff } from "lucide-react";
 import logoFallback from "@/assets/images/logo/logo.svg";
 import pkg from "../../package.json";
+import { usePublicConfig } from "@/lib/api";
 
 export default function LoginPage() {
   const { t } = useTranslation();
@@ -17,16 +18,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  const { data: config } = useQuery({
-    queryKey: ["brand-config"],
-    queryFn: () =>
-      fetch("/dashboard/api/config")
-        .then((r) => r.json())
-        .then((d) => ({
-          googleOAuthEnabled: d.google_oauth_enabled === true,
-        })),
-    staleTime: 60000,
-  });
+  const { data: config } = usePublicConfig();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -143,7 +135,7 @@ export default function LoginPage() {
           </Button>
         </form>
 
-        {config?.googleOAuthEnabled && (
+        {config?.google_oauth_enabled && (
           <>
             <div className="flex items-center gap-3 my-5">
               <div className="flex-1 h-px bg-white/[0.08]" />

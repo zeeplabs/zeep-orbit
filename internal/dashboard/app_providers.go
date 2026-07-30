@@ -12,9 +12,9 @@ import (
 
 // AppProviderConfig is the per-provider config stored in an app's auth_providers JSONB.
 type AppProviderConfig struct {
-	Enabled    bool     `json:"enabled"`
-	ClientID   string   `json:"client_id,omitempty"`
-	RedirectURL string  `json:"redirect_url,omitempty"`
+	Enabled     bool   `json:"enabled"`
+	ClientID    string `json:"client_id,omitempty"`
+	RedirectURL string `json:"redirect_url,omitempty"`
 }
 
 // GetAppAuthProviders returns the auth providers configuration for an app.

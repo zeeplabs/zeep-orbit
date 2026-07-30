@@ -19,9 +19,9 @@ func NewDeployProviderConfigHandler(pool *db.Pool) *DeployProviderConfigHandler 
 }
 
 type deployProviderConfigBody struct {
-	APIKey           string `json:"api_key"`
-	RenderProjectID  string `json:"render_project_id"`
-	BaseDomain       string `json:"base_domain"`
+	APIKey          string `json:"api_key"`
+	RenderProjectID string `json:"render_project_id"`
+	BaseDomain      string `json:"base_domain"`
 }
 
 func (h *DeployProviderConfigHandler) Status(w http.ResponseWriter, r *http.Request) {
@@ -98,9 +98,9 @@ func (h *DeployProviderConfigHandler) audit(ctx context.Context, userID, userEma
 }
 
 type deployProviderFieldsBody struct {
-	APIKey           string `json:"api_key"`
-	RenderProjectID  string `json:"render_project_id"`
-	BaseDomain       string `json:"base_domain"`
+	APIKey          string `json:"api_key"`
+	RenderProjectID string `json:"render_project_id"`
+	BaseDomain      string `json:"base_domain"`
 }
 
 func (h *DeployProviderConfigHandler) UpdateFields(w http.ResponseWriter, r *http.Request) {

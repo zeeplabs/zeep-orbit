@@ -231,6 +231,7 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Post("/api/deploy-provider/config", deployProviderH.UpsertConfig)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/deploy-provider/config", deployProviderH.UpdateFields)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/changelog", dashboard.ChangelogHandler)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/version-check", dashboard.VersionCheckHandler)
 		r.Handle("/*", dashboard.StaticHandler())
 	})
 
@@ -252,7 +253,7 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.Post("/refresh", ah.Refresh)
 		r.With(AuthJWTMiddleware(reg)).Post("/logout", ah.Logout)
 		r.With(AuthJWTMiddleware(reg)).Get("/me", ah.Me)
-		r.With(AuthJWTMiddleware(reg)).Put("/me", ah.UpdateMe)
+		r.With(AuthJWTMiddleware(reg)).Patch("/me", ah.UpdateMe)
 		r.With(ah.RateLimit).Post("/token/refresh", ah.TokenRefresh)
 		r.Get("/google/login", appGoogleH.Login)
 		r.Get("/google/callback", appGoogleH.Callback)

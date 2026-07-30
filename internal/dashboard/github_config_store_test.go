@@ -174,7 +174,7 @@ func TestUpsertGitHubConfigPartialUpdatePreservesPrivateKey(t *testing.T) {
 // TestUpsertGitHubConfigPartialUpdatePreservesExactCiphertext covers the fix
 // for the Critical review finding: preservation of unchanged secrets must be
 // enforced by the SQL CASE WHEN guard, not a Go-side pre-read that could
-// silently wipe secrets to '' on a transient error. This test asserts the
+// silently wipe secrets to ” on a transient error. This test asserts the
 // raw stored ciphertext is byte-identical across the partial update (proof
 // the column was left untouched by the database, not merely that it decrypts
 // to the same cleartext by coincidence).
