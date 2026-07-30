@@ -1,0 +1,666 @@
+# Instincts generated from https://github.com/zeeplabs/zeep-orbit
+# Generated: 2026-07-30T02:48:57.688Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: zeep-orbit-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Commit Length
+
+## Action
+
+Write moderate-length commit messages (~88 characters)
+
+## Evidence
+
+- Average commit message length: 88 chars
+- Based on 17 commits
+
+---
+id: zeep-orbit-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Naming Files
+
+## Action
+
+Use camelCase naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: camelCase
+
+---
+id: zeep-orbit-import-alias
+trigger: "when importing modules"
+confidence: 0.85
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Import Alias
+
+## Action
+
+Use path aliases (@/, ~/) instead of relative imports
+
+## Evidence
+
+- Import analysis shows alias pattern
+- Example: import { x } from '@/lib/x'
+
+---
+id: zeep-orbit-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: zeep-orbit-arch-type-based
+trigger: "when adding new code"
+confidence: 0.8
+domain: architecture
+source: repo-analysis
+source_repo: https://github.com/zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Arch Type Based
+
+## Action
+
+Place code in the appropriate type folder (components/, services/, utils/, etc.)
+
+## Evidence
+
+- Type-based module organization detected
+- Folders: 
+
+---
+id: zeep-orbit-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: zeep-orbit-workflow-feature-development
+trigger: "when implementing a new feature"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Workflow Feature Development
+
+## Action
+
+Follow the feature-development workflow:
+1. Add feature implementation
+2. Add tests for feature
+3. Update documentation
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~23x per month
+- Files: internal/dashboard/ui/src/components/*, internal/dashboard/ui/src/lib/*, internal/dashboard/ui/src/pages/*
+
+---
+id: zeep-orbit-workflow-refactoring
+trigger: "when refactoring code"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Workflow Refactoring
+
+## Action
+
+Follow the refactoring workflow:
+1. Ensure tests pass before refactor
+2. Refactor code structure
+3. Verify tests still pass
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~18x per month
+- Files: src/**/*
+
+---
+id: zeep-orbit-workflow-feature-spec-design-implementation
+trigger: "when doing feature spec design implementation"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Workflow Feature Spec Design Implementation
+
+## Action
+
+Follow the feature-spec-design-implementation workflow:
+1. Create or update .specs/features/<feature>/design.md
+2. Create or update .specs/features/<feature>/spec.md
+3. Create or update .specs/features/<feature>/tasks.md
+4. Update .specs/project/ROADMAP.md
+5. Implement backend logic (e.g., internal/provisioner, internal/dashboard, internal/config, etc.)
+6. Implement or update frontend components if applicable (e.g., internal/dashboard/ui/src/components/...)
+7. Write or update tests for new logic
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: .specs/features/*/design.md, .specs/features/*/spec.md, .specs/features/*/tasks.md
+
+---
+id: zeep-orbit-workflow-i18n-localization-update
+trigger: "when doing i18n localization update"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Workflow I18n Localization Update
+
+## Action
+
+Follow the i18n-localization-update workflow:
+1. Update or add translation keys in internal/dashboard/ui/src/locales/en.json and other locale files
+2. Refactor UI components/pages to use translation hooks (useTranslation)
+3. Update or add translated text in UI components/pages
+4. Optionally, update README or documentation to reflect i18n changes
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: internal/dashboard/ui/src/locales/*.json, internal/dashboard/ui/src/components/*.tsx, internal/dashboard/ui/src/pages/*.tsx
+
+---
+id: zeep-orbit-workflow-ci-cd-workflow-update
+trigger: "when doing ci cd workflow update"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Workflow Ci Cd Workflow Update
+
+## Action
+
+Follow the ci-cd-workflow-update workflow:
+1. Edit or add .github/workflows/*.yml files
+2. Refactor jobs into reusable workflows if needed
+3. Update release process documentation or scripts
+4. Test and verify workflow status checks
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: .github/workflows/*.yml
+
+---
+id: zeep-orbit-workflow-documentation-expansion-and-localization
+trigger: "when doing documentation expansion and localization"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Workflow Documentation Expansion And Localization
+
+## Action
+
+Follow the documentation-expansion-and-localization workflow:
+1. Add or update README.md and its translations in i18n/README.*.md
+2. Update or add documentation files for features, contributing, or configuration
+3. Update or add docs in docs/docs/*
+4. Update CHANGELOG.md or RELEASE.md if relevant
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: README.md, i18n/README.*.md, CONTRIBUTING.md
+
+---
+id: zeep-orbit-workflow-table-schema-feature-expansion
+trigger: "when doing table schema feature expansion"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Workflow Table Schema Feature Expansion
+
+## Action
+
+Follow the table-schema-feature-expansion workflow:
+1. Update backend schema/config logic (internal/config, internal/provisioner, internal/dashboard)
+2. Update or add tests for schema logic
+3. Update frontend components to support new schema features (internal/dashboard/ui/src/components/TableCard.tsx, api.ts, etc.)
+4. Update or add translation keys for new UI elements
+5. Update documentation/specs for the new schema feature
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: internal/config/*.go, internal/provisioner/*.go, internal/dashboard/*.go
+
+---
+id: zeep-orbit-workflow-release-version-bump
+trigger: "when doing release version bump"
+confidence: 0.55
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Workflow Release Version Bump
+
+## Action
+
+Follow the release-version-bump workflow:
+1. Update CHANGELOG.md with new release notes
+2. Update version in charts/zeep-orbit/Chart.yaml and internal/dashboard/ui/package.json
+3. Add or update internal/dashboard/changelog.json
+4. Add or update .github/release-notes-<version>.md
+5. Commit and push changes, create tag, and trigger CI/CD workflows
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~1x per month
+- Files: CHANGELOG.md, charts/zeep-orbit/Chart.yaml, internal/dashboard/changelog.json
+
+---
+id: zeep-orbit-instinct-camelcase-files
+trigger: "When creating or renaming a file"
+confidence: 0.85
+domain: code-style
+source: repo-analysis
+source_repo: zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Instinct Camelcase Files
+
+## Action
+
+Use camelCase for file names
+
+## Evidence
+
+- Pattern in codeStyle.namingConventions.files
+- internal/dashboard/ui/src/components/TableCard.tsx
+
+---
+id: zeep-orbit-instinct-camelcase-functions
+trigger: "When defining a function"
+confidence: 0.85
+domain: code-style
+source: repo-analysis
+source_repo: zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Instinct Camelcase Functions
+
+## Action
+
+Use camelCase for function names
+
+## Evidence
+
+- Pattern in codeStyle.namingConventions.functions
+
+---
+id: zeep-orbit-instinct-pascalcase-classes
+trigger: "When defining a class or component"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Instinct Pascalcase Classes
+
+## Action
+
+Use PascalCase for class and component names
+
+## Evidence
+
+- Pattern in codeStyle.namingConventions.classes
+- internal/dashboard/ui/src/components/TableCard.tsx
+
+---
+id: zeep-orbit-instinct-screaming-constants
+trigger: "When declaring a constant"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Instinct Screaming Constants
+
+## Action
+
+Use SCREAMING_SNAKE_CASE for constants
+
+## Evidence
+
+- Pattern in codeStyle.namingConventions.constants
+
+---
+id: zeep-orbit-instinct-import-alias
+trigger: "When importing a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Instinct Import Alias
+
+## Action
+
+Use import aliases
+
+## Evidence
+
+- Pattern in codeStyle.importStyle
+
+---
+id: zeep-orbit-instinct-named-exports
+trigger: "When exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Instinct Named Exports
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- Pattern in codeStyle.exportStyle
+
+---
+id: zeep-orbit-instinct-test-location-separate
+trigger: "When adding or updating tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Instinct Test Location Separate
+
+## Action
+
+Place tests in a separate directory (e.g., .specs or alongside source in test files)
+
+## Evidence
+
+- architecture.folderStructure.testLocation = separate
+- files like .specs/features/*/spec.md
+
+---
+id: zeep-orbit-instinct-test-after-feature
+trigger: "When implementing a new feature"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Instinct Test After Feature
+
+## Action
+
+Write or update tests for the new logic after implementation
+
+## Evidence
+
+- feature-development workflow
+- commitSequence includes 'Add tests for feature'
+
+---
+id: zeep-orbit-instinct-test-after-refactor
+trigger: "When refactoring code"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Instinct Test After Refactor
+
+## Action
+
+Ensure tests pass before and after refactoring
+
+## Evidence
+
+- refactoring workflow
+- commitSequence includes 'Ensure tests pass before refactor' and 'Verify tests still pass'
+
+---
+id: zeep-orbit-instinct-commit-prefixes
+trigger: "When writing a commit message"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Instinct Commit Prefixes
+
+## Action
+
+Use a prefix such as feat, refactor, release, or an emoji to indicate the type of change
+
+## Evidence
+
+- commits.prefixes
+- Examples: 'feat(provisioner): ...', 'refactor(ci): ...', 'release: bump to v0.5.0', '📝 ...', '✨ ...'
+
+---
+id: zeep-orbit-instinct-commit-format
+trigger: "When writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Instinct Commit Format
+
+## Action
+
+Format commit as <type>(<scope>): <description> or <emoji> (<file>): <description>
+
+## Evidence
+
+- commits.examples
+- feat(schema): support table relationships (foreign keys) and indexes
+- 📝 (TableCard.tsx): Add i18n support for translations in TableCard component
+
+---
+id: zeep-orbit-instinct-feature-spec-design-implementation
+trigger: "When someone wants to add a significant new feature or capability"
+confidence: 0.95
+domain: workflow
+source: repo-analysis
+source_repo: zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Instinct Feature Spec Design Implementation
+
+## Action
+
+Create or update design, spec, and tasks docs; update roadmap; implement backend/frontend; write tests
+
+## Evidence
+
+- feature-spec-design-implementation workflow
+- files: .specs/features/*/design.md, .specs/features/*/spec.md, .specs/features/*/tasks.md, .specs/project/ROADMAP.md, internal/*/*.go, internal/dashboard/ui/src/components/*.tsx
+
+---
+id: zeep-orbit-instinct-i18n-localization-update
+trigger: "When someone wants to add new UI text, support new languages, or improve localization"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Instinct I18n Localization Update
+
+## Action
+
+Update translation files, refactor components to use translation hooks, update UI text, optionally update docs
+
+## Evidence
+
+- i18n-localization-update workflow
+- files: internal/dashboard/ui/src/locales/*.json, internal/dashboard/ui/src/components/*.tsx
+
+---
+id: zeep-orbit-instinct-ci-cd-workflow-update
+trigger: "When someone wants to improve, refactor, or add CI/CD automation"
+confidence: 0.85
+domain: workflow
+source: repo-analysis
+source_repo: zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Instinct Ci Cd Workflow Update
+
+## Action
+
+Edit or add .github/workflows/*.yml files, refactor jobs, update release process docs/scripts, verify status checks
+
+## Evidence
+
+- ci-cd-workflow-update workflow
+- files: .github/workflows/*.yml
+
+---
+id: zeep-orbit-instinct-documentation-expansion-localization
+trigger: "When someone wants to improve docs or add new language support"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Instinct Documentation Expansion Localization
+
+## Action
+
+Add or update README, translations, contributing guides, feature docs, and update changelog/release notes if relevant
+
+## Evidence
+
+- documentation-expansion-and-localization workflow
+- files: README.md, i18n/README.*.md, .specs/features/*/*.md
+
+---
+id: zeep-orbit-instinct-table-schema-feature-expansion
+trigger: "When someone wants to add or change table schema features (e.g., FKs, indexes, defaults)"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Instinct Table Schema Feature Expansion
+
+## Action
+
+Update backend schema/config logic, add tests, update frontend components, update translations, update docs/specs
+
+## Evidence
+
+- table-schema-feature-expansion workflow
+- files: internal/config/*.go, internal/provisioner/*.go, internal/dashboard/ui/src/components/TableCard.tsx, .specs/features/*/*.md
+
+---
+id: zeep-orbit-instinct-release-version-bump
+trigger: "When someone wants to release a new version"
+confidence: 0.95
+domain: workflow
+source: repo-analysis
+source_repo: zeeplabs/zeep-orbit
+---
+
+# Zeep Orbit Instinct Release Version Bump
+
+## Action
+
+Update changelog, version files, release notes, commit/tag, and trigger CI/CD
+
+## Evidence
+
+- release-version-bump workflow
+- files: CHANGELOG.md, charts/zeep-orbit/Chart.yaml, internal/dashboard/ui/package.json
+
