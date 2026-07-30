@@ -1,7 +1,9 @@
 # GitHub Shared App Design
 
 **Spec**: `.specs/features/github-shared-app/spec.md`
-**Status**: Draft
+**Status**: Abandoned
+
+**Decisão (2026-07-30)**: revertida. Ver `spec.md` para o rationale completo — resumindo: complexidade real (relay stateless obrigatório, distribuição de 7 secrets incluindo private key pra cada instância self-hosted, novo serviço de infra) supera o ganho de UX. Todo código desta feature (T-01 a T-08) foi revertido do repo. Mantido só como registro de design avaliado e descartado.
 
 ---
 
@@ -10,7 +12,7 @@
 Nenhuma tabela nova, nenhuma mudança de schema. `zeep_system.github_app_config` continua singleton exatamente como hoje (`internal/dashboard/github_config_store.go`, `ON CONFLICT ((TRUE))`). A mudança inteira acontece em **como a linha singleton é populada na primeira vez**:
 
 - **Hoje**: só existe uma forma de popular a linha — o superadmin preenche o form em `GitHubIntegrationPage.tsx`, que chama `POST /api/github/config` (`github_config.go:70` `UpsertConfig`).
-- **Depois**: no boot da instância, se existirem env vars do App compartilhado da Starbem **e** ainda não existir linha em `github_app_config`, o próprio processo chama a função `UpsertGitHubConfig` já existente (reuso total, zero SQL novo) com as credenciais lidas do ambiente. Se já existir uma linha (cliente já configurou o próprio App, fluxo antigo), o boot não mexe em nada — é a garantia de compatibilidade retroativa exigida no spec.
+- **Depois**: no boot da instância, se existirem env vars do App compartilhado da ZeepLabs **e** ainda não existir linha em `github_app_config`, o próprio processo chama a função `UpsertGitHubConfig` já existente (reuso total, zero SQL novo) com as credenciais lidas do ambiente. Se já existir uma linha (cliente já configurou o próprio App, fluxo antigo), o boot não mexe em nada — é a garantia de compatibilidade retroativa exigida no spec.
 
 A UI decide qual tela mostrar (form manual de credenciais vs. só botão "Instalar no GitHub") baseada em uma nova flag exposta por `GET /api/github/config`: `managed_by_env: bool`, calculada em runtime a partir da presença das env vars — não é um dado persistido, é um fato do ambiente do processo.
 
@@ -89,7 +91,7 @@ graph TD
 | Error Scenario | Handling | User Impact |
 |---|---|---|
 | Env vars do App compartilhado ausentes nesta instância | `Configured()` retorna `false`, seeder não roda, UI mostra form legado | Nenhum — comportamento idêntico ao de hoje |
-| Env vars presentes mas credencial inválida (App ID errado, private key malformada) | Seeder chama `VerifyAppCredentials` antes de persistir; falha → loga erro no boot (nível error) e **não** persiste nada, UI cai para estado "não conectado" com form legado como fallback | Superadmin vê "não conectado"; log do processo indica causa pro time Starbem investigar o deployment |
+| Env vars presentes mas credencial inválida (App ID errado, private key malformada) | Seeder chama `VerifyAppCredentials` antes de persistir; falha → loga erro no boot (nível error) e **não** persiste nada, UI cai para estado "não conectado" com form legado como fallback | Superadmin vê "não conectado"; log do processo indica causa pro time ZeepLabs investigar o deployment |
 | Já existe linha em `github_app_config` (cliente com App próprio, fluxo antigo) | Seeder detecta via `GetGitHubConfig != nil` e não faz nada, mesmo com env vars presentes | Cliente já conectado continua funcionando sem interrupção — garantia central de compatibilidade do spec |
 | Private key do App compartilhado com quebras de linha (PEM) em env var/K8s Secret | Documentar exigência de base64 na env var (`GITHUB_SHARED_APP_PRIVATE_KEY_B64`), decodificado no `LoadSharedGitHubAppEnv` — evita problemas de multi-linha em YAML/Helm values | Nenhum — deployment já resolve isso na configuração do Secret |
 

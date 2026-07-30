@@ -1,15 +1,19 @@
 # GitHub Shared App Specification
 
+## Status: Abandoned
+
+**Decisão (2026-07-30, mesma sessão)**: revertida. Complexidade real descoberta (relay stateless obrigatório por causa do Setup URL único do GitHub App, distribuição de 7 secrets — incluindo private key — pra cada instância self-hosted, novo servico de infra pra ZeepLabs hospedar e manter) supera o ganho de UX (cliente economiza ~5min criando o próprio App). Decisão do usuário: manter o fluxo original de `github-integration/` — cada empresa cliente cria e configura o próprio GitHub App, consistente com o modelo self-hosted (1 instância = 1 empresa = 1 dono de credencial). Todo código desta feature (T-01 a T-08) foi revertido do repo. Arquivo mantido só como registro de design já avaliado e descartado — não reabrir sem motivo novo.
+
 ## Problem Statement
 
-Hoje, para usar a integração GitHub (`.specs/features/github-integration/`), cada empresa cliente precisa **criar seu próprio GitHub App** (na própria conta/org GitHub) e colar App ID, Client Secret, Private Key (PEM) e Webhook Secret no dashboard antes de conectar. Isso é atrito desnecessário: a Starbem já é dona do produto zeep-orbit, então pode ser dona de **um único GitHub App** (ex: "Zeep Orbit") e distribuir suas credenciais junto com o próprio deployment. Cada empresa cliente passaria só a **instalar** esse App já existente na própria org GitHub — sem criar nada do zero, sem gerar/colar private key.
+Hoje, para usar a integração GitHub (`.specs/features/github-integration/`), cada empresa cliente precisa **criar seu próprio GitHub App** (na própria conta/org GitHub) e colar App ID, Client Secret, Private Key (PEM) e Webhook Secret no dashboard antes de conectar. Isso é atrito desnecessário: a ZeepLabs já é dona do produto zeep-orbit, então pode ser dona de **um único GitHub App** (ex: "Zeep Orbit") e distribuir suas credenciais junto com o próprio deployment. Cada empresa cliente passaria só a **instalar** esse App já existente na própria org GitHub — sem criar nada do zero, sem gerar/colar private key.
 
 **Modelo de negócio não muda**: continua self-hosted, uma instância = uma empresa = uma org GitHub conectada (`github-integration/spec.md`, Out of Scope: "Múltiplas orgs GitHub por instância"). Esta feature não introduz multi-tenancy — só move a *propriedade das credenciais do App* de "por cliente" para "do produto".
 
 ## Goals
 
 - [ ] Credenciais do GitHub App (App ID, Private Key, Client Secret, Webhook Secret) deixam de ser inseridas pelo admin de cada empresa e passam a ser configuração do produto (shipped via env var/secret do Helm chart, mesmo padrão de outros secrets documentados no README)
-- [ ] Admin de cada empresa só vê e clica em "Instalar no GitHub", apontando para o slug fixo do App da Starbem (`github.com/apps/zeep-orbit/installations/new` ou equivalente)
+- [ ] Admin de cada empresa só vê e clica em "Instalar no GitHub", apontando para o slug fixo do App da ZeepLabs (`github.com/apps/zeep-orbit/installations/new` ou equivalente)
 - [ ] `installation_id` / `org_login` continuam persistidos por instância (schema atual do `zeep_system.github_app_config` já resolve isso — sem mudança de multi-tenant)
 - [ ] Compatibilidade retroativa: instância já conectada com App próprio do cliente continua funcionando sem migração forçada (ver Edge Cases)
 
@@ -18,7 +22,7 @@ Hoje, para usar a integração GitHub (`.specs/features/github-integration/`), c
 | Feature | Reason |
 |---|---|
 | Multi-tenancy / múltiplas orgs por instância | Modelo de negócio segue self-hosted, 1 instância = 1 empresa — decisão reafirmada nesta sessão |
-| Criar/gerenciar o GitHub App da Starbem em si (manifest, permissões, registro no GitHub) | Ação administrativa única, feita manualmente pela Starbem fora do dashboard — não é feature de código |
+| Criar/gerenciar o GitHub App da ZeepLabs em si (manifest, permissões, registro no GitHub) | Ação administrativa única, feita manualmente pela ZeepLabs fora do dashboard — não é feature de código |
 | Migração automática de instâncias já conectadas com App próprio para o App compartilhado | Cliente já conectado pode continuar como está; troca é opcional e manual (ver Edge Cases) |
 | Rotação/gestão de secrets do App compartilhado | Segue o mesmo processo de qualquer secret de produto (fora do escopo desta feature) |
 
@@ -28,7 +32,7 @@ Hoje, para usar a integração GitHub (`.specs/features/github-integration/`), c
 
 ### P1: Produto distribui credenciais do GitHub App compartilhado ⭐ MVP
 
-**User Story**: Como time Starbem, quero empacotar as credenciais do GitHub App "Zeep Orbit" (App ID, Private Key, Client Secret, Webhook Secret) como configuração do produto, para que nenhuma empresa cliente precise criar o próprio App.
+**User Story**: Como time ZeepLabs, quero empacotar as credenciais do GitHub App "Zeep Orbit" (App ID, Private Key, Client Secret, Webhook Secret) como configuração do produto, para que nenhuma empresa cliente precise criar o próprio App.
 
 **Why P1**: Sem isso, não há credencial válida para nenhuma instância usar — é pré-requisito de tudo mais.
 
@@ -52,7 +56,7 @@ Hoje, para usar a integração GitHub (`.specs/features/github-integration/`), c
 **Acceptance Criteria**:
 
 1. WHEN o superadmin acessa "Integrações → GitHub" pela primeira vez e a instância tem credenciais de produto configuradas THEN o dashboard SHALL mostrar estado "não conectado" com apenas um botão "Instalar no GitHub" (sem formulário de App ID/Private Key/Client Secret/Webhook Secret).
-2. WHEN o superadmin clica "Instalar no GitHub" THEN o sistema SHALL redirecionar para o fluxo nativo de instalação do App compartilhado (slug fixo do App da Starbem).
+2. WHEN o superadmin clica "Instalar no GitHub" THEN o sistema SHALL redirecionar para o fluxo nativo de instalação do App compartilhado (slug fixo do App da ZeepLabs).
 3. WHEN o GitHub redireciona de volta com `installation_id` THEN o sistema SHALL persistir `installation_id`, `org_login`, `installed_at` em `zeep_system.github_app_config` — mesma tabela/linha singleton de hoje, sem mudança de schema.
 4. WHEN qualquer ação desta feature ocorre (instalação concluída, desconexão) THEN o sistema SHALL registrar entrada em `audit_log` (mesmo padrão já existente).
 

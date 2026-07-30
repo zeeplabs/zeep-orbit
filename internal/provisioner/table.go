@@ -58,9 +58,15 @@ func onDeleteSQL(onDelete string) string {
 	}
 }
 
-// Single quotes in DEFAULT value are escaped by doubling them (”). schemaName
-// is needed to schema-qualify REFERENCES targets (references are intra-app,
-// so the target table lives in the same schema as this column's table).
+// Single quotes in a literal DEFAULT value are escaped by doubling them
+// (”). When col.DefaultIsExpression is set, col.Default is written
+// unquoted instead (e.g. "now()", "gen_random_uuid()") — callers must have
+// already validated it against the allowlist in config.ValidateTables
+// (validateDefault), since this function trusts col.Type/col.Default the
+// same way it already trusts col.Type without re-checking allowedTypes.
+// schemaName is needed to schema-qualify REFERENCES targets (references are
+// intra-app, so the target table lives in the same schema as this column's
+// table).
 func columnDDL(schemaName string, col config.ColumnConfig) string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("%q %s", col.Name, pgType(col.Type)))
@@ -69,8 +75,12 @@ func columnDDL(schemaName string, col config.ColumnConfig) string {
 		sb.WriteString(" NOT NULL")
 	}
 	if col.Default != "" {
-		escaped := strings.ReplaceAll(col.Default, "'", "''")
-		sb.WriteString(fmt.Sprintf(" DEFAULT '%s'", escaped))
+		if col.DefaultIsExpression {
+			sb.WriteString(fmt.Sprintf(" DEFAULT %s", col.Default))
+		} else {
+			escaped := strings.ReplaceAll(col.Default, "'", "''")
+			sb.WriteString(fmt.Sprintf(" DEFAULT '%s'", escaped))
+		}
 	}
 	if col.Unique {
 		sb.WriteString(" UNIQUE")

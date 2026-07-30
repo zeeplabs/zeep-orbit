@@ -1,8 +1,12 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
+	"time"
 )
 
 var validOnDelete = map[string]bool{
@@ -12,6 +16,18 @@ var validOnDelete = map[string]bool{
 	"set_null":  true,
 	"no_action": true,
 }
+
+// defaultExpressions is a strict allowlist of SQL expressions a column's
+// default may use when DefaultIsExpression is true, keyed by column type.
+// This value is embedded unquoted into DDL (internal/provisioner/table.go
+// columnDDL), so anything not in this list is rejected rather than passed
+// through — never treat this as extensible via user input.
+var defaultExpressions = map[string][]string{
+	"uuid":        {"gen_random_uuid()"},
+	"timestamptz": {"now()"},
+}
+
+var uuidLiteralRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 // ValidateTables checks foreign key references, index declarations, and
 // circular dependencies across a single app's full set of tables. Callers
@@ -27,10 +43,13 @@ func ValidateTables(tables []TableConfig) error {
 
 	for _, table := range tables {
 		for k, col := range table.Columns {
+			cPrefix := fmt.Sprintf("table %q, column[%d] (%s)", table.Name, k, col.Name)
+			if err := validateDefault(cPrefix, col); err != nil {
+				return err
+			}
 			if col.References == nil {
 				continue
 			}
-			cPrefix := fmt.Sprintf("table %q, column[%d] (%s)", table.Name, k, col.Name)
 			if err := validateReference(cPrefix, col, tablesByName); err != nil {
 				return err
 			}
@@ -42,6 +61,65 @@ func ValidateTables(tables []TableConfig) error {
 	}
 
 	return detectReferenceCycle("schema", tables)
+}
+
+// validateDefault checks a column's Default value before it reaches DDL
+// generation. Expression defaults (DefaultIsExpression=true) are checked
+// against the defaultExpressions allowlist for the column's type — since
+// columnDDL embeds this value unquoted, anything not on the allowlist is
+// rejected here rather than risk it reaching raw SQL. Literal defaults are
+// checked to actually parse as the column's type, so a bad value fails fast
+// with a clear error instead of surfacing as a cryptic Postgres error (or,
+// worse, silently coercing) once DDL runs.
+func validateDefault(cPrefix string, col ColumnConfig) error {
+	if col.Default == "" {
+		return nil
+	}
+
+	if col.DefaultIsExpression {
+		for _, allowed := range defaultExpressions[col.Type] {
+			if col.Default == allowed {
+				return nil
+			}
+		}
+		return fmt.Errorf("%s: default expression %q is not allowed for column type %q", cPrefix, col.Default, col.Type)
+	}
+
+	switch col.Type {
+	case "integer":
+		if _, err := strconv.ParseInt(col.Default, 10, 32); err != nil {
+			return fmt.Errorf("%s: default %q is not a valid integer", cPrefix, col.Default)
+		}
+	case "bigint":
+		if _, err := strconv.ParseInt(col.Default, 10, 64); err != nil {
+			return fmt.Errorf("%s: default %q is not a valid bigint", cPrefix, col.Default)
+		}
+	case "numeric":
+		if _, err := strconv.ParseFloat(col.Default, 64); err != nil {
+			return fmt.Errorf("%s: default %q is not a valid number", cPrefix, col.Default)
+		}
+	case "boolean":
+		lower := strings.ToLower(col.Default)
+		if lower != "true" && lower != "false" {
+			return fmt.Errorf("%s: default %q is not a valid boolean (use true or false)", cPrefix, col.Default)
+		}
+	case "uuid":
+		if !uuidLiteralRe.MatchString(col.Default) {
+			return fmt.Errorf("%s: default %q is not a valid UUID (use %s, or the gen_random_uuid() expression)", cPrefix, col.Default, "8-4-4-4-12 hex format")
+		}
+	case "timestamptz":
+		if _, err := time.Parse(time.RFC3339, col.Default); err != nil {
+			return fmt.Errorf("%s: default %q is not a valid RFC3339 timestamp (use the now() expression for the current time)", cPrefix, col.Default)
+		}
+	case "jsonb":
+		if !json.Valid([]byte(col.Default)) {
+			return fmt.Errorf("%s: default %q is not valid JSON", cPrefix, col.Default)
+		}
+	case "text":
+		// Any string is a valid text default.
+	}
+
+	return nil
 }
 
 // validateReference checks a single column's References against the app's

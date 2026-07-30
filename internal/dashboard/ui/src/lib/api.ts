@@ -19,6 +19,7 @@ export interface ColumnDef {
   type: string
   required: boolean
   default: string
+  default_is_expression?: boolean
   unique: boolean
   references?: ReferenceDef | null
 }

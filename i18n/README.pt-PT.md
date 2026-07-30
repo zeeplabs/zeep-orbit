@@ -260,10 +260,29 @@ As aplicações frontend permitem-lhe fazer deploy de sites e aplicações web s
 
 ### Integração com GitHub
 
-- Instalação da GitHub App com acesso a "All repositories"
-- Gestão de templates com campos de configuração de deploy
-- Deploy keys por aplicação para sincronização segura local↔repositório
-- Arquivamento do repositório ao eliminar aplicações frontend
+O Zeep Orbit liga-se ao GitHub através de uma **GitHub App** — nunca OAuth ou personal access token, pelo que nenhuma credencial pessoal fica armazenada. Cada instância self-hosted cria e liga a própria App à própria org do GitHub (é um produto self-hosted: uma instância, uma empresa, uma App — não existe App partilhada/central para instalar).
+
+**1. Crie a GitHub App** — `https://github.com/organizations/<sua-org>/settings/apps/new` (ou nas definições de programador da sua conta pessoal, se não utilizar uma org):
+
+| Campo | Valor |
+|---|---|
+| GitHub App name | Qualquer nome único (tem de ser único em todo o GitHub), ex: `acme-zeep-orbit` |
+| Homepage URL | URL da sua instância, ou este repositório |
+| Callback URL | Deixe vazio — não é utilizado, este fluxo nunca faz OAuth de login de utilizador |
+| Setup URL | `https://<sua-instancia>/dashboard/api/github/install/callback` |
+| Webhook → Active | Desmarcado — nenhum evento de webhook é consumido hoje |
+| Repository permissions → Administration | Read and write |
+| Where can this GitHub App be installed | Only on this account |
+
+Gere uma **private key** na página de definições da App (transfere um ficheiro `.pem`) e anote **App ID**, **App slug**, **Client ID** e **Client Secret**.
+
+**2. Configure no dashboard** — vá a **Integrações → GitHub** e cole o App ID, App slug, Client ID, Client Secret, e o conteúdo completo do ficheiro `.pem` da private key. O Webhook Secret pode ser qualquer valor (reservado para uso futuro — não validado hoje).
+
+**3. Instale** — clique em **Instalar**, que executa o fluxo nativo de instalação do GitHub. Escolha sempre **"Only select repositories"** e marque os repositórios que esta instância deve gerir — a API cria repositórios novos e gere deploy keys só dentro desse âmbito, nunca "All repositories".
+
+**4. Adicione um repositório template** — no separador **Templates**, registe um repositório marcado como **Template repository** no GitHub (`Settings → Template repository` no próprio repositório). É este repositório que é clonado sempre que alguém cria uma nova aplicação frontend.
+
+Depois de ligado, as deploy keys são geridas automaticamente por aplicação frontend, e os repositórios são arquivados (não eliminados) quando uma aplicação frontend é removida.
 
 ---
 

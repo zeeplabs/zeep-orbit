@@ -50,6 +50,7 @@ func githubHandlerTestPool(t *testing.T) *db.Pool {
 	truncate := func() {
 		_, _ = pool.Exec(context.Background(), `TRUNCATE zeep_system.audit_log`)
 		_, _ = pool.Exec(context.Background(), `TRUNCATE zeep_system.github_app_config`)
+		_, _ = pool.Exec(context.Background(), `TRUNCATE zeep_system.github_templates CASCADE`)
 		_, _ = pool.Exec(context.Background(), `TRUNCATE zeep_system.dashboard_users CASCADE`)
 	}
 	truncate()

@@ -32,6 +32,30 @@ const COLUMN_TYPES = [
   "jsonb",
 ];
 
+// Mirrors the allowlist in internal/config/validate.go (defaultExpressions)
+// — the only SQL expressions the backend accepts for a column default. Keep
+// these two lists in sync; the backend rejects anything not on its own copy
+// regardless of what this UI offers.
+const DEFAULT_EXPRESSIONS: Record<string, string> = {
+  uuid: "gen_random_uuid()",
+  timestamptz: "now()",
+};
+
+// Strips a numeric default's input down to what the column type can
+// actually hold, as the user types — an optional leading "-" and, for
+// numeric only, a single ".". The backend (internal/config/validate.go)
+// still re-validates on submit; this is just to stop obviously-wrong
+// characters (letters, a second "-"/".") from ever being typed.
+const sanitizeNumericDefault = (type: string, raw: string): string => {
+  let v = raw.replace(type === "numeric" ? /[^0-9.-]/g : /[^0-9-]/g, "");
+  v = v.length > 0 ? v[0].replace(/[^0-9-]/, "") + v.slice(1).replace(/-/g, "") : v;
+  if (type === "numeric") {
+    const firstDot = v.indexOf(".");
+    if (firstDot !== -1) v = v.slice(0, firstDot + 1) + v.slice(firstDot + 1).replace(/\./g, "");
+  }
+  return v;
+};
+
 const ON_DELETE_VALUES: NonNullable<ReferenceDef["on_delete"]>[] = ["no_action", "cascade", "restrict", "set_null"];
 const ON_DELETE_LABEL_KEYS: Record<string, string> = {
   no_action: "tableCard.onDeleteNoAction",
@@ -57,6 +81,7 @@ const emptyColumn = (): ColumnDef => ({
   type: "text",
   required: false,
   default: "",
+  default_is_expression: false,
   unique: false,
   references: null,
 });
@@ -330,11 +355,12 @@ export default function TableCard({
             {t("tableCard.relationshipsInfoBtn")}
           </button>
         </div>
-        <div className="grid gap-3 mb-1" style={{ gridTemplateColumns: "1fr 140px 80px 80px 32px 40px" }}>
+        <div className="grid gap-3 mb-1" style={{ gridTemplateColumns: "1fr 140px 80px 80px 140px 32px 40px" }}>
           <span className="text-[11px] text-[#94A3B8] font-semibold">{t("appForm.columnName")}</span>
           <span className="text-[11px] text-[#94A3B8] font-semibold">{t("appForm.columnType")}</span>
           <span className="text-[11px] text-[#94A3B8] font-semibold text-center">{t("appForm.columnReq")}</span>
           <span className="text-[11px] text-[#94A3B8] font-semibold text-center">{t("appForm.columnUnique")}</span>
+          <span className="text-[11px] text-[#94A3B8] font-semibold">{t("tableCard.defaultValue")}</span>
           <span />
           <span />
         </div>
@@ -344,7 +370,7 @@ export default function TableCard({
             <div
               key={auto.name}
               className="grid gap-3 items-center max-md:flex max-md:flex-col max-md:gap-2 max-md:p-3 max-md:bg-white/[0.03] max-md:rounded-xl max-md:border max-md:border-white/[0.06]"
-              style={{ gridTemplateColumns: "1fr 140px 80px 80px 32px 40px" }}
+              style={{ gridTemplateColumns: "1fr 140px 80px 80px 140px 32px 40px" }}
             >
               <div className="h-8 px-2.5 flex items-center gap-1.5 text-[13px] bg-white/[0.02] border border-white/[0.06] rounded-md text-[#94A3B8]">
                 <Lock size={10} strokeWidth={1.5} className="shrink-0" />
@@ -362,6 +388,7 @@ export default function TableCard({
                 </div>
                 <span />
                 <span />
+                <span />
               </div>
             </div>
           ))}
@@ -372,7 +399,7 @@ export default function TableCard({
             <div key={ci} className="max-md:p-3 max-md:bg-white/[0.03] max-md:rounded-xl max-md:border max-md:border-white/[0.06]">
               <div
                 className="grid gap-3 items-center max-md:flex max-md:flex-col max-md:gap-2"
-                style={{ gridTemplateColumns: "1fr 140px 80px 80px 32px 40px" }}
+                style={{ gridTemplateColumns: "1fr 140px 80px 80px 140px 32px 40px" }}
               >
                 <Input
                   value={col.name}
@@ -383,7 +410,18 @@ export default function TableCard({
                   className="h-8 px-2.5 py-1.5 text-[13px] bg-white/[0.05] border-white/[0.10] rounded-md text-[#F8FAFC] placeholder:text-white/30 brand-focus"
                 />
                 <div className="contents max-md:flex max-md:items-center max-md:gap-2">
-                  <Select value={col.type} onValueChange={(val) => updateColumn(ci, { type: val })}>
+                  <Select
+                    value={col.type}
+                    onValueChange={(val) =>
+                      // A default value/expression is only ever valid for
+                      // the type it was set under (a boolean "true" isn't a
+                      // valid uuid, an expression picked for uuid isn't
+                      // valid for integer, etc.) — changing type always
+                      // clears it rather than risk sending a mismatched
+                      // default the backend will reject.
+                      updateColumn(ci, { type: val, default: "", default_is_expression: false })
+                    }
+                  >
                     <SelectTrigger className="h-8 w-[130px] max-md:flex-1 text-[12px] bg-white/[0.05] border-white/[0.10] text-[#F8FAFC] rounded-md px-2 brand-focus">
                       <SelectValue />
                     </SelectTrigger>
@@ -408,6 +446,61 @@ export default function TableCard({
                       onCheckedChange={(val) => updateColumn(ci, { unique: val })}
                       className="h-5 w-9"
                     />
+                  </div>
+                  <div className="flex items-center max-md:w-full">
+                    {col.type === "boolean" ? (
+                      <Select
+                        value={col.default === "" ? "__none__" : col.default}
+                        onValueChange={(val) =>
+                          updateColumn(ci, val === "__none__"
+                            ? { default: "", default_is_expression: false }
+                            : { default: val, default_is_expression: false })
+                        }
+                      >
+                        <SelectTrigger className="h-8 w-full text-[12px] bg-white/[0.05] border-white/[0.10] text-[#F8FAFC] rounded-md px-2 brand-focus">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-[#0D0D14] border-white/[0.10] text-[#F8FAFC]">
+                          <SelectItem value="__none__" className="text-[12px]">{t("tableCard.defaultNone")}</SelectItem>
+                          <SelectItem value="true" className="text-[12px]">true</SelectItem>
+                          <SelectItem value="false" className="text-[12px]">false</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : DEFAULT_EXPRESSIONS[col.type] ? (
+                      <Select
+                        value={col.default_is_expression ? col.default : "__none__"}
+                        onValueChange={(val) =>
+                          updateColumn(ci, val === "__none__"
+                            ? { default: "", default_is_expression: false }
+                            : { default: val, default_is_expression: true })
+                        }
+                      >
+                        <SelectTrigger className="h-8 w-full text-[12px] bg-white/[0.05] border-white/[0.10] text-[#F8FAFC] rounded-md px-2 brand-focus">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-[#0D0D14] border-white/[0.10] text-[#F8FAFC]">
+                          <SelectItem value="__none__" className="text-[12px]">{t("tableCard.defaultNone")}</SelectItem>
+                          <SelectItem value={DEFAULT_EXPRESSIONS[col.type]} className="text-[12px] font-mono">
+                            {DEFAULT_EXPRESSIONS[col.type]}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : col.type === "integer" || col.type === "bigint" || col.type === "numeric" ? (
+                      <Input
+                        value={col.default}
+                        onChange={(e) =>
+                          updateColumn(ci, {
+                            default: sanitizeNumericDefault(col.type, e.target.value),
+                            default_is_expression: false,
+                          })
+                        }
+                        inputMode={col.type === "numeric" ? "decimal" : "numeric"}
+                        placeholder={t("tableCard.defaultNone")}
+                        className="h-8 w-full px-2 text-[12px] bg-white/[0.05] border-white/[0.10] rounded-md text-[#F8FAFC] placeholder:text-white/30 brand-focus"
+                      />
+                    ) : (
+                      <span />
+                    )}
                   </div>
                   <button
                     type="button"
@@ -541,9 +634,9 @@ export default function TableCard({
                   value={idx.name}
                   onChange={(e) => updateIndex(ii, { name: e.target.value.toLowerCase().replace(/[\s-]+/g, "_") })}
                   placeholder={t("tableCard.indexNamePlaceholder")}
-                  className="h-7 w-[160px] px-2 py-1 text-[12px] bg-white/[0.05] border-white/[0.10] rounded-md text-[#F8FAFC] placeholder:text-white/30 brand-focus"
+                  className="h-7 w-[160px] shrink-0 px-2 py-1 text-[12px] bg-white/[0.05] border-white/[0.10] rounded-md text-[#F8FAFC] placeholder:text-white/30 brand-focus"
                 />
-                <div className="flex flex-wrap gap-1">
+                <div className="flex flex-wrap gap-1 flex-1 min-w-[120px]">
                   {columns.filter((c) => c.name.trim()).map((c) => (
                     <button
                       key={c.name}
@@ -560,22 +653,24 @@ export default function TableCard({
                     </button>
                   ))}
                 </div>
-                <div className="flex items-center gap-1.5 ml-auto">
-                  <span className="text-[11px] text-[#94A3B8]">{t("tableCard.uniqueLabel")}</span>
-                  <Switch
-                    checked={!!idx.unique}
-                    onCheckedChange={(val) => updateIndex(ii, { unique: val })}
-                    className="h-5 w-9"
-                  />
+                <div className="flex items-center gap-2 shrink-0 ml-auto">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] text-[#94A3B8]">{t("tableCard.uniqueLabel")}</span>
+                    <Switch
+                      checked={!!idx.unique}
+                      onCheckedChange={(val) => updateIndex(ii, { unique: val })}
+                      className="h-5 w-9"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    title={t("tableCard.removeIndex")}
+                    onClick={() => removeIndex(ii)}
+                    className="w-7 h-7 flex items-center justify-center rounded-md border border-red-500/[0.12] bg-red-500/[0.06] text-red-400 cursor-pointer hover:bg-red-500/[0.12] transition-colors shrink-0"
+                  >
+                    <Trash2 size={12} strokeWidth={1.5} />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  title={t("tableCard.removeIndex")}
-                  onClick={() => removeIndex(ii)}
-                  className="w-7 h-7 flex items-center justify-center rounded-md border border-red-500/[0.12] bg-red-500/[0.06] text-red-400 cursor-pointer hover:bg-red-500/[0.12] transition-colors"
-                >
-                  <Trash2 size={12} strokeWidth={1.5} />
-                </button>
               </div>
             ))}
           </div>

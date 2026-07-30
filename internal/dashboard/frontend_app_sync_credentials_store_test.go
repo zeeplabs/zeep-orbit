@@ -71,7 +71,7 @@ func syncCredentialsTestPool(t *testing.T) *db.Pool {
 		}
 	}
 
-	if _, err := pool.Exec(ctx, `TRUNCATE zeep_system.frontend_app_sync_credentials, zeep_system.frontend_apps, zeep_system.github_templates, zeep_system.dashboard_users`); err != nil {
+	if _, err := pool.Exec(ctx, `TRUNCATE zeep_system.frontend_app_sync_credentials, zeep_system.frontend_apps, zeep_system.github_templates, zeep_system.dashboard_users CASCADE`); err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
 

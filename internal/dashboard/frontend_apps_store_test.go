@@ -73,11 +73,11 @@ func frontendAppsTestPool(t *testing.T) *db.Pool {
 		t.Fatalf("create unique index: %v", err)
 	}
 
-	if _, err := pool.Exec(ctx, `TRUNCATE zeep_system.frontend_apps, zeep_system.github_templates, zeep_system.dashboard_users`); err != nil {
+	if _, err := pool.Exec(ctx, `TRUNCATE zeep_system.frontend_apps, zeep_system.github_templates, zeep_system.dashboard_users CASCADE`); err != nil {
 		t.Fatalf("truncate tables: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), `TRUNCATE zeep_system.frontend_apps, zeep_system.github_templates, zeep_system.dashboard_users`)
+		_, _ = pool.Exec(context.Background(), `TRUNCATE zeep_system.frontend_apps, zeep_system.github_templates, zeep_system.dashboard_users CASCADE`)
 	})
 
 	return pool

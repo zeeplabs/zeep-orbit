@@ -132,3 +132,80 @@ func TestValidateTables_IndexUnknownColumn(t *testing.T) {
 		t.Fatal("expected error for index on unknown column, got nil")
 	}
 }
+
+func defaultTestTable(col ColumnConfig) []TableConfig {
+	col.Name = "col"
+	return []TableConfig{{Name: "t", Columns: []ColumnConfig{col}}}
+}
+
+func TestValidateTables_DefaultLiteralValid(t *testing.T) {
+	cases := []ColumnConfig{
+		{Type: "text", Default: "anything goes"},
+		{Type: "integer", Default: "42"},
+		{Type: "integer", Default: "-7"},
+		{Type: "bigint", Default: "9223372036854775807"},
+		{Type: "numeric", Default: "3.14"},
+		{Type: "boolean", Default: "true"},
+		{Type: "boolean", Default: "FALSE"},
+		{Type: "uuid", Default: "550e8400-e29b-41d4-a716-446655440000"},
+		{Type: "timestamptz", Default: "2026-01-01T00:00:00Z"},
+		{Type: "jsonb", Default: `{"a":1}`},
+		{Type: "jsonb", Default: `[]`},
+	}
+	for _, c := range cases {
+		if err := ValidateTables(defaultTestTable(c)); err != nil {
+			t.Errorf("type=%s default=%q: expected no error, got: %v", c.Type, c.Default, err)
+		}
+	}
+}
+
+func TestValidateTables_DefaultLiteralInvalid(t *testing.T) {
+	cases := []ColumnConfig{
+		{Type: "integer", Default: "not-a-number"},
+		{Type: "integer", Default: "3.14"},
+		{Type: "bigint", Default: "abc"},
+		{Type: "numeric", Default: "abc"},
+		{Type: "boolean", Default: "yes"},
+		{Type: "uuid", Default: "not-a-uuid"},
+		{Type: "timestamptz", Default: "not-a-date"},
+		{Type: "jsonb", Default: "{not valid json"},
+	}
+	for _, c := range cases {
+		if err := ValidateTables(defaultTestTable(c)); err == nil {
+			t.Errorf("type=%s default=%q: expected error, got nil", c.Type, c.Default)
+		}
+	}
+}
+
+func TestValidateTables_DefaultExpressionAllowed(t *testing.T) {
+	cases := []ColumnConfig{
+		{Type: "uuid", Default: "gen_random_uuid()", DefaultIsExpression: true},
+		{Type: "timestamptz", Default: "now()", DefaultIsExpression: true},
+	}
+	for _, c := range cases {
+		if err := ValidateTables(defaultTestTable(c)); err != nil {
+			t.Errorf("type=%s expression=%q: expected no error, got: %v", c.Type, c.Default, err)
+		}
+	}
+}
+
+func TestValidateTables_DefaultExpressionRejectsUnlistedValue(t *testing.T) {
+	cases := []ColumnConfig{
+		// Not on the allowlist for this type, despite being marked as an expression.
+		{Type: "uuid", Default: "now()", DefaultIsExpression: true},
+		{Type: "text", Default: "now()", DefaultIsExpression: true},
+		// Classic injection attempt: must never be embedded unquoted.
+		{Type: "text", Default: "'; DROP TABLE users; --", DefaultIsExpression: true},
+	}
+	for _, c := range cases {
+		if err := ValidateTables(defaultTestTable(c)); err == nil {
+			t.Errorf("type=%s expression=%q: expected error, got nil", c.Type, c.Default)
+		}
+	}
+}
+
+func TestValidateTables_DefaultEmptyAlwaysValid(t *testing.T) {
+	if err := ValidateTables(defaultTestTable(ColumnConfig{Type: "integer", Default: ""})); err != nil {
+		t.Fatalf("expected no error for empty default, got: %v", err)
+	}
+}

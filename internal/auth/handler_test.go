@@ -54,6 +54,9 @@ func TestMain(m *testing.M) {
 			"avatar_url"         TEXT,
 			"email_confirmed_at" TIMESTAMPTZ,
 			"last_sign_in_at"    TIMESTAMPTZ,
+			"active"             BOOLEAN     NOT NULL DEFAULT true,
+			"provider"           TEXT        NOT NULL DEFAULT 'email',
+			"google_id"          TEXT,
 			"created_at"         TIMESTAMPTZ NOT NULL DEFAULT now(),
 			"updated_at"         TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,

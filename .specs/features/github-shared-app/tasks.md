@@ -1,7 +1,9 @@
 # GitHub Shared App Tasks
 
 **Design**: `.specs/features/github-shared-app/design.md`
-**Status**: Draft
+**Status**: Abandoned
+
+**Decisão (2026-07-30)**: revertida — ver `spec.md` para o rationale completo. Todo o código destas 8 tasks (T-01 a T-08) foi implementado, testado, e depois revertido do repo na mesma sessão. Mantido só como registro histórico.
 
 **Nota sobre gates**: mesma convenção já usada em `.specs/features/github-integration/tasks.md` — inferida do `Makefile` real do repo, nada inventado.
 
@@ -150,7 +152,7 @@ T-03, T-05 ──→ T-06
 **Done when**:
 - [ ] `managed_by_env: true` → form de credenciais não renderiza, só botão de instalação
 - [ ] `managed_by_env: false` → tela idêntica à de hoje, sem regressão
-- [ ] Strings novas (se houver, ex: texto explicando "App gerenciado pela Starbem") passam por `react-i18next`, adicionadas em `en.json` e `pt-BR.json` na mesma mudança (regra `AGENTS.md` §5)
+- [ ] Strings novas (se houver, ex: texto explicando "App gerenciado pela ZeepLabs") passam por `react-i18next`, adicionadas em `en.json` e `pt-BR.json` na mesma mudança (regra `AGENTS.md` §5)
 - [ ] Gate check passa: `npx tsc -b && npm run build`
 
 **Tests**: none (mesma justificativa de UI já usada em `github-integration/tasks.md` T-10/T-11 — sem TESTING.md exigindo e2e aqui)
@@ -169,7 +171,7 @@ T-03, T-05 ──→ T-06
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] 6 env vars documentadas nas 4 versões do README, com nota "opcional — só necessário se a Starbem for distribuir um App compartilhado"
+- [ ] 6 env vars documentadas nas 4 versões do README, com nota "opcional — só necessário se a ZeepLabs for distribuir um App compartilhado"
 - [ ] `CHANGELOG.md` ganha entrada em `[Unreleased]`
 - [ ] `python3 -c "import json; json.load(open('src/locales/en.json'))"` e `pt-BR.json` (se strings de UI da T-05 tocaram JSON de i18n) continuam válidos
 

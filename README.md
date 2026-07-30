@@ -262,10 +262,29 @@ Frontend apps let you deploy websites and web apps with zero configuration:
 
 ### GitHub Integration
 
-- GitHub App installation with "All repositories" access
-- Template management with deploy configuration fields
-- Per-app deploy keys for secure local↔repo sync
-- Repo archival when deleting frontend apps
+Zeep Orbit connects to GitHub via a **GitHub App** — never OAuth or a personal access token, so no one's personal credentials are stored. Each self-hosted instance creates and connects its own App to its own GitHub organization (this is a self-hosted product: one instance, one company, one App — there's no shared/central App to install).
+
+**1. Create the GitHub App** — `https://github.com/organizations/<your-org>/settings/apps/new` (or your personal account's Developer settings if you're not using an org):
+
+| Field | Value |
+|---|---|
+| GitHub App name | Any unique name (must be unique across all of GitHub), e.g. `acme-zeep-orbit` |
+| Homepage URL | Your instance's URL, or this repo |
+| Callback URL | Leave empty — not used, this flow never does user OAuth login |
+| Setup URL | `https://<your-instance>/dashboard/api/github/install/callback` |
+| Webhook → Active | Unchecked — no webhook events are consumed today |
+| Repository permissions → Administration | Read and write |
+| Where can this GitHub App be installed | Only on this account |
+
+Generate a **private key** on the App's settings page (downloads a `.pem` file) and note the **App ID**, **App slug**, **Client ID**, and **Client Secret**.
+
+**2. Configure in the dashboard** — go to **Integrations → GitHub** and paste the App ID, App slug, Client ID, Client Secret, and the full contents of the private key `.pem` file. Webhook Secret can be any value (reserved for future use — not validated today).
+
+**3. Install** — click **Install**, which runs GitHub's native installation flow. Always choose **"Only select repositories"** and pick the repos this instance should manage — the API creates new repos and manages deploy keys only within that scope, never "All repositories".
+
+**4. Add a template repository** — under the **Templates** tab, register a repo that's marked as a **Template repository** on GitHub (`Settings → Template repository` on the repo itself). This is what gets cloned every time someone creates a new frontend app.
+
+Once connected, deploy keys are managed automatically per frontend app, and repos are archived (not deleted) when a frontend app is removed.
 
 ---
 
