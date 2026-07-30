@@ -1,0 +1,47 @@
+name: Reusable CI
+
+on:
+  workflow_call:
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: internal/dashboard/ui/package-lock.json
+
+      - name: Build Dashboard UI
+        run: |
+          cd internal/dashboard/ui
+          npm ci
+          npx tsc -b
+          npm run build
+
+      - name: Go vet
+        run: go vet ./...
+
+      - name: Go build
+        run: go build ./...
+
+      - name: Gofmt check
+        run: |
+          fmt_out="$(gofmt -l .)"
+          if [ -n "$fmt_out" ]; then
+            echo "::error::gofmt found unformatted files:"
+            echo "$fmt_out"
+            exit 1
+          fi
+
+      - name: Go test
+        run: go test ./...
