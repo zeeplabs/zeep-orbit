@@ -2,41 +2,34 @@
 // endpoints: saving/validating App credentials, reporting connectivity
 // status, running the GitHub App installation flow (start + callback), and
 // disconnecting. It mirrors the structure of GoogleOAuthHandler in
-// google.go: a small handler struct holding the DB pool and an in-memory
-// CSRF state store for the installation redirect flow.
+// google.go: a small handler struct holding the DB pool, and a stateless
+// signed CSRF token (not an in-memory map) for the installation redirect
+// flow — required so the callback validates correctly regardless of which
+// replica handled the earlier /install/start request, behind a non-sticky
+// load balancer running multiple replicas.
 package dashboard
 
 import (
 	"context"
-	"crypto/rand"
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
-	"sync"
+	"strings"
 	"time"
 
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 	"github.com/zeeplabs/zeep-orbit/internal/github"
 )
 
-// githubInstallState is a single-use, time-limited CSRF token issued right
-// before redirecting the superadmin to GitHub's "install this App" page, and
-// consumed by the installation callback. Same shape as googleState in
-// google.go, kept separate since it belongs to an unrelated flow.
-type githubInstallState struct {
-	token     string
-	expiresAt time.Time
-}
-
 // GitHubConfigHandler serves the superadmin-only GitHub App configuration
 // and installation endpoints under /dashboard/api/github/*.
 type GitHubConfigHandler struct {
-	pool     *db.Pool
-	states   map[string]*githubInstallState
-	statesMu sync.Mutex
+	pool *db.Pool
 
 	// httpClient overrides the HTTP client used by internal/github.Client
 	// instances built by this handler. nil in production (github.NewClient
@@ -49,8 +42,7 @@ type GitHubConfigHandler struct {
 // NewGitHubConfigHandler builds a GitHubConfigHandler backed by pool.
 func NewGitHubConfigHandler(pool *db.Pool) *GitHubConfigHandler {
 	return &GitHubConfigHandler{
-		pool:   pool,
-		states: make(map[string]*githubInstallState),
+		pool: pool,
 	}
 }
 
@@ -254,7 +246,7 @@ func (h *GitHubConfigHandler) InstallStart(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	state, err := h.generateState()
+	state, err := signGitHubState([]byte(cfg.PrivateKey))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 		return
@@ -277,7 +269,16 @@ func (h *GitHubConfigHandler) InstallCallback(w http.ResponseWriter, r *http.Req
 	state := q.Get("state")
 	installationIDStr := q.Get("installation_id")
 
-	if !h.validateState(state) {
+	// The state signature is keyed off the configured App's private key, so
+	// config must be loaded before the state can be verified — same
+	// credential used to sign it in InstallStart.
+	cfg, err := GetGitHubConfig(r.Context(), h.pool)
+	if err != nil || cfg == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "GitHub App not configured"})
+		return
+	}
+
+	if !verifyGitHubState([]byte(cfg.PrivateKey), state) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid or expired state"})
 		return
 	}
@@ -289,12 +290,6 @@ func (h *GitHubConfigHandler) InstallCallback(w http.ResponseWriter, r *http.Req
 	installationID, err := strconv.ParseInt(installationIDStr, 10, 64)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid installation_id"})
-		return
-	}
-
-	cfg, err := GetGitHubConfig(r.Context(), h.pool)
-	if err != nil || cfg == nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "GitHub App not configured"})
 		return
 	}
 
@@ -359,39 +354,51 @@ func (h *GitHubConfigHandler) audit(ctx context.Context, userID, userEmail, acti
 	_ = InsertAuditLog(ctx, h.pool, userID, userEmail, action, resourceType, resourceID, resourceName, metadata, ip)
 }
 
-func (h *GitHubConfigHandler) generateState() (string, error) {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("github: generate state: %w", err)
-	}
-	token := base64.RawURLEncoding.EncodeToString(b)
-
-	h.statesMu.Lock()
-	h.states[token] = &githubInstallState{
-		token:     token,
-		expiresAt: time.Now().Add(10 * time.Minute),
-	}
-	h.statesMu.Unlock()
-
-	return token, nil
+// githubStateClaims is the payload embedded in the install-flow "state"
+// param, signed with the configured App's private key. Stateless (no
+// in-memory map) so the callback validates correctly regardless of which
+// replica handled the earlier /install/start request — same pattern as
+// googleStateClaims in google.go.
+type githubStateClaims struct {
+	ExpiresAt int64 `json:"exp"`
 }
 
-func (h *GitHubConfigHandler) validateState(token string) bool {
-	if token == "" {
+func signGitHubState(secret []byte) (string, error) {
+	payload, err := json.Marshal(githubStateClaims{
+		ExpiresAt: time.Now().Add(10 * time.Minute).Unix(),
+	})
+	if err != nil {
+		return "", fmt.Errorf("github: marshal state: %w", err)
+	}
+	encoded := base64.RawURLEncoding.EncodeToString(payload)
+
+	mac := hmac.New(sha256.New, secret)
+	mac.Write([]byte(encoded))
+	sig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+
+	return encoded + "." + sig, nil
+}
+
+func verifyGitHubState(secret []byte, token string) bool {
+	encoded, sig, found := strings.Cut(token, ".")
+	if !found || encoded == "" || sig == "" {
 		return false
 	}
 
-	h.statesMu.Lock()
-	defer h.statesMu.Unlock()
-
-	s, ok := h.states[token]
-	if !ok {
+	mac := hmac.New(sha256.New, secret)
+	mac.Write([]byte(encoded))
+	expectedSig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	if !hmac.Equal([]byte(sig), []byte(expectedSig)) {
 		return false
 	}
-	delete(h.states, token) // single-use: consumed whether or not it's still valid
 
-	if time.Now().After(s.expiresAt) {
+	payload, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil {
 		return false
 	}
-	return true
+	var claims githubStateClaims
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return false
+	}
+	return time.Now().Unix() <= claims.ExpiresAt
 }
