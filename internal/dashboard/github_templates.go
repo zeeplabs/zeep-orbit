@@ -75,17 +75,15 @@ func (h *GitHubTemplatesHandler) buildVerifiedClient(w http.ResponseWriter, r *h
 	return client, true
 }
 
-// List handles GET /dashboard/api/github/templates. The ?active_only=true
+// List handles GET /dashboard/api/github/templates. Available to any
+// authenticated role (admins need it to populate the frontend-app creation
+// modal; template CRUD itself stays superadmin-only). The ?active_only=true
 // query param restricts results to active templates only; any other value
 // (or its absence) returns all templates regardless of active status.
 func (h *GitHubTemplatesHandler) List(w http.ResponseWriter, r *http.Request) {
-	user, ok := UserFromContext(r.Context())
+	_, ok := UserFromContext(r.Context())
 	if !ok {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-		return
-	}
-	if user.Role != "superadmin" {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}
 

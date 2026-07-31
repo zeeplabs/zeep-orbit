@@ -19,9 +19,10 @@ func NewDeployProviderConfigHandler(pool *db.Pool) *DeployProviderConfigHandler 
 }
 
 type deployProviderConfigBody struct {
-	APIKey          string `json:"api_key"`
-	RenderProjectID string `json:"render_project_id"`
-	BaseDomain      string `json:"base_domain"`
+	APIKey              string `json:"api_key"`
+	RenderProjectID     string `json:"render_project_id"`
+	RenderEnvironmentID string `json:"render_environment_id"`
+	BaseDomain          string `json:"base_domain"`
 }
 
 func (h *DeployProviderConfigHandler) Status(w http.ResponseWriter, r *http.Request) {
@@ -42,10 +43,11 @@ func (h *DeployProviderConfigHandler) Status(w http.ResponseWriter, r *http.Requ
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"connected":         true,
-		"provider":          cfg.Provider,
-		"render_project_id": cfg.RenderProjectID,
-		"base_domain":       cfg.BaseDomain,
+		"connected":             true,
+		"provider":              cfg.Provider,
+		"render_project_id":     cfg.RenderProjectID,
+		"render_environment_id": cfg.RenderEnvironmentID,
+		"base_domain":           cfg.BaseDomain,
 	})
 }
 
@@ -82,7 +84,7 @@ func (h *DeployProviderConfigHandler) UpsertConfig(w http.ResponseWriter, r *htt
 		return
 	}
 
-	if err := UpsertDeployProviderConfig(r.Context(), h.pool, "render", encrypted, body.RenderProjectID, body.BaseDomain); err != nil {
+	if err := UpsertDeployProviderConfig(r.Context(), h.pool, "render", encrypted, body.RenderProjectID, body.RenderEnvironmentID, body.BaseDomain); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 		return
 	}
@@ -98,9 +100,10 @@ func (h *DeployProviderConfigHandler) audit(ctx context.Context, userID, userEma
 }
 
 type deployProviderFieldsBody struct {
-	APIKey          string `json:"api_key"`
-	RenderProjectID string `json:"render_project_id"`
-	BaseDomain      string `json:"base_domain"`
+	APIKey              string `json:"api_key"`
+	RenderProjectID     string `json:"render_project_id"`
+	RenderEnvironmentID string `json:"render_environment_id"`
+	BaseDomain          string `json:"base_domain"`
 }
 
 func (h *DeployProviderConfigHandler) UpdateFields(w http.ResponseWriter, r *http.Request) {
@@ -142,7 +145,7 @@ func (h *DeployProviderConfigHandler) UpdateFields(w http.ResponseWriter, r *htt
 		apiKeyEncrypted = cfg.APIKey
 	}
 
-	if err := UpsertDeployProviderConfig(r.Context(), h.pool, "render", apiKeyEncrypted, body.RenderProjectID, body.BaseDomain); err != nil {
+	if err := UpsertDeployProviderConfig(r.Context(), h.pool, "render", apiKeyEncrypted, body.RenderProjectID, body.RenderEnvironmentID, body.BaseDomain); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 		return
 	}

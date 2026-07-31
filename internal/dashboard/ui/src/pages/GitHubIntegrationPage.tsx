@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
-import { Save, Eye, EyeOff, Loader2, Link2, Trash2, Plus, Pencil, Rocket } from "lucide-react";
+import { Save, Eye, EyeOff, Loader2, Link2, Trash2, Plus, Pencil, Rocket, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
@@ -50,6 +51,33 @@ export default function GitHubIntegrationPage() {
   const setTab = (value: string) => {
     setSearchParams({ tab: value }, { replace: true });
   };
+
+  const { data: me, isLoading: meLoading } = useQuery({
+    queryKey: ["me"],
+    queryFn: async () => {
+      const res = await fetch("/dashboard/api/me", { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json() as Promise<{ id: string; email: string; name: string; role: string; language: string }>;
+    },
+    retry: false,
+  });
+
+  if (meLoading) return null;
+
+  if (me?.role !== "superadmin") {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: EASE }}
+        className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-12 text-center"
+      >
+        <ShieldAlert size={32} className="text-[#64748B]" />
+        <h2 className="text-[16px] font-bold text-[#F8FAFC]">{t("github.forbiddenTitle", "Superadmin access required")}</h2>
+        <p className="max-w-md text-sm text-[#94A3B8]">{t("github.forbiddenBody", "GitHub integration, templates, and deploy provider settings can only be managed by a superadmin.")}</p>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div
@@ -917,9 +945,10 @@ function DeployTab() {
   const { t } = useTranslation();
   const [apiKey, setApiKey] = useState("");
   const [renderProjectId, setRenderProjectId] = useState("");
+  const [renderEnvironmentId, setRenderEnvironmentId] = useState("");
   const [baseDomain, setBaseDomain] = useState("");
   const [saving, setSaving] = useState(false);
-  const [status, setStatus] = useState<{ connected: boolean; provider: string; render_project_id?: string; base_domain?: string } | null>(null);
+  const [status, setStatus] = useState<{ connected: boolean; provider: string; render_project_id?: string; render_environment_id?: string; base_domain?: string } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [messageType, setMessageType] = useState<"success" | "error">("success");
 
@@ -932,6 +961,7 @@ function DeployTab() {
         const data = await res.json();
         setStatus(data);
         if (data.render_project_id) setRenderProjectId(data.render_project_id);
+        if (data.render_environment_id) setRenderEnvironmentId(data.render_environment_id);
         if (data.base_domain) setBaseDomain(data.base_domain);
       }
     } catch {}
@@ -944,7 +974,7 @@ function DeployTab() {
       const res = await fetch("/dashboard/api/deploy-provider/config", {
         method: "PUT", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ api_key: apiKey, render_project_id: renderProjectId, base_domain: baseDomain }),
+        body: JSON.stringify({ api_key: apiKey, render_project_id: renderProjectId, render_environment_id: renderEnvironmentId, base_domain: baseDomain }),
       });
       const data = await res.json();
       if (!res.ok) { setMessage(data.error || "Failed"); setMessageType("error"); return; }
@@ -992,6 +1022,12 @@ function DeployTab() {
             <input type="text" value={renderProjectId} onChange={(e) => setRenderProjectId(e.target.value)}
               placeholder="prj-..." className={inputClass} />
             <p className="mt-1 text-[11px] text-[#64748B]">{t("deploy.projectIdHint", "All services created via Zeep Orbit will be grouped under this project. Leave empty to use the default workspace.")}</p>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">{t("deploy.environmentId", "Render Environment ID (optional)")}</label>
+            <input type="text" value={renderEnvironmentId} onChange={(e) => setRenderEnvironmentId(e.target.value)}
+              placeholder="evm-..." className={inputClass} />
+            <p className="mt-1 text-[11px] text-[#64748B]">{t("deploy.environmentIdHint", "Required if the Project above has more than one Environment — otherwise deploys fail since Render can't tell which one to use. Leave empty if the project has exactly one Environment; it's resolved automatically.")}</p>
           </div>
           <div>
             <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">{t("deploy.baseDomain", "Base Domain (optional)")}</label>
