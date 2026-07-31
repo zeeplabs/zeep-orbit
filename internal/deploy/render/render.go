@@ -71,6 +71,41 @@ type ownerResponse struct {
 	} `json:"owner"`
 }
 
+type environmentEntry struct {
+	Environment struct {
+		ID        string `json:"id"`
+		Name      string `json:"name"`
+		ProjectID string `json:"projectId"`
+	} `json:"environment"`
+}
+
+// resolveEnvironmentID looks up the single Environment belonging to projectID.
+// The Render API assigns new services to an Environment, not directly to a
+// Project — a Project ID stored in deploy config (e.g. "prj-...") cannot be
+// sent as-is on service creation, it has to be translated to that Environment's
+// ID first. Errors out if the project has zero or more than one environment,
+// since there is nothing in our config to disambiguate which one to use.
+func resolveEnvironmentID(ctx context.Context, client *Client, projectID string) (string, error) {
+	resp, body, err := client.do(ctx, http.MethodGet, "/environments?projectId="+projectID, nil)
+	if err != nil {
+		return "", fmt.Errorf("render: fetch environments: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("render: fetch environments: %d: %s", resp.StatusCode, string(body))
+	}
+	var envs []environmentEntry
+	if err := json.Unmarshal(body, &envs); err != nil {
+		return "", fmt.Errorf("render: parse environments: %w", err)
+	}
+	if len(envs) == 0 {
+		return "", fmt.Errorf("render: project %q has no environments", projectID)
+	}
+	if len(envs) > 1 {
+		return "", fmt.Errorf("render: project %q has %d environments, expected exactly 1 — configure which environment to deploy into", projectID, len(envs))
+	}
+	return envs[0].Environment.ID, nil
+}
+
 func ValidateAPIKey(ctx context.Context, apiKey string) error {
 	client := NewClient(apiKey)
 	resp, body, err := client.do(ctx, http.MethodGet, "/owners", nil)
@@ -95,12 +130,17 @@ func ValidateAPIKey(ctx context.Context, apiKey string) error {
 }
 
 type RenderProvider struct {
-	client    *Client
-	ownerID   string
-	projectID string
+	client        *Client
+	ownerID       string
+	environmentID string
 }
 
-func NewRenderProvider(ctx context.Context, apiKey, projectID string) (*RenderProvider, error) {
+// NewRenderProvider builds a provider scoped to the given API key. If
+// environmentID is set, it's used as-is. Otherwise, if projectID is set, its
+// Environment is resolved automatically (only works for projects with
+// exactly one Environment — see resolveEnvironmentID). Both empty means
+// services are created in the workspace's default location.
+func NewRenderProvider(ctx context.Context, apiKey, projectID, environmentID string) (*RenderProvider, error) {
 	client := NewClient(apiKey)
 
 	resp, body, err := client.do(ctx, http.MethodGet, "/owners", nil)
@@ -118,10 +158,17 @@ func NewRenderProvider(ctx context.Context, apiKey, projectID string) (*RenderPr
 		return nil, fmt.Errorf("render: no owners found for this api key")
 	}
 
+	if environmentID == "" && projectID != "" {
+		environmentID, err = resolveEnvironmentID(ctx, client, projectID)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &RenderProvider{
-		client:    client,
-		ownerID:   owners[0].Owner.ID,
-		projectID: projectID,
+		client:        client,
+		ownerID:       owners[0].Owner.ID,
+		environmentID: environmentID,
 	}, nil
 }
 
@@ -140,7 +187,7 @@ type createServiceRequest struct {
 	Type           string              `json:"type"`
 	Name           string              `json:"name"`
 	OwnerID        string              `json:"ownerId"`
-	ProjectID      string              `json:"projectId,omitempty"`
+	EnvironmentID  string              `json:"environmentId,omitempty"`
 	Repo           string              `json:"repo"`
 	AutoDeploy     string              `json:"autoDeploy"`
 	ServiceDetails interface{}         `json:"serviceDetails"`
@@ -189,7 +236,7 @@ func (p *RenderProvider) CreateService(ctx context.Context, params deploy.Create
 		Type:           params.ServiceType,
 		Name:           params.RepoName,
 		OwnerID:        p.ownerID,
-		ProjectID:      p.projectID,
+		EnvironmentID:  p.environmentID,
 		Repo:           repoURL,
 		AutoDeploy:     "yes",
 		ServiceDetails: serviceDetails,
@@ -197,9 +244,35 @@ func (p *RenderProvider) CreateService(ctx context.Context, params deploy.Create
 	}
 	reqJSON, _ := json.Marshal(req)
 
-	resp, body, err := p.client.do(ctx, http.MethodPost, "/services", req)
-	if err != nil {
-		return deploy.ServiceInfo{}, err
+	// The repo backing this service was typically created via the GitHub API
+	// moments earlier. Render's own GitHub App integration can take a few
+	// seconds to notice a brand-new repo, which surfaces here as a transient
+	// 404 ("repo not found") or 500 ("internal server error") even though the
+	// repo and the App's access to it are both fine. Retry those with a short
+	// backoff before giving up; anything else (400 name conflict, 429 rate
+	// limit, ...) is not a sync race and fails immediately.
+	var resp *http.Response
+	var body []byte
+	const maxAttempts = 4
+	backoff := 2 * time.Second
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		var err error
+		resp, body, err = p.client.do(ctx, http.MethodPost, "/services", req)
+		if err != nil {
+			return deploy.ServiceInfo{}, err
+		}
+		if resp.StatusCode != http.StatusNotFound && resp.StatusCode != http.StatusInternalServerError {
+			break
+		}
+		if attempt == maxAttempts {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return deploy.ServiceInfo{}, ctx.Err()
+		case <-time.After(backoff):
+		}
+		backoff *= 2
 	}
 
 	if resp.StatusCode == http.StatusCreated {
@@ -210,11 +283,6 @@ func (p *RenderProvider) CreateService(ctx context.Context, params deploy.Create
 		info := deploy.ServiceInfo{
 			ServiceID: parsed.Service.ID,
 			URL:       parsed.Service.ServiceDetails.URL,
-		}
-
-		// Assign to project if configured, ignore failure (best-effort).
-		if p.projectID != "" {
-			_ = p.assignToProject(ctx, parsed.Service.ID)
 		}
 
 		return info, nil
@@ -243,19 +311,6 @@ func (p *RenderProvider) DeleteService(ctx context.Context, serviceID string) er
 		return nil // already deleted — not an error for best-effort
 	}
 	return fmt.Errorf("render: delete service failed (status %d): %s", resp.StatusCode, string(body))
-}
-
-func (p *RenderProvider) assignToProject(ctx context.Context, serviceID string) error {
-	resp, body, err := p.client.do(ctx, http.MethodPatch, "/services/"+serviceID, map[string]string{
-		"projectId": p.projectID,
-	})
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		return nil
-	}
-	return fmt.Errorf("render: assign to project failed (status %d): %s", resp.StatusCode, string(body))
 }
 
 func (p *RenderProvider) AddCustomDomain(ctx context.Context, serviceID, domain string) error {

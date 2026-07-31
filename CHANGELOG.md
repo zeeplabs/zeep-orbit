@@ -9,6 +9,20 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-07-31
+
+### Added
+
+- **Render Environment ID field in Deploy Provider config** (superadmin, GitHub Integration page) — needed because Render assigns new services to an Environment, not a Project; the Project ID alone only works when that project has exactly one Environment (auto-resolved). Projects with multiple Environments now require this field explicitly, since the app has no way to guess which one to use.
+
+### Fixed
+
+- **GitHub Integration page (config, templates, deploy provider) had no role guard on the frontend** — every action there is `superadmin`-only server-side, but an `admin` navigating to the page directly saw the forms render and silently 403 on every request. The page now checks the current user's role and shows a clear "superadmin access required" message instead.
+- **Admin users couldn't see GitHub templates in the frontend-app creation modal** — `GET /dashboard/api/github/templates` was restricted to `superadmin`, but the modal (used by any authenticated role) calls that same endpoint and silently swallowed the resulting 403, leaving the template select empty. Listing is now open to any authenticated role; managing templates (create/update/delete/set-active) stays `superadmin`-only.
+- **Frontend app deploy could leave an orphaned Render service after a failure**, permanently blocking that name — Render service name is always the app's slug with no suffix, and `deploy_service_id` was only persisted after every deploy step (custom domain, etc.) succeeded. If Render created the service but a later step failed, the ID was never saved; deleting or archiving the app then couldn't clean up the Render service (nothing to delete), so any retry or new app with the same slug hit `already in use`. The service ID is now persisted right after Render confirms creation, before any further step.
+- **Frontend app creation intermittently failed to deploy** with transient `404`/`500` errors from Render right after creating the service — Render's GitHub App integration can take a few seconds to notice a repo created moments earlier via the GitHub API, and the single deploy attempt had no retry. `CreateService` now retries those two statuses with backoff (up to 4 attempts) before failing; other errors (name conflict, rate limit) still fail immediately.
+- **Deployed Render services were never actually placed in the configured Project** — they were created loose in the workspace instead. Render's create-service API has no `projectId` field (that field is silently ignored); services are assigned via `environmentId`, and the follow-up call meant to fix this up (`PATCH /services/{id}` with `projectId`) isn't a real Render endpoint either, and its failure was swallowed. The configured Project ID is now resolved to its Environment at startup and sent as `environmentId` on creation. Only supports a single Environment per configured Project for now — deploy fails with a clear error instead of guessing if the project has more than one.
+
 ## [0.5.0] — 2026-07-30
 
 ### Added

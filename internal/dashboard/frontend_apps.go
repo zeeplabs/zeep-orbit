@@ -568,7 +568,7 @@ func buildDeployProvider(ctx context.Context, cfg *DeployProviderConfig) (deploy
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: decrypt api key: %w", err)
 	}
-	return render.NewRenderProvider(ctx, apiKey, cfg.RenderProjectID)
+	return render.NewRenderProvider(ctx, apiKey, cfg.RenderProjectID, cfg.RenderEnvironmentID)
 }
 
 func (h *FrontendAppsHandler) attemptDeploy(ctx context.Context, app *FrontendApp, tmpl *GitHubTemplate, subdomain string) {
@@ -607,6 +607,15 @@ func (h *FrontendAppsHandler) attemptDeploy(ctx context.Context, app *FrontendAp
 	info, err := provider.CreateService(ctx, params)
 	if err != nil {
 		_, _ = UpdateFrontendAppDeploy(ctx, h.pool, app.ID, "", "", "failed", err.Error())
+		return
+	}
+
+	// Persist the service ID immediately, before any further step that could
+	// fail (custom domain, network, process crash). Otherwise a failure here
+	// leaves the Render service orphaned: deploy_service_id stays empty, so
+	// deleting/archiving this app never cleans it up, and the name can never
+	// be reused without colliding with the orphan on Render's side.
+	if _, err := UpdateFrontendAppDeploy(ctx, h.pool, app.ID, info.ServiceID, info.URL, "provisioning", ""); err != nil {
 		return
 	}
 
