@@ -1,6 +1,33 @@
 {
   "entries": [
     {
+      "version": "v0.5.0",
+      "release_date": "2026-07-30",
+      "title": "Column Default Values & Reliability Fixes",
+      "summary": "Set default values (literal or SQL expression) on backend app table columns, an update-available sidebar banner, and fixes for dashboard login, app users listing, and auth API consistency.",
+      "sections": [
+        {
+          "type": "features",
+          "items": [
+            {"description": "Column default value in the backend app schema builder — literal defaults for integer/bigint/numeric, a true/false picker for boolean, and gen_random_uuid()/now() SQL expressions for uuid/timestamptz, validated server-side against a strict allowlist before reaching the generated DDL"},
+            {"description": "Update notifications — sidebar banner alerts when a new Zeep Orbit release is available on GitHub, linking to the release page"}
+          ]
+        },
+        {
+          "type": "fixes",
+          "items": [
+            {"description": "Dashboard Google login failing behind multiple replicas — OAuth state was kept in an in-memory map per process; now signed stateless (HMAC-SHA256)"},
+            {"description": "GitHub App installation callback had the same in-memory state issue as Google login — fixed the same way"},
+            {"description": "/apps/{id}/users always returned an empty list when email auth was enabled, due to an incorrect schema name lookup"},
+            {"description": "PATCH /{app}/auth/me returned 405 despite being documented — route was registered as PUT"},
+            {"description": "Auth provider \"allowed domains\" field couldn't be cleared once set"},
+            {"description": "Google login button and brand theme flashed incorrectly on first paint of the login screen"},
+            {"description": "App token refresh endpoint was missing from the per-app Swagger docs"}
+          ]
+        }
+      ]
+    },
+    {
       "version": "v0.4.0",
       "release_date": "2026-07-26",
       "title": "Changelog, Brand Repositioning & Deploy Improvements",

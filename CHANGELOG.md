@@ -27,11 +27,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 - **Update notifications** — sidebar banner (above Changelog) alerts when a new Zeep Orbit release is available on GitHub, showing the version and linking to the release page. Backend proxies GitHub's releases API with a 1-hour cache to avoid rate-limit exposure.
 - **Phone field in per-app auth Swagger docs** — `/register` and `PATCH /me` request bodies, and the user response schema, now include `phone` (already accepted and persisted by the handlers, just missing from the hand-written OpenAPI generator).
+- **Column default value in the backend app schema builder** — set a default for a table column when creating or editing it in the dashboard. `integer`/`bigint`/`numeric` accept a literal value; `boolean` picks `true`/`false`; `uuid`/`timestamptz` can auto-generate (`gen_random_uuid()`/`now()`) via a strict, type-scoped allowlist of SQL expressions (not free-form — the value is validated server-side before it ever reaches the generated DDL). Not available for `text`/`jsonb` columns.
 
 ### Fixed
 
 - **App token refresh endpoint missing from Swagger** — `POST /{app}/auth/token/refresh` existed in the router but was never registered in `internal/docs/generator.go`, so it didn't show up in the per-app OpenAPI docs. Now documented, gated to apps without email/password auth (same scope as the endpoint itself); apps with email auth keep using the separate, already-documented `/auth/refresh` (refresh_token grant).
 - **Dashboard Google login failing behind multiple replicas** — OAuth `state` (CSRF protection) was kept in an in-memory map per process; if `/login` and `/callback` landed on different pods behind a non-sticky load balancer, the callback always failed with "session expired or invalid." Now signed stateless (HMAC-SHA256), matching the existing per-app Google OAuth flow.
+- **GitHub App installation callback had the same in-memory `state` issue** as the Google login above — fixed the same way (signed stateless HMAC-SHA256, keyed on the App's private key).
 - **`/apps/{id}/users` always returned an empty list** when email auth was enabled — 4 handlers built the app schema name incorrectly (`"app_" + name` instead of the actual naming rule), and the resulting Postgres error was silently swallowed.
 - **`PATCH /{app}/auth/me` returned 405** despite being documented — route was registered as `PUT`.
 - **Auth provider "allowed domains" field couldn't be cleared** — emptying it in Settings and saving reported success but the old value came back on reload; the frontend omitted the field entirely instead of sending an empty list.
