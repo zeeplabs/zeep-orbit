@@ -467,29 +467,33 @@ Para adicionar uma nova entrada: edite `internal/dashboard/changelog.json`, adic
 
 ## 🗺️ Roadmap
 
+Detalhe completo (checklists por milestone, specs ligadas) vive em [`.specs/project/ROADMAP.md`](../.specs/project/ROADMAP.md) — esta tabela é um resumo, mantido sincronizado com ele.
+
 | Milestone | Estado | Funcionalidades |
 |---|---|---|
-| **M1 — MVP Core** | Concluído | Schema → REST, CLI, Docker Compose |
-| **M2 — Dashboard** | Concluído | CRUD de aplicações, Data Browser, Logs, Utilizadores, Auth, White-label |
-| **M3 — Governação** | Concluído | Audit Log, Soft Delete, Rate Limiting, App Tokens |
-| **M4 — Storage & Events** | Concluído | Armazenamento S3, configuração de storage por aplicação |
-| **M5 — Frontend Deploy** | Concluído | Integração com GitHub, Templates, Deploy no Render, Domínios personalizados |
-| **M6 — i18n** | Concluído | pt-BR / inglês, seletor de idioma |
-| **M7 — SDKs** | Concluído | Clientes TS, Go, Python, Rust, Java, PHP |
-| **M8 — IA e Automação** | Planeado | Criação de schema em linguagem natural, servidor MCP |
+| **M1 — MVP Core** | ✅ Concluído | Schema → REST, CLI, Docker Compose |
+| **M2 — Developer Experience** | ✅ Concluído | Dashboard, SDKs, relações e índices, migrações, filtragem/ordenação |
+| **M3 — Aplicações Frontend** | ✅ Concluído | Integração com GitHub, Templates, Deploy no Render, Domínios personalizados |
+| **M4 — Governação & Segurança** | 🔵 Em desenvolvimento | Audit Log, Soft Delete, SSO, Rate Limiting · planeado: [RBAC por aplicação](../.specs/features/rbac-per-app/), [papéis globais do dashboard](../.specs/features/dashboard-global-roles/), [2FA](../.specs/features/two-factor-auth/), fluxo de aprovação de alterações de schema |
+| **M5 — Storage & Events** | 🔵 Em desenvolvimento | Armazenamento S3 · planeado: webhooks, event bus |
+| **M6 — i18n** | ✅ Concluído | pt-BR / inglês, seletor de idioma |
+| **M7 — SDKs** | ✅ Concluído | Clientes TS, Go, Python, Rust, Java, PHP |
+| **M8 — Platform Services** | 🔵 Em desenvolvimento | planeado: [integração SMTP/email](../.specs/features/smtp-email-integration/) (convites, recuperação de senha), [integrações de observabilidade](../.specs/features/observability-integrations/) (OpenTelemetry, Datadog, New Relic) |
+| **M9 — Enterprise Licensing** | 🔵 Em desenvolvimento | planeado: [modelo de licenciamento dual](../.specs/features/enterprise-licensing/) (núcleo MIT + funcionalidades enterprise trancadas) |
 
 ### Adiado / Backlog
 
 - Início de sessão com Apple (por aplicação)
 - Gerador de código para o SDK de TypeScript (`@zeeptech/orbit-generate`)
+- Snippets oficiais de prompt para Claude Code / Cursor / Lovable
+- Servidor MCP para operações do zeep-orbit
 - Geração automática de GraphQL
 - Subscrições em tempo real (WebSockets)
 - Edge functions
-- Fluxo de aprovação de alterações de schema
+- Suporte multi-região
 - Marketplace de templates de aplicações
-- Webhooks e Event Bus
-- RBAC com permissões granulares
-- Integração SSO / SAML
+- RBAC com permissões granulares por ação (além dos níveis fixos admin/editor/viewer)
+- SSO Microsoft Entra ID
 
 ---
 

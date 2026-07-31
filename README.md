@@ -469,29 +469,33 @@ To add a new entry: edit `internal/dashboard/changelog.json`, add your release t
 
 ## 🗺️ Roadmap
 
+Full detail (per-milestone checklists, linked specs) lives in [`.specs/project/ROADMAP.md`](.specs/project/ROADMAP.md) — this table is a summary, kept in sync with it.
+
 | Milestone | Status | Features |
 |---|---|---|
-| **M1 — MVP Core** | Done | Schema → REST, CLI, Docker Compose |
-| **M2 — Dashboard** | Done | App CRUD, Data Browser, Logs, Users, Auth, White-label |
-| **M3 — Governance** | Done | Audit Log, Soft Delete, Rate Limiting, App Tokens |
-| **M4 — Storage & Events** | Done | S3 File Storage, Per-App Storage Config |
-| **M5 — Frontend Deploy** | Done | GitHub Integration, Templates, Render Deploy, Custom Domains |
-| **M6 — i18n** | Done | pt-BR / English, language switcher |
-| **M7 — SDKs** | Done | TS, Go, Python, Rust, Java, PHP clients |
-| **M8 — AI & Automation** | Planned | Natural language schema creation, MCP server |
+| **M1 — MVP Core** | ✅ Done | Schema → REST, CLI, Docker Compose |
+| **M2 — Developer Experience** | ✅ Done | Dashboard, SDKs, relationships & indexes, migrations, filtering/sorting |
+| **M3 — Frontend Apps** | ✅ Done | GitHub Integration, Templates, Render Deploy, Custom Domains |
+| **M4 — Governance & Security** | 🔵 In progress | Audit Log, Soft Delete, SSO, Rate Limiting · planned: [RBAC per app](.specs/features/rbac-per-app/), [global dashboard roles](.specs/features/dashboard-global-roles/), [2FA](.specs/features/two-factor-auth/), schema change approval |
+| **M5 — Storage & Events** | 🔵 In progress | S3 File Storage · planned: webhooks, event bus |
+| **M6 — i18n** | ✅ Done | pt-BR / English, language switcher |
+| **M7 — SDKs** | ✅ Done | TS, Go, Python, Rust, Java, PHP clients |
+| **M8 — Platform Services** | 🔵 In progress | planned: [SMTP/email integration](.specs/features/smtp-email-integration/) (invites, password reset), [observability integrations](.specs/features/observability-integrations/) (OpenTelemetry, Datadog, New Relic) |
+| **M9 — Enterprise Licensing** | 🔵 In progress | planned: [dual-license model](.specs/features/enterprise-licensing/) (MIT core + gated enterprise features) |
 
 ### Deferred / Backlog
 
 - Sign in with Apple (per-app)
 - TypeScript SDK code generator (`@zeeptech/orbit-generate`)
+- Official prompt snippets for Claude Code / Cursor / Lovable
+- MCP server for zeep-orbit operations
 - GraphQL auto-generation
 - Realtime subscriptions (WebSockets)
 - Edge functions
-- Schema change approval workflow
+- Multi-region support
 - Marketplace of app templates
-- Webhooks & Event Bus
-- RBAC with granular permissions
-- SSO / SAML integration
+- RBAC with granular per-action permissions (beyond the fixed admin/editor/viewer levels)
+- Microsoft Entra ID SSO
 
 ---
 
