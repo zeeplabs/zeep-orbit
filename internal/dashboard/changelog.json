@@ -1,6 +1,30 @@
 {
   "entries": [
     {
+      "version": "v0.5.1",
+      "release_date": "2026-07-31",
+      "title": "Render Deploy Reliability & GitHub Integration Access Control",
+      "summary": "Fixes to the Render deploy flow (orphaned services, transient errors, wrong Project placement), template visibility for admins, and a missing role guard on the GitHub Integration page.",
+      "sections": [
+        {
+          "type": "features",
+          "items": [
+            {"description": "Render Environment ID field in Deploy Provider config (superadmin) — required when the configured Project has more than one Environment, since the app can no longer guess which one to deploy into"}
+          ]
+        },
+        {
+          "type": "fixes",
+          "items": [
+            {"description": "GitHub Integration page (config, templates, deploy provider) had no role guard on the frontend — admins could reach the superadmin-only page and see forms silently 403 on every action"},
+            {"description": "Admin users couldn't see GitHub templates in the frontend-app creation modal — the templates list endpoint was superadmin-only, now open to any authenticated role"},
+            {"description": "Frontend app deploy could leave an orphaned Render service after a failure — the Render service ID is now persisted immediately after creation, before any later step that could fail"},
+            {"description": "Frontend app creation intermittently failed to deploy due to transient 404/500 errors from Render right after creating the service — now retried with backoff"},
+            {"description": "Deployed Render services were never placed in the configured Project — Render's API uses environmentId, not projectId; the configured Project is now resolved to its Environment and used correctly"}
+          ]
+        }
+      ]
+    },
+    {
       "version": "v0.5.0",
       "release_date": "2026-07-30",
       "title": "Column Default Values & Reliability Fixes",

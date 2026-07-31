@@ -9,6 +9,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-07-31
+
 ### Added
 
 - **Render Environment ID field in Deploy Provider config** (superadmin, GitHub Integration page) — needed because Render assigns new services to an Environment, not a Project; the Project ID alone only works when that project has exactly one Environment (auto-resolved). Projects with multiple Environments now require this field explicitly, since the app has no way to guess which one to use.
