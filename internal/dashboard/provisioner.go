@@ -217,6 +217,30 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 		 ON zeep_system.app_members(frontend_app_id, user_id) WHERE frontend_app_id IS NOT NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_app_members_user
 		 ON zeep_system.app_members(user_id)`,
+		// rbac-per-app T-02: migrate existing ownership into app_members. The
+		// three pre-existing sources of "this user is responsible for this app"
+		// are all collapsed into a single row with role='admin':
+		//   1. apps.owner_id (backend apps, the current single owner)
+		//   2. app_ownership (backend apps, co-owners — pre-rbac table)
+		//   3. frontend_apps.created_by (frontend apps; resolved by email
+		//      against dashboard_users — unresolved values leave the app
+		//      without any membership, which is intentional: superadmin
+		//      retains access and can add the first admin manually)
+		//
+		// All three use ON CONFLICT DO NOTHING against the partial UNIQUE
+		// indexes from T-01, so re-running ProvisionZeepSystem is safe.
+		`INSERT INTO zeep_system.app_members (backend_app_id, user_id, role)
+		 SELECT apps.id, apps.owner_id, 'admin' FROM zeep_system.apps
+		 ON CONFLICT (backend_app_id, user_id) WHERE backend_app_id IS NOT NULL DO NOTHING`,
+		`INSERT INTO zeep_system.app_members (backend_app_id, user_id, role)
+		 SELECT app_ownership.app_id, app_ownership.user_id, 'admin'
+		 FROM zeep_system.app_ownership
+		 ON CONFLICT (backend_app_id, user_id) WHERE backend_app_id IS NOT NULL DO NOTHING`,
+		`INSERT INTO zeep_system.app_members (frontend_app_id, user_id, role)
+		 SELECT fa.id, du.id, 'admin'
+		 FROM zeep_system.frontend_apps fa
+		 JOIN zeep_system.dashboard_users du ON du.email = fa.created_by
+		 ON CONFLICT (frontend_app_id, user_id) WHERE frontend_app_id IS NOT NULL DO NOTHING`,
 		`CREATE TABLE IF NOT EXISTS zeep_system.frontend_app_sync_credentials (
 			id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			frontend_app_id        UUID NOT NULL UNIQUE REFERENCES zeep_system.frontend_apps(id),
