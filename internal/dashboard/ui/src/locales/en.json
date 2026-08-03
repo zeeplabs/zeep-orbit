@@ -638,5 +638,9 @@
   "frontendApps.deploying": "Deploying",
   "apps.createWithAi": "Create with AI",
   "apps.soon": "Soon",
-  "apps.createWithAiSoon": "AI-assisted app creation is coming soon"
+  "apps.createWithAiSoon": "AI-assisted app creation is coming soon",
+  "sdk.title": "SDKs",
+  "sdk.subtitle": "Official client libraries for talking to your apps' REST APIs.",
+  "sdk.copyInstall": "Copy install command",
+  "sdk.copySnippet": "Copy code"
 }

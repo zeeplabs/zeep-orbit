@@ -638,5 +638,9 @@
   "frontendApps.deploying": "Publicando",
   "apps.createWithAi": "Criar com IA",
   "apps.soon": "Em breve",
-  "apps.createWithAiSoon": "Criação de app assistida por IA em breve"
+  "apps.createWithAiSoon": "Criação de app assistida por IA em breve",
+  "sdk.title": "SDKs",
+  "sdk.subtitle": "Bibliotecas cliente oficiais para consumir a API REST dos seus apps.",
+  "sdk.copyInstall": "Copiar comando de instalação",
+  "sdk.copySnippet": "Copiar código"
 }
