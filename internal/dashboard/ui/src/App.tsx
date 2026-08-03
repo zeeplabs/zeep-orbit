@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Navigate, Routes, Route, useParams } from 'react-router-dom'
@@ -19,6 +20,10 @@ import AppUsersPage from './pages/AppUsersPage'
 import DataBrowserPage from './pages/DataBrowserPage'
 import { Toaster } from 'sonner'
 import { useBootstrapStatus } from './lib/api'
+
+const ComponentsSandbox = import.meta.env.DEV
+  ? lazy(() => import('./pages/dev/ComponentsSandbox'))
+  : null
 
 function LoadingScreen() {
   const { t } = useTranslation()
@@ -80,6 +85,16 @@ function App() {
   return (
     <>
       <Routes>
+        {ComponentsSandbox && (
+          <Route
+            path="/dev/components"
+            element={
+              <Suspense fallback={null}>
+                <ComponentsSandbox />
+              </Suspense>
+            }
+          />
+        )}
         <Route path="/login" element={user ? <Navigate to="/apps" replace /> : <LoginPage />} />
         <Route path="/google-setup" element={
           !user ? <Navigate to="/login" replace /> :

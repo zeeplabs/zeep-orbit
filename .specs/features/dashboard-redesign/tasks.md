@@ -11,12 +11,12 @@ Legenda status: ☐ pending · ◐ in progress · ☑ done
 
 ## Fase 0 — Fundação (bloqueia tudo)
 
-- [ ] **T0.1** — Criar `src/styles/tokens.css` com `.theme-dark`/`.theme-light` e todas as CSS custom properties da palette do handoff (README linhas 50-66). Importar em `index.css`. `[DRD-01, DRD-04]`
-- [ ] **T0.2** — Self-host Manrope + Space Grotesk + mono; declarar `@font-face`; definir stacks `--font-ui`/`--font-display`/`--font-mono` com fallback de sistema. Remover Plus Jakarta Sans. `[DRD-01]`
-- [ ] **T0.3** — Self-host Material Symbols Rounded; criar `src/components/ui/icon.tsx` (`<Icon name size>` → `<span class="material-symbols-rounded">`, `currentColor`). `[DRD-40, DRD-41]`
-- [ ] **T0.4** — Remover `THEMES`/`applyTheme` de `lib/themes.ts` e todo consumo de `azure`/`emerald`/`ruby`; ajustar `App.tsx` para aplicar `theme-dark`/`theme-light` no root via `useTheme`. `grep azure|emerald|ruby|applyTheme|THEMES` = 0 no `src`. `[DRD-02]`
-- [ ] **T0.5** — `usePublicConfig`: parar de consumir `theme` (brand); preservar `company_name`. Sinalizar ao backend que o campo `theme` só pode ser dropado após confirmar contrato. `[DRD-03]`
-- [ ] **T0.6** — Hooks `useTheme()` / `useLanguage()` com persistência localStorage (`zeep.theme`/`zeep.lang`) e API estável para futura migração a endpoint de prefs. `[DRD-01]`
+- [x] **T0.1** — Criar `src/styles/tokens.css` com `.theme-dark`/`.theme-light` e todas as CSS custom properties da palette do handoff (README linhas 50-66). Importar em `index.css`. `[DRD-01, DRD-04]`
+- [◐] **T0.2** — Fontes Manrope + Space Grotesk + mono ativas + stacks `--font-ui`/`--font-display`/`--font-mono`, Plus Jakarta removido. **PENDENTE:** self-host (hoje via Google Fonts CDN, TODO marcado no `index.html`). `[DRD-01]`
+- [◐] **T0.3** — `<Icon>` wrapper criado (`src/components/ui/icon.tsx`), Material Symbols Rounded ativo. **PENDENTE:** self-host da fonte de ícones (hoje via CDN). `[DRD-40, DRD-41]`
+- [x] **T0.4** — Remover `THEMES`/`applyTheme` de `lib/themes.ts` e todo consumo de `azure`/`emerald`/`ruby`; ajustar `App.tsx` para aplicar `theme-dark`/`theme-light` no root via `useTheme`. `grep azure|emerald|ruby|applyTheme|THEMES` = 0 no `src`. `[DRD-02]`
+- [x] **T0.5** — `usePublicConfig`: parar de consumir `theme` (brand); preservar `company_name`. Sinalizar ao backend que o campo `theme` só pode ser dropado após confirmar contrato. `[DRD-03]`
+- [x] **T0.6** — Hooks `useTheme()` / `useLanguage()` com persistência localStorage (`zeep.theme`/`zeep.lang`) e API estável para futura migração a endpoint de prefs. `[DRD-01]`
 
 **Checkpoint Fase 0**: `npx tsc -b` + `npm run build` limpos; app renderiza em dark e light alternando a classe root; zero referência a brand-theme.
 
@@ -26,23 +26,23 @@ Legenda status: ☐ pending · ◐ in progress · ☑ done
 
 ### Nível 1 — Primitivos
 
-- [ ] **T05.1** — Restilizar `button`, `input`, `label`, `separator`, `badge`, `switch` para tokens/shape novos. `[DRD-10]`
-- [ ] **T05.2** — Restilizar `table`, `dialog`, `tabs`, `select` para tokens novos, Radix mantido. `[DRD-10]`
-- [ ] **T05.3** — Novos primitivos: `drawer` (Radix Dialog lateral), `accordion` (Radix Accordion), `tooltip` (Radix Tooltip), `skeleton`. Adicionar `@radix-ui/react-accordion` + `@radix-ui/react-tooltip` a `package.json`. `[DRD-10]`
+- [x] **T05.1** — Restilizar `button`, `input`, `label`, `separator`, `badge`, `switch` para tokens/shape novos. `[DRD-10]`
+- [x] **T05.2** — Restilizar `table`, `dialog`, `tabs`, `select` para tokens novos, Radix mantido. `[DRD-10]`
+- [x] **T05.3** — Novos primitivos: `drawer` (Radix Dialog lateral), `accordion` (Radix Accordion), `tooltip` (Radix Tooltip), `skeleton`. Adicionar `@radix-ui/react-accordion` + `@radix-ui/react-tooltip` a `package.json`. `[DRD-10]`
 
 ### Nível 2 — Padrões
 
-- [ ] **T05.4** — `PageHeader` (title/subtitle/actions/breadcrumb). `[DRD-11]`
-- [ ] **T05.5** — `DataTable<T>` (columns/rows/sort/pagination/rowActions + empty/loading/error embutidos), absorvendo `TableCard`. `[DRD-11, DRD-13]`
-- [ ] **T05.6** — `StatusPill`, `EmptyState`, `ErrorState`, `LoadingState`. `[DRD-11, DRD-13]`
-- [ ] **T05.7** — `ConfirmDialog` generalizando `DeleteConfirmDialog` (delete + logout, título/mensagem adaptáveis, flag `destructive`). Reapontar usos existentes de `DeleteConfirmDialog`. `[DRD-11]`
-- [ ] **T05.8** — `ProviderCard` (accordion card: name/status/badge/disabled/children), `SettingRow` (label/description/control). `[DRD-11]`
-- [ ] **T05.9** — `EnterpriseBadge` + `UpgradeModal`, `MaskedSecretField`, `FormDrawer`. `[DRD-11]`
-- [ ] **T05.10** — `RoleGate` (`allow: Role[]`, `fallback`), `useCurrentRole()` derivando da sessão `/me` com degradação para modelo 2-papéis. `[DRD-11]`
+- [x] **T05.4** — `PageHeader` (title/subtitle/actions/breadcrumb). `[DRD-11]`
+- [x] **T05.5** — `DataTable<T>` (columns/rows/sort/pagination/rowActions + empty/loading/error embutidos), absorvendo `TableCard`. `[DRD-11, DRD-13]`
+- [x] **T05.6** — `StatusPill`, `EmptyState`, `ErrorState`, `LoadingState`. `[DRD-11, DRD-13]`
+- [x] **T05.7** — `ConfirmDialog` generalizando `DeleteConfirmDialog` (delete + logout, título/mensagem adaptáveis, flag `destructive`). Reapontar usos existentes de `DeleteConfirmDialog`. `[DRD-11]`
+- [x] **T05.8** — `ProviderCard` (accordion card: name/status/badge/disabled/children), `SettingRow` (label/description/control). `[DRD-11]`
+- [x] **T05.9** — `EnterpriseBadge` + `UpgradeModal`, `MaskedSecretField`, `FormDrawer`. `[DRD-11]`
+- [x] **T05.10** — `RoleGate` (`allow: Role[]`, `fallback`), `useCurrentRole()` derivando da sessão `/me` com degradação para modelo 2-papéis. `[DRD-11]`
 
 ### Sandbox
 
-- [ ] **T05.11** — Rota `/dev/components` (gated, fora de produção) renderizando todos primitivos + padrões em dark e light. `[DRD-14]`
+- [x] **T05.11** — Rota `/dev/components` (gated, fora de produção) renderizando todos primitivos + padrões em dark e light. `[DRD-14]`
 
 **Checkpoint Fase 0.5**: `/dev/components` mostra todos os componentes corretos nos dois temas; `ConfirmDialog` cobre os casos que `DeleteConfirmDialog` cobria; `tsc`/build limpos.
 

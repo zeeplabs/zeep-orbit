@@ -159,4 +159,11 @@
   --color-bg: var(--bg-page);
   --color-text: var(--text-primary);
   --color-text-muted: var(--text-secondary);
+  /* shadcn utility `bg-accent`/`text-accent-foreground` = superfície de hover sutil
+   * (NÃO o laranja do handoff, que vive em `--accent` bare). Nomes distintos. */
+  --color-accent: var(--hover-surface);
+  --color-accent-foreground: var(--text-primary);
+  --color-accent-light: var(--primary-tint);
+  --color-accent-purple: var(--accent);
+  --color-accent-pink: var(--accent);
 }
