@@ -49,7 +49,7 @@ const DrawerContent = React.forwardRef<
     >
       {children}
       {!hideClose && (
-        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-lg p-1 opacity-70 transition-opacity hover:opacity-100 hover:bg-[var(--hover-surface)] focus:outline-none focus:ring-2 focus:ring-ring">
+        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-[8px] p-1 opacity-70 transition-opacity hover:opacity-100 hover:bg-[var(--hover-surface)] focus:outline-none focus:ring-2 focus:ring-ring">
           <Icon name="close" size={18} />
           <span className="sr-only">Close</span>
         </DialogPrimitive.Close>

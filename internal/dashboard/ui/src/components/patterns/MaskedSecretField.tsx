@@ -37,7 +37,7 @@ export function MaskedSecretField({
   if (!editing) {
     return (
       <div className={cn('flex items-center gap-2', className)}>
-        <code className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--sunken)] px-3 py-2 font-mono text-sm text-[var(--text-secondary)]">
+        <code className="flex-1 rounded-[10px] border border-[var(--border)] bg-[var(--sunken)] px-3 py-2 font-mono text-sm text-[var(--text-secondary)]">
           {maskedHint}
         </code>
         <Button variant="outline" size="sm" onClick={() => { setValue(''); setEditing(true) }}>

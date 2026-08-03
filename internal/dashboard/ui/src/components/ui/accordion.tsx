@@ -13,7 +13,7 @@ const AccordionItem = React.forwardRef<
   <AccordionPrimitive.Item
     ref={ref}
     className={cn(
-      "overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]",
+      "overflow-hidden rounded-[14px] border border-[var(--border)] bg-[var(--surface)]",
       className
     )}
     {...props}

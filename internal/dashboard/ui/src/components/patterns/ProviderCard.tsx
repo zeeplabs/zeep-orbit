@@ -46,7 +46,7 @@ export function ProviderCard({
   const header = (
     <div className="flex flex-1 items-center gap-3">
       <div
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px]"
         style={{ background: 'var(--hover-surface)', color: 'var(--text-secondary)' }}
       >
         {logo ?? (icon && <Icon name={icon} size={20} />)}
@@ -72,7 +72,7 @@ export function ProviderCard({
     return (
       <div
         className={cn(
-          'flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3.5 opacity-60',
+          'flex items-center gap-3 rounded-[14px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3.5 opacity-60',
           className
         )}
       >

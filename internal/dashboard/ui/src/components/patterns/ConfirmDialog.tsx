@@ -48,7 +48,7 @@ export function ConfirmDialog({
       <DialogContent className="max-w-[420px] gap-0 p-6">
         <DialogHeader className="text-left">
           <div
-            className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl"
+            className="mb-4 flex h-11 w-11 items-center justify-center rounded-[12px]"
             style={{ background: tint, color: tone }}
           >
             <Icon name={icon ?? (destructive ? 'warning' : 'help')} size={20} />

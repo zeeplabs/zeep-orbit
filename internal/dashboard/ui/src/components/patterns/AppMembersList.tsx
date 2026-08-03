@@ -322,9 +322,9 @@ export function AppMembersList({ appId, axis }: AppMembersListProps) {
 
   if (accessDenied) {
     return (
-      <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] py-12 text-center">
+      <div className="flex flex-col items-center justify-center gap-3 rounded-[14px] border border-white/[0.08] bg-white/[0.03] py-12 text-center">
         <div
-          className="flex h-12 w-12 items-center justify-center rounded-xl"
+          className="flex h-12 w-12 items-center justify-center rounded-[12px]"
           style={{ background: "var(--warning-tint)", color: "var(--warning)" }}
         >
           <Icon name="lock" size={20} />
@@ -350,7 +350,7 @@ export function AppMembersList({ appId, axis }: AppMembersListProps) {
         return (
           <div className="flex items-center gap-2.5">
             <div
-              className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] text-[12px] font-bold"
+              className="flex size-8 shrink-0 items-center justify-center rounded-[8px] border border-[var(--border)] text-[12px] font-bold"
               style={{ background: "var(--primary-tint)", color: "var(--primary)" }}
             >
               {name.charAt(0).toUpperCase()}

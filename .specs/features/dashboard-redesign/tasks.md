@@ -72,9 +72,9 @@ Legenda status: ☐ pending · ◐ in progress · ☑ done
 
 Ordem por risco/tráfego. Cada task: substituir markup por composição de nível 2 + tokens/ícones/fontes novos; preservar 100% de dados/API/ações; ícones da tela migram para `<Icon>` na mesma PR; strings en+pt-BR juntas; checks AGENTS §3 limpos. `[DRD-30..34, DRD-40..42]`
 
-- [ ] **T2.1** — `AppsPage` (955 ln) — home de apps.
-- [ ] **T2.2** — `AppDetailsPage` (924 ln) — tabs Database/Login/Storage/API/Members/Observability. Login/Storage → `ProviderCard` accordion.
-- [ ] **T2.3** — `DataBrowserPage` (1385 ln, maior) — `DataTable`.
+- [x] **T2.1** — `AppsPage` (955 ln) — home de apps.
+- [x] **T2.2** — `AppDetailsPage` (924 ln) — tabs Database/Login/Storage/API/Members/Observability. Login/Storage → `ProviderCard` accordion.
+- [x] **T2.3** — `DataBrowserPage` (1385 ln, maior) — `DataTable`.
 - [x] **T2.4** — `LogsPage` (523 ln).
 - [x] **T2.5** — `UsersPage` (575 ln) — tela de referência de `DataTable` + row-actions.
 - [x] **T2.6** — `AuditLogPage` (292 ln).

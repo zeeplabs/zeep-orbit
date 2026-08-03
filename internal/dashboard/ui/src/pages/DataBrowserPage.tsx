@@ -1,24 +1,5 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  Database,
-  Table2,
-  ChevronDown,
-  ChevronRight,
-  RefreshCw,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-  ChevronLeft,
-  ChevronRight as ChevronRightIcon,
-  Loader2,
-  Pencil,
-  Trash2,
-  X,
-  Filter,
-  Download,
-} from "lucide-react";
 import {
   useDataBrowserApps,
   useDataBrowserQuery,
@@ -28,6 +9,32 @@ import {
   DataBrowserApp,
   DataBrowserTable,
 } from "../lib/api";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Icon } from "@/components/ui/icon";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  DataTable,
+  EmptyState,
+  ConfirmDialog,
+  type Column,
+  type SortDir,
+} from "@/components/patterns";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 
 function filterOperators(t: (key: string) => string) {
   return [
@@ -41,84 +48,13 @@ function filterOperators(t: (key: string) => string) {
     { value: "like", label: "LIKE" },
   ];
 }
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-
-const ease = [0.32, 0.72, 0, 1] as const;
 
 const systemDisplayColumns = new Set(["id", "created_at", "updated_at", "owner_id"]);
 
-const fadeUp = {
-  initial: { opacity: 0, y: 16 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.6, ease },
-};
+const nativeInputCls =
+  "w-full rounded-[10px] border border-[var(--border)] bg-[var(--sunken)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--primary)]";
 
-function TableSkeleton({ cols }: { cols: number }) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 16 }}>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: `repeat(${Math.min(cols, 6)}, 1fr)`,
-          gap: 12,
-        }}
-      >
-        {Array.from({ length: Math.min(cols, 6) }).map((_, i) => (
-          <div
-            key={i}
-            style={{
-              height: 14,
-              borderRadius: 4,
-              background: "rgba(255,255,255,0.06)",
-            }}
-          />
-        ))}
-      </div>
-      {Array.from({ length: 5 }).map((_, i) => (
-        <div
-          key={i}
-          style={{
-            display: "grid",
-            gridTemplateColumns: `repeat(${Math.min(cols, 6)}, 1fr)`,
-            gap: 12,
-          }}
-        >
-          {Array.from({ length: Math.min(cols, 6) }).map((_, j) => (
-            <div
-              key={j}
-              style={{
-                height: 12,
-                borderRadius: 4,
-                background: "rgba(255,255,255,0.04)",
-              }}
-            />
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function EmptyState({ message }: { message: string }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        height: "100%",
-        color: "var(--text-muted)",
-        fontSize: 14,
-        gap: 12,
-      }}
-    >
-      <Database size={40} style={{ opacity: 0.3 }} />
-      <span>{message}</span>
-    </div>
-  );
-}
+type Row = Record<string, unknown>;
 
 export default function DataBrowserPage() {
   const { t } = useTranslation();
@@ -141,7 +77,7 @@ export default function DataBrowserPage() {
   const [isExporting, setIsExporting] = useState(false);
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingRow, setEditingRow] = useState<Record<string, unknown> | null>(null);
+  const [editingRow, setEditingRow] = useState<Row | null>(null);
   const [formValues, setFormValues] = useState<Record<string, string>>({});
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
@@ -172,11 +108,8 @@ export default function DataBrowserPage() {
   const toggleApp = (name: string) => {
     setExpandedApps((prev) => {
       const next = new Set(prev);
-      if (next.has(name)) {
-        next.delete(name);
-      } else {
-        next.add(name);
-      }
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
       return next;
     });
   };
@@ -233,20 +166,13 @@ export default function DataBrowserPage() {
     setPageOffset(0);
   };
 
-  const getSortIcon = (col: string) => {
-    if (!sortOrder || !sortOrder.startsWith(col)) return <ArrowUpDown size={12} style={{ opacity: 0.4 }} />;
-    if (sortOrder === `${col}.asc`) return <ArrowUp size={12} />;
-    return <ArrowDown size={12} />;
-  };
-
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await refetch();
     setIsRefreshing(false);
   };
 
-
-  const openEditModal = (row: Record<string, unknown>) => {
+  const openEditModal = (row: Row) => {
     setEditingRow(row);
     const initial: Record<string, string> = {};
     for (const col of columns) {
@@ -324,44 +250,57 @@ export default function DataBrowserPage() {
   };
 
   const columns = selectedTable?.columns || [];
-  const data = queryResult?.data || [];
+  const data: Row[] = queryResult?.data || [];
   const totalCount = queryResult?.count || 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / limit));
   const currentPage = Math.floor(pageOffset / limit) + 1;
-
   const isSaving = updateRow.isPending;
 
-  return (
-    <motion.div {...fadeUp} className="grid grid-cols-[240px_1fr] max-md:flex max-md:flex-col max-md:gap-3" style={{ minHeight: "100%" }}>
-      {/* Tree panel */}
-      <div
-        className="max-md:max-h-[200px] max-md:overflow-y-auto"
-        style={{
-          background: "rgba(255,255,255,0.02)",
-          borderRight: "1px solid rgba(255,255,255,0.06)",
-          borderRadius: 16,
-          overflow: "hidden",
-          padding: 12,
-        }}
-      >
-        <div
+  const sortProp = sortOrder
+    ? { key: sortOrder.split(".")[0], dir: (sortOrder.endsWith(".desc") ? "desc" : "asc") as SortDir }
+    : undefined;
+
+  const tableColumns: Column<Row>[] = columns.map((col) => ({
+    key: col.name,
+    sortable: true,
+    className: "max-w-[260px]",
+    header: (
+      <span className="inline-flex items-center gap-1.5">
+        {col.name}
+        <span className="font-mono text-[10px] font-normal opacity-50">{col.type}</span>
+      </span>
+    ),
+    render: (row: Row) => {
+      const val = row[col.name];
+      const isNull = val === null || val === undefined;
+      const isId = col.name === "id" || col.type === "uuid";
+      return (
+        <span
+          className="block max-w-[260px] truncate"
           style={{
-            fontSize: 11,
-            fontWeight: 600,
-            textTransform: "uppercase",
-            letterSpacing: "0.05em",
-            color: "var(--text-muted)",
-            padding: "8px 12px",
+            fontFamily: isId ? "var(--font-mono)" : undefined,
+            fontSize: isId ? 12 : undefined,
+            color: isNull ? "var(--text-tertiary)" : col.name === "id" ? "var(--text-tertiary)" : undefined,
+            fontStyle: isNull ? "italic" : undefined,
           }}
         >
-          Apps
+          {formatCellValue(val, col.type)}
+        </span>
+      );
+    },
+  }));
+
+  return (
+    <div className="grid min-h-full grid-cols-[240px_1fr] gap-4 max-md:flex max-md:flex-col">
+      {/* Tree panel */}
+      <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 max-md:max-h-[220px] max-md:overflow-y-auto">
+        <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+          {t("dataBrowser.appsLabel")}
         </div>
         {appsLoading ? (
-          <div style={{ padding: "12px", color: "var(--text-muted)", fontSize: 13 }}>
-            {t("app.loading")}
-          </div>
+          <div className="px-3 py-2 text-[13px] text-[var(--text-tertiary)]">{t("app.loading")}</div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <div className="flex flex-col gap-0.5">
             {(apps || []).map((app) => {
               const isExpanded = expandedApps.has(app.name);
               const isActive = selectedTable?.app === app.name;
@@ -369,47 +308,20 @@ export default function DataBrowserPage() {
                 <div key={app.name}>
                   <button
                     onClick={() => toggleApp(app.name)}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      width: "100%",
-                      padding: "8px 12px",
-                      borderRadius: 8,
-                      border: "none",
-                      background: isActive ? "rgba(255,255,255,0.06)" : "transparent",
-                      color: "var(--text)",
-                      fontSize: 13,
-                      cursor: "pointer",
-                      textAlign: "left",
-                      transition: "background 0.15s",
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isActive) e.currentTarget.style.background = "rgba(255,255,255,0.03)";
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isActive) e.currentTarget.style.background = "transparent";
-                    }}
+                    className={cn(
+                      "flex w-full cursor-pointer items-center gap-2 rounded-[8px] border-none px-3 py-2 text-left text-[13px] text-[var(--text-primary)] transition-colors hover:bg-[var(--hover-surface)]",
+                      isActive ? "bg-[var(--hover-surface)]" : "bg-transparent",
+                    )}
                   >
-                    {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                    <Database size={14} style={{ opacity: 0.6 }} />
-                    <span style={{ fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {app.name}
-                    </span>
-                    <Badge
-                      variant="secondary"
-                      style={{
-                        fontSize: 10,
-                        padding: "0 6px",
-                        marginLeft: "auto",
-                        background: "rgba(255,255,255,0.06)",
-                      }}
-                    >
+                    <Icon name={isExpanded ? "expand_more" : "chevron_right"} size={16} className="text-[var(--text-tertiary)]" />
+                    <Icon name="database" size={15} className="text-[var(--text-tertiary)]" />
+                    <span className="truncate font-medium">{app.name}</span>
+                    <span className="ml-auto rounded-full bg-[var(--sunken)] px-1.5 py-0.5 text-[10px] text-[var(--text-tertiary)]">
                       {app.tables.length}
-                    </Badge>
+                    </span>
                   </button>
                   {isExpanded && (
-                    <div style={{ marginLeft: 8 }}>
+                    <div className="ml-2 flex flex-col gap-0.5">
                       {app.tables.map((table) => {
                         const isTableActive =
                           selectedTable?.app === app.name && selectedTable?.table === table.name;
@@ -417,32 +329,15 @@ export default function DataBrowserPage() {
                           <button
                             key={table.name}
                             onClick={() => selectTable(app, table)}
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 8,
-                              width: "100%",
-                              padding: "6px 12px 6px 28px",
-                              borderRadius: 6,
-                              border: "none",
-                              background: isTableActive ? "rgba(var(--brand-primary-rgb),0.12)" : "transparent",
-                              color: isTableActive ? "var(--brand-primary)" : "var(--text-muted)",
-                              fontSize: 13,
-                              cursor: "pointer",
-                              textAlign: "left",
-                              transition: "all 0.15s",
-                            }}
-                            onMouseEnter={(e) => {
-                              if (!isTableActive)
-                                e.currentTarget.style.background = "rgba(255,255,255,0.03)";
-                            }}
-                            onMouseLeave={(e) => {
-                              if (!isTableActive)
-                                e.currentTarget.style.background = "transparent";
-                            }}
+                            className={cn(
+                              "flex w-full cursor-pointer items-center gap-2 rounded-md border-none py-1.5 pl-7 pr-3 text-left text-[13px] transition-colors",
+                              isTableActive
+                                ? "bg-[var(--primary-tint)] text-[var(--primary)]"
+                                : "bg-transparent text-[var(--text-secondary)] hover:bg-[var(--hover-surface)]",
+                            )}
                           >
-                            <Table2 size={13} />
-                            <span>{table.name}</span>
+                            <Icon name="table_chart" size={14} />
+                            <span className="truncate">{table.name}</span>
                           </button>
                         );
                       })}
@@ -456,227 +351,107 @@ export default function DataBrowserPage() {
       </div>
 
       {/* Data panel */}
-      <div
-        className="pl-4 max-md:pl-0 max-md:pt-3"
-        style={{
-          overflow: "hidden",
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
+      <div className="flex min-w-0 flex-col gap-3">
         {!selectedTable ? (
-          <EmptyState message={t("dataBrowser.emptySelect")} />
+          <EmptyState icon="database" title={t("dataBrowser.emptySelect")} />
         ) : (
           <>
-            {/* Header */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "12px 16px",
-                borderBottom: "1px solid rgba(255,255,255,0.06)",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <Table2 size={16} style={{ opacity: 0.6 }} />
-                <span style={{ fontSize: 14, fontWeight: 600 }}>
+            {/* Toolbar */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-[var(--text-primary)]">
+                <Icon name="table_chart" size={16} className="text-[var(--text-tertiary)]" />
+                <span className="text-sm font-semibold">
                   {selectedTable.app}.{selectedTable.table}
                 </span>
-                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                  {columns.length} colunas
+                <span className="text-xs text-[var(--text-tertiary)]">
+                  {t("dataBrowser.columnsCount", { count: columns.length })}
                 </span>
               </div>
-              <div style={{ display: "flex", gap: 6 }}>
+              <div className="flex items-center gap-2">
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
+                  className={cn("gap-1.5", showFilters && "border-[var(--primary)] text-[var(--primary)]")}
                   onClick={() => setShowFilters((v) => !v)}
-                  style={{
-                    fontSize: 12,
-                    background: showFilters ? "rgba(var(--brand-primary-rgb),0.12)" : undefined,
-                    color: showFilters ? "var(--brand-primary)" : undefined,
-                  }}
                 >
-                  <Filter size={14} style={{ marginRight: 6 }} />
+                  <Icon name="filter_list" size={15} />
                   {t("dataBrowser.filters")}
                   {activeFilterCount > 0 && (
-                    <span
-                      style={{
-                        marginLeft: 6,
-                        background: "var(--brand-primary)",
-                        color: "#fff",
-                        borderRadius: 999,
-                        fontSize: 10,
-                        padding: "0 5px",
-                        lineHeight: "16px",
-                      }}
-                    >
+                    <span className="ml-0.5 rounded-full bg-[var(--primary)] px-1.5 text-[10px] leading-4 text-white">
                       {activeFilterCount}
                     </span>
                   )}
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleExport}
-                  disabled={isExporting}
-                  style={{ fontSize: 12 }}
-                >
-                  {isExporting ? (
-                    <Loader2 size={14} style={{ marginRight: 6, animation: "spin 1s linear infinite" }} />
-                  ) : (
-                    <Download size={14} style={{ marginRight: 6 }} />
-                  )}
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExport} disabled={isExporting}>
+                  <Icon name={isExporting ? "progress_activity" : "download"} size={15} className={isExporting ? "animate-spin" : undefined} />
                   CSV
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleRefresh}
-                  disabled={isRefreshing || queryFetching}
-                  style={{ fontSize: 12 }}
-                >
-                  <RefreshCw
-                    size={14}
-                    style={{
-                      marginRight: 6,
-                      animation: isRefreshing || queryFetching ? "spin 1s linear infinite" : undefined,
-                    }}
-                  />
-                  Atualizar
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={handleRefresh} disabled={isRefreshing || queryFetching}>
+                  <Icon name="refresh" size={15} className={isRefreshing || queryFetching ? "animate-spin" : undefined} />
+                  {t("dataBrowser.refresh")}
                 </Button>
               </div>
             </div>
 
             {/* Filter panel */}
             {showFilters && columns.length > 0 && (
-              <div
-                style={{
-                  padding: "10px 16px",
-                  borderBottom: "1px solid rgba(255,255,255,0.06)",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 8,
-                }}
-              >
-                {/* Add rule row */}
-                <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                  <select
-                    value={draftCol}
-                    onChange={(e) => setDraftCol(e.target.value)}
-                    style={{
-                      padding: "5px 8px",
-                      borderRadius: 6,
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      background: "rgba(255,255,255,0.03)",
-                      color: draftCol ? "var(--text)" : "var(--text-muted)",
-                      fontSize: 12,
-                      cursor: "pointer",
-                      minWidth: 130,
-                    }}
-                  >
-                    <option value="">Column...</option>
-                    {columns.map((col) => (
-                      <option key={col.name} value={col.name}>{col.name}</option>
-                    ))}
-                  </select>
-                  <select
-                    value={draftOp}
-                    onChange={(e) => setDraftOp(e.target.value)}
-                    style={{
-                      padding: "5px 8px",
-                      borderRadius: 6,
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      background: "rgba(255,255,255,0.03)",
-                      color: "var(--text)",
-                      fontSize: 12,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {filterOps.map((op) => (
-                      <option key={op.value} value={op.value}>{op.label}</option>
-                    ))}
-                  </select>
-                  <input
-                    type="text"
+              <div className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Select value={draftCol} onValueChange={setDraftCol}>
+                    <SelectTrigger className="h-9 min-w-[150px]">
+                      <SelectValue placeholder={t("dataBrowser.columnPlaceholder")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {columns.map((col) => (
+                        <SelectItem key={col.name} value={col.name}>{col.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={draftOp} onValueChange={setDraftOp}>
+                    <SelectTrigger className="h-9 w-auto min-w-[90px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {filterOps.map((op) => (
+                        <SelectItem key={op.value} value={op.value}>{op.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
                     value={draftValue}
                     onChange={(e) => setDraftValue(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") addFilterRule(); }}
                     placeholder={t("dataBrowser.valuePlaceholder")}
-                    style={{
-                      padding: "5px 10px",
-                      borderRadius: 6,
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      background: "rgba(255,255,255,0.03)",
-                      color: "var(--text)",
-                      fontSize: 12,
-                      outline: "none",
-                      flex: 1,
-                      minWidth: 120,
-                      maxWidth: 220,
-                    }}
+                    className="h-9 max-w-[220px] flex-1"
                   />
-                  <Button
-                    size="sm"
-                    onClick={addFilterRule}
-                    disabled={!draftCol || !draftValue.trim()}
-                    style={{ fontSize: 12 }}
-                  >
-                    + {t("dataBrowser.addFilter")}
+                  <Button size="sm" className="gap-1" onClick={addFilterRule} disabled={!draftCol || !draftValue.trim()}>
+                    <Icon name="add" size={15} />
+                    {t("dataBrowser.addFilter")}
                   </Button>
                 </div>
 
-                {/* Active filter chips */}
                 {filterRules.length > 0 && (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                  <div className="flex flex-wrap items-center gap-2">
                     {filterRules.map((r) => (
                       <div
                         key={r.col}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 4,
-                          background: "rgba(var(--brand-primary-rgb),0.1)",
-                          border: "1px solid rgba(var(--brand-primary-rgb),0.2)",
-                          borderRadius: 999,
-                          padding: "3px 8px 3px 10px",
-                          fontSize: 12,
-                        }}
+                        className="flex items-center gap-1.5 rounded-full border border-[var(--primary)]/25 bg-[var(--primary-tint)] py-1 pl-2.5 pr-2 text-xs"
                       >
-                        <span style={{ fontWeight: 600, color: "var(--brand-primary)" }}>{r.col}</span>
-                        <span style={{ color: "var(--text-muted)", margin: "0 1px" }}>
-                          {filterOps.find((o) => o.value === r.op)?.label}
-                        </span>
-                        <span style={{ color: "var(--text)" }}>{r.value}</span>
+                        <span className="font-semibold text-[var(--primary)]">{r.col}</span>
+                        <span className="text-[var(--text-tertiary)]">{filterOps.find((o) => o.value === r.op)?.label}</span>
+                        <span className="text-[var(--text-primary)]">{r.value}</span>
                         <button
                           title={t("dataBrowser.removeFilter")}
                           onClick={() => removeFilterRule(r.col)}
-                          style={{
-                            marginLeft: 4,
-                            border: "none",
-                            background: "transparent",
-                            color: "var(--text-muted)",
-                            cursor: "pointer",
-                            padding: 0,
-                            display: "flex",
-                            alignItems: "center",
-                          }}
+                          className="flex cursor-pointer items-center border-none bg-transparent text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
                         >
-                          <X size={12} />
+                          <Icon name="close" size={13} />
                         </button>
                       </div>
                     ))}
                     <button
                       onClick={clearFilters}
-                      style={{
-                        fontSize: 11,
-                        color: "#ef4444",
-                        background: "transparent",
-                        border: "none",
-                        cursor: "pointer",
-                        padding: "2px 6px",
-                      }}
+                      className="cursor-pointer border-none bg-transparent px-1.5 py-0.5 text-[11px] text-[var(--danger)]"
                     >
                       {t("dataBrowser.clearFilters")}
                     </button>
@@ -685,674 +460,117 @@ export default function DataBrowserPage() {
               </div>
             )}
 
-            {/* Desktop table */}
-            <div className="max-md:hidden" style={{ overflow: "auto", flex: 1, position: "relative" }}>
-              {queryLoading ? (
-                <TableSkeleton cols={columns.length} />
-              ) : (
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                  <thead>
-                    <tr
-                      style={{
-                        borderBottom: "1px solid rgba(255,255,255,0.06)",
-                        position: "sticky",
-                        top: 0,
-                        background: "var(--bg)",
-                        zIndex: 1,
-                      }}
-                    >
-                      <th
-                        style={{
-                          padding: "10px 12px",
-                          width: 80,
-                          textAlign: "center",
-                          fontWeight: 500,
-                          color: "var(--text-muted)",
-                          fontSize: 12,
-                        }}
-                      >
-                        {t("dataBrowser.actions")}
-                      </th>
-                      {columns.map((col) => (
-                        <th
-                          key={col.name}
-                          onClick={() => handleSort(col.name)}
-                          style={{
-                            padding: "10px 12px",
-                            textAlign: "left",
-                            fontWeight: 500,
-                            color: "var(--text-muted)",
-                            fontSize: 12,
-                            cursor: "pointer",
-                            userSelect: "none",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 4,
-                            }}
-                          >
-                            <span>{col.name}</span>
-                            {getSortIcon(col.name)}
-                            <span
-                              style={{
-                                fontSize: 10,
-                                opacity: 0.4,
-                                marginLeft: 2,
-                                fontFamily: "monospace",
-                              }}
-                            >
-                              {col.type}
-                            </span>
-                          </div>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={columns.length + 1}
-                          style={{
-                            padding: 40,
-                            textAlign: "center",
-                            color: "var(--text-muted)",
-                            fontSize: 13,
-                          }}
-                        >
-                          {t("dataBrowser.noRecords")}
-                        </td>
-                      </tr>
-                    ) : (
-                      data.map((row, i) => (
-                        <tr
-                          key={row["id"] as string || i}
-                          style={{
-                            borderBottom: "1px solid rgba(255,255,255,0.04)",
-                            transition: "background 0.1s",
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = "rgba(255,255,255,0.02)";
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = "transparent";
-                          }}
-                        >
-                          <td style={{ padding: "8px 12px", textAlign: "center" }}>
-                            <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
-                              <button
-                                onClick={() => openEditModal(row)}
-                                style={{
-                                  padding: 4,
-                                  border: "none",
-                                  background: "transparent",
-                                  color: "var(--text-muted)",
-                                  cursor: "pointer",
-                                  borderRadius: 4,
-                                  transition: "all 0.15s",
-                                }}
-                                title={t("dataBrowser.edit")}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.background = "rgba(255,255,255,0.06)";
-                                  e.currentTarget.style.color = "var(--brand-primary)";
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.background = "transparent";
-                                  e.currentTarget.style.color = "var(--text-muted)";
-                                }}
-                              >
-                                <Pencil size={14} />
-                              </button>
-                              <button
-                                onClick={() => setDeleteConfirmId(String(row["id"]))}
-                                style={{
-                                  padding: 4,
-                                  border: "none",
-                                  background: "transparent",
-                                  color: "var(--text-muted)",
-                                  cursor: "pointer",
-                                  borderRadius: 4,
-                                  transition: "all 0.15s",
-                                }}
-                                title={t("dataBrowser.delete")}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.background = "rgba(255,255,255,0.06)";
-                                  e.currentTarget.style.color = "#ef4444";
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.background = "transparent";
-                                  e.currentTarget.style.color = "var(--text-muted)";
-                                }}
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
-                          </td>
-                          {columns.map((col) => {
-                            const val = row[col.name];
-                            return (
-                              <td
-                                key={col.name}
-                                style={{
-                                  padding: "8px 12px",
-                                  maxWidth: 250,
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                  whiteSpace: "nowrap",
-                                  fontFamily:
-                                    col.name === "id" ? "monospace" : undefined,
-                                  fontSize: col.name === "id" ? 12 : 13,
-                                  color:
-                                    val === null || val === undefined
-                                      ? "rgba(255,255,255,0.2)"
-                                      : col.name === "id"
-                                        ? "var(--text-muted)"
-                                        : undefined,
-                                  fontStyle:
-                                    val === null || val === undefined
-                                      ? "italic"
-                                      : undefined,
-                                }}
-                              >
-                                {formatCellValue(val, col.type)}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              )}
-            </div>
-
-            {/* Mobile card view */}
-            <div className="md:hidden flex-1 overflow-y-auto">
-              {queryLoading ? (
-                <TableSkeleton cols={columns.length} />
-              ) : data.length === 0 ? (
-                <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>
-                  {t("dataBrowser.noRecords")}
-                </div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {data.map((row, i) => (
-                    <div
-                      key={row["id"] as string || i}
-                      style={{
-                        background: "rgba(255,255,255,0.03)",
-                        border: "1px solid rgba(255,255,255,0.06)",
-                        borderRadius: 12,
-                        overflow: "hidden",
-                      }}
-                    >
-                      {columns.map((col, ci) => {
-                        const val = row[col.name];
-                        const isFirst = ci === 0;
-                        return (
-                          <div
-                            key={col.name}
-                            style={{
-                              display: "flex",
-                              alignItems: "flex-start",
-                              gap: 8,
-                              padding: isFirst ? "12px 14px 8px" : "6px 14px",
-                              borderBottom: ci < columns.length - 1 ? "1px solid rgba(255,255,255,0.04)" : undefined,
-                            }}
-                          >
-                            <span
-                              style={{
-                                fontSize: isFirst ? 10 : 11,
-                                fontWeight: isFirst ? 700 : 500,
-                                color: "var(--text-muted)",
-                                minWidth: isFirst ? undefined : 90,
-                                flexShrink: 0,
-                                textTransform: isFirst ? "uppercase" : undefined,
-                                letterSpacing: isFirst ? "0.05em" : undefined,
-                              }}
-                            >
-                              {col.name}
-                            </span>
-                            <span
-                              style={{
-                                fontSize: isFirst ? 12 : 13,
-                                fontWeight: isFirst ? 600 : 400,
-                                color:
-                                  val === null || val === undefined
-                                    ? "rgba(255,255,255,0.2)"
-                                    : isFirst
-                                      ? "var(--text)"
-                                      : undefined,
-                                fontStyle:
-                                  val === null || val === undefined
-                                    ? "italic"
-                                    : undefined,
-                                fontFamily: col.name === "id" || isFirst ? "monospace" : undefined,
-                                wordBreak: "break-word",
-                                textAlign: "right",
-                                flex: 1,
-                              }}
-                            >
-                              {formatCellValue(val, col.type)}
-                            </span>
-                          </div>
-                        );
-                      })}
-                      {/* Mobile action buttons */}
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: 4,
-                          padding: "8px 14px",
-                          borderTop: "1px solid rgba(255,255,255,0.04)",
-                        }}
-                      >
-                        <button
-                          onClick={() => openEditModal(row)}
-                          style={{
-                            flex: 1,
-                            padding: "6px 12px",
-                            border: "1px solid rgba(255,255,255,0.1)",
-                            background: "transparent",
-                            color: "var(--text-muted)",
-                            cursor: "pointer",
-                            borderRadius: 6,
-                            fontSize: 12,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            gap: 4,
-                          }}
-                        >
-                          <Pencil size={12} />
-                          {t("dataBrowser.edit")}
-                        </button>
-                        <button
-                          onClick={() => setDeleteConfirmId(String(row["id"]))}
-                          style={{
-                            flex: 1,
-                            padding: "6px 12px",
-                            border: "1px solid rgba(239,68,68,0.3)",
-                            background: "transparent",
-                            color: "#ef4444",
-                            cursor: "pointer",
-                            borderRadius: 6,
-                            fontSize: 12,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            gap: 4,
-                          }}
-                        >
-                          <Trash2 size={12} />
-                          {t("dataBrowser.delete")}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Pagination */}
-            {totalCount > 0 && (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "10px 16px",
-                  borderTop: "1px solid rgba(255,255,255,0.06)",
-                  fontSize: 12,
-                  color: "var(--text-muted)",
-                }}
-              >
-                <span>
-                  {t("dataBrowser.pageRange", {
-                    from: pageOffset + 1,
-                    to: Math.min(pageOffset + limit, totalCount),
-                    total: totalCount,
-                  })}
-                </span>
-                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={pageOffset === 0}
-                    onClick={() => setPageOffset(Math.max(0, pageOffset - limit))}
-                    style={{ padding: "4px 8px", height: "auto" }}
-                  >
-                    <ChevronLeft size={14} />
-                    {t("dataBrowser.previous")}
+            <DataTable<Row>
+              columns={tableColumns}
+              rows={data}
+              getRowId={(row) => String(row["id"])}
+              loading={queryLoading}
+              empty={{ icon: "table_rows", title: t("dataBrowser.noRecords") }}
+              sort={sortProp}
+              onSort={handleSort}
+              pagination={{
+                page: currentPage,
+                pageCount: totalPages,
+                onPageChange: (p) => setPageOffset((p - 1) * limit),
+                prevLabel: t("dataBrowser.previous"),
+                nextLabel: t("dataBrowser.next"),
+                label: t("dataBrowser.pageRange", {
+                  from: pageOffset + 1,
+                  to: Math.min(pageOffset + limit, totalCount),
+                  total: totalCount,
+                }),
+              }}
+              rowActions={(row) => (
+                <>
+                  <Button variant="outline" size="icon" className="size-8" title={t("dataBrowser.edit")} onClick={() => openEditModal(row)}>
+                    <Icon name="edit" size={15} />
                   </Button>
-                  <span style={{ padding: "0 8px", fontSize: 11 }}>
-                    {currentPage} / {totalPages}
-                  </span>
                   <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={pageOffset + limit >= totalCount}
-                    onClick={() => setPageOffset(pageOffset + limit)}
-                    style={{ padding: "4px 8px", height: "auto" }}
+                    variant="outline"
+                    size="icon"
+                    className="size-8 border-[var(--danger)]/30 text-[var(--danger)] hover:bg-[var(--danger-tint)]"
+                    title={t("dataBrowser.delete")}
+                    onClick={() => setDeleteConfirmId(String(row["id"]))}
                   >
-                    {t("dataBrowser.next")}
-                    <ChevronRightIcon size={14} />
+                    <Icon name="delete" size={15} />
                   </Button>
-                </div>
-              </div>
-            )}
+                </>
+              )}
+            />
           </>
         )}
       </div>
 
-      {/* ── Create/Edit Modal ── */}
-      <AnimatePresence>
-        {modalOpen && selectedTable && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            style={{
-              position: "fixed",
-              inset: 0,
-              zIndex: 100,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              background: "rgba(0,0,0,0.6)",
-              backdropFilter: "blur(4px)",
-              padding: 16,
-            }}
-            onClick={(e) => {
-              if (e.target === e.currentTarget) closeModal();
-            }}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              transition={{ duration: 0.2, ease }}
-              style={{
-                width: "100%",
-                maxWidth: 520,
-                maxHeight: "85vh",
-                overflow: "hidden",
-                display: "flex",
-                flexDirection: "column",
-                background: "var(--bg-card, #1a1a2e)",
-                border: "1px solid rgba(255,255,255,0.1)",
-                borderRadius: 16,
-              }}
-            >
-              {/* Modal header */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "16px 20px",
-                  borderBottom: "1px solid rgba(255,255,255,0.06)",
-                }}
-              >
-                <span style={{ fontSize: 15, fontWeight: 600 }}>
-                  {t("dataBrowser.editRecordTitle")}
-                </span>
-                <button
-                  title={t("appDetails.close")}
-                  onClick={closeModal}
-                  style={{
-                    padding: 4,
-                    border: "none",
-                    background: "transparent",
-                    color: "var(--text-muted)",
-                    cursor: "pointer",
-                    borderRadius: 6,
-                  }}
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              {/* Modal body */}
-              <div
-                style={{
-                  padding: "16px 20px",
-                  overflow: "auto",
-                  flex: 1,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 14,
-                }}
-              >
-                {columns
-                  .filter((col) => !systemDisplayColumns.has(col.name))
-                  .map((col) => (
-                    <div key={col.name} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                      <label
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 500,
-                          color: "var(--text-muted)",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 4,
-                        }}
-                      >
-                        {col.name}
-                        <span style={{ fontSize: 10, fontFamily: "monospace", opacity: 0.4 }}>
-                          {col.type}
-                        </span>
-                      </label>
-                      {col.type === "boolean" ? (
-                        <select
-                          value={formValues[col.name] ?? ""}
-                          onChange={(e) => handleFormChange(col.name, e.target.value)}
-                          style={{
-                            padding: "8px 12px",
-                            borderRadius: 8,
-                            border: "1px solid rgba(255,255,255,0.1)",
-                            background: "rgba(255,255,255,0.03)",
-                            color: "var(--text)",
-                            fontSize: 13,
-                            fontFamily: "inherit",
-                            outline: "none",
-                          }}
-                        >
-                          <option value="">—</option>
-                          <option value="true">true</option>
-                          <option value="false">false</option>
-                        </select>
-                      ) : col.type === "jsonb" ? (
-                        <textarea
-                          value={formValues[col.name] ?? ""}
-                          onChange={(e) => handleFormChange(col.name, e.target.value)}
-                          rows={3}
-                          style={{
-                            padding: "8px 12px",
-                            borderRadius: 8,
-                            border: "1px solid rgba(255,255,255,0.1)",
-                            background: "rgba(255,255,255,0.03)",
-                            color: "var(--text)",
-                            fontSize: 13,
-                            fontFamily: "monospace",
-                            outline: "none",
-                            resize: "vertical",
-                          }}
-                        />
-                      ) : (
-                        <input
-                          type={col.type === "integer" || col.type === "bigint" || col.type === "decimal" || col.type === "numeric" ? "number" : "text"}
-                          value={formValues[col.name] ?? ""}
-                          onChange={(e) => handleFormChange(col.name, e.target.value)}
-                          placeholder={col.name}
-                          style={{
-                            padding: "8px 12px",
-                            borderRadius: 8,
-                            border: "1px solid rgba(255,255,255,0.1)",
-                            background: "rgba(255,255,255,0.03)",
-                            color: "var(--text)",
-                            fontSize: 13,
-                            fontFamily: col.type === "uuid" ? "monospace" : "inherit",
-                            outline: "none",
-                          }}
-                        />
-                      )}
-                    </div>
-                  ))}
-              </div>
-
-              {/* Modal footer */}
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "flex-end",
-                  gap: 8,
-                  padding: "12px 20px",
-                  borderTop: "1px solid rgba(255,255,255,0.06)",
-                }}
-              >
-                <Button variant="ghost" size="sm" onClick={closeModal} disabled={isSaving}>
-                  {t("appForm.cancel")}
-                </Button>
-                <Button size="sm" onClick={handleSave} disabled={isSaving}>
-                  {isSaving ? (
-                    <>
-                      <Loader2 size={14} style={{ marginRight: 6, animation: "spin 1s linear infinite" }} />
-                      {t("dataBrowser.saving")}
-                    </>
+      {/* Edit Modal */}
+      <Dialog open={modalOpen && !!selectedTable} onOpenChange={(o) => { if (!o) closeModal(); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("dataBrowser.editRecordTitle")}</DialogTitle>
+          </DialogHeader>
+          <div className="flex max-h-[60vh] flex-col gap-3.5 overflow-auto">
+            {columns
+              .filter((col) => !systemDisplayColumns.has(col.name))
+              .map((col) => (
+                <div key={col.name} className="flex flex-col gap-1.5">
+                  <Label className="flex items-center gap-1.5">
+                    {col.name}
+                    <span className="font-mono text-[10px] font-normal opacity-50">{col.type}</span>
+                  </Label>
+                  {col.type === "boolean" ? (
+                    <select
+                      value={formValues[col.name] ?? ""}
+                      onChange={(e) => handleFormChange(col.name, e.target.value)}
+                      className={nativeInputCls}
+                    >
+                      <option value="">—</option>
+                      <option value="true">true</option>
+                      <option value="false">false</option>
+                    </select>
+                  ) : col.type === "jsonb" ? (
+                    <textarea
+                      value={formValues[col.name] ?? ""}
+                      onChange={(e) => handleFormChange(col.name, e.target.value)}
+                      rows={3}
+                      className={cn(nativeInputCls, "resize-y font-mono")}
+                    />
                   ) : (
-                    t("dataBrowser.save")
+                    <Input
+                      type={col.type === "integer" || col.type === "bigint" || col.type === "decimal" || col.type === "numeric" ? "number" : "text"}
+                      value={formValues[col.name] ?? ""}
+                      onChange={(e) => handleFormChange(col.name, e.target.value)}
+                      placeholder={col.name}
+                      className={col.type === "uuid" ? "font-mono" : undefined}
+                    />
                   )}
-                </Button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── Delete Confirmation Modal ── */}
-      <AnimatePresence>
-        {deleteConfirmId && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            style={{
-              position: "fixed",
-              inset: 0,
-              zIndex: 110,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              background: "rgba(0,0,0,0.6)",
-              backdropFilter: "blur(4px)",
-              padding: 16,
-            }}
-            onClick={(e) => {
-              if (e.target === e.currentTarget) setDeleteConfirmId(null);
-            }}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              transition={{ duration: 0.2, ease }}
-              style={{
-                width: "100%",
-                maxWidth: 400,
-                background: "var(--bg-card, #1a1a2e)",
-                border: "1px solid rgba(255,255,255,0.1)",
-                borderRadius: 16,
-                overflow: "hidden",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12,
-                  padding: "20px 20px 0",
-                }}
-              >
-                <div
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: "50%",
-                    background: "rgba(239,68,68,0.15)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexShrink: 0,
-                  }}
-                >
-                  <Trash2 size={18} style={{ color: "#ef4444" }} />
                 </div>
-                <div>
-                  <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>
-                    {t("dataBrowser.deleteRecordTitle")}
-                  </div>
-                  <div style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.4 }}>
-                    {t("dataBrowser.deleteConfirmMsg")}
-                  </div>
-                </div>
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "flex-end",
-                  gap: 8,
-                  padding: "16px 20px",
-                  marginTop: 8,
-                }}
-              >
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setDeleteConfirmId(null)}
-                  disabled={deleteRow.isPending}
-                >
-                  {t("appForm.cancel")}
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => handleDelete(deleteConfirmId)}
-                  disabled={deleteRow.isPending}
-                  style={{
-                    background: "#ef4444",
-                    color: "#fff",
-                    border: "none",
-                  }}
-                >
-                  {deleteRow.isPending ? (
-                    <>
-                      <Loader2 size={14} style={{ marginRight: 6, animation: "spin 1s linear infinite" }} />
-                      {t("dataBrowser.deleting")}
-                    </>
-                  ) : (
-                    <>
-                      <Trash2 size={14} style={{ marginRight: 6 }} />
-                      {t("dataBrowser.delete")}
-                    </>
-                  )}
-                </Button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeModal} disabled={isSaving}>
+              {t("appForm.cancel")}
+            </Button>
+            <Button onClick={handleSave} disabled={isSaving} className="gap-2">
+              {isSaving && <Icon name="progress_activity" size={16} className="animate-spin" />}
+              {isSaving ? t("dataBrowser.saving") : t("dataBrowser.save")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      <style>{`
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
-    </motion.div>
+      {/* Delete confirmation */}
+      <ConfirmDialog
+        open={!!deleteConfirmId}
+        title={t("dataBrowser.deleteRecordTitle")}
+        message={t("dataBrowser.deleteConfirmMsg")}
+        confirmLabel={deleteRow.isPending ? t("dataBrowser.deleting") : t("dataBrowser.delete")}
+        cancelLabel={t("appForm.cancel")}
+        destructive
+        icon="delete"
+        loading={deleteRow.isPending}
+        onConfirm={() => deleteConfirmId && handleDelete(deleteConfirmId)}
+        onCancel={() => setDeleteConfirmId(null)}
+      />
+    </div>
   );
 }
 

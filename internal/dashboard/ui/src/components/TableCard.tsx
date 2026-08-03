@@ -4,6 +4,8 @@ import { useTranslation, Trans } from "react-i18next";
 import { Plus, Trash2, Table2, Link2, Lock, AlertCircle } from "lucide-react";
 import { TableDef, ColumnDef, IndexDef, ReferenceDef } from "../lib/api";
 import { cn } from "@/lib/utils";
+import { Icon } from "@/components/ui/icon";
+import { StatusPill } from "@/components/patterns";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -229,74 +231,31 @@ export default function TableCard({
   }
 
   if (!editing) {
-    const foreignKeys = table.columns
-      .filter((c) => c.references?.table)
-      .map((c) => ({
-        text: `${c.name} → ${c.references!.table}.${c.references!.column}`,
-        onDelete: c.references!.on_delete && c.references!.on_delete !== "no_action" ? c.references!.on_delete : null,
-      }));
-    const tableIndexes = table.indexes ?? [];
-
+    const totalCols = table.columns.length + autoColumnsFor(table.rls).length;
     return (
-      <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Table2 size={15} strokeWidth={1.5} className="text-[#B3D1FF] shrink-0" />
-            <span className="text-[13px] font-semibold text-[#F8FAFC]">{table.name}</span>
-            <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border border-white/[0.10] text-[#94A3B8]">
-              {table.rls === "enabled" ? t("appForm.tableRestricted") : t("appForm.tablePublic")}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={locked}
-              onClick={enterEdit}
-              className={cn(
-                "text-[12px] font-medium px-3 py-1.5 rounded-full border border-white/[0.10] bg-transparent",
-                locked ? "text-white/30 cursor-not-allowed" : "text-[#F8FAFC] cursor-pointer hover:bg-white/[0.06]",
-              )}
-            >
-              {t("tableCard.edit")}
-            </button>
-            <button
-              type="button"
-              disabled={locked || deleting}
-              onClick={remove}
-              className={cn(
-                "w-7 h-7 flex items-center justify-center rounded-md border border-red-500/[0.12] bg-red-500/[0.06]",
-                locked || deleting ? "text-red-400/30 cursor-not-allowed" : "text-red-400 cursor-pointer hover:bg-red-500/[0.12]",
-              )}
-            >
-              <Trash2 size={12} strokeWidth={1.5} />
-            </button>
-          </div>
+      <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
+        <div
+          onClick={() => { if (!locked) enterEdit(); }}
+          className={cn(
+            "flex items-center gap-3 px-[18px] py-4",
+            locked ? "cursor-default" : "cursor-pointer hover:bg-[var(--hover-surface)]",
+          )}
+        >
+          <Icon name="table_chart" size={18} className="shrink-0 text-[var(--text-tertiary)]" />
+          <span className="text-[14.5px] font-bold text-[var(--text-primary)]" style={{ fontFamily: "var(--font-display)" }}>
+            {table.name}
+          </span>
+          <StatusPill
+            label={table.rls === "enabled" ? t("appForm.tableRestricted") : t("appForm.tablePublic")}
+            tone={table.rls === "enabled" ? "primary" : "neutral"}
+            dot={false}
+          />
+          <span className="ml-auto text-xs text-[var(--text-tertiary)]">
+            {t("tableCard.columnsCount", { count: totalCols })}
+          </span>
+          <Icon name="expand_more" size={20} className="text-[var(--text-tertiary)]" />
         </div>
-
-        {(foreignKeys.length > 0 || tableIndexes.length > 0) && (
-          <div className="flex flex-wrap gap-1.5 mt-2.5 pl-[27px]">
-            {foreignKeys.map((fk, i) => (
-              <span
-                key={`fk-${i}`}
-                className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border border-white/[0.08] text-[#94A3B8]"
-              >
-                <Link2 size={9} strokeWidth={1.5} />
-                {fk.text}
-                {fk.onDelete && ` (${fk.onDelete})`}
-              </span>
-            ))}
-            {tableIndexes.map((idx, i) => (
-              <span
-                key={`idx-${i}`}
-                className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border border-white/[0.08] text-[#94A3B8]"
-              >
-                {idx.name} ({idx.columns.join(", ")}){idx.unique ? " UNIQUE" : ""}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {error && <p className="text-xs text-red-400 mt-2">{error}</p>}
+        {error && <p className="px-[18px] pb-3 text-xs text-[var(--danger)]">{error}</p>}
       </div>
     );
   }
@@ -306,29 +265,29 @@ export default function TableCard({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
-      className="bg-white/[0.04] border border-white/[0.08] rounded-xl overflow-hidden"
+      className="bg-[var(--surface)] border border-[var(--border)] rounded-[14px] overflow-hidden"
     >
       <div className="flex items-center gap-3 px-4 py-3">
-        <Table2 size={15} strokeWidth={1.5} className="text-[#B3D1FF] shrink-0" />
+        <Table2 size={15} strokeWidth={1.5} className="text-[var(--primary)] shrink-0" />
         <Input
           value={name}
           disabled={!isDraft}
           onChange={(e) => setName(e.target.value.toLowerCase().replace(/[\s-]+/g, "_"))}
           placeholder={t("appForm.tableName")}
-          className="h-8 px-3 py-1.5 text-[13px] bg-white/[0.05] border-white/[0.10] rounded-md text-[#F8FAFC] placeholder:text-white/30 brand-focus"
+          className="h-8 px-3 py-1.5 text-[13px] bg-[var(--sunken)] border-[var(--border)] rounded-md text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] brand-focus"
         />
         <Select value={rls} onValueChange={setRls}>
-          <SelectTrigger className="h-8 w-[100px] shrink-0 text-[12px] bg-white/[0.05] border-white/[0.10] text-[#F8FAFC] rounded-md px-3 brand-focus">
+          <SelectTrigger className="h-8 w-[100px] shrink-0 text-[12px] bg-[var(--sunken)] border-[var(--border)] text-[var(--text-primary)] rounded-md px-3 brand-focus">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="bg-[#0D0D14] border-white/[0.10] text-[#F8FAFC]">
-            <SelectItem value="disabled" className="text-[12px] focus:bg-white/[0.08] focus:text-[#F8FAFC]">
+          <SelectContent className="bg-[var(--surface-raised)] border-[var(--border)] text-[var(--text-primary)]">
+            <SelectItem value="disabled" className="text-[12px] focus:bg-[var(--hover-surface)] focus:text-[var(--text-primary)]">
               {t("appForm.tablePublic")}
             </SelectItem>
             <SelectItem
               value="enabled"
               disabled={!authEmailEnabled}
-              className="text-[12px] focus:bg-white/[0.08] focus:text-[#F8FAFC]"
+              className="text-[12px] focus:bg-[var(--hover-surface)] focus:text-[var(--text-primary)]"
             >
               {t("appForm.tableRestricted")}
             </SelectItem>
@@ -336,31 +295,31 @@ export default function TableCard({
         </Select>
       </div>
       {!authEmailEnabled && (
-        <p className="px-4 text-[11px] text-[#94A3B8]">
+        <p className="px-4 text-[11px] text-[var(--text-secondary)]">
           {t("tableCard.restrictedHint")}
         </p>
       )}
 
       <div className="px-4 pb-4">
         <div className="flex items-center justify-between gap-2 mb-2">
-          <p className="text-[11px] text-[#94A3B8]">
+          <p className="text-[11px] text-[var(--text-secondary)]">
             {t("tableCard.autoColumnsNote")}
           </p>
           <button
             type="button"
             onClick={() => setShowRelationshipsInfo(true)}
-            className="flex items-center gap-1 text-[11px] text-[#94A3B8] hover:text-[var(--brand-light)] bg-transparent border-none cursor-pointer shrink-0 transition-colors"
+            className="flex items-center gap-1 text-[11px] text-[var(--text-secondary)] hover:text-[var(--primary)] bg-transparent border-none cursor-pointer shrink-0 transition-colors"
           >
             <AlertCircle size={12} strokeWidth={1.5} />
             {t("tableCard.relationshipsInfoBtn")}
           </button>
         </div>
         <div className="grid gap-3 mb-1" style={{ gridTemplateColumns: "1fr 140px 80px 80px 140px 32px 40px" }}>
-          <span className="text-[11px] text-[#94A3B8] font-semibold">{t("appForm.columnName")}</span>
-          <span className="text-[11px] text-[#94A3B8] font-semibold">{t("appForm.columnType")}</span>
-          <span className="text-[11px] text-[#94A3B8] font-semibold text-center">{t("appForm.columnReq")}</span>
-          <span className="text-[11px] text-[#94A3B8] font-semibold text-center">{t("appForm.columnUnique")}</span>
-          <span className="text-[11px] text-[#94A3B8] font-semibold">{t("tableCard.defaultValue")}</span>
+          <span className="text-[11px] text-[var(--text-secondary)] font-semibold">{t("appForm.columnName")}</span>
+          <span className="text-[11px] text-[var(--text-secondary)] font-semibold">{t("appForm.columnType")}</span>
+          <span className="text-[11px] text-[var(--text-secondary)] font-semibold text-center">{t("appForm.columnReq")}</span>
+          <span className="text-[11px] text-[var(--text-secondary)] font-semibold text-center">{t("appForm.columnUnique")}</span>
+          <span className="text-[11px] text-[var(--text-secondary)] font-semibold">{t("tableCard.defaultValue")}</span>
           <span />
           <span />
         </div>
@@ -369,15 +328,15 @@ export default function TableCard({
           {autoColumnsFor(rls).map((auto) => (
             <div
               key={auto.name}
-              className="grid gap-3 items-center max-md:flex max-md:flex-col max-md:gap-2 max-md:p-3 max-md:bg-white/[0.03] max-md:rounded-xl max-md:border max-md:border-white/[0.06]"
+              className="grid gap-3 items-center max-md:flex max-md:flex-col max-md:gap-2 max-md:p-3 max-md:bg-[var(--sunken)] max-md:rounded-[10px] max-md:border max-md:border-[var(--border)]"
               style={{ gridTemplateColumns: "1fr 140px 80px 80px 140px 32px 40px" }}
             >
-              <div className="h-8 px-2.5 flex items-center gap-1.5 text-[13px] bg-white/[0.02] border border-white/[0.06] rounded-md text-[#94A3B8]">
+              <div className="h-8 px-2.5 flex items-center gap-1.5 text-[13px] bg-[var(--sunken)] border border-[var(--border)] rounded-md text-[var(--text-secondary)]">
                 <Lock size={10} strokeWidth={1.5} className="shrink-0" />
                 {auto.name}
               </div>
               <div className="contents max-md:flex max-md:items-center max-md:gap-2">
-                <div className="h-8 w-[130px] max-md:flex-1 flex items-center px-2 text-[12px] bg-white/[0.02] border border-white/[0.06] rounded-md text-[#94A3B8]">
+                <div className="h-8 w-[130px] max-md:flex-1 flex items-center px-2 text-[12px] bg-[var(--sunken)] border border-[var(--border)] rounded-md text-[var(--text-secondary)]">
                   {auto.type}
                 </div>
                 <div className="flex justify-center">
@@ -396,7 +355,7 @@ export default function TableCard({
 
         <div className="flex flex-col gap-2.5 mb-3">
           {columns.map((col, ci) => (
-            <div key={ci} className="max-md:p-3 max-md:bg-white/[0.03] max-md:rounded-xl max-md:border max-md:border-white/[0.06]">
+            <div key={ci} className="max-md:p-3 max-md:bg-[var(--sunken)] max-md:rounded-[10px] max-md:border max-md:border-[var(--border)]">
               <div
                 className="grid gap-3 items-center max-md:flex max-md:flex-col max-md:gap-2"
                 style={{ gridTemplateColumns: "1fr 140px 80px 80px 140px 32px 40px" }}
@@ -407,7 +366,7 @@ export default function TableCard({
                     updateColumn(ci, { name: e.target.value.toLowerCase().replace(/[\s-]+/g, "_") })
                   }
                   placeholder={t("tableCard.columnNamePlaceholder")}
-                  className="h-8 px-2.5 py-1.5 text-[13px] bg-white/[0.05] border-white/[0.10] rounded-md text-[#F8FAFC] placeholder:text-white/30 brand-focus"
+                  className="h-8 px-2.5 py-1.5 text-[13px] bg-[var(--sunken)] border-[var(--border)] rounded-md text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] brand-focus"
                 />
                 <div className="contents max-md:flex max-md:items-center max-md:gap-2">
                   <Select
@@ -422,12 +381,12 @@ export default function TableCard({
                       updateColumn(ci, { type: val, default: "", default_is_expression: false })
                     }
                   >
-                    <SelectTrigger className="h-8 w-[130px] max-md:flex-1 text-[12px] bg-white/[0.05] border-white/[0.10] text-[#F8FAFC] rounded-md px-2 brand-focus">
+                    <SelectTrigger className="h-8 w-[130px] max-md:flex-1 text-[12px] bg-[var(--sunken)] border-[var(--border)] text-[var(--text-primary)] rounded-md px-2 brand-focus">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-[#0D0D14] border-white/[0.10] text-[#F8FAFC]">
+                    <SelectContent className="bg-[var(--surface-raised)] border-[var(--border)] text-[var(--text-primary)]">
                       {COLUMN_TYPES.map((t) => (
-                        <SelectItem key={t} value={t} className="text-[12px] focus:bg-white/[0.08] focus:text-[#F8FAFC]">
+                        <SelectItem key={t} value={t} className="text-[12px] focus:bg-[var(--hover-surface)] focus:text-[var(--text-primary)]">
                           {t}
                         </SelectItem>
                       ))}
@@ -457,10 +416,10 @@ export default function TableCard({
                             : { default: val, default_is_expression: false })
                         }
                       >
-                        <SelectTrigger className="h-8 w-full text-[12px] bg-white/[0.05] border-white/[0.10] text-[#F8FAFC] rounded-md px-2 brand-focus">
+                        <SelectTrigger className="h-8 w-full text-[12px] bg-[var(--sunken)] border-[var(--border)] text-[var(--text-primary)] rounded-md px-2 brand-focus">
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent className="bg-[#0D0D14] border-white/[0.10] text-[#F8FAFC]">
+                        <SelectContent className="bg-[var(--surface-raised)] border-[var(--border)] text-[var(--text-primary)]">
                           <SelectItem value="__none__" className="text-[12px]">{t("tableCard.defaultNone")}</SelectItem>
                           <SelectItem value="true" className="text-[12px]">true</SelectItem>
                           <SelectItem value="false" className="text-[12px]">false</SelectItem>
@@ -475,10 +434,10 @@ export default function TableCard({
                             : { default: val, default_is_expression: true })
                         }
                       >
-                        <SelectTrigger className="h-8 w-full text-[12px] bg-white/[0.05] border-white/[0.10] text-[#F8FAFC] rounded-md px-2 brand-focus">
+                        <SelectTrigger className="h-8 w-full text-[12px] bg-[var(--sunken)] border-[var(--border)] text-[var(--text-primary)] rounded-md px-2 brand-focus">
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent className="bg-[#0D0D14] border-white/[0.10] text-[#F8FAFC]">
+                        <SelectContent className="bg-[var(--surface-raised)] border-[var(--border)] text-[var(--text-primary)]">
                           <SelectItem value="__none__" className="text-[12px]">{t("tableCard.defaultNone")}</SelectItem>
                           <SelectItem value={DEFAULT_EXPRESSIONS[col.type]} className="text-[12px] font-mono">
                             {DEFAULT_EXPRESSIONS[col.type]}
@@ -496,7 +455,7 @@ export default function TableCard({
                         }
                         inputMode={col.type === "numeric" ? "decimal" : "numeric"}
                         placeholder={t("tableCard.defaultNone")}
-                        className="h-8 w-full px-2 text-[12px] bg-white/[0.05] border-white/[0.10] rounded-md text-[#F8FAFC] placeholder:text-white/30 brand-focus"
+                        className="h-8 w-full px-2 text-[12px] bg-[var(--sunken)] border-[var(--border)] rounded-md text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] brand-focus"
                       />
                     ) : (
                       <span />
@@ -517,8 +476,8 @@ export default function TableCard({
                     className={cn(
                       "w-7 h-7 flex items-center justify-center rounded-md border transition-colors",
                       col.references
-                        ? "border-[var(--brand-light)]/40 bg-[var(--brand-light)]/10 text-[var(--brand-light)]"
-                        : "border-white/[0.10] bg-transparent text-[#94A3B8]",
+                        ? "border-[var(--primary)]/40 bg-[var(--primary)]/10 text-[var(--primary)]"
+                        : "border-[var(--border)] bg-transparent text-[var(--text-secondary)]",
                       otherTables.length === 0 && "opacity-30 cursor-not-allowed",
                     )}
                   >
@@ -530,8 +489,8 @@ export default function TableCard({
                     onClick={() => removeColumn(ci)}
                     disabled={columns.length <= 1}
                     className={cn(
-                      "w-7 h-7 flex items-center justify-center rounded-md border border-red-500/[0.12] bg-red-500/[0.06] transition-colors",
-                      columns.length <= 1 ? "text-red-400/30 cursor-not-allowed" : "text-red-400 cursor-pointer hover:bg-red-500/[0.12]",
+                      "w-7 h-7 flex items-center justify-center rounded-md border border-[var(--danger)]/20 bg-[var(--danger-tint)] transition-colors",
+                      columns.length <= 1 ? "text-[var(--danger)]/40 cursor-not-allowed" : "text-[var(--danger)] cursor-pointer hover:bg-[var(--danger-tint)]",
                     )}
                   >
                     <Trash2 size={12} strokeWidth={1.5} />
@@ -541,41 +500,41 @@ export default function TableCard({
 
               {col.references && (
                 <div className="flex flex-wrap items-center gap-2 mt-2 pl-1">
-                  <span className="text-[11px] text-[#94A3B8]">{t("tableCard.references")}</span>
+                  <span className="text-[11px] text-[var(--text-secondary)]">{t("tableCard.references")}</span>
                   <Select
                     value={col.references.table}
                     onValueChange={(val) =>
                       updateColumn(ci, { references: { ...col.references!, table: val, column: "id" } })
                     }
                   >
-                    <SelectTrigger className="h-7 w-[140px] text-[12px] bg-white/[0.05] border-white/[0.10] text-[#F8FAFC] rounded-md px-2 brand-focus">
+                    <SelectTrigger className="h-7 w-[140px] text-[12px] bg-[var(--sunken)] border-[var(--border)] text-[var(--text-primary)] rounded-md px-2 brand-focus">
                       <SelectValue placeholder={t("tableCard.tablePlaceholder")} />
                     </SelectTrigger>
-                    <SelectContent className="bg-[#0D0D14] border-white/[0.10] text-[#F8FAFC]">
+                    <SelectContent className="bg-[var(--surface-raised)] border-[var(--border)] text-[var(--text-primary)]">
                       {otherTables.map((ot) => (
-                        <SelectItem key={ot.name} value={ot.name} className="text-[12px] focus:bg-white/[0.08] focus:text-[#F8FAFC]">
+                        <SelectItem key={ot.name} value={ot.name} className="text-[12px] focus:bg-[var(--hover-surface)] focus:text-[var(--text-primary)]">
                           {ot.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <span className="text-[11px] text-[#94A3B8]">{t("tableCard.column")}</span>
+                  <span className="text-[11px] text-[var(--text-secondary)]">{t("tableCard.column")}</span>
                   <Select
                     value={col.references.column}
                     onValueChange={(val) => updateColumn(ci, { references: { ...col.references!, column: val } })}
                   >
-                    <SelectTrigger className="h-7 w-[110px] text-[12px] bg-white/[0.05] border-white/[0.10] text-[#F8FAFC] rounded-md px-2 brand-focus">
+                    <SelectTrigger className="h-7 w-[110px] text-[12px] bg-[var(--sunken)] border-[var(--border)] text-[var(--text-primary)] rounded-md px-2 brand-focus">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-[#0D0D14] border-white/[0.10] text-[#F8FAFC]">
+                    <SelectContent className="bg-[var(--surface-raised)] border-[var(--border)] text-[var(--text-primary)]">
                       {referenceTargetColumns(col.references.table).map((c) => (
-                        <SelectItem key={c} value={c} className="text-[12px] focus:bg-white/[0.08] focus:text-[#F8FAFC]">
+                        <SelectItem key={c} value={c} className="text-[12px] focus:bg-[var(--hover-surface)] focus:text-[var(--text-primary)]">
                           {c}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <span className="text-[11px] text-[#94A3B8]">{t("tableCard.onDelete")}</span>
+                  <span className="text-[11px] text-[var(--text-secondary)]">{t("tableCard.onDelete")}</span>
                   <Select
                     value={col.references.on_delete ?? "no_action"}
                     onValueChange={(val) =>
@@ -584,12 +543,12 @@ export default function TableCard({
                       })
                     }
                   >
-                    <SelectTrigger className="h-7 w-[170px] text-[12px] bg-white/[0.05] border-white/[0.10] text-[#F8FAFC] rounded-md px-2 brand-focus">
+                    <SelectTrigger className="h-7 w-[170px] text-[12px] bg-[var(--sunken)] border-[var(--border)] text-[var(--text-primary)] rounded-md px-2 brand-focus">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-[#0D0D14] border-white/[0.10] text-[#F8FAFC]">
+                    <SelectContent className="bg-[var(--surface-raised)] border-[var(--border)] text-[var(--text-primary)]">
                       {ON_DELETE_VALUES.map((val) => (
-                        <SelectItem key={val} value={val!} className="text-[12px] focus:bg-white/[0.08] focus:text-[#F8FAFC]">
+                        <SelectItem key={val} value={val!} className="text-[12px] focus:bg-[var(--hover-surface)] focus:text-[var(--text-primary)]">
                           {t(ON_DELETE_LABEL_KEYS[val!])}
                         </SelectItem>
                       ))}
@@ -604,20 +563,20 @@ export default function TableCard({
         <button
           type="button"
           onClick={addColumn}
-          className="flex items-center gap-1.5 text-[12px] font-semibold bg-transparent border border-white/[0.08] rounded-full px-3 py-1.5 cursor-pointer hover:bg-white/[0.06] transition-colors self-start"
-          style={{ color: "var(--brand-light)" }}
+          className="flex items-center gap-1.5 text-[12px] font-semibold bg-transparent border border-[var(--border)] rounded-full px-3 py-1.5 cursor-pointer hover:bg-[var(--hover-surface)] transition-colors self-start"
+          style={{ color: "var(--primary)" }}
         >
           <Plus size={11} strokeWidth={2} />
           {t("appForm.addColumn")}
         </button>
 
-        <div className="mt-4 pt-4 border-t border-white/[0.06]">
+        <div className="mt-4 pt-4 border-t border-[var(--border)]">
           <div className="flex items-center justify-between gap-2 mb-2">
-            <p className="text-[11px] text-[#94A3B8] font-semibold">{t("tableCard.indexesTitle")}</p>
+            <p className="text-[11px] text-[var(--text-secondary)] font-semibold">{t("tableCard.indexesTitle")}</p>
             <button
               type="button"
               onClick={() => setShowIndexInfo(true)}
-              className="flex items-center gap-1 text-[11px] text-[#94A3B8] hover:text-[var(--brand-light)] bg-transparent border-none cursor-pointer shrink-0 transition-colors"
+              className="flex items-center gap-1 text-[11px] text-[var(--text-secondary)] hover:text-[var(--primary)] bg-transparent border-none cursor-pointer shrink-0 transition-colors"
             >
               <AlertCircle size={12} strokeWidth={1.5} />
               {t("tableCard.indexInfoBtn")}
@@ -628,13 +587,13 @@ export default function TableCard({
             {indexes.map((idx, ii) => (
               <div
                 key={ii}
-                className="flex flex-wrap items-center gap-2 bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2"
+                className="flex flex-wrap items-center gap-2 bg-[var(--sunken)] border border-[var(--border)] rounded-[10px] px-3 py-2"
               >
                 <Input
                   value={idx.name}
                   onChange={(e) => updateIndex(ii, { name: e.target.value.toLowerCase().replace(/[\s-]+/g, "_") })}
                   placeholder={t("tableCard.indexNamePlaceholder")}
-                  className="h-7 w-[160px] shrink-0 px-2 py-1 text-[12px] bg-white/[0.05] border-white/[0.10] rounded-md text-[#F8FAFC] placeholder:text-white/30 brand-focus"
+                  className="h-7 w-[160px] shrink-0 px-2 py-1 text-[12px] bg-[var(--sunken)] border-[var(--border)] rounded-md text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] brand-focus"
                 />
                 <div className="flex flex-wrap gap-1 flex-1 min-w-[120px]">
                   {columns.filter((c) => c.name.trim()).map((c) => (
@@ -645,8 +604,8 @@ export default function TableCard({
                       className={cn(
                         "text-[11px] px-2 py-0.5 rounded-full border transition-colors",
                         idx.columns.includes(c.name)
-                          ? "border-[var(--brand-light)]/40 bg-[var(--brand-light)]/10 text-[var(--brand-light)]"
-                          : "border-white/[0.10] text-[#94A3B8] hover:bg-white/[0.06]",
+                          ? "border-[var(--primary)]/40 bg-[var(--primary)]/10 text-[var(--primary)]"
+                          : "border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--hover-surface)]",
                       )}
                     >
                       {c.name}
@@ -655,7 +614,7 @@ export default function TableCard({
                 </div>
                 <div className="flex items-center gap-2 shrink-0 ml-auto">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] text-[#94A3B8]">{t("tableCard.uniqueLabel")}</span>
+                    <span className="text-[11px] text-[var(--text-secondary)]">{t("tableCard.uniqueLabel")}</span>
                     <Switch
                       checked={!!idx.unique}
                       onCheckedChange={(val) => updateIndex(ii, { unique: val })}
@@ -666,7 +625,7 @@ export default function TableCard({
                     type="button"
                     title={t("tableCard.removeIndex")}
                     onClick={() => removeIndex(ii)}
-                    className="w-7 h-7 flex items-center justify-center rounded-md border border-red-500/[0.12] bg-red-500/[0.06] text-red-400 cursor-pointer hover:bg-red-500/[0.12] transition-colors shrink-0"
+                    className="w-7 h-7 flex items-center justify-center rounded-md border border-[var(--danger)]/20 bg-[var(--danger-tint)] text-[var(--danger)] cursor-pointer hover:bg-[var(--danger-tint)] transition-colors shrink-0"
                   >
                     <Trash2 size={12} strokeWidth={1.5} />
                   </button>
@@ -678,58 +637,72 @@ export default function TableCard({
           <button
             type="button"
             onClick={addIndex}
-            className="flex items-center gap-1.5 text-[12px] font-semibold bg-transparent border border-white/[0.08] rounded-full px-3 py-1.5 cursor-pointer hover:bg-white/[0.06] transition-colors self-start"
-            style={{ color: "var(--brand-light)" }}
+            className="flex items-center gap-1.5 text-[12px] font-semibold bg-transparent border border-[var(--border)] rounded-full px-3 py-1.5 cursor-pointer hover:bg-[var(--hover-surface)] transition-colors self-start"
+            style={{ color: "var(--primary)" }}
           >
             <Plus size={11} strokeWidth={2} />
             {t("tableCard.addIndex")}
           </button>
         </div>
 
-        {error && <p className="text-xs text-red-400 mt-3">{error}</p>}
+        {error && <p className="text-xs text-[var(--danger)] mt-3">{error}</p>}
 
-        <div className="flex items-center gap-2 mt-4">
-          <button
-            type="button"
-            onClick={save}
-            disabled={saving}
-            className="text-[12px] font-semibold px-4 py-1.5 rounded-full text-white cursor-pointer disabled:opacity-50"
-            style={{ background: "linear-gradient(to right, var(--brand-primary), var(--brand-secondary))" }}
-          >
-            {saving ? t("tableCard.savingTable") : t("tableCard.saveTable")}
-          </button>
-          <button
-            type="button"
-            onClick={cancel}
-            disabled={saving}
-            className="text-[12px] font-medium px-4 py-1.5 rounded-full border border-white/[0.10] bg-transparent text-[#94A3B8] cursor-pointer hover:bg-white/[0.06]"
-          >
-            {t("appForm.cancel")}
-          </button>
+        <div className="mt-6 flex items-center justify-between gap-2 border-t border-[var(--border)] pt-4">
+          {!isDraft ? (
+            <button
+              type="button"
+              onClick={remove}
+              disabled={deleting || saving}
+              className="text-[13px] font-semibold text-[var(--danger)] bg-transparent border-none cursor-pointer disabled:opacity-50"
+            >
+              {deleting ? t("tableCard.deletingTable") : t("tableCard.deleteTable")}
+            </button>
+          ) : (
+            <span />
+          )}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={cancel}
+              disabled={saving}
+              className="text-[12px] font-medium px-4 py-1.5 rounded-full border border-[var(--border)] bg-transparent text-[var(--text-secondary)] cursor-pointer hover:bg-[var(--hover-surface)]"
+            >
+              {t("appForm.cancel")}
+            </button>
+            <button
+              type="button"
+              onClick={save}
+              disabled={saving}
+              className="text-[12px] font-semibold px-4 py-1.5 rounded-full text-white cursor-pointer disabled:opacity-50"
+              style={{ background: "var(--primary)" }}
+            >
+              {saving ? t("tableCard.savingTable") : t("tableCard.saveTable")}
+            </button>
+          </div>
         </div>
       </div>
 
       <Dialog open={showRelationshipsInfo} onOpenChange={setShowRelationshipsInfo}>
-        <DialogContent className="max-w-[480px] border border-white/[0.10] bg-[#0D0D14]/60 backdrop-blur-xl rounded-2xl p-0 gap-0">
-          <div className="bg-white/[0.04] shadow-[inset_0_1px_1px_rgba(255,255,255,0.10)] rounded-[calc(1rem-2px)] px-7 pb-6 pt-7">
+        <DialogContent className="max-w-[480px] border border-[var(--border)] bg-[var(--surface-raised)] backdrop-blur-xl rounded-2xl p-0 gap-0">
+          <div className="bg-[var(--surface)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.10)] rounded-[calc(1rem-2px)] px-7 pb-6 pt-7">
             <DialogHeader className="mb-0">
-              <div className="w-11 h-11 rounded-xl bg-white/[0.08] border border-white/[0.10] flex items-center justify-center mb-[18px]">
-                <Link2 size={18} strokeWidth={1.5} className="text-[#94A3B8]" />
+              <div className="w-11 h-11 rounded-[12px] bg-[var(--hover-surface)] border border-[var(--border)] flex items-center justify-center mb-[18px]">
+                <Link2 size={18} strokeWidth={1.5} className="text-[var(--text-secondary)]" />
               </div>
-              <DialogTitle className="text-base font-bold text-[#F8FAFC] mb-2">
+              <DialogTitle className="text-base font-bold text-[var(--text-primary)] mb-2">
                 {t("tableCard.relationshipsInfoBtn")}
               </DialogTitle>
-              <DialogDescription className="text-[13px] text-[#94A3B8] leading-relaxed">
+              <DialogDescription className="text-[13px] text-[var(--text-secondary)] leading-relaxed">
                 <Trans
                   i18nKey="tableCard.relationshipsExplainer"
                   components={{
-                    1: <code className="text-[#B3D1FF]" />,
-                    3: <code className="text-[#B3D1FF]" />,
-                    5: <code className="text-[#B3D1FF]" />,
-                    7: <strong className="text-[#B3D1FF] font-medium" />,
-                    9: <strong className="text-[#B3D1FF] font-medium" />,
-                    11: <strong className="text-[#B3D1FF] font-medium" />,
-                    13: <strong className="text-[#B3D1FF] font-medium" />,
+                    1: <code className="text-[var(--primary)]" />,
+                    3: <code className="text-[var(--primary)]" />,
+                    5: <code className="text-[var(--primary)]" />,
+                    7: <strong className="text-[var(--primary)] font-medium" />,
+                    9: <strong className="text-[var(--primary)] font-medium" />,
+                    11: <strong className="text-[var(--primary)] font-medium" />,
+                    13: <strong className="text-[var(--primary)] font-medium" />,
                   }}
                 />
               </DialogDescription>
@@ -739,24 +712,24 @@ export default function TableCard({
       </Dialog>
 
       <Dialog open={showIndexInfo} onOpenChange={setShowIndexInfo}>
-        <DialogContent className="max-w-[480px] border border-white/[0.10] bg-[#0D0D14]/60 backdrop-blur-xl rounded-2xl p-0 gap-0">
-          <div className="bg-white/[0.04] shadow-[inset_0_1px_1px_rgba(255,255,255,0.10)] rounded-[calc(1rem-2px)] px-7 pb-6 pt-7">
+        <DialogContent className="max-w-[480px] border border-[var(--border)] bg-[var(--surface-raised)] backdrop-blur-xl rounded-2xl p-0 gap-0">
+          <div className="bg-[var(--surface)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.10)] rounded-[calc(1rem-2px)] px-7 pb-6 pt-7">
             <DialogHeader className="mb-0">
-              <div className="w-11 h-11 rounded-xl bg-white/[0.08] border border-white/[0.10] flex items-center justify-center mb-[18px]">
-                <AlertCircle size={18} strokeWidth={1.5} className="text-[#94A3B8]" />
+              <div className="w-11 h-11 rounded-[12px] bg-[var(--hover-surface)] border border-[var(--border)] flex items-center justify-center mb-[18px]">
+                <AlertCircle size={18} strokeWidth={1.5} className="text-[var(--text-secondary)]" />
               </div>
-              <DialogTitle className="text-base font-bold text-[#F8FAFC] mb-2">
+              <DialogTitle className="text-base font-bold text-[var(--text-primary)] mb-2">
                 {t("tableCard.indexInfoBtn")}
               </DialogTitle>
-              <DialogDescription className="text-[13px] text-[#94A3B8] leading-relaxed">
+              <DialogDescription className="text-[13px] text-[var(--text-secondary)] leading-relaxed">
                 <Trans
                   i18nKey="tableCard.indexExplainer"
                   components={{
-                    1: <strong className="text-[#B3D1FF] font-medium" />,
-                    3: <strong className="text-[#B3D1FF] font-medium" />,
-                    5: <code className="text-[#B3D1FF]" />,
-                    7: <code className="text-[#B3D1FF]" />,
-                    9: <strong className="text-[#B3D1FF] font-medium" />,
+                    1: <strong className="text-[var(--primary)] font-medium" />,
+                    3: <strong className="text-[var(--primary)] font-medium" />,
+                    5: <code className="text-[var(--primary)]" />,
+                    7: <code className="text-[var(--primary)]" />,
+                    9: <strong className="text-[var(--primary)] font-medium" />,
                   }}
                 />
               </DialogDescription>
