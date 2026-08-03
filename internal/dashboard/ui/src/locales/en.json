@@ -643,5 +643,9 @@
   "sdk.subtitle": "Official client libraries for talking to your apps' REST APIs.",
   "sdk.copyInstall": "Copy install command",
   "sdk.copySnippet": "Copy code",
-  "changelog.subtitle": "What's new in Zeep Orbit."
+  "changelog.subtitle": "What's new in Zeep Orbit.",
+  "login.formTitle": "Welcome back",
+  "login.formSubtitle": "Sign in to manage your apps.",
+  "login.showPassword": "Show password",
+  "login.hidePassword": "Hide password"
 }
