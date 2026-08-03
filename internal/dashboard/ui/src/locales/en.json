@@ -311,6 +311,7 @@
   "github.forbiddenBody": "GitHub integration, templates, and deploy provider settings can only be managed by a superadmin.",
   "github.tabConfig": "Configuration",
   "github.tabTemplates": "Templates",
+  "github.tabDeploy": "Deploy",
   "github.configDesc": "Configure GitHub App credentials to connect your organization",
   "github.connected": "Connected",
   "github.notConnected": "Not connected",

@@ -569,7 +569,16 @@ func TestGitHubTemplates_ListOnlyActiveFilter(t *testing.T) {
 	}
 }
 
-func TestGitHubTemplates_ListNonSuperadminForbidden(t *testing.T) {
+// Listing is open to any authenticated role, not just superadmin — the
+// frontend-app creation modal (used by any authenticated user) needs to
+// populate its template <select> from this endpoint. Template CRUD
+// (Create/Update/Delete/SetActive) stays superadmin-only; see
+// TestGitHubTemplates_CreateSuperadminOnly and friends. This was an
+// explicit fix in CHANGELOG v0.5.0 ("Admin users couldn't see GitHub
+// templates in the frontend-app creation modal" — listing was restricted
+// to superadmin, the modal silently swallowed the 403, the template
+// select was empty).
+func TestGitHubTemplates_ListNonSuperadminAllowed(t *testing.T) {
 	pool := githubTemplatesHandlerTestPool(t)
 	defer pool.Close()
 	user := mustCreateRegularUser(t, pool)
@@ -579,7 +588,7 @@ func TestGitHubTemplates_ListNonSuperadminForbidden(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.List(w, req)
 
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want 403", w.Code)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
 	}
 }
