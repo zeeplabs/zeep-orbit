@@ -555,5 +555,11 @@
   "users.colRole": "Papel",
   "users.colCreated": "Criado em",
   "common.previous": "Anterior",
-  "common.next": "Próximo"
+  "common.next": "Próximo",
+  "logs.colStatus": "Status",
+  "logs.colMethod": "Método",
+  "logs.colPath": "Rota",
+  "logs.colApp": "App",
+  "logs.colLatency": "Latência",
+  "logs.colTime": "Hora"
 }

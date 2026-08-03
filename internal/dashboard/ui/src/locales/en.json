@@ -554,5 +554,11 @@
   "users.colRole": "Role",
   "users.colCreated": "Created",
   "common.previous": "Previous",
-  "common.next": "Next"
+  "common.next": "Next",
+  "logs.colStatus": "Status",
+  "logs.colMethod": "Method",
+  "logs.colPath": "Path",
+  "logs.colApp": "App",
+  "logs.colLatency": "Latency",
+  "logs.colTime": "Time"
 }

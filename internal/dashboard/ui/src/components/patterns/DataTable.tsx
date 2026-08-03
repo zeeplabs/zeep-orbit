@@ -1,4 +1,4 @@
-import { ReactNode } from 'react'
+import { Fragment, ReactNode } from 'react'
 import { Icon } from '@/components/ui/icon'
 import { Button } from '@/components/ui/button'
 import { EmptyState, ErrorState, LoadingState } from './states'
@@ -32,6 +32,14 @@ export interface DataTableProps<T> {
   /** Ações por linha (ícones à direita). */
   rowActions?: (row: T) => ReactNode
   onRowClick?: (row: T) => void
+  /**
+   * Detalhe expansível por linha. Quando definido, cada linha ganha um chevron
+   * e o click alterna a expansão (controlada via `expandedRowId`/`onToggleExpand`).
+   * Substitui o click simples (`onRowClick` é ignorado enquanto expansível).
+   */
+  renderExpanded?: (row: T) => ReactNode
+  expandedRowId?: string | null
+  onToggleExpand?: (id: string) => void
   /** Paginação controlada. */
   pagination?: {
     page: number
@@ -61,11 +69,16 @@ export function DataTable<T>({
   onSort,
   rowActions,
   onRowClick,
+  renderExpanded,
+  expandedRowId,
+  onToggleExpand,
   pagination,
   className,
 }: DataTableProps<T>) {
   const alignClass = (a?: Column<T>['align']) =>
     a === 'right' ? 'text-right' : a === 'center' ? 'text-center' : 'text-left'
+  const expandable = Boolean(renderExpanded)
+  const colCount = columns.length + (expandable ? 1 : 0) + (rowActions ? 1 : 0)
 
   return (
     <div
@@ -78,6 +91,7 @@ export function DataTable<T>({
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-[var(--border)]">
+              {expandable && <th className="w-8 px-2 py-3" />}
               {columns.map((col) => {
                 const active = sort?.key === col.key
                 return (
@@ -110,30 +124,52 @@ export function DataTable<T>({
           </thead>
           {!loading && !error && rows.length > 0 && (
             <tbody>
-              {rows.map((row) => (
-                <tr
-                  key={getRowId(row)}
-                  className={cn(
-                    'border-b border-[var(--border)] last:border-0 transition-colors',
-                    onRowClick && 'cursor-pointer hover:bg-[var(--hover-surface)]'
-                  )}
-                  onClick={() => onRowClick?.(row)}
-                >
-                  {columns.map((col) => (
-                    <td
-                      key={col.key}
-                      className={cn('px-4 py-3 text-[var(--text-primary)]', alignClass(col.align), col.className)}
+              {rows.map((row) => {
+                const id = getRowId(row)
+                const expanded = expandable && expandedRowId === id
+                const clickable = expandable || Boolean(onRowClick)
+                return (
+                  <Fragment key={id}>
+                    <tr
+                      className={cn(
+                        'border-b border-[var(--border)] last:border-0 transition-colors',
+                        clickable && 'cursor-pointer hover:bg-[var(--hover-surface)]',
+                        expanded && 'bg-[var(--hover-surface)]'
+                      )}
+                      onClick={() => {
+                        if (expandable) onToggleExpand?.(id)
+                        else onRowClick?.(row)
+                      }}
                     >
-                      {col.render ? col.render(row) : String((row as Record<string, unknown>)[col.key] ?? '')}
-                    </td>
-                  ))}
-                  {rowActions && (
-                    <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-1">{rowActions(row)}</div>
-                    </td>
-                  )}
-                </tr>
-              ))}
+                      {expandable && (
+                        <td className="w-8 px-2 py-3 text-[var(--text-tertiary)]">
+                          <Icon name={expanded ? 'expand_less' : 'expand_more'} size={16} />
+                        </td>
+                      )}
+                      {columns.map((col) => (
+                        <td
+                          key={col.key}
+                          className={cn('px-4 py-3 text-[var(--text-primary)]', alignClass(col.align), col.className)}
+                        >
+                          {col.render ? col.render(row) : String((row as Record<string, unknown>)[col.key] ?? '')}
+                        </td>
+                      ))}
+                      {rowActions && (
+                        <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-1">{rowActions(row)}</div>
+                        </td>
+                      )}
+                    </tr>
+                    {expanded && (
+                      <tr className="border-b border-[var(--border)] last:border-0">
+                        <td colSpan={colCount} className="bg-[var(--bg)] px-4 py-4">
+                          {renderExpanded!(row)}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
             </tbody>
           )}
         </table>

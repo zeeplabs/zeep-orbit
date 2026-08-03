@@ -50,6 +50,7 @@ export default function ComponentsSandbox() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [upgradeOpen, setUpgradeOpen] = useState(false)
   const [sw, setSw] = useState(true)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
 
   const cols: Column<DemoRow>[] = [
     { key: 'name', header: 'Name', sortable: true, render: (r) => <code className="font-mono">{r.name}</code> },
@@ -156,6 +157,22 @@ export default function ComponentsSandbox() {
             onSort={() => {}}
             rowActions={() => (
               <Button size="icon" variant="ghost"><Icon name="more_vert" size={18} /></Button>
+            )}
+          />
+        </div>
+
+        <div className="mb-10">
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">DataTable — expandable rows</h2>
+          <DataTable
+            columns={cols}
+            rows={DEMO_ROWS}
+            getRowId={(r) => r.id}
+            expandedRowId={expandedId}
+            onToggleExpand={(id) => setExpandedId((cur) => (cur === id ? null : id))}
+            renderExpanded={(r) => (
+              <div className="text-sm text-[var(--text-secondary)]">
+                Detalhe expandido de <code className="font-mono">{r.name}</code> — status {r.status}.
+              </div>
             )}
           />
         </div>
