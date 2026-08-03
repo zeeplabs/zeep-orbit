@@ -5,6 +5,9 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import './lib/i18n'
 import './index.css'
+import { bootstrapThemeMode } from './lib/theme'
+
+bootstrapThemeMode()
 
 const queryClient = new QueryClient({
   defaultOptions: {

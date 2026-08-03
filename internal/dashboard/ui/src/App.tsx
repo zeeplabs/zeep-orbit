@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Navigate, Routes, Route, useParams } from 'react-router-dom'
@@ -19,8 +18,7 @@ import ChangelogPage from './pages/ChangelogPage'
 import AppUsersPage from './pages/AppUsersPage'
 import DataBrowserPage from './pages/DataBrowserPage'
 import { Toaster } from 'sonner'
-import { useBootstrapStatus, usePublicConfig } from './lib/api'
-import { THEMES, applyTheme } from './lib/themes'
+import { useBootstrapStatus } from './lib/api'
 
 function LoadingScreen() {
   const { t } = useTranslation()
@@ -31,13 +29,13 @@ function LoadingScreen() {
         alignItems: 'center',
         justifyContent: 'center',
         height: '100vh',
-        background: 'var(--bg)',
+        background: 'var(--bg-page)',
       }}
     >
       <div
         style={{
-          color: 'rgba(255,255,255,0.4)',
-          fontFamily: 'Plus Jakarta Sans, sans-serif',
+          color: 'var(--text-tertiary)',
+          fontFamily: 'var(--font-ui)',
         }}
       >
         {t("app.loading")}
@@ -54,14 +52,6 @@ function RedirectToAppDetails() {
 function App() {
   const qc = useQueryClient()
 
-  const { data: config, isLoading: configLoading } = usePublicConfig()
-
-  useEffect(() => {
-    if (!config) return
-    const theme = THEMES[config.theme] || THEMES.azure
-    applyTheme(theme)
-  }, [config])
-
   const { data: status, isLoading: statusLoading } = useBootstrapStatus()
 
   const { data: user, isLoading: userLoading } = useQuery({
@@ -75,7 +65,7 @@ function App() {
     enabled: status?.bootstrapped === true,
   })
 
-  if (statusLoading || configLoading || (status?.bootstrapped && userLoading)) {
+  if (statusLoading || (status?.bootstrapped && userLoading)) {
     return <LoadingScreen />
   }
 
