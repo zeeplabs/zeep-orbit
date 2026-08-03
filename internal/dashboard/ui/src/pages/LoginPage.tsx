@@ -115,8 +115,15 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* Form (right) — handoff linhas 104-144 */}
-      <div className="flex flex-1 items-center justify-center p-10">
+      {/* Form (right) — handoff linhas 104-144.
+          bg explícito var(--bg-page) (#0A0E1A dark) para garantir que o lado
+          direito fica mais escuro que o hero esquerdo (var(--bg-surface) = #111726);
+          o handoff deixa implícito via herança do container, mas ser explícito
+          é mais robusto contra CSS resets ou wrappers futuros. */}
+      <div
+        className="flex flex-1 items-center justify-center p-10"
+        style={{ background: 'var(--bg-page)' }}
+      >
         <div className="w-full max-w-[360px]">
           <div
             className="mb-1.5 text-[26px] font-bold"
