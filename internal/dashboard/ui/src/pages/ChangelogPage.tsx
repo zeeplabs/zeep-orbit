@@ -1,150 +1,194 @@
-import { useState } from "react";
-import { useTranslation } from "react-i18next";
-import { useQuery } from "@tanstack/react-query";
-import { Megaphone } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { useQuery } from '@tanstack/react-query'
+import { PageHeader, EmptyState, LoadingState } from '@/components/patterns'
+import { Button } from '@/components/ui/button'
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 10
 
-type SectionType = "features" | "improvements" | "fixes" | "security" | "breaking";
+type SectionType = 'features' | 'improvements' | 'fixes' | 'security' | 'breaking'
 
 interface SectionItem {
-  description: string;
+  description: string
 }
 
 interface Section {
-  type: SectionType;
-  items: SectionItem[];
+  type: SectionType
+  items: SectionItem[]
 }
 
 interface ChangelogEntry {
-  id?: string;
-  version: string;
-  release_date: string;
-  title: string;
-  summary: string;
-  sections: Section[];
+  id?: string
+  version: string
+  release_date: string
+  title: string
+  summary: string
+  sections: Section[]
 }
 
 function parseSections(sections: unknown): Section[] {
-  if (Array.isArray(sections)) return sections;
-  if (typeof sections === "string") {
-    try { return JSON.parse(sections); } catch { return []; }
+  if (Array.isArray(sections)) return sections
+  if (typeof sections === 'string') {
+    try {
+      return JSON.parse(sections)
+    } catch {
+      return []
+    }
   }
-  return [];
+  return []
 }
 
-const sectionColors: Record<SectionType, { bg: string; text: string; border: string }> = {
-  features: { bg: "bg-emerald-500/10", text: "text-emerald-400", border: "border-emerald-500/20" },
-  improvements: { bg: "bg-blue-500/10", text: "text-blue-400", border: "border-blue-500/20" },
-  fixes: { bg: "bg-amber-500/10", text: "text-amber-400", border: "border-amber-500/20" },
-  security: { bg: "bg-red-500/10", text: "text-red-400", border: "border-red-500/20" },
-  breaking: { bg: "bg-purple-500/10", text: "text-purple-400", border: "border-purple-500/20" },
-};
+/** Mapeia o tipo da seção (do backend) para os tokens de cor canônicos do handoff. */
+const sectionTone: Record<SectionType, { bg: string; color: string }> = {
+  features: { bg: 'var(--success-tint)', color: 'var(--success)' },
+  improvements: { bg: 'var(--primary-tint)', color: 'var(--primary)' },
+  fixes: { bg: 'var(--warning-tint)', color: 'var(--warning)' },
+  security: { bg: 'var(--danger-tint)', color: 'var(--danger)' },
+  breaking: { bg: 'var(--accent-tint)', color: 'var(--accent)' },
+}
 
-function formatDate(dateStr: string): string {
-  const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
+function formatReleaseDate(dateStr: string, lang: string): string {
+  const d = new Date(dateStr + 'T00:00:00Z')
+  try {
+    return new Intl.DateTimeFormat(lang, {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    }).format(d)
+  } catch {
+    return d.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })
+  }
 }
 
 function ChangelogEntryView({ entry }: { entry: ChangelogEntry }) {
-  const { t } = useTranslation();
-  const sections = parseSections(entry.sections);
+  const { t, i18n } = useTranslation()
+  const sections = parseSections(entry.sections)
+  const dateLabel = formatReleaseDate(entry.release_date, i18n.language)
 
   return (
-    <div className="relative border border-white/[0.06] rounded-xl bg-white/[0.02] p-6">
-      <div className="flex items-center gap-3 mb-4">
-        <span className="px-2.5 py-0.5 rounded-md bg-white/[0.06] text-xs font-mono text-[#F8FAFC]">
+    <div className="flex gap-5">
+      {/* Coluna esquerda: versão + data (90px fixo, handoff linha 2177) */}
+      <div className="w-[90px] shrink-0 pt-0.5">
+        <div
+          className="font-mono text-[13px] font-bold"
+          style={{ color: 'var(--primary)' }}
+        >
           {entry.version}
-        </span>
-        <span className="text-xs text-[#94A3B8]">{formatDate(entry.release_date)}</span>
+        </div>
+        <div
+          className="mt-0.5 text-[11.5px]"
+          style={{ color: 'var(--text-tertiary)' }}
+        >
+          {dateLabel}
+        </div>
       </div>
-
-      {entry.title && (
-        <h3 className="text-sm font-semibold text-[#F8FAFC] mb-1">{entry.title}</h3>
-      )}
-      {entry.summary && (
-        <p className="text-[13px] text-[#94A3B8] mb-4">{entry.summary}</p>
-      )}
-
-      <div className="space-y-4">
-        {sections.map((section, si) => {
-          const colors = sectionColors[section.type] || sectionColors.fixes;
-          return (
-            <div key={si}>
-              <span
-                className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold ${colors.bg} ${colors.text} border ${colors.border} mb-2`}
-              >
-                {t(`changelog.sectionType.${section.type}` as any)}
-              </span>
-              <ul className="space-y-1.5">
+      {/* Coluna direita: conteúdo com border-left, handoff linha 2181 */}
+      <div
+        className="flex-1 border-l pl-5 pb-1"
+        style={{ borderColor: 'var(--border)' }}
+      >
+        {entry.title && (
+          <h3
+            className="mb-1 text-base font-bold"
+            style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}
+          >
+            {entry.title}
+          </h3>
+        )}
+        {entry.summary && (
+          <p
+            className="mb-3.5 text-[13px]"
+            style={{ color: 'var(--text-secondary)' }}
+          >
+            {entry.summary}
+          </p>
+        )}
+        <div className="flex flex-col gap-2">
+          {sections.map((section, si) => {
+            const tone = sectionTone[section.type] || sectionTone.fixes
+            return (
+              <div key={si} className="flex flex-col gap-2">
                 {section.items.map((item, ii) => (
-                  <li key={ii} className="flex items-start gap-2 text-[13px] text-[#94A3B8]">
-                    <span className="text-white/20 mt-1.5 block w-1 h-1 rounded-full bg-current flex-shrink-0" />
-                    {item.description}
-                  </li>
+                  <div
+                    key={ii}
+                    className="flex items-start gap-2.5 text-[12.5px]"
+                  >
+                    <span
+                      className="mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold leading-none"
+                      style={{ background: tone.bg, color: tone.color }}
+                    >
+                      {t(`changelog.sectionType.${section.type}`)}
+                    </span>
+                    <span style={{ color: 'var(--text-secondary)' }}>
+                      {item.description}
+                    </span>
+                  </div>
                 ))}
-              </ul>
-            </div>
-          );
-        })}
+              </div>
+            )
+          })}
+        </div>
       </div>
     </div>
-  );
+  )
 }
 
+/**
+ * Tela de Changelog (T2.9 do spec dashboard-redesign).
+ * Handoff §F3-11: timeline com versão+data à esquerda, conteúdo com border-left
+ * à direita. Badges coloridos por tipo (success/primary/warning/danger/accent).
+ * Drop lucide-react (Megaphone) e tokens hardcoded; usa PageHeader, EmptyState,
+ * LoadingState, design tokens canônicos.
+ */
 export default function ChangelogPage() {
-  const { t } = useTranslation();
-  const [offset, setOffset] = useState(0);
+  const { t } = useTranslation()
+  const [offset, setOffset] = useState(0)
 
   const { data, isLoading } = useQuery({
-    queryKey: ["changelog"],
+    queryKey: ['changelog'],
     queryFn: async () => {
-      const res = await fetch("/dashboard/api/changelog", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to load");
-      return res.json() as Promise<{ entries: ChangelogEntry[] }>;
+      const res = await fetch('/dashboard/api/changelog', { credentials: 'include' })
+      if (!res.ok) throw new Error('Failed to load')
+      return res.json() as Promise<{ entries: ChangelogEntry[] }>
     },
     staleTime: 300000,
-  });
+  })
 
-  const allEntries = data?.entries || [];
-  const entries = allEntries.slice(0, offset + PAGE_SIZE);
-  const hasMore = offset + PAGE_SIZE < allEntries.length;
+  const allEntries = useMemo(() => data?.entries || [], [data?.entries])
+  const entries = allEntries.slice(0, offset + PAGE_SIZE)
+  const hasMore = offset + PAGE_SIZE < allEntries.length
 
   return (
-    <div className="w-full max-w-2xl mx-auto py-2">
-      <div className="mb-8">
-        <h1 className="text-xl font-bold text-[#F8FAFC]">{t("changelog.title")}</h1>
-      </div>
+    <>
+      <PageHeader title={t('changelog.title')} subtitle={t('changelog.subtitle')} />
 
-      {isLoading ? (
-        <div className="text-center text-[#94A3B8] py-12">Carregando...</div>
-      ) : entries.length === 0 ? (
-        <div className="text-center py-16">
-          <Megaphone size={40} strokeWidth={1} className="mx-auto text-white/10 mb-4" />
-          <p className="text-[#94A3B8] text-sm">{t("changelog.empty")}</p>
-        </div>
-      ) : (
-        <>
-          <div className="space-y-4">
+      <div className="mx-auto flex w-full max-w-[780px] flex-col gap-7">
+        {isLoading ? (
+          <LoadingState rows={4} />
+        ) : entries.length === 0 ? (
+          <EmptyState
+            icon="campaign"
+            title={t('changelog.empty')}
+          />
+        ) : (
+          <>
             {entries.map((entry, i) => (
               <ChangelogEntryView key={entry.id || i} entry={entry} />
             ))}
-          </div>
 
-          {hasMore && (
-            <div className="text-center mt-6">
-              <Button
-                variant="outline"
-                onClick={() => setOffset((p) => p + PAGE_SIZE)}
-                className="rounded-xl border-white/[0.10] bg-white/[0.04] text-[#94A3B8] hover:bg-white/[0.08] hover:text-[#F8FAFC]"
-              >
-                {t("changelog.loadMore")}
-              </Button>
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
+            {hasMore && (
+              <div className="mt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setOffset((p) => p + PAGE_SIZE)}
+                >
+                  {t('changelog.loadMore')}
+                </Button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </>
+  )
 }

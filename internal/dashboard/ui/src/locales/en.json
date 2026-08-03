@@ -642,5 +642,6 @@
   "sdk.title": "SDKs",
   "sdk.subtitle": "Official client libraries for talking to your apps' REST APIs.",
   "sdk.copyInstall": "Copy install command",
-  "sdk.copySnippet": "Copy code"
+  "sdk.copySnippet": "Copy code",
+  "changelog.subtitle": "What's new in Zeep Orbit."
 }
