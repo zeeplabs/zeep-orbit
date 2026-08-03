@@ -6,8 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Icon } from '@/components/ui/icon'
 import { usePublicConfig } from '@/lib/api'
-import logo from '@/assets/images/logo/logo.svg'
-import logotype from '@/assets/images/logo/logotype.svg'
+import logo from '@/assets/images/logo/orbit-transparent.png'
 import pkg from '../../package.json'
 
 export default function LoginPage() {
@@ -58,7 +57,7 @@ export default function LoginPage() {
         className="relative hidden overflow-hidden md:flex md:flex-col md:justify-between"
         style={{
           flex: 1.1,
-          background: 'var(--bg-surface)',
+          background: 'var(--surface)',
           borderRight: '1px solid var(--border)',
           padding: '56px',
         }}
@@ -89,8 +88,7 @@ export default function LoginPage() {
 
         {/* Logo (handoff linhas 94-97) */}
         <div className="relative flex items-center gap-2.5">
-          <img src={logo} alt="Zeep Orbit" className="h-[34px] w-[34px] object-contain" />
-          <img src={logotype} alt="Orbit" className="block h-[19px] w-auto" />
+          <img src={logo} alt="Zeep Orbit" className="h-[52px] object-contain" />
         </div>
 
         {/* Headline (handoff linhas 98-101) */}
@@ -117,7 +115,7 @@ export default function LoginPage() {
 
       {/* Form (right) — handoff linhas 104-144.
           bg explícito var(--bg-page) (#0A0E1A dark) para garantir que o lado
-          direito fica mais escuro que o hero esquerdo (var(--bg-surface) = #111726);
+          direito fica mais escuro que o hero esquerdo (var(--surface) = #111726);
           o handoff deixa implícito via herança do container, mas ser explícito
           é mais robusto contra CSS resets ou wrappers futuros. */}
       <div
@@ -180,7 +178,7 @@ export default function LoginPage() {
 
             {error && (
               <div
-                className="rounded-lg border px-3 py-2 text-[13px]"
+                className="rounded-[10px] border px-3 py-2 text-[13px]"
                 style={{
                   background: 'var(--danger-tint)',
                   borderColor: 'var(--danger)',
@@ -212,7 +210,7 @@ export default function LoginPage() {
                   className="flex h-auto items-center justify-center gap-2.5 rounded-[10px] border py-2.5 text-[14px] font-semibold no-underline transition-colors"
                   style={{
                     borderColor: 'var(--border-strong)',
-                    background: 'var(--bg-surface)',
+                    background: 'var(--surface)',
                     color: 'var(--text-primary)',
                   }}
                 >

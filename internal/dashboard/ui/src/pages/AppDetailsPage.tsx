@@ -159,7 +159,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
+    <div className="flex flex-col gap-4 rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-5">
       <h3 className="text-[13px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">{title}</h3>
       {children}
     </div>
@@ -616,7 +616,7 @@ function TokensTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]
 
   if (app.auth_email_enabled) {
     return (
-      <div className="rounded-2xl border border-[var(--warning)]/20 bg-[var(--warning-tint)] px-6 py-5 text-sm text-[var(--warning)]">
+      <div className="rounded-[10px] border border-[var(--warning)]/20 bg-[var(--warning-tint)] px-6 py-5 text-sm text-[var(--warning)]">
         {t("appDetails.tokensAuthWarning")}
       </div>
     );
@@ -643,7 +643,7 @@ function TokensTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]
         </div>
       </div>
 
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+      <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-4">
         <div className="mb-2 flex items-center justify-between">
           <p className="text-[12px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">{t("appDetails.jwtSecretLabel")}</p>
           <button
@@ -678,7 +678,7 @@ function TokensTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]
         )}
       </div>
 
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+      <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-4">
         <p className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">{t("appDetails.tokensListTitle")}</p>
         {isLoading ? (
           <p className="text-sm text-[var(--text-secondary)]">{t("app.loading")}</p>

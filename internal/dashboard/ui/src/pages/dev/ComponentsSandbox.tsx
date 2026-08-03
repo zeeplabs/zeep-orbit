@@ -32,7 +32,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return (
     <section className="mb-10">
       <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">{title}</h2>
-      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
+      <div className="flex flex-wrap items-center gap-3 rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-5">
         {children}
       </div>
     </section>
@@ -179,7 +179,7 @@ export default function ComponentsSandbox() {
 
         <div className="mb-10">
           <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">EmptyState</h2>
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
+          <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)]">
             <EmptyState icon="inbox" title="No apps yet" description="Create your first app to get started." action={{ label: 'Create app', onClick: () => {} }} />
           </div>
         </div>

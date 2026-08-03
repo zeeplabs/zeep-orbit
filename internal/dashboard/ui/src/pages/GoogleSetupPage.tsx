@@ -87,7 +87,7 @@ export default function GoogleSetupPage() {
       <div
         className="w-full max-w-[460px] rounded-2xl border p-10"
         style={{
-          background: 'var(--bg-surface)',
+          background: 'var(--surface)',
           borderColor: 'var(--border)',
           boxShadow: 'var(--shadow-md)',
         }}
@@ -174,7 +174,7 @@ export default function GoogleSetupPage() {
 
           {error && (
             <div
-              className="rounded-lg border px-3 py-2 text-[13px]"
+              className="rounded-[10px] border px-3 py-2 text-[13px]"
               style={{
                 background: 'var(--danger-tint)',
                 borderColor: 'var(--danger)',

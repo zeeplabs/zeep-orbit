@@ -55,7 +55,7 @@ export default function AppOnboardingPage() {
       <PageHeader title={t("appOnboarding.title")} subtitle={t("appOnboarding.subtitle")} />
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-        <div className="flex flex-col gap-5 rounded-[14px] border border-[var(--border)] bg-[var(--bg-surface)] p-5">
+        <div className="flex flex-col gap-5 rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-5">
           <div className="flex flex-col gap-1.5">
             <Label>{t("appOnboarding.nameLabel")}</Label>
             <Input

@@ -144,7 +144,7 @@ export default function SdkPage() {
           <div
             key={sdk.name}
             className="flex flex-col gap-3 rounded-[14px] border p-5"
-            style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
+            style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
           >
             <div className="flex items-center gap-2.5">
               <div
@@ -170,7 +170,7 @@ export default function SdkPage() {
             </div>
 
             <div
-              className="flex items-center gap-2 rounded-lg px-3 py-2"
+              className="flex items-center gap-2 rounded-[10px] px-3 py-2"
               style={{ background: 'var(--bg-sunken)' }}
             >
               <span
@@ -184,7 +184,7 @@ export default function SdkPage() {
 
             <div className="relative">
               <pre
-                className="m-0 overflow-x-auto rounded-lg border p-3 text-[11px] leading-[1.5]"
+                className="m-0 overflow-x-auto rounded-[10px] border p-3 text-[11px] leading-[1.5]"
                 style={{
                   background: 'var(--bg-page)',
                   borderColor: 'var(--border)',

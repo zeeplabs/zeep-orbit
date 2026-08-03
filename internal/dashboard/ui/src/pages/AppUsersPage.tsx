@@ -176,7 +176,7 @@ export default function AppUsersPage() {
                 onClick={() => deactivate.mutate({ appId: id!, userId: u.id })}
                 disabled={deactivate.isPending}
                 title={t('appUsers.deactivateTitle')}
-                className="size-7 rounded-lg"
+                className="size-7 rounded-[8px]"
                 style={{
                   borderColor: 'var(--border)',
                   color: 'var(--text-tertiary)',
@@ -195,7 +195,7 @@ export default function AppUsersPage() {
                 size="icon"
                 onClick={() => activate.mutate({ appId: id!, userId: u.id })}
                 title={t('appUsers.activateTitle')}
-                className="size-7 rounded-lg"
+                className="size-7 rounded-[8px]"
                 style={{
                   borderColor: 'var(--success)',
                   color: 'var(--success)',
@@ -214,7 +214,7 @@ export default function AppUsersPage() {
               onClick={() => resetSessions.mutate({ appId: id!, userId: u.id })}
               disabled={resetSessions.isPending}
               title={t('appUsers.resetTitle')}
-              className="size-7 rounded-lg"
+              className="size-7 rounded-[8px]"
               style={{
                 borderColor: 'var(--border)',
                 color: 'var(--text-tertiary)',
@@ -278,7 +278,7 @@ export default function AppUsersPage() {
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleSearch()
               }}
-              className="h-9 rounded-lg border pl-9 pr-9 text-[12.5px]"
+              className="h-9 rounded-[10px] border pl-9 pr-9 text-[12.5px]"
             />
             <Icon
               name="search"
@@ -303,7 +303,7 @@ export default function AppUsersPage() {
             variant="outline"
             size="sm"
             onClick={handleSearch}
-            className="h-9 shrink-0 rounded-lg"
+            className="h-9 shrink-0 rounded-[8px]"
           >
             {t('appUsers.searchBtn')}
           </Button>
@@ -315,7 +315,7 @@ export default function AppUsersPage() {
           onClick={() => refetch()}
           disabled={isFetching}
           title={t('appUsers.refresh')}
-          className="size-9 shrink-0 rounded-lg"
+          className="size-9 shrink-0 rounded-[8px]"
         >
           <Icon
             name="refresh"

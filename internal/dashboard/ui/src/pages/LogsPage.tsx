@@ -64,10 +64,10 @@ interface StatCardProps {
 
 function StatCard({ icon, label, value, sub, fg, bg }: StatCardProps) {
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 max-md:p-3">
+    <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-5 max-md:p-3">
       <div className="mb-3 flex items-center gap-2.5 max-md:mb-2">
         <div
-          className="flex size-9 items-center justify-center rounded-xl max-md:size-8"
+          className="flex size-9 items-center justify-center rounded-[10px] max-md:size-8"
           style={{ background: bg ?? "var(--hover-surface)", color: fg ?? "var(--text-tertiary)" }}
         >
           <Icon name={icon} size={16} />
@@ -192,14 +192,14 @@ export default function LogsPage() {
             )}
             <button
               onClick={() => setAutoRefresh((v) => !v)}
-              className="h-9 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 text-[12px] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] cursor-pointer"
+              className="h-9 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-3 text-[12px] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] cursor-pointer"
               title={autoRefresh ? t("logs.refreshOff") : t("logs.refreshOn")}
             >
               {autoRefresh ? t("logs.modeAuto") : t("logs.modeManual")}
             </button>
             <button
               onClick={() => refetch()}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] cursor-pointer"
+              className="flex h-9 w-9 items-center justify-center rounded-[8px] border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] cursor-pointer"
               title={t("logs.refresh")}
             >
               <Icon name="refresh" size={16} />
@@ -306,7 +306,7 @@ export default function LogsPage() {
             {e.req_body && (
               <div className="col-span-2">
                 <DetailField label="Request Body">
-                  <pre className="max-h-[200px] overflow-x-auto rounded-lg bg-[var(--bg-page)] p-3 text-[11px] leading-relaxed text-[var(--text-secondary)]">
+                  <pre className="max-h-[200px] overflow-x-auto rounded-[10px] bg-[var(--bg-page)] p-3 text-[11px] leading-relaxed text-[var(--text-secondary)]">
                     {formatBody(e.req_body)}
                   </pre>
                 </DetailField>
@@ -315,7 +315,7 @@ export default function LogsPage() {
             {e.res_body && (
               <div className="col-span-2">
                 <DetailField label="Response Body">
-                  <pre className="max-h-[200px] overflow-x-auto rounded-lg bg-[var(--bg-page)] p-3 text-[11px] leading-relaxed text-[var(--text-secondary)]">
+                  <pre className="max-h-[200px] overflow-x-auto rounded-[10px] bg-[var(--bg-page)] p-3 text-[11px] leading-relaxed text-[var(--text-secondary)]">
                     {formatBody(e.res_body)}
                   </pre>
                 </DetailField>

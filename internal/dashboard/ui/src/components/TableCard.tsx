@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { motion } from "framer-motion";
 import { useTranslation, Trans } from "react-i18next";
 import { TableDef, ColumnDef, IndexDef, ReferenceDef } from "../lib/api";
 import { cn } from "@/lib/utils";
@@ -232,7 +231,7 @@ export default function TableCard({
   if (!editing) {
     const totalCols = table.columns.length + autoColumnsFor(table.rls).length;
     return (
-      <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
+      <div className="overflow-hidden rounded-[14px] border border-[var(--border)] bg-[var(--surface)]">
         <div
           onClick={() => { if (!locked) enterEdit(); }}
           className={cn(
@@ -260,11 +259,8 @@ export default function TableCard({
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
-      className="bg-[var(--surface)] border border-[var(--border)] rounded-[14px] overflow-hidden"
+    <div
+      className="animate-in fade-in-0 slide-in-from-bottom-2 duration-200 bg-[var(--surface)] border border-[var(--border)] rounded-[14px] overflow-hidden"
     >
       <div className="flex items-center gap-3 px-4 py-3">
         <Icon name="table_chart" size={15} className="text-[var(--primary)] shrink-0" />
@@ -682,7 +678,7 @@ export default function TableCard({
       </div>
 
       <Dialog open={showRelationshipsInfo} onOpenChange={setShowRelationshipsInfo}>
-        <DialogContent className="max-w-[480px] border border-[var(--border)] bg-[var(--surface-raised)] backdrop-blur-xl rounded-2xl p-0 gap-0">
+        <DialogContent className="max-w-[480px] border border-[var(--border)] bg-[var(--surface-raised)] backdrop-blur-xl rounded-[18px] p-0 gap-0">
           <div className="bg-[var(--surface)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.10)] rounded-[calc(1rem-2px)] px-7 pb-6 pt-7">
             <DialogHeader className="mb-0">
               <div className="w-11 h-11 rounded-[12px] bg-[var(--hover-surface)] border border-[var(--border)] flex items-center justify-center mb-[18px]">
@@ -711,7 +707,7 @@ export default function TableCard({
       </Dialog>
 
       <Dialog open={showIndexInfo} onOpenChange={setShowIndexInfo}>
-        <DialogContent className="max-w-[480px] border border-[var(--border)] bg-[var(--surface-raised)] backdrop-blur-xl rounded-2xl p-0 gap-0">
+        <DialogContent className="max-w-[480px] border border-[var(--border)] bg-[var(--surface-raised)] backdrop-blur-xl rounded-[18px] p-0 gap-0">
           <div className="bg-[var(--surface)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.10)] rounded-[calc(1rem-2px)] px-7 pb-6 pt-7">
             <DialogHeader className="mb-0">
               <div className="w-11 h-11 rounded-[12px] bg-[var(--hover-surface)] border border-[var(--border)] flex items-center justify-center mb-[18px]">
@@ -736,6 +732,6 @@ export default function TableCard({
           </div>
         </DialogContent>
       </Dialog>
-    </motion.div>
+    </div>
   );
 }

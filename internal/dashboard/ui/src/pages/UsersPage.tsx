@@ -193,7 +193,7 @@ export default function UsersPage() {
       render: (u) => (
         <div className="flex items-center gap-2.5">
           <div
-            className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] text-[12px] font-bold"
+            className="flex size-8 shrink-0 items-center justify-center rounded-[10px] border border-[var(--border)] text-[12px] font-bold"
             style={{ background: "var(--primary-tint)", color: "var(--primary)" }}
           >
             {(u.name || u.email).charAt(0).toUpperCase()}

@@ -18,7 +18,7 @@ export function NavRow({ item, onNavigate }: { item: NavItemDef; onNavigate?: ()
       to={item.path}
       end={item.path === '/apps'}
       onClick={onNavigate}
-      className="group relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm no-underline transition-colors"
+      className="group relative flex items-center gap-2.5 rounded-[8px] px-3 py-2 text-sm no-underline transition-colors"
       style={({ isActive }) => ({
         background: isActive ? 'var(--primary-tint)' : 'transparent',
         color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
@@ -63,7 +63,7 @@ export function Sidebar({ companyName, banner, footer }: SidebarProps) {
         <img
           src={logoType}
           alt="Zeep Orbit"
-          className="h-[38px] w-[38px] rounded-lg border border-[var(--border)] object-cover"
+          className="h-[38px] w-[38px] rounded-[10px] border border-[var(--border)] object-cover"
         />
         <div className="flex min-w-0 flex-col">
           <span

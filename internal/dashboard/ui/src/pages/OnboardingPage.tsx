@@ -279,7 +279,7 @@ export default function OnboardingPage({ onComplete }: OnboardingPageProps) {
       <div
         className="w-full max-w-[460px] rounded-2xl border p-10"
         style={{
-          background: 'var(--bg-surface)',
+          background: 'var(--surface)',
           borderColor: 'var(--border)',
           boxShadow: 'var(--shadow-md)',
         }}

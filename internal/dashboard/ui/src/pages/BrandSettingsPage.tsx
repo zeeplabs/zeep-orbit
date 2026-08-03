@@ -32,12 +32,12 @@ export default function BrandSettingsPage() {
       <PageHeader title={t("brand.title")} subtitle={t("brand.subtitle")} />
 
       <Tabs value={tab} onValueChange={setTab} className="w-full">
-        <TabsList className="mb-6 h-auto w-full justify-start gap-1 overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-1.5">
+        <TabsList className="mb-6 h-auto w-full justify-start gap-1 overflow-x-auto rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-1.5">
           {TABS.map((tb) => (
             <TabsTrigger
               key={tb.value}
               value={tb.value}
-              className="gap-1.5 rounded-xl text-[13px] text-[var(--text-secondary)] data-[state=active]:bg-[var(--hover-surface)] data-[state=active]:text-[var(--text-primary)] data-[state=active]:shadow-none"
+              className="gap-1.5 rounded-[8px] text-[13px] text-[var(--text-secondary)] data-[state=active]:bg-[var(--hover-surface)] data-[state=active]:text-[var(--text-primary)] data-[state=active]:shadow-none"
             >
               <Icon name={tb.icon} size={14} /> {t(tb.labelKey)}
             </TabsTrigger>
@@ -91,7 +91,7 @@ function BrandingTab() {
   };
 
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
+    <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-5">
       <Label className="text-[13px] font-semibold text-[var(--text-secondary)]">
         {t("brand.companyName")}
       </Label>
@@ -146,7 +146,7 @@ function SoftDeleteCard() {
   if (loading) return <p className="text-[13px] text-[var(--text-secondary)]">{t("app.loading")}</p>;
 
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
+    <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-5">
       <SettingRow
         label={t("system.softDelete")}
         description={t("system.softDeleteDesc")}

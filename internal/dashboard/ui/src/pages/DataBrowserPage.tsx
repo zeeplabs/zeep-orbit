@@ -293,7 +293,7 @@ export default function DataBrowserPage() {
   return (
     <div className="grid min-h-full grid-cols-[240px_1fr] gap-4 max-md:flex max-md:flex-col">
       {/* Tree panel */}
-      <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 max-md:max-h-[220px] max-md:overflow-y-auto">
+      <div className="overflow-hidden rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-3 max-md:max-h-[220px] max-md:overflow-y-auto">
         <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
           {t("dataBrowser.appsLabel")}
         </div>
@@ -395,7 +395,7 @@ export default function DataBrowserPage() {
 
             {/* Filter panel */}
             {showFilters && columns.length > 0 && (
-              <div className="flex flex-col gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+              <div className="flex flex-col gap-3 rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <Select value={draftCol} onValueChange={setDraftCol}>
                     <SelectTrigger className="h-9 min-w-[150px]">

@@ -40,7 +40,7 @@ function UpdateAvailableBanner() {
       target="_blank"
       rel="noopener noreferrer"
       title={t("nav.updateAvailable", { version: data.tag_name })}
-      className="mb-2 flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-[13px] font-medium no-underline transition-colors"
+      className="mb-2 flex items-center gap-2.5 rounded-[10px] border px-3 py-2.5 text-[13px] font-medium no-underline transition-colors"
       style={{
         borderColor: "color-mix(in srgb, var(--primary) 25%, transparent)",
         background: "var(--primary-tint)",

@@ -33,7 +33,7 @@ function IconBtn({
       onClick={onClick}
       title={title}
       aria-label={title}
-      className="flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--hover-surface)] hover:text-[var(--text-primary)]"
+      className="flex h-9 w-9 items-center justify-center rounded-[8px] border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--hover-surface)] hover:text-[var(--text-primary)]"
     >
       {children ?? (icon && <Icon name={icon} size={17} />)}
     </button>
@@ -105,7 +105,7 @@ export function SidebarFooter({
           target="_blank"
           rel="noopener noreferrer"
           title="GitHub"
-          className="flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--hover-surface)] hover:text-[var(--text-primary)]"
+          className="flex h-9 w-9 items-center justify-center rounded-[8px] border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--hover-surface)] hover:text-[var(--text-primary)]"
         >
           <Icon name="code_blocks" size={17} />
         </a>

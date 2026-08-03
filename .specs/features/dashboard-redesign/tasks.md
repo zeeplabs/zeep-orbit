@@ -12,8 +12,8 @@ Legenda status: ☐ pending · ◐ in progress · ☑ done
 ## Fase 0 — Fundação (bloqueia tudo)
 
 - [x] **T0.1** — Criar `src/styles/tokens.css` com `.theme-dark`/`.theme-light` e todas as CSS custom properties da palette do handoff (README linhas 50-66). Importar em `index.css`. `[DRD-01, DRD-04]`
-- [◐] **T0.2** — Fontes Manrope + Space Grotesk + mono ativas + stacks `--font-ui`/`--font-display`/`--font-mono`, Plus Jakarta removido. **PENDENTE:** self-host (hoje via Google Fonts CDN, TODO marcado no `index.html`). `[DRD-01]`
-- [◐] **T0.3** — `<Icon>` wrapper criado (`src/components/ui/icon.tsx`), Material Symbols Rounded ativo. **PENDENTE:** self-host da fonte de ícones (hoje via CDN). `[DRD-40, DRD-41]`
+- [x] **T0.2** — Fontes Manrope + Space Grotesk + mono ativas + stacks `--font-ui`/`--font-display`/`--font-mono`, Plus Jakarta removido. Self-host via `@fontsource-variable/*` (manrope, space-grotesk, jetbrains-mono). `[DRD-01]`
+- [x] **T0.3** — `<Icon>` wrapper criado (`src/components/ui/icon.tsx`), Material Symbols Rounded ativo. Self-host via `@fontsource-variable/material-symbols-rounded`. `[DRD-40, DRD-41]`
 - [x] **T0.4** — Remover `THEMES`/`applyTheme` de `lib/themes.ts` e todo consumo de `azure`/`emerald`/`ruby`; ajustar `App.tsx` para aplicar `theme-dark`/`theme-light` no root via `useTheme`. `grep azure|emerald|ruby|applyTheme|THEMES` = 0 no `src`. `[DRD-02]`
 - [x] **T0.5** — `usePublicConfig`: parar de consumir `theme` (brand); preservar `company_name`. Sinalizar ao backend que o campo `theme` só pode ser dropado após confirmar contrato. `[DRD-03]`
 - [x] **T0.6** — Hooks `useTheme()` / `useLanguage()` com persistência localStorage (`zeep.theme`/`zeep.lang`) e API estável para futura migração a endpoint de prefs. `[DRD-01]`
@@ -79,11 +79,11 @@ Ordem por risco/tráfego. Cada task: substituir markup por composição de níve
 - [x] **T2.5** — `UsersPage` (575 ln) — tela de referência de `DataTable` + row-actions.
 - [x] **T2.6** — `AuditLogPage` (292 ln).
 - [x] **T2.7** — `BrandSettingsPage` (483 ln) — Settings, tabs Branding/Database/Auth/Storage; `SettingRow` + `ProviderCard`.
-- [ ] **T2.8** — `SdkPage` (184 ln).
-- [ ] **T2.9** — `ChangelogPage` (150 ln).
-- [ ] **T2.10** — `LoginPage` (181 ln) + `OnboardingPage`/`GoogleSetupPage`/`AppOnboardingPage`.
-- [ ] **T2.11** — `AppUsersPage` (449 ln) — re-skin (feature já existe hoje).
-- [ ] **T2.12** — `FrontendAppsPage` (634 ln) + `GitHubIntegrationPage` (1050 ln) — re-skin visual; redesign multi-provider de Integrations é escopo de spec própria.
+- [x] **T2.8** — `SdkPage` (184 ln).
+- [x] **T2.9** — `ChangelogPage` (150 ln).
+- [x] **T2.10** — `LoginPage` (181 ln) + `OnboardingPage`/`GoogleSetupPage`/`AppOnboardingPage`.
+- [x] **T2.11** — `AppUsersPage` (449 ln) — re-skin (feature já existe hoje).
+- [x] **T2.12** — `FrontendAppsPage` (634 ln) + `GitHubIntegrationPage` (1050 ln) — re-skin visual; redesign multi-provider de Integrations é escopo de spec própria.
 
 **Checkpoint Fase 2**: cada tela pixel-fiel ao protótipo, ações disparando as mesmas APIs de antes.
 
@@ -91,7 +91,8 @@ Ordem por risco/tráfego. Cada task: substituir markup por composição de níve
 
 ## Fase 3 — Encerramento
 
-- [ ] **T3.1** — Remover `lucide-react` de `package.json` (só quando a última tela migrar). `[DRD-42]`
+- [x] **T3.1** — Remover `lucide-react` **e** `framer-motion` de `package.json` (lucide dropado em `832e379`; framer-motion dropado em sessão seguinte — ChangePasswordModal migrado para `Dialog` F0.5, TableCard para `animate-in`). `[DRD-42]`
+- [x] **T3.2** — Auditoria final: token `--bg-surface` inexistente corrigido para `var(--surface)` (10 ocorrências em 6 telas — LoginPage/AppOnboarding/GitHubIntegration/SdkPage/Onboarding/GoogleSetup); código morto removido (`DeleteConfirmDialog.tsx`, `magicui/` — 0 usos); sweep de radius completado nas telas que ficaram com `rounded-lg/xl/2xl` legados (renderizavam 16/20px por causa do override `--radius-lg: 16px` — Sidebar, SidebarFooter, LogsPage, LoginPage, AppUsersPage, TableCard, DashboardShell, UsersPage, AccessDenied, DataBrowserPage, AppDetailsPage, GitHubIntegrationPage, SdkPage, BrandSettingsPage, GoogleSetupPage, ComponentsSandbox, ChangePasswordModal); ChangePasswordModal tokenizado (cores hardcoded `#F8FAFC`/`#64748B`/`#94A3B8`/`#ef4444`/`white/[0.06]` → tokens, gradiente `brand-*` → `primary`/`accent` canônicos). Cards 460px de Onboarding/GoogleSetup mantêm `rounded-2xl` (documentado intencional no CHANGELOG T2.10). `[DRD-12]`
 - [ ] **T3.2** — Auditoria final: `grep` por strings hardcoded, cores fora de token, markup de padrão duplicado inline. `[DRD-12]`
 - [ ] **T3.3** — CHANGELOG `[Unreleased]` + README feature tables (+ 3 traduções, AGENTS §6) para o que for user-facing novo (toggle tema/idioma, mobile shell). `[DRD-30]`
 - [ ] **T3.4** — Coordenar com features net-new que consomem nível 2 (licensing/observability/2FA) — confirmar que os componentes servem sem fork. `[DRD-11]`
@@ -102,30 +103,30 @@ Ordem por risco/tráfego. Cada task: substituir markup por composição de níve
 
 | Requirement ID | Tasks | Status |
 |---|---|---|
-| DRD-01 | T0.1, T0.2, T0.6 | Pending |
-| DRD-02 | T0.4 | Pending |
-| DRD-03 | T0.5 | Pending |
-| DRD-04 | T0.1 | Pending |
-| DRD-10 | T05.1, T05.2, T05.3 | Pending |
-| DRD-11 | T05.4-T05.10, T3.4 | Pending |
-| DRD-12 | T3.2 | Pending |
-| DRD-13 | T05.5, T05.6 | Pending |
-| DRD-14 | T05.11 | Pending |
-| DRD-20 | T15.1, T15.2 | Pending |
-| DRD-21 | T15.1 | Pending |
-| DRD-22 | T15.3 | Pending |
-| DRD-23 | T15.4 | Pending |
-| DRD-24 | T15.1, T15.5 | Pending |
-| DRD-30 | T2.1-T2.12, T3.3 | Pending |
-| DRD-31 | T2.1-T2.12 | Pending |
-| DRD-32 | T2.1-T2.12 | Pending |
-| DRD-33 | T2.1-T2.12 | Pending |
-| DRD-34 | T2.1-T2.12 | Pending |
-| DRD-40 | T0.3, T2.* | Pending |
-| DRD-41 | T0.3 | Pending |
-| DRD-42 | T3.1 | Pending |
+| DRD-01 | T0.1, T0.2, T0.6 | Done |
+| DRD-02 | T0.4 | Done |
+| DRD-03 | T0.5 | Done |
+| DRD-04 | T0.1 | Done |
+| DRD-10 | T05.1, T05.2, T05.3 | Done |
+| DRD-11 | T05.4-T05.10, T3.4 | Partial (T3.4 pending) |
+| DRD-12 | T3.2 | Done |
+| DRD-13 | T05.5, T05.6 | Done |
+| DRD-14 | T05.11 | Done |
+| DRD-20 | T15.1, T15.2 | Done |
+| DRD-21 | T15.1 | Done |
+| DRD-22 | T15.3 | Done |
+| DRD-23 | T15.4 | Done |
+| DRD-24 | T15.1, T15.5 | Done |
+| DRD-30 | T2.1-T2.12, T3.3 | Partial (T3.3 pending) |
+| DRD-31 | T2.1-T2.12 | Done |
+| DRD-32 | T2.1-T2.12 | Done |
+| DRD-33 | T2.1-T2.12 | Done |
+| DRD-34 | T2.1-T2.12 | Done |
+| DRD-40 | T0.3, T2.* | Done |
+| DRD-41 | T0.3 | Done |
+| DRD-42 | T3.1 | Done |
 
-**Coverage**: 22/22 requisitos mapeados a tasks.
+**Coverage**: 22/22 requisitos mapeados a tasks. **Pendentes**: T3.3 (CHANGELOG consolidation + README 4 línguas), T3.4 (coord com net-new features).
 
 ---
 

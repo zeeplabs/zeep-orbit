@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { useChangeMyPassword, useChangeUserPassword } from "../lib/api";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 interface ChangePasswordModalProps {
   open: boolean;
@@ -11,8 +11,6 @@ interface ChangePasswordModalProps {
   targetUserId?: string;
   targetEmail?: string;
 }
-
-const ease = [0.32, 0.72, 0, 1] as const;
 
 export default function ChangePasswordModal({ open, onClose, targetUserId, targetEmail }: ChangePasswordModalProps) {
   const { t } = useTranslation();
@@ -84,43 +82,12 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
   };
 
   const inputClass =
-    "h-10 rounded-md border border-white/[0.10] bg-white/[0.06] text-[13px] text-[#F8FAFC] placeholder:text-[#64748B] w-full pl-4 pr-10 outline-none brand-focus";
+    "h-10 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] w-full pl-4 pr-10 outline-none brand-focus";
 
   return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 100,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "rgba(0,0,0,0.6)",
-            backdropFilter: "blur(4px)",
-            padding: 16,
-          }}
-          onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
-        >
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            transition={{ duration: 0.2, ease }}
-            style={{
-              width: "100%",
-              maxWidth: 420,
-              background: "var(--bg-card, #1a1a2e)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: 16,
-              overflow: "hidden",
-            }}
-          >
-            <div style={{ padding: "20px 24px 0" }}>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
+      <DialogContent className="max-w-[420px] p-0 overflow-hidden">
+        <div style={{ padding: "20px 24px 0" }}>
               <div
                 style={{
                   width: 44,
@@ -136,14 +103,14 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
               >
                 <Icon name="lock" size={18} style={{ color: "var(--primary)" }} />
               </div>
-              <h2 style={{ fontSize: 16, fontWeight: 700, margin: "0 0 4px" }}>
+              <DialogTitle style={{ fontSize: 16, fontWeight: 700, margin: "0 0 4px" }}>
                 {t("changePassword.title")}
-              </h2>
-              <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 20px", lineHeight: 1.4 }}>
+              </DialogTitle>
+              <DialogDescription style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 20px", lineHeight: 1.4 }}>
                 {isSuperAdminAction
                   ? t("changePassword.title")
                   : t("changePassword.title")}
-              </p>
+              </DialogDescription>
             </div>
 
             {success ? (
@@ -158,15 +125,15 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
                   }}
                 >
                   <Icon name="check_circle" size={40} style={{ color: "var(--success)" }} />
-                  <p style={{ fontSize: 14, fontWeight: 600, color: "#F8FAFC" }}>
+                  <p style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>
                     {t("changePassword.title")}
                   </p>
                 </div>
                 <Button
                   onClick={handleClose}
-                  className="w-full rounded-xl border-0 text-white font-semibold h-10"
+                  className="w-full rounded-[10px] border-0 text-white font-semibold h-10"
                   style={{
-                    background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))',
+                    background: 'linear-gradient(to bottom right, var(--primary), var(--accent))',
                   }}
                 >
                   Fechar
@@ -276,7 +243,7 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
                 </div>
 
                 {error && (
-                  <p style={{ fontSize: 12, color: "#ef4444", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 8, padding: "8px 12px", margin: 0 }}>
+                  <p style={{ fontSize: 12, color: "var(--danger)", background: "var(--danger-tint)", border: "1px solid var(--danger)", borderRadius: 10, padding: "8px 12px", margin: 0 }}>
                     {error}
                   </p>
                 )}
@@ -287,7 +254,7 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
                     size="sm"
                     onClick={handleClose}
                     disabled={isPending}
-                    className="flex-1 rounded-xl border-white/[0.10] bg-white/[0.06] text-[#94A3B8] hover:bg-white/[0.10] hover:text-[#F8FAFC] font-medium"
+                    className="flex-1 rounded-[10px] border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--hover-surface)] hover:text-[var(--text-primary)] font-medium"
                   >
                     Cancelar
                   </Button>
@@ -295,9 +262,9 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
                     size="sm"
                     onClick={handleSubmit}
                     disabled={isPending}
-                    className="flex-1 rounded-xl border-0 text-white font-semibold disabled:opacity-40"
+                    className="flex-1 rounded-[10px] border-0 text-white font-semibold disabled:opacity-40"
                     style={{
-                      background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))',
+                      background: 'linear-gradient(to bottom right, var(--primary), var(--accent))',
                     }}
                   >
                     {isPending ? (
@@ -312,9 +279,7 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
                 </div>
               </div>
             )}
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+        </DialogContent>
+    </Dialog>
   );
 }

@@ -10,7 +10,7 @@ export default function AccessDenied() {
   return (
     <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 text-center">
       <div
-        className="flex h-14 w-14 items-center justify-center rounded-2xl"
+        className="flex h-14 w-14 items-center justify-center rounded-[14px]"
         style={{ background: 'var(--danger-tint)', color: 'var(--danger)' }}
       >
         <Icon name="block" size={28} />

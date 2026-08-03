@@ -96,7 +96,7 @@ export default function GitHubIntegrationPage() {
       <div
         className="flex flex-col items-center justify-center gap-3 rounded-[14px] border p-12 text-center"
         style={{
-          background: 'var(--bg-surface)',
+          background: 'var(--surface)',
           borderColor: 'var(--border)',
         }}
       >
@@ -299,7 +299,7 @@ function GitHubConfigTab() {
     <div className="flex flex-col gap-6">
       <div
         className="flex flex-col gap-6 rounded-[14px] border p-6"
-        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
+        style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
       >
         <div className="flex items-center justify-between">
           <div>
@@ -379,7 +379,7 @@ function GitHubConfigTab() {
                 onChange={(e) => setPrivateKey(e.target.value)}
                 placeholder={status?.configured ? '•••••••• (empty = keep current)' : t('github.privateKey')}
                 rows={4}
-                className="w-full resize-none rounded-lg border px-3 py-2 font-mono text-[12px] outline-none"
+                className="w-full resize-none rounded-[10px] border px-3 py-2 font-mono text-[12px] outline-none"
                 style={{
                   background: 'var(--bg-page)',
                   borderColor: 'var(--border-strong)',
@@ -692,7 +692,7 @@ function GitHubTemplatesTab() {
             size="icon"
             onClick={() => openEditModal(tpl)}
             title={t('github.editTemplate')}
-            className="size-7 rounded-lg"
+            className="size-7 rounded-[8px]"
             style={{ color: 'var(--text-tertiary)' }}
           >
             <Icon name="edit" size={12} />
@@ -702,7 +702,7 @@ function GitHubTemplatesTab() {
             size="icon"
             onClick={() => handleDelete(tpl)}
             title={t('github.deleteTemplate')}
-            className="size-7 rounded-lg"
+            className="size-7 rounded-[8px]"
             style={{ color: 'var(--danger)' }}
           >
             <Icon name="delete" size={12} />
@@ -948,7 +948,7 @@ function DeployTab() {
     <div className="flex flex-col gap-6">
       <div
         className="flex flex-col gap-6 rounded-[14px] border p-6"
-        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}
+        style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
       >
         <div className="mb-0 flex items-center gap-4">
           <div
