@@ -783,3 +783,115 @@ export function useUpdateBrandConfig(): UseMutationResult<
     },
   })
 }
+
+
+// ---- App members (rbac-per-app T-06 + T-09) ----
+
+export type AppRole = 'admin' | 'editor' | 'viewer'
+
+export interface AppMember {
+  id: string
+  user_id: string
+  role: AppRole
+  created_at: string
+}
+
+export interface AppMemberListResponse {
+  members: AppMember[]
+}
+
+export type AppAxis = 'backend' | 'frontend'
+
+/** Builds the URL prefix for the membership management API. */
+function appMembersPath(axis: AppAxis, appId: string): string {
+  const base = axis === 'backend' ? 'apps' : 'frontend-apps'
+  return `/dashboard/api/${base}/${appId}/members`
+}
+
+/**
+ * Returns the membership list for an app. Per T-06 AC-6, the backend
+ * returns 403 for editor/viewer/non-member on every /members endpoint
+ * (including GET), so a non-admin caller will see `error` set rather
+ * than an empty list — the component should render a "no access" state.
+ */
+export function useAppMembers(
+  appId: string,
+  axis: AppAxis,
+): UseQueryResult<AppMemberListResponse> {
+  return useQuery({
+    queryKey: ['app-members', axis, appId],
+    queryFn: () => apiFetch<AppMemberListResponse>(appMembersPath(axis, appId)),
+    enabled: Boolean(appId),
+  })
+}
+
+export interface AddAppMemberInput {
+  user_id: string
+  role: AppRole
+}
+
+export function useAddAppMember(
+  appId: string,
+  axis: AppAxis,
+): UseMutationResult<AppMember, Error, AddAppMemberInput> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input) =>
+      apiFetch<AppMember>(appMembersPath(axis, appId), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['app-members', axis, appId] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+export interface UpdateAppMemberInput {
+  user_id: string
+  role: AppRole
+}
+
+export function useUpdateAppMember(
+  appId: string,
+  axis: AppAxis,
+): UseMutationResult<AppMember, Error, UpdateAppMemberInput> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ user_id, role }) =>
+      apiFetch<AppMember>(`${appMembersPath(axis, appId)}/${user_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['app-members', axis, appId] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+export function useRemoveAppMember(
+  appId: string,
+  axis: AppAxis,
+): UseMutationResult<void, Error, string> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (user_id: string) =>
+      apiFetch<void>(`${appMembersPath(axis, appId)}/${user_id}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['app-members', axis, appId] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}

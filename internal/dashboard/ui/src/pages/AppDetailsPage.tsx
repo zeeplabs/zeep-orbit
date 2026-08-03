@@ -21,6 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TableCard from "@/components/TableCard";
+import { AppMembersList } from "@/components/patterns/AppMembersList";
 
 export default function AppDetailsPage() {
   const { t } = useTranslation();
@@ -108,6 +109,12 @@ export default function AppDetailsPage() {
           >
             {t("appDetails.tabTokens")}
           </TabsTrigger>
+          <TabsTrigger
+            value="members"
+            className="rounded-xl px-4 py-2 text-[13px] font-semibold text-[#94A3B8] data-[state=active]:bg-white/[0.08] data-[state=active]:text-[#F8FAFC] data-[state=active]:shadow-none"
+          >
+            {t("appDetails.tabMembers")}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="database" className="mt-0">
@@ -124,6 +131,9 @@ export default function AppDetailsPage() {
         </TabsContent>
         <TabsContent value="tokens" className="mt-0">
           <TokensTab app={app} />
+        </TabsContent>
+        <TabsContent value="members" className="mt-0">
+          <AppMembersList appId={app.id} axis="backend" />
         </TabsContent>
       </Tabs>
     </motion.div>
