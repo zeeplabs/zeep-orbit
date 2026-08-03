@@ -28,9 +28,26 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			email        TEXT        UNIQUE NOT NULL,
 			password_hash TEXT       NOT NULL DEFAULT '',
 			google_id    TEXT        UNIQUE,
-			role         TEXT        NOT NULL CHECK (role IN ('admin','superadmin')),
+			role         TEXT        NOT NULL CHECK (role IN ('superadmin','admin','auditor','member')),
 			created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
+		// dashboard-global-roles T-01: 2→4 role tiers. Existing 'admin' users are
+		// reclassified as 'member' (renamed to fit the new model: 'admin' is now a
+		// platform-management role distinct from the per-app "owner" pattern that
+		// 'member' replaces). 'superadmin' is untouched.
+		//
+		// Order is non-trivial and was previously wrong (UPDATE-first crashed because
+		// the OLD 2-value constraint rejects 'member' mid-flight). Correct order:
+		//   1. DROP the old constraint (no constraint active during the UPDATE)
+		//   2. UPDATE admin→member (now allowed because no CHECK is in effect)
+		//   3. ADD the new 4-value constraint
+		// All three run inside the same transaction; the window without a CHECK is
+		// atomic and invisible to other sessions. Re-running is a no-op (DROP IF
+		// EXISTS swallows the second-drop; UPDATE matches no rows; ADD replaces).
+		`ALTER TABLE zeep_system.dashboard_users DROP CONSTRAINT IF EXISTS dashboard_users_role_check`,
+		`UPDATE zeep_system.dashboard_users SET role = 'member' WHERE role = 'admin'`,
+		`ALTER TABLE zeep_system.dashboard_users ADD CONSTRAINT dashboard_users_role_check
+		 CHECK (role IN ('superadmin','admin','auditor','member'))`,
 		`ALTER TABLE zeep_system.dashboard_users ADD COLUMN IF NOT EXISTS google_id TEXT`,
 		`ALTER TABLE zeep_system.dashboard_users ADD COLUMN IF NOT EXISTS name TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE zeep_system.dashboard_users ADD COLUMN IF NOT EXISTS language TEXT NOT NULL DEFAULT 'en'`,

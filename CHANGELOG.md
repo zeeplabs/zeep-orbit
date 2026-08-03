@@ -13,6 +13,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 - **Render Environment ID field in Deploy Provider config** (superadmin, GitHub Integration page) — needed because Render assigns new services to an Environment, not a Project; the Project ID alone only works when that project has exactly one Environment (auto-resolved). Projects with multiple Environments now require this field explicitly, since the app has no way to guess which one to use.
 
+### Changed
+
+- **Dashboard user roles restructured from 2 to 4 tiers** — `zeep_system.dashboard_users.role` now accepts `superadmin`, `admin`, `auditor`, `member` (was `superadmin`, `admin`). Existing `admin` users are reclassified to `member`; `superadmin` is untouched. `auditor` is a new read-only platform role (read access to all apps and the audit log, no writes). `admin` is now a platform-management role distinct from the per-app "owner" pattern that `member` replaces. Migration is idempotent (DROP IF EXISTS + UPDATE + ADD inside the same transaction in `ProvisionZeepSystem`) and runs automatically on every server boot. Part of the `dashboard-global-roles` spec (T-01 of 9) — enforcement of the new role tiers (T-02 onward) lands in a follow-up. No behavior change yet for existing `admin` users beyond the rename; the matrix and `HasPlatformPermission` gate aren't wired in until the next release.
+
 ### Fixed
 
 - **GitHub Integration page (config, templates, deploy provider) had no role guard on the frontend** — every action there is `superadmin`-only server-side, but an `admin` navigating to the page directly saw the forms render and silently 403 on every request. The page now checks the current user's role and shows a clear "superadmin access required" message instead.

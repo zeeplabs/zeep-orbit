@@ -42,17 +42,17 @@ Fase 5: Frontend                          Fase 6: Docs e changelog
 
 ---
 
-### T-01: Migration — 4 roles
+### T-01: Migration — 4 roles [x]
 
-- **What**: `UPDATE dashboard_users SET role = 'member' WHERE role = 'admin'`, seguido de `DROP CONSTRAINT` + `ADD CONSTRAINT CHECK (role IN ('superadmin','admin','auditor','member'))`. Ordem exata importa (update antes de trocar a constraint).
-- **Where**: migration nova em `internal/provisioner` (ou local equivalente das migrations de `zeep_system`)
+- **What**: `DROP CONSTRAINT IF EXISTS dashboard_users_role_check` (libera o UPDATE), `UPDATE dashboard_users SET role = 'member' WHERE role = 'admin'`, depois `ADD CONSTRAINT dashboard_users_role_check CHECK (role IN ('superadmin','admin','auditor','member'))`. **Ordem importa e é a inversa do que estava escrito antes**: drop → update → add. O UPDATE só passa se a OLD 2-value CHECK já tiver sido removida (a OLD constraint rejeita `member` mid-flight). As três statements rodam dentro da mesma transação do `ProvisionZeepSystem` (janela sem CHECK é atômica e invisível pra outras sessões).
+- **Where**: `internal/dashboard/provisioner.go` (não `internal/provisioner/` — `ProvisionZeepSystem` é o orquestrador das migrations de `zeep_system`)
 - **Depends on**: nenhuma
-- **Reuses**: padrão de migration idempotente já usado no `provisioner.go`
+- **Reuses**: padrão de migration idempotente já usado no `provisioner.go` (advisory lock + IF NOT EXISTS + statements em lista)
 - **Requirement**: DGR-01, DGR-02, DGR-03, DGR-04
 - **Tools**: nenhum
 - **Done when**: fixture com `admin`/`superadmin` pré-existentes migra corretamente; inserir role fora dos 4 valores falha na constraint; rodar a migration 2x não quebra nada
-- **Tests**: teste de migration com fixture de dados pré-existentes
-- **Gate**: `go test ./internal/provisioner/... -run TestRoleMigration`
+- **Tests**: `internal/dashboard/provisioner_roles_test.go::TestRoleMigration` — recria `dashboard_users` com a OLD constraint, semeia admin+superadmin, chama `ProvisionZeepSystem`, valida os 5 cenários (admin→member, superadmin intacto, constraint rejeita valor inválido, aceita os 4 valores, idempotente)
+- **Gate**: `go test ./internal/dashboard/... -run TestRoleMigration` (exercitado contra PostgreSQL real local em 2026-08-03; spec originalmente apontava `./internal/provisioner/...` mas o local correto é `./internal/dashboard/...`)
 - **Commit**: `feat(roles): migrate dashboard_users to 4-tier role model (superadmin/admin/auditor/member)` (T-01 sozinho, mudança de schema visível)
 
 ---

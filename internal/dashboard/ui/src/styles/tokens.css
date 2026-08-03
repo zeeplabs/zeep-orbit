@@ -107,10 +107,10 @@
  * ------------------------------------------------------------------ */
 .theme-dark,
 .theme-light {
-  /* Fontes */
-  --font-ui: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-display: 'Space Grotesk', 'Manrope', -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Fontes — variable families self-hosted via @fontsource-variable (T0.2) */
+  --font-ui: 'Manrope Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-display: 'Space Grotesk Variable', 'Manrope Variable', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* Aliases de base */
   --bg: var(--bg-page);
