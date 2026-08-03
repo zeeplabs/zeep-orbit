@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { Lock, Loader2, Eye, EyeOff, CheckCircle } from "lucide-react";
 import { useChangeMyPassword, useChangeUserPassword } from "../lib/api";
 import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
 
 interface ChangePasswordModalProps {
   open: boolean;
@@ -134,7 +134,7 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
                   marginBottom: 16,
                 }}
               >
-                <Lock size={18} style={{ color: "var(--brand-primary)" }} />
+                <Icon name="lock" size={18} style={{ color: "var(--primary)" }} />
               </div>
               <h2 style={{ fontSize: 16, fontWeight: 700, margin: "0 0 4px" }}>
                 {t("changePassword.title")}
@@ -157,7 +157,7 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
                     padding: "24px 0",
                   }}
                 >
-                  <CheckCircle size={40} style={{ color: "#22c55e" }} />
+                  <Icon name="check_circle" size={40} style={{ color: "var(--success)" }} />
                   <p style={{ fontSize: 14, fontWeight: 600, color: "#F8FAFC" }}>
                     {t("changePassword.title")}
                   </p>
@@ -203,7 +203,7 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
                           padding: 4,
                         }}
                       >
-                        {showCurrent ? <EyeOff size={16} /> : <Eye size={16} />}
+                        {showCurrent ? <Icon name="visibility_off" size={16} /> : <Icon name="visibility" size={16} />}
                       </button>
                     </div>
                   </div>
@@ -237,7 +237,7 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
                         padding: 4,
                       }}
                     >
-                      {showNew ? <EyeOff size={16} /> : <Eye size={16} />}
+                        {showNew ? <Icon name="visibility_off" size={16} /> : <Icon name="visibility" size={16} />}
                     </button>
                   </div>
                 </div>
@@ -270,7 +270,7 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
                         padding: 4,
                       }}
                     >
-                      {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+                        {showConfirm ? <Icon name="visibility_off" size={16} /> : <Icon name="visibility" size={16} />}
                     </button>
                   </div>
                 </div>
@@ -302,7 +302,7 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
                   >
                     {isPending ? (
                       <>
-                        <Loader2 size={14} style={{ marginRight: 6, animation: "spin 1s linear infinite" }} />
+                        <Icon name="progress_activity" size={14} style={{ marginRight: 6 }} className="animate-spin" />
                         Alterando...
                       </>
                     ) : (

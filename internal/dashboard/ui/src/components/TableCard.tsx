@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { useTranslation, Trans } from "react-i18next";
-import { Plus, Trash2, Table2, Link2, Lock, AlertCircle } from "lucide-react";
 import { TableDef, ColumnDef, IndexDef, ReferenceDef } from "../lib/api";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon";
@@ -268,7 +267,7 @@ export default function TableCard({
       className="bg-[var(--surface)] border border-[var(--border)] rounded-[14px] overflow-hidden"
     >
       <div className="flex items-center gap-3 px-4 py-3">
-        <Table2 size={15} strokeWidth={1.5} className="text-[var(--primary)] shrink-0" />
+        <Icon name="table_chart" size={15} className="text-[var(--primary)] shrink-0" />
         <Input
           value={name}
           disabled={!isDraft}
@@ -310,7 +309,7 @@ export default function TableCard({
             onClick={() => setShowRelationshipsInfo(true)}
             className="flex items-center gap-1 text-[11px] text-[var(--text-secondary)] hover:text-[var(--primary)] bg-transparent border-none cursor-pointer shrink-0 transition-colors"
           >
-            <AlertCircle size={12} strokeWidth={1.5} />
+            <Icon name="error" size={12} />
             {t("tableCard.relationshipsInfoBtn")}
           </button>
         </div>
@@ -332,7 +331,7 @@ export default function TableCard({
               style={{ gridTemplateColumns: "1fr 140px 80px 80px 140px 32px 40px" }}
             >
               <div className="h-8 px-2.5 flex items-center gap-1.5 text-[13px] bg-[var(--sunken)] border border-[var(--border)] rounded-md text-[var(--text-secondary)]">
-                <Lock size={10} strokeWidth={1.5} className="shrink-0" />
+                <Icon name="lock" size={10} className="shrink-0" />
                 {auto.name}
               </div>
               <div className="contents max-md:flex max-md:items-center max-md:gap-2">
@@ -481,7 +480,7 @@ export default function TableCard({
                       otherTables.length === 0 && "opacity-30 cursor-not-allowed",
                     )}
                   >
-                    <Link2 size={12} strokeWidth={1.5} />
+                    <Icon name="link" size={12} />
                   </button>
                   <button
                     type="button"
@@ -493,7 +492,7 @@ export default function TableCard({
                       columns.length <= 1 ? "text-[var(--danger)]/40 cursor-not-allowed" : "text-[var(--danger)] cursor-pointer hover:bg-[var(--danger-tint)]",
                     )}
                   >
-                    <Trash2 size={12} strokeWidth={1.5} />
+                    <Icon name="delete" size={12} />
                   </button>
                 </div>
               </div>
@@ -566,7 +565,7 @@ export default function TableCard({
           className="flex items-center gap-1.5 text-[12px] font-semibold bg-transparent border border-[var(--border)] rounded-full px-3 py-1.5 cursor-pointer hover:bg-[var(--hover-surface)] transition-colors self-start"
           style={{ color: "var(--primary)" }}
         >
-          <Plus size={11} strokeWidth={2} />
+          <Icon name="add" size={11} />
           {t("appForm.addColumn")}
         </button>
 
@@ -578,7 +577,7 @@ export default function TableCard({
               onClick={() => setShowIndexInfo(true)}
               className="flex items-center gap-1 text-[11px] text-[var(--text-secondary)] hover:text-[var(--primary)] bg-transparent border-none cursor-pointer shrink-0 transition-colors"
             >
-              <AlertCircle size={12} strokeWidth={1.5} />
+            <Icon name="error" size={12} />
               {t("tableCard.indexInfoBtn")}
             </button>
           </div>
@@ -627,7 +626,7 @@ export default function TableCard({
                     onClick={() => removeIndex(ii)}
                     className="w-7 h-7 flex items-center justify-center rounded-md border border-[var(--danger)]/20 bg-[var(--danger-tint)] text-[var(--danger)] cursor-pointer hover:bg-[var(--danger-tint)] transition-colors shrink-0"
                   >
-                    <Trash2 size={12} strokeWidth={1.5} />
+                    <Icon name="delete" size={12} />
                   </button>
                 </div>
               </div>
@@ -640,7 +639,7 @@ export default function TableCard({
             className="flex items-center gap-1.5 text-[12px] font-semibold bg-transparent border border-[var(--border)] rounded-full px-3 py-1.5 cursor-pointer hover:bg-[var(--hover-surface)] transition-colors self-start"
             style={{ color: "var(--primary)" }}
           >
-            <Plus size={11} strokeWidth={2} />
+          <Icon name="add" size={11} />
             {t("tableCard.addIndex")}
           </button>
         </div>
@@ -687,7 +686,7 @@ export default function TableCard({
           <div className="bg-[var(--surface)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.10)] rounded-[calc(1rem-2px)] px-7 pb-6 pt-7">
             <DialogHeader className="mb-0">
               <div className="w-11 h-11 rounded-[12px] bg-[var(--hover-surface)] border border-[var(--border)] flex items-center justify-center mb-[18px]">
-                <Link2 size={18} strokeWidth={1.5} className="text-[var(--text-secondary)]" />
+                <Icon name="link" size={18} className="text-[var(--text-secondary)]" />
               </div>
               <DialogTitle className="text-base font-bold text-[var(--text-primary)] mb-2">
                 {t("tableCard.relationshipsInfoBtn")}
@@ -716,7 +715,7 @@ export default function TableCard({
           <div className="bg-[var(--surface)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.10)] rounded-[calc(1rem-2px)] px-7 pb-6 pt-7">
             <DialogHeader className="mb-0">
               <div className="w-11 h-11 rounded-[12px] bg-[var(--hover-surface)] border border-[var(--border)] flex items-center justify-center mb-[18px]">
-                <AlertCircle size={18} strokeWidth={1.5} className="text-[var(--text-secondary)]" />
+                <Icon name="error" size={18} className="text-[var(--text-secondary)]" />
               </div>
               <DialogTitle className="text-base font-bold text-[var(--text-primary)] mb-2">
                 {t("tableCard.indexInfoBtn")}

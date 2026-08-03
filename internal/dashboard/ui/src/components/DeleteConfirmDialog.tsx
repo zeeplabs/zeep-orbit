@@ -1,5 +1,4 @@
 import { useTranslation, Trans } from 'react-i18next'
-import { AlertTriangle } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -9,6 +8,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { Icon } from '@/components/ui/icon'
 
 interface Props {
   open: boolean
@@ -30,7 +30,7 @@ export default function DeleteConfirmDialog({ open, appName, loading, onConfirm,
         <div className="bg-white/[0.04] shadow-[inset_0_1px_1px_rgba(255,255,255,0.10)] rounded-[calc(1rem-2px)] px-7 pb-6 pt-7">
           <DialogHeader className="mb-0">
             <div className="w-11 h-11 rounded-xl bg-red-500/[0.12] border border-red-500/[0.20] flex items-center justify-center mb-[18px]">
-              <AlertTriangle size={20} strokeWidth={1.5} className="text-red-500" />
+              <Icon name="warning" size={20} className="text-red-500" />
             </div>
 
             <DialogTitle className="text-base font-bold text-[#F8FAFC] mb-2">
