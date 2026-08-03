@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/ui/icon'
 import { useCurrentRole } from '@/lib/useCurrentRole'
 import { hasPlatformPermission } from '@/lib/permissions'
-import { NAV_SECTIONS, CHANGELOG_ITEM, MOBILE_TABS } from './nav'
+import { NAV_SECTIONS, MOBILE_TABS } from './nav'
 import { NavRow } from './Sidebar'
 import { SidebarFooter } from './SidebarFooter'
 
@@ -18,12 +18,14 @@ interface MobileNavProps {
   onChangePassword: () => void
   onSaveLanguage: (lang: string) => void
   onLogout: () => void
+  version?: string
 }
 
 /**
  * Shell mobile: bottom tab bar (Apps/Data/Logs) + "More" abrindo bottom-sheet
  * com o resto da nav (role-aware) + footer (usuário/tema/idioma/logout).
  * Não é reflow da sidebar — é experiência de app.
+ * Handoff §F1-07: link de Changelog vive dentro do SidebarFooter (não duplicado no sheet).
  */
 export function MobileNav({
   user,
@@ -31,6 +33,7 @@ export function MobileNav({
   onChangePassword,
   onSaveLanguage,
   onLogout,
+  version,
 }: MobileNavProps) {
   const { t } = useTranslation()
   const role = useCurrentRole()
@@ -106,7 +109,6 @@ export function MobileNav({
                   </div>
                 )
               })}
-              <NavRow item={CHANGELOG_ITEM} onNavigate={() => setSheetOpen(false)} />
             </nav>
             <SidebarFooter
               className="mt-4"
@@ -115,6 +117,8 @@ export function MobileNav({
               onChangePassword={() => { setSheetOpen(false); onChangePassword() }}
               onSaveLanguage={onSaveLanguage}
               onLogout={() => { setSheetOpen(false); onLogout() }}
+              version={version}
+              onNavigate={() => setSheetOpen(false)}
             />
           </div>
         </div>

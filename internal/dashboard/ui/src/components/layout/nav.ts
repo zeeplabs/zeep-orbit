@@ -56,12 +56,6 @@ export const NAV_SECTIONS: NavSectionDef[] = [
   },
 ]
 
-export const CHANGELOG_ITEM: NavItemDef = {
-  icon: 'campaign',
-  labelKey: 'nav.changelog',
-  path: '/changelog',
-}
-
 /** Itens fixos da tab bar mobile (README: Apps / Data / Logs). */
 export const MOBILE_TABS: NavItemDef[] = [
   { icon: 'grid_view', labelKey: 'nav.apps', path: '/apps' },

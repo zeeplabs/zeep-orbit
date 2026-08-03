@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/ui/icon'
 import { useCurrentRole } from '@/lib/useCurrentRole'
 import { hasPlatformPermission } from '@/lib/permissions'
-import { NAV_SECTIONS, CHANGELOG_ITEM, NavItemDef } from './nav'
+import { NAV_SECTIONS, NavItemDef } from './nav'
 import logoType from '@/assets/images/logo/logotype.svg'
 
 function label(key: string, t: (k: string) => string): string {
@@ -47,7 +47,8 @@ interface SidebarProps {
   footer: ReactNode
 }
 
-/** Sidebar desktop — logo, nav role-aware (omite via RoleGate), banner, footer. */
+/** Sidebar desktop — logo, nav role-aware (omite via RoleGate), banner, footer.
+ *  Handoff §F1-07: o link de Changelog vive no footer (SidebarFooter), não no nav. */
 export function Sidebar({ companyName, banner, footer }: SidebarProps) {
   const { t } = useTranslation()
   const role = useCurrentRole()
@@ -96,9 +97,6 @@ export function Sidebar({ companyName, banner, footer }: SidebarProps) {
       </nav>
 
       {banner}
-      <div className="mb-3">
-        <NavRow item={CHANGELOG_ITEM} />
-      </div>
 
       {footer}
     </aside>

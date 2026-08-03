@@ -130,6 +130,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
       onChangePassword={() => setShowChangePassword(true)}
       onSaveLanguage={saveLanguage}
       onLogout={() => setShowLogoutDialog(true)}
+      version={pkg.version}
     />
   );
 
@@ -152,6 +153,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
         onChangePassword={() => setShowChangePassword(true)}
         onSaveLanguage={saveLanguage}
         onLogout={() => setShowLogoutDialog(true)}
+        version={pkg.version}
       />
 
       <ConfirmDialog
