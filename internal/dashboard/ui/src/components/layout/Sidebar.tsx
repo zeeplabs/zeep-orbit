@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/ui/icon'
 import { useCurrentRole } from '@/lib/useCurrentRole'
-import { roleAllowed } from '@/lib/roles'
+import { hasPlatformPermission } from '@/lib/permissions'
 import { NAV_SECTIONS, CHANGELOG_ITEM, NavItemDef } from './nav'
 import logoType from '@/assets/images/logo/logotype.svg'
 
@@ -78,7 +78,9 @@ export function Sidebar({ companyName, banner, footer }: SidebarProps) {
       {/* Nav */}
       <nav className="flex flex-1 flex-col gap-4">
         {NAV_SECTIONS.map((section) => {
-          const visible = section.items.filter((item) => !item.allow || roleAllowed(role, item.allow))
+          const visible = section.items.filter(
+            (item) => !item.platformAction || hasPlatformPermission(role, item.platformAction),
+          )
           if (visible.length === 0) return null
           return (
             <div key={section.titleKey} className="flex flex-col gap-0.5">

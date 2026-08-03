@@ -1,4 +1,4 @@
-import { Role } from '@/lib/roles'
+import { PlatformAction } from '@/lib/permissions'
 
 export interface NavItemDef {
   /** Material Symbols glyph. */
@@ -6,8 +6,17 @@ export interface NavItemDef {
   /** chave i18n do label. */
   labelKey: string
   path: string
-  /** Papéis que veem o item. undefined = todos autenticados. */
-  allow?: Role[]
+  /**
+   * Ação de plataforma que gateia o item. Se ausente, item é visível a todos os
+   * autenticados. A visibilidade é resolvida por `hasPlatformPermission` (matriz
+   * em `@/lib/permissions`, que espelha `HasPlatformPermission` no Go) — fonte
+   * única de verdade, com omit (não disable) por construção.
+   *
+   * Substitui o antigo `allow: Role[]`: ao invés de duplicar a matriz de papel
+   * por item, declaramos qual ação de plataforma o item representa e a matriz
+   * central decide.
+   */
+  platformAction?: PlatformAction
 }
 
 export interface NavSectionDef {
@@ -16,13 +25,10 @@ export interface NavSectionDef {
 }
 
 /**
- * Modelo de navegação com gate por papel (final, 4 níveis). Ver
- * ui-design-brief de `dashboard-global-roles` para a matriz.
- *
- * Nota de interim: enquanto o backend não migra para 4 papéis, na prática só
- * existe `superadmin` (vê tudo). Um eventual `admin`/`auditor` legado pode ver
- * itens que o backend ainda 403a — resolve-se sozinho quando dashboard-global-roles
- * subir. `allow` já reflete a matriz final.
+ * Modelo de navegação gateado pela matriz de plataforma
+ * (`.specs/features/dashboard-global-roles`, T-07). Backend é a fonte de verdade
+ * do enforcement (retorna 403); aqui só derivamos visibilidade. Páginas com
+ * rota direta continuam guardadas por `RequireRole` em `App.tsx`.
  */
 export const NAV_SECTIONS: NavSectionDef[] = [
   {
@@ -42,10 +48,10 @@ export const NAV_SECTIONS: NavSectionDef[] = [
   {
     titleKey: 'nav.sectionSuperadmin',
     items: [
-      { icon: 'group', labelKey: 'nav.users', path: '/usuarios', allow: ['superadmin', 'admin'] },
-      { icon: 'shield', labelKey: 'nav.audit', path: '/auditoria', allow: ['superadmin', 'auditor'] },
-      { icon: 'extension', labelKey: 'nav.integrations', path: '/integracoes/github', allow: ['superadmin'] },
-      { icon: 'settings', labelKey: 'nav.settings', path: '/configuracoes', allow: ['superadmin', 'admin'] },
+      { icon: 'group', labelKey: 'nav.users', path: '/usuarios', platformAction: 'users' },
+      { icon: 'shield', labelKey: 'nav.audit', path: '/auditoria', platformAction: 'audit' },
+      { icon: 'extension', labelKey: 'nav.integrations', path: '/integracoes/github', platformAction: 'integrations' },
+      { icon: 'settings', labelKey: 'nav.settings', path: '/configuracoes', platformAction: 'branding' },
     ],
   },
 ]

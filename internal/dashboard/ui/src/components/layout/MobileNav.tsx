@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/ui/icon'
 import { useCurrentRole } from '@/lib/useCurrentRole'
-import { roleAllowed } from '@/lib/roles'
+import { hasPlatformPermission } from '@/lib/permissions'
 import { NAV_SECTIONS, CHANGELOG_ITEM, MOBILE_TABS } from './nav'
 import { NavRow } from './Sidebar'
 import { SidebarFooter } from './SidebarFooter'
@@ -91,7 +91,9 @@ export function MobileNav({
             <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-[var(--border-strong)]" />
             <nav className="flex flex-col gap-4">
               {NAV_SECTIONS.map((section) => {
-                const visible = section.items.filter((it) => !it.allow || roleAllowed(role, it.allow))
+                const visible = section.items.filter(
+                  (it) => !it.platformAction || hasPlatformPermission(role, it.platformAction),
+                )
                 if (visible.length === 0) return null
                 return (
                   <div key={section.titleKey} className="flex flex-col gap-0.5">
