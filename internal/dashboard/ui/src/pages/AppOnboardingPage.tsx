@@ -55,7 +55,7 @@ export default function AppOnboardingPage() {
       <PageHeader title={t("appOnboarding.title")} subtitle={t("appOnboarding.subtitle")} />
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-        <div className="flex flex-col gap-5 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
+        <div className="flex flex-col gap-5 rounded-[14px] border border-[var(--border)] bg-[var(--bg-surface)] p-5">
           <div className="flex flex-col gap-1.5">
             <Label>{t("appOnboarding.nameLabel")}</Label>
             <Input
@@ -79,7 +79,10 @@ export default function AppOnboardingPage() {
         </div>
 
         {submitError && (
-          <div className="rounded-2xl border border-[var(--danger)]/20 bg-[var(--danger-tint)] px-6 py-4 text-sm text-[var(--danger)]">
+          <div
+            className="rounded-[10px] border bg-[var(--danger-tint)] px-6 py-4 text-sm"
+            style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
+          >
             {submitError}
           </div>
         )}
