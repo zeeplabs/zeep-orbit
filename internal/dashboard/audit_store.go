@@ -123,6 +123,7 @@ func auditActionLabel(a string) string {
 		"app.update":              "App Atualizado",
 		"app.delete":              "App Excluído",
 		"user.create":             "Usuário Criado",
+		"user.role_changed":       "Papel de Usuário Alterado",
 		"user.delete":             "Usuário Excluído",
 		"user.login":              "Login",
 		"user.logout":             "Logout",

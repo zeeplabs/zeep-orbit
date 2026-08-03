@@ -237,6 +237,26 @@ func DeleteUser(ctx context.Context, pool *db.Pool, id string) error {
 	return nil
 }
 
+// UpdateUserRole updates the role of an existing dashboard user. Returns
+// ErrNotFound if the user does not exist. The caller is responsible for
+// authorization checks (action gate, role-creation gate, ≥1-superadmin
+// invariant) — this function is a thin store layer.
+func UpdateUserRole(ctx context.Context, pool *db.Pool, id, role string) (*DashboardUser, error) {
+	var u DashboardUser
+	err := pool.QueryRow(ctx,
+		`UPDATE zeep_system.dashboard_users SET role = $1 WHERE id = $2
+		 RETURNING id, email, COALESCE(name, ''), role, COALESCE(language, 'en'), created_at`,
+		role, id,
+	).Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Language, &u.CreatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("dashboard: update user role: %w", err)
+	}
+	return &u, nil
+}
+
 // DeleteExpiredSessions removes sessions past their expiry time.
 func DeleteExpiredSessions(ctx context.Context, pool *db.Pool) error {
 	_, err := pool.Exec(ctx, `DELETE FROM zeep_system.sessions WHERE expires_at <= now()`)

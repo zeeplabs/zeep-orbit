@@ -777,6 +777,29 @@ func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// dashboard-global-roles T-05: ≥1 superadmin invariant. Before deleting,
+	// look up the target's role — if it's a superadmin, verify at least one
+	// other superadmin exists. Same helper as UpdateUserRole.
+	target, err := GetUser(r.Context(), h.pool, targetID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
+			return
+		}
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+	if target.Role == "superadmin" {
+		if err := assertAtLeastOneSuperadminRemains(r.Context(), h.pool, targetID); err != nil {
+			if errors.Is(err, errLastSuperadmin) {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "platform must have at least one superadmin"})
+				return
+			}
+			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+			return
+		}
+	}
+
 	if err := DeleteUser(r.Context(), h.pool, targetID); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
