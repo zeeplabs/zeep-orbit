@@ -1,18 +1,22 @@
 import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
-import { Palette, Save, Eye, EyeOff, Loader2, Globe, Shield, HardDrive } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
-import { THEMES, BrandTheme, applyTheme } from "../lib/themes";
+import { toast } from "sonner";
+import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
+import { PageHeader, ProviderCard, SettingRow } from "@/components/patterns";
+import { useBrandConfig, useUpdateBrandConfig } from "../lib/api";
 
-const EASE = [0.32, 0.72, 0, 1] as const;
+const TABS = [
+  { value: "branding", icon: "palette", labelKey: "settings.tabBranding" },
+  { value: "database", icon: "database", labelKey: "settings.tabDatabase" },
+  { value: "auth", icon: "public", labelKey: "settings.tabAuth" },
+  { value: "storage", icon: "hard_drive", labelKey: "settings.tabStorage" },
+] as const;
 
 export default function BrandSettingsPage() {
   const { t } = useTranslation();
@@ -24,199 +28,145 @@ export default function BrandSettingsPage() {
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: EASE }}
-    >
-      <div className="mb-8">
-        <span className="mb-3 inline-block rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em]"
-          style={{ borderColor: "rgba(var(--brand-primary-rgb), 0.2)", backgroundColor: "rgba(var(--brand-primary-rgb), 0.12)", color: "var(--brand-light)" }}>
-          {t("nav.settings")}
-        </span>
-        <h2 className="text-[22px] font-extrabold text-[#F8FAFC]">{t("brand.title")}</h2>
-        <p className="mt-1 text-sm text-[#94A3B8]">{t("brand.subtitle")}</p>
-      </div>
+    <>
+      <PageHeader title={t("brand.title")} subtitle={t("brand.subtitle")} />
 
       <Tabs value={tab} onValueChange={setTab} className="w-full">
-        <TabsList className="w-full justify-start gap-1 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-1.5 mb-6 h-auto overflow-x-auto">
-          <TabsTrigger value="branding" className="rounded-xl data-[state=active]:bg-white/[0.08] data-[state=active]:shadow-none text-[13px] gap-1.5">
-            <Palette size={14} /> {t("settings.tabBranding")}
-          </TabsTrigger>
-          <TabsTrigger value="database" className="rounded-xl data-[state=active]:bg-white/[0.08] data-[state=active]:shadow-none text-[13px] gap-1.5">
-            <Shield size={14} /> {t("settings.tabDatabase")}
-          </TabsTrigger>
-          <TabsTrigger value="auth" className="rounded-xl data-[state=active]:bg-white/[0.08] data-[state=active]:shadow-none text-[13px] gap-1.5">
-            <Globe size={14} /> {t("settings.tabAuth")}
-          </TabsTrigger>
-          <TabsTrigger value="storage" className="rounded-xl data-[state=active]:bg-white/[0.08] data-[state=active]:shadow-none text-[13px] gap-1.5">
-            <HardDrive size={14} /> {t("settings.tabStorage")}
-          </TabsTrigger>
+        <TabsList className="mb-6 h-auto w-full justify-start gap-1 overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-1.5">
+          {TABS.map((tb) => (
+            <TabsTrigger
+              key={tb.value}
+              value={tb.value}
+              className="gap-1.5 rounded-xl text-[13px] text-[var(--text-secondary)] data-[state=active]:bg-[var(--hover-surface)] data-[state=active]:text-[var(--text-primary)] data-[state=active]:shadow-none"
+            >
+              <Icon name={tb.icon} size={14} /> {t(tb.labelKey)}
+            </TabsTrigger>
+          ))}
         </TabsList>
 
         <TabsContent value="branding" className="mt-0">
           <BrandingTab />
         </TabsContent>
-
         <TabsContent value="database" className="mt-0">
           <SoftDeleteCard />
         </TabsContent>
-
         <TabsContent value="auth" className="mt-0">
           <GoogleAuthProviderCard />
         </TabsContent>
-
         <TabsContent value="storage" className="mt-0">
           <GlobalStorageCard />
         </TabsContent>
       </Tabs>
-    </motion.div>
+    </>
   );
 }
 
+/**
+ * Branding: só nome da empresa. O antigo seletor de brand-theme
+ * (azure/emerald/ruby) foi removido — DRD-02/T0.4 trocou runtime brand-theming
+ * por dark/light via classe (toggle no rodapé da sidebar). O PUT ainda reenvia
+ * `theme` inalterado porque o contrato do campo no backend não foi confirmado
+ * para drop (T0.5).
+ */
 function BrandingTab() {
   const { t } = useTranslation();
-  const qc = useQueryClient();
+  const { data } = useBrandConfig();
+  const update = useUpdateBrandConfig();
   const [companyName, setCompanyName] = useState("");
-  const [selectedTheme, setSelectedTheme] = useState("azure");
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/dashboard/api/config", { credentials: "include" })
-      .then((res) => res.json())
-      .then((data) => {
-        setCompanyName(data.company_name);
-        setSelectedTheme(data.theme);
-      })
-      .catch(() => {});
-  }, []);
+    if (data) setCompanyName(data.company_name);
+  }, [data]);
 
-  const handleSave = async () => {
-    setSaving(true);
-    setMessage(null);
-    try {
-      const res = await fetch("/dashboard/api/config", {
-        method: "PUT",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ theme: selectedTheme, company_name: companyName, logo_url: "", icon_url: "" }),
-      });
-      if (!res.ok) { const data = await res.json(); setMessage(data.error || t("settings.error")); return; }
-      applyTheme(THEMES[selectedTheme] || THEMES.azure);
-      qc.invalidateQueries({ queryKey: ["brand-config"] });
-      setMessage(t("settings.saved"));
-    } catch { setMessage(t("settings.error")); }
-    finally { setSaving(false); }
+  const handleSave = () => {
+    if (!data) return;
+    update.mutate(
+      // logo_url:"" preserva o comportamento legado (esta tela não edita logo).
+      { theme: data.theme, company_name: companyName, logo_url: "" },
+      {
+        onSuccess: () => toast.success(t("settings.savedSuccess")),
+        onError: (err) => toast.error(err.message),
+      }
+    );
   };
 
-  const currentTheme = THEMES[selectedTheme] || THEMES.azure;
-
   return (
-    <div className="flex flex-col gap-6">
-      <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-5 flex flex-col gap-4">
-        <Label className="text-[13px] font-semibold text-[#94A3B8]">{t("brand.companyName")}</Label>
-        <Input value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Zeep Tecnologia"
-          className="bg-white/[0.05] border-white/[0.10] rounded-md text-[#F8FAFC] placeholder:text-white/30 brand-focus h-10" />
-      </div>
-
-      <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-5 flex flex-col gap-4">
-        <div className="flex items-center gap-2"><Palette size={16} className="text-[#94A3B8]" /><Label className="text-[13px] font-semibold text-[#94A3B8]">{t("brand.theme")}</Label></div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {Object.entries(THEMES).map(([key, theme]) => (
-            <ThemeCard key={key} themeKey={key} theme={theme} selected={selectedTheme === key} onClick={() => setSelectedTheme(key)} />
-          ))}
-        </div>
-      </div>
-
-      <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-5 flex flex-col gap-4">
-        <Label className="text-[13px] font-semibold text-[#94A3B8]">{t("settings.preview")}</Label>
-        <div className="rounded-xl border p-4 flex items-center gap-3" style={{ borderColor: "rgba(var(--brand-primary-rgb), 0.2)", backgroundColor: "rgba(var(--brand-primary-rgb), 0.06)" }}>
-          <div className="size-9 rounded-lg flex items-center justify-center text-white text-sm font-bold"
-            style={{ background: `linear-gradient(135deg, ${currentTheme.primary}, ${currentTheme.secondary})` }}>Z</div>
-          <div>
-            <p className="text-sm font-bold" style={{ color: currentTheme.primary }}>{companyName || "Zeep Tecnologia"}</p>
-            <p className="text-[11px] text-[#94A3B8]">{t("brand.save")} <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold text-white"
-              style={{ background: `linear-gradient(135deg, ${currentTheme.primary}, ${currentTheme.secondary})` }}>{t("settings.example")}</span></p>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-3">
-        <Button onClick={handleSave} disabled={saving}
-          className="gap-2 rounded-xl px-6 py-2.5 text-sm font-bold text-white border-0"
-          style={{ background: saving ? "rgba(var(--brand-primary-rgb), 0.5)" : "linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))" }}>
-          <Save size={14} />{saving ? t("brand.saving") : t("brand.save")}
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
+      <Label className="text-[13px] font-semibold text-[var(--text-secondary)]">
+        {t("brand.companyName")}
+      </Label>
+      <Input
+        value={companyName}
+        onChange={(e) => setCompanyName(e.target.value)}
+        placeholder="Zeep Tecnologia"
+        className="mt-2 max-w-md"
+      />
+      <div className="mt-5">
+        <Button onClick={handleSave} disabled={!data || update.isPending} className="gap-2">
+          <Icon name="save" size={16} />
+          {update.isPending ? t("brand.saving") : t("brand.save")}
         </Button>
-        {message && <span className={cn("text-sm", message === t("settings.saved") ? "text-green-400" : "text-red-400")}>{message}</span>}
       </div>
     </div>
   );
 }
 
-function ThemeCard({
-  themeKey,
-  theme,
-  selected,
-  onClick,
-}: {
-  themeKey: string;
-  theme: BrandTheme;
-  selected: boolean;
-  onClick: () => void;
-}) {
+function SoftDeleteCard() {
+  const { t } = useTranslation();
+  const [enabled, setEnabled] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetch("/dashboard/api/config/system", { credentials: "include" })
+      .then((r) => r.json())
+      .then((d) => setEnabled(d.soft_delete_enabled))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch("/dashboard/api/config/system", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ soft_delete_enabled: enabled }),
+      });
+      if (!res.ok) throw new Error(t("system.error"));
+      toast.success(t("system.saved"));
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <p className="text-[13px] text-[var(--text-secondary)]">{t("app.loading")}</p>;
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "flex flex-col gap-2 p-3 rounded-xl border transition-all duration-200 cursor-pointer text-left",
-        selected
-          ? "border-white/[0.20] bg-white/[0.06]"
-          : "border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.05]",
-      )}
-    >
-      {/* Color swatches */}
-      <div className="flex gap-1">
-        <div
-          className="h-6 flex-1 rounded-md"
-          style={{ backgroundColor: theme.primary }}
-        />
-        <div
-          className="h-6 flex-1 rounded-md"
-          style={{ backgroundColor: theme.secondary }}
-        />
-        <div
-          className="h-6 flex-1 rounded-md"
-          style={{ backgroundColor: theme.tertiary }}
-        />
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
+      <SettingRow
+        label={t("system.softDelete")}
+        description={t("system.softDeleteDesc")}
+        control={<Switch checked={enabled} onCheckedChange={setEnabled} />}
+      />
+      <div className="mt-4 border-t border-[var(--border)] pt-4">
+        <Button onClick={handleSave} disabled={saving} className="gap-2">
+          <Icon name="save" size={16} />
+          {saving ? t("system.saving") : t("system.save")}
+        </Button>
       </div>
-      <div className="flex items-center justify-between">
-        <span className="text-[12px] font-semibold text-[#F8FAFC]">
-          {theme.name}
-        </span>
-        {selected && (
-          <span
-            className="size-2 rounded-full"
-            style={{ backgroundColor: theme.primary }}
-          />
-        )}
-      </div>
-    </button>
+    </div>
   );
 }
 
 function GoogleAuthProviderCard() {
   const { t } = useTranslation();
-  const [config, setConfig] = useState<{
-    enabled: boolean;
-    config: { client_id?: string; client_secret?: string; redirect_url?: string; allowed_domains?: string[] };
-    config_set: boolean;
-  } | null>(null);
+  const [configSet, setConfigSet] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [messageType, setMessageType] = useState<"success" | "error">("success");
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [redirectUrl, setRedirectUrl] = useState("");
@@ -228,160 +178,134 @@ function GoogleAuthProviderCard() {
     fetch("/dashboard/api/config/auth/providers/google?reveal=true", { credentials: "include" })
       .then((r) => r.json())
       .then((d) => {
-        setConfig(d);
+        setConfigSet(Boolean(d.config_set));
         setEnabled(d.enabled);
         setClientId(d.config?.client_id || "");
         setClientSecret("");
         setRedirectUrl(d.config?.redirect_url || "");
         setAllowedDomains((d.config?.allowed_domains || []).join(", "));
       })
-      .catch(() => setMessage(t("settings.loadConfigError")))
+      .catch(() => toast.error(t("settings.loadConfigError")))
       .finally(() => setLoading(false));
   }, []);
 
   const handleSave = async () => {
     setSaving(true);
-    setMessage(null);
     try {
       const configBody: Record<string, unknown> = {};
       if (clientId) configBody.client_id = clientId;
       if (clientSecret) configBody.client_secret = clientSecret;
       if (redirectUrl) configBody.redirect_url = redirectUrl;
-      configBody.allowed_domains = allowedDomains ? allowedDomains.split(",").map((d) => d.trim()).filter(Boolean) : [];
+      configBody.allowed_domains = allowedDomains
+        ? allowedDomains.split(",").map((d) => d.trim()).filter(Boolean)
+        : [];
 
       const res = await fetch("/dashboard/api/config/auth/providers/google", {
         method: "PUT",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled, config: Object.keys(configBody).length > 0 ? configBody : undefined }),
+        body: JSON.stringify({
+          enabled,
+          config: Object.keys(configBody).length > 0 ? configBody : undefined,
+        }),
       });
-      if (!res.ok) { const err = await res.json(); throw new Error(err.error || t("settings.error")); }
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || t("settings.error"));
+      }
       const result = await res.json();
-      setConfig(result as typeof config);
+      setConfigSet(Boolean(result.config_set));
       setClientSecret("");
-      setMessage(t("settings.savedSuccess"));
-      setMessageType("success");
+      toast.success(t("settings.savedSuccess"));
     } catch (err) {
-      setMessage((err as Error).message);
-      setMessageType("error");
+      toast.error((err as Error).message);
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) return <p className="text-[13px] text-[#94A3B8]">{t("app.loading")}</p>;
-
-  const inputClass = "h-10 rounded-md border border-white/[0.10] bg-white/[0.06] text-[13px] text-[#F8FAFC] placeholder:text-[#64748B] outline-none brand-focus w-full";
+  if (loading) return <p className="text-[13px] text-[var(--text-secondary)]">{t("app.loading")}</p>;
 
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6 mt-4">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <span className="text-[15px] font-bold text-[#F8FAFC]">Google</span>
-          <p className="text-[12px] text-[#94A3B8] mt-0.5">{t("settings.googleDesc")}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-[12px] text-[#94A3B8]">{t("settings.active")}</span>
-          <Switch checked={enabled} onCheckedChange={setEnabled} />
-        </div>
-      </div>
+    <ProviderCard
+      name="Google"
+      icon="public"
+      description={t("settings.googleDesc")}
+      status={
+        enabled
+          ? { label: t("settings.active"), tone: "success" }
+          : { label: t("settings.inactive"), tone: "neutral" }
+      }
+      defaultOpen
+    >
+      <div className="flex flex-col gap-4">
+        <SettingRow
+          label={t("settings.active")}
+          control={<Switch checked={enabled} onCheckedChange={setEnabled} />}
+        />
 
-      {enabled && (
-        <div className="flex flex-col gap-4 max-w-lg">
-          <div>
-            <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">{t("settings.clientId")}</label>
-            <Input value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder="Google OAuth Client ID" className={inputClass} />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">{t("settings.clientSecret")}</label>
-            <div className="relative">
-              <Input type={showSecret ? "text" : "password"} value={clientSecret} onChange={(e) => setClientSecret(e.target.value)}
-                placeholder={config?.config_set ? t("settings.googleClientSecretPlaceholder") : t("settings.googleClientSecretPlaceholderNew")} className={inputClass + " pr-10"} />
-              <button type="button" title="Show/hide secret" onClick={() => setShowSecret(!showSecret)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#F8FAFC] bg-none border-none cursor-pointer">
-                {showSecret ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
+        {enabled && (
+          <div className="flex max-w-lg flex-col gap-4">
+            <div>
+              <Label className="mb-1.5 block text-[12px] font-medium uppercase tracking-wider text-[var(--text-secondary)]">
+                {t("settings.clientId")}
+              </Label>
+              <Input value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder="Google OAuth Client ID" />
+            </div>
+            <div>
+              <Label className="mb-1.5 block text-[12px] font-medium uppercase tracking-wider text-[var(--text-secondary)]">
+                {t("settings.clientSecret")}
+              </Label>
+              <div className="relative">
+                <Input
+                  type={showSecret ? "text" : "password"}
+                  value={clientSecret}
+                  onChange={(e) => setClientSecret(e.target.value)}
+                  placeholder={
+                    configSet
+                      ? t("settings.googleClientSecretPlaceholder")
+                      : t("settings.googleClientSecretPlaceholderNew")
+                  }
+                  className="pr-10 font-mono"
+                />
+                <button
+                  type="button"
+                  title={t("settings.clientSecret")}
+                  onClick={() => setShowSecret((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+                >
+                  <Icon name={showSecret ? "visibility_off" : "visibility"} size={16} />
+                </button>
+              </div>
+            </div>
+            <div>
+              <Label className="mb-1.5 block text-[12px] font-medium uppercase tracking-wider text-[var(--text-secondary)]">
+                {t("settings.redirectUrl")}
+              </Label>
+              <Input
+                value={redirectUrl}
+                onChange={(e) => setRedirectUrl(e.target.value)}
+                placeholder="https://orbit.zeeplabs.com/dashboard/api/auth/google/callback"
+              />
+            </div>
+            <div>
+              <Label className="mb-1.5 block text-[12px] font-medium uppercase tracking-wider text-[var(--text-secondary)]">
+                {t("settings.allowedDomains")}
+              </Label>
+              <Input value={allowedDomains} onChange={(e) => setAllowedDomains(e.target.value)} placeholder="zeeplabs.com, zeepfly.com" />
+              <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">{t("settings.domainsHint")}</p>
             </div>
           </div>
-          <div>
-            <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">{t("settings.redirectUrl")}</label>
-            <Input value={redirectUrl} onChange={(e) => setRedirectUrl(e.target.value)}
-              placeholder="https://orbit.zeeplabs.com/dashboard/api/auth/google/callback" className={inputClass} />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">{t("settings.allowedDomains")}</label>
-            <Input value={allowedDomains} onChange={(e) => setAllowedDomains(e.target.value)} placeholder="zeeplabs.com, zeepfly.com" className={inputClass} />
-            <p className="mt-1 text-[11px] text-[#64748B]">{t("settings.domainsHint")}</p>
-          </div>
-        </div>
-      )}
+        )}
 
-      {message && <p className={`mt-4 text-[12px] ${messageType === "success" ? "text-green-400" : "text-red-400"}`}>{message}</p>}
-
-      <Button onClick={handleSave} disabled={saving}
-        className="mt-5 gap-2 rounded-xl border-0 text-white font-semibold disabled:opacity-40"
-        style={{ background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))' }}>
-        {saving ? <><Loader2 size={14} className="animate-spin" /> {t("brand.saving")}</> : <><Save size={14} /> {t("brand.save")}</>}
-      </Button>
-    </div>
-  );
-}
-
-function SoftDeleteCard() {
-  const { t } = useTranslation();
-  const [enabled, setEnabled] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch("/dashboard/api/config/system", { credentials: "include" })
-      .then((r) => r.json())
-      .then((d) => { setEnabled(d.soft_delete_enabled); })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
-
-  const handleSave = async () => {
-    setSaving(true);
-    setMessage(null);
-    try {
-      const res = await fetch("/dashboard/api/config/system", {
-        method: "PUT",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ soft_delete_enabled: enabled }),
-      });
-      if (!res.ok) throw new Error(t("system.error"));
-      setMessage(t("system.saved"));
-    } catch {
-      setMessage(t("system.error"));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (loading) return <p className="text-[13px] text-[#94A3B8]">{t("app.loading")}</p>;
-
-  return (
-    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6 mt-4">
-      <div className="flex items-center justify-between mb-6">
         <div>
-          <span className="text-[15px] font-bold text-[#F8FAFC]">{t("system.softDelete")}</span>
-          <p className="text-[12px] text-[#94A3B8] mt-0.5">{t("system.softDeleteDesc")}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-[12px] text-[#94A3B8]">{t("system.softDeleteEnabled")}</span>
-          <Switch checked={enabled} onCheckedChange={setEnabled} />
+          <Button onClick={handleSave} disabled={saving} className="gap-2">
+            <Icon name="save" size={16} />
+            {saving ? t("brand.saving") : t("brand.save")}
+          </Button>
         </div>
       </div>
-      {message && <p className="text-[12px] text-green-400 mb-4">{message}</p>}
-      <Button onClick={handleSave} disabled={saving}
-        className="gap-2 rounded-xl border-0 text-white font-semibold disabled:opacity-40"
-        style={{ background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))' }}>
-        {saving ? <><Loader2 size={14} className="animate-spin" /> {t("system.saving")}</> : <><Save size={14} /> {t("system.save")}</>}
-      </Button>
-    </div>
+    </ProviderCard>
   );
 }
 
@@ -395,7 +319,6 @@ function GlobalStorageCard() {
   const [bucket, setBucket] = useState("");
   const [accessKeyId, setAccessKeyId] = useState("");
   const [secretAccessKey, setSecretAccessKey] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
   const [currentSoftDelete, setCurrentSoftDelete] = useState(false);
 
   useEffect(() => {
@@ -418,7 +341,6 @@ function GlobalStorageCard() {
 
   const handleSave = async () => {
     setSaving(true);
-    setMessage(null);
     try {
       const body: Record<string, unknown> = { soft_delete_enabled: currentSoftDelete };
       if (enabled && endpoint && region && bucket && accessKeyId) {
@@ -433,51 +355,59 @@ function GlobalStorageCard() {
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error(t("settings.errorSaving"));
-      setMessage(t("settings.savedSuccess"));
-    } catch {
-      setMessage(t("settings.errorSaving"));
+      toast.success(t("settings.savedSuccess"));
+    } catch (err) {
+      toast.error((err as Error).message);
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) return <p className="text-[13px] text-[#94A3B8]">{t("app.loading")}</p>;
+  if (loading) return <p className="text-[13px] text-[var(--text-secondary)]">{t("app.loading")}</p>;
 
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6 mt-4">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <span className="text-[15px] font-bold text-[#F8FAFC]">{t("settings.globalStorage")}</span>
-          <p className="text-[12px] text-[#94A3B8] mt-0.5">{t("settings.globalStorageDesc")}</p>
-        </div>
-        <Switch checked={enabled} onCheckedChange={setEnabled} />
-      </div>
+    <ProviderCard
+      name={t("settings.globalStorage")}
+      icon="hard_drive"
+      description={t("settings.globalStorageDesc")}
+      status={
+        enabled
+          ? { label: t("settings.active"), tone: "success" }
+          : { label: t("settings.inactive"), tone: "neutral" }
+      }
+      defaultOpen
+    >
+      <div className="flex flex-col gap-4">
+        <SettingRow
+          label={t("settings.globalStorage")}
+          control={<Switch checked={enabled} onCheckedChange={setEnabled} />}
+        />
 
-      {enabled && (
-        <div className="flex flex-col gap-4 max-w-lg">
-          <Input value={endpoint} onChange={(e) => setEndpoint(e.target.value)}
-            placeholder="https://s3.amazonaws.com" className="h-10 rounded-md border border-white/[0.10] bg-white/[0.06] text-[13px] text-[#F8FAFC] placeholder:text-[#64748B] outline-none brand-focus w-full" />
-          <div className="flex gap-3">
-            <Input value={region} onChange={(e) => setRegion(e.target.value)}
-              placeholder="Region (us-east-1)" className="h-10 rounded-md border border-white/[0.10] bg-white/[0.06] text-[13px] text-[#F8FAFC] placeholder:text-[#64748B] outline-none brand-focus w-full" />
-            <Input value={bucket} onChange={(e) => setBucket(e.target.value)}
-              placeholder={t("settings.bucketName")} className="h-10 rounded-md border border-white/[0.10] bg-white/[0.06] text-[13px] text-[#F8FAFC] placeholder:text-[#64748B] outline-none brand-focus w-full" />
+        {enabled && (
+          <div className="flex max-w-lg flex-col gap-4">
+            <Input value={endpoint} onChange={(e) => setEndpoint(e.target.value)} placeholder="https://s3.amazonaws.com" />
+            <div className="flex gap-3">
+              <Input value={region} onChange={(e) => setRegion(e.target.value)} placeholder="Region (us-east-1)" />
+              <Input value={bucket} onChange={(e) => setBucket(e.target.value)} placeholder={t("settings.bucketName")} />
+            </div>
+            <Input value={accessKeyId} onChange={(e) => setAccessKeyId(e.target.value)} placeholder={t("settings.accessKeyId")} />
+            <Input
+              type="password"
+              value={secretAccessKey}
+              onChange={(e) => setSecretAccessKey(e.target.value)}
+              placeholder={t("settings.secretAccessKey")}
+              className="font-mono"
+            />
           </div>
-          <Input value={accessKeyId} onChange={(e) => setAccessKeyId(e.target.value)}
-            placeholder={t("settings.accessKeyId")} className="h-10 rounded-md border border-white/[0.10] bg-white/[0.06] text-[13px] text-[#F8FAFC] placeholder:text-[#64748B] outline-none brand-focus w-full" />
-          <Input type="password" value={secretAccessKey} onChange={(e) => setSecretAccessKey(e.target.value)}
-            placeholder={t("settings.secretAccessKey")} className="h-10 rounded-md border border-white/[0.10] bg-white/[0.06] text-[13px] text-[#F8FAFC] placeholder:text-[#64748B] outline-none brand-focus w-full" />
+        )}
+
+        <div>
+          <Button onClick={handleSave} disabled={saving} className="gap-2">
+            <Icon name="save" size={16} />
+            {saving ? t("system.saving") : t("system.save")}
+          </Button>
         </div>
-      )}
-
-      {message && <p className={`mt-4 text-[12px] ${message === t("settings.savedSuccess") ? "text-green-400" : "text-red-400"}`}>{message}</p>}
-
-      <Button onClick={handleSave} disabled={saving}
-        className="mt-5 gap-2 rounded-xl border-0 text-white font-semibold disabled:opacity-40"
-        style={{ background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))' }}>
-        {saving ? <><Loader2 size={14} className="animate-spin" /> {t("system.saving")}</> : <><Save size={14} /> {t("system.save")}</>}
-      </Button>
-    </div>
+      </div>
+    </ProviderCard>
   );
 }
-

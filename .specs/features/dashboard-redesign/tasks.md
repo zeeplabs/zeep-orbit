@@ -78,7 +78,7 @@ Ordem por risco/tráfego. Cada task: substituir markup por composição de níve
 - [x] **T2.4** — `LogsPage` (523 ln).
 - [x] **T2.5** — `UsersPage` (575 ln) — tela de referência de `DataTable` + row-actions.
 - [x] **T2.6** — `AuditLogPage` (292 ln).
-- [ ] **T2.7** — `BrandSettingsPage` (483 ln) — Settings, tabs Branding/Database/Auth/Storage; `SettingRow` + `ProviderCard`.
+- [x] **T2.7** — `BrandSettingsPage` (483 ln) — Settings, tabs Branding/Database/Auth/Storage; `SettingRow` + `ProviderCard`.
 - [ ] **T2.8** — `SdkPage` (184 ln).
 - [ ] **T2.9** — `ChangelogPage` (150 ln).
 - [ ] **T2.10** — `LoginPage` (181 ln) + `OnboardingPage`/`GoogleSetupPage`/`AppOnboardingPage`.

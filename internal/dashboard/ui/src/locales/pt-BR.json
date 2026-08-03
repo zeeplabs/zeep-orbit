@@ -561,5 +561,6 @@
   "logs.colPath": "Rota",
   "logs.colApp": "App",
   "logs.colLatency": "Latência",
-  "logs.colTime": "Hora"
+  "logs.colTime": "Hora",
+  "settings.inactive": "Inativo"
 }

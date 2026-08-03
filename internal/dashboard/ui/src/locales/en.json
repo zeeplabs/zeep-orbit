@@ -560,5 +560,6 @@
   "logs.colPath": "Path",
   "logs.colApp": "App",
   "logs.colLatency": "Latency",
-  "logs.colTime": "Time"
+  "logs.colTime": "Time",
+  "settings.inactive": "Inactive"
 }
