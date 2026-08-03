@@ -687,7 +687,11 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
-	if user.Role != "superadmin" {
+	// dashboard-global-roles T-02: action gate replaces the old `role ==
+	// "superadmin"` inline check. admin can also manage users; the per-role
+	// target restriction (only superadmin can create superadmin) is enforced
+	// separately below by CanCreateUserWithRole.
+	if !HasPlatformPermission(user.Role, ActionManageUsers) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}
@@ -714,8 +718,19 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid email address"})
 		return
 	}
-	if body.Role != "admin" && body.Role != "superadmin" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "role must be 'admin' or 'superadmin'"})
+	// dashboard-global-roles T-01: 4 valid role values now. Anything else is 400.
+	switch body.Role {
+	case "superadmin", "admin", "auditor", "member":
+		// valid
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "role must be one of: superadmin, admin, auditor, member"})
+		return
+	}
+	// dashboard-global-roles T-03: only a superadmin can create another superadmin.
+	// Other restrictions on the target role live in HasPlatformPermission; this
+	// is the only function that decides "can actor X create role=Y?".
+	if !CanCreateUserWithRole(user.Role, body.Role) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only a superadmin can create a superadmin"})
 		return
 	}
 	if len(body.Password) < 8 {
