@@ -18,6 +18,8 @@ import SdkPage from './pages/SdkPage'
 import ChangelogPage from './pages/ChangelogPage'
 import AppUsersPage from './pages/AppUsersPage'
 import DataBrowserPage from './pages/DataBrowserPage'
+import AccessDenied from './pages/AccessDenied'
+import { RequireRole } from './components/patterns/RequireRole'
 import { Toaster } from 'sonner'
 import { useBootstrapStatus } from './lib/api'
 
@@ -110,25 +112,37 @@ function App() {
           <Route path="/apps/:id" element={<AppDetailsPage />} />
           <Route path="/apps/:id/edit" element={<RedirectToAppDetails />} />
           <Route path="/apps/:id/users" element={<AppUsersPage />} />
-          <Route path="/configuracoes" element={<BrandSettingsPage />} />
+          <Route
+            path="/configuracoes"
+            element={<RequireRole allow={['superadmin', 'admin']}><BrandSettingsPage /></RequireRole>}
+          />
           <Route path="/data-browser" element={<DataBrowserPage />} />
-          <Route path="/usuarios" element={<UsersPage />} />
+          <Route
+            path="/usuarios"
+            element={<RequireRole allow={['superadmin', 'admin']}><UsersPage /></RequireRole>}
+          />
           <Route path="/logs" element={<LogsPage />} />
-          <Route path="/auditoria" element={<AuditLogPage />} />
-          <Route path="/integracoes/github" element={<GitHubIntegrationPage />} />
+          <Route
+            path="/auditoria"
+            element={<RequireRole allow={['superadmin', 'auditor']}><AuditLogPage /></RequireRole>}
+          />
+          <Route
+            path="/integracoes/github"
+            element={<RequireRole allow={['superadmin']}><GitHubIntegrationPage /></RequireRole>}
+          />
           <Route path="/sdks" element={<SdkPage />} />
           <Route path="/changelog" element={<ChangelogPage />} />
+          <Route path="/403" element={<AccessDenied />} />
         </Route>
         <Route path="*" element={<Navigate to="/apps" replace />} />
       </Routes>
       <Toaster
         position="bottom-right"
-        theme="dark"
         toastOptions={{
           style: {
-            background: '#1A1A24',
-            border: '1px solid rgba(255,255,255,0.10)',
-            color: '#F8FAFC',
+            background: 'var(--surface-raised)',
+            border: '1px solid var(--border)',
+            color: 'var(--text-primary)',
           },
         }}
       />

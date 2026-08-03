@@ -543,5 +543,11 @@
   "dataBrowser.deleteConfirmMsg": "Are you sure you want to delete this record? This action cannot be undone.",
   "dataBrowser.deleting": "Deleting...",
   "dataBrowser.removeFilter": "Remove filter",
-  "dataBrowser.filters": "Filters"
+  "dataBrowser.filters": "Filters",
+  "nav.more": "More",
+  "theme.dark": "Dark theme",
+  "theme.light": "Light theme",
+  "accessDenied.title": "Access denied",
+  "accessDenied.desc": "You don't have permission to view this page.",
+  "accessDenied.back": "Back to Apps"
 }

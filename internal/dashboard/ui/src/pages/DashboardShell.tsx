@@ -1,182 +1,22 @@
 import { useState, useEffect } from "react";
-import { Navigate, NavLink, Outlet } from "react-router-dom";
-import { motion } from "framer-motion";
+import { Navigate, Outlet } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import {
-  LogOut,
-  Grid,
-  Database,
-  Users,
-  Activity,
-  Shield,
-  Code2,
-  Settings,
-  User,
-  Lock,
-  Megaphone,
-  Link2,
-  Github,
-  ArrowUpCircle,
-} from "lucide-react";
-import ChangePasswordModal from "./ChangePasswordModal";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
+import ChangePasswordModal from "./ChangePasswordModal";
 import { setLanguage } from "../lib/i18n";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import logoType from "@/assets/images/logo/logotype.svg";
+import { Icon } from "@/components/ui/icon";
+import { ConfirmDialog } from "@/components/patterns/ConfirmDialog";
+import { Sidebar } from "@/components/layout/Sidebar";
+import { SidebarFooter } from "@/components/layout/SidebarFooter";
+import { MobileNav } from "@/components/layout/MobileNav";
 import pkg from "../../package.json";
+
 interface User {
   id: string;
   email: string;
   name?: string;
   role: string;
   language?: string;
-}
-
-type NavItem = { icon: typeof Grid; label: string; path: string };
-type NavSection = { title: string; items: NavItem[] };
-
-function navSections(user: User | null, t: (k: string) => string): NavSection[] {
-  const sections: NavSection[] = [
-    {
-      title: t("nav.sectionGeneral"),
-      items: [
-        { icon: Grid, label: t("nav.apps"), path: "/apps" },
-        { icon: Database, label: t("nav.dataBrowser"), path: "/data-browser" },
-      ],
-    },
-    {
-      title: t("nav.sectionDeployment"),
-      items: [
-        { icon: Activity, label: t("nav.logs"), path: "/logs" },
-        { icon: Code2, label: "SDKs", path: "/sdks" },
-      ],
-    },
-  ];
-  if (user?.role === "superadmin") {
-    sections.push({
-      title: t("nav.sectionSuperadmin"),
-      items: [
-        { icon: Users, label: t("nav.users"), path: "/usuarios" },
-        { icon: Shield, label: t("nav.audit"), path: "/auditoria" },
-        { icon: Link2, label: t("nav.integrations"), path: "/integracoes/github" },
-        { icon: Settings, label: t("nav.settings"), path: "/configuracoes" },
-      ],
-    });
-  }
-  return sections;
-}
-
-function navItems(user: User | null, t: (k: string) => string): NavItem[] {
-  return navSections(user, t).flatMap((s) => s.items);
-}
-
-function firstLastName(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length <= 1) return parts[0] || "";
-  return `${parts[0]} ${parts[parts.length - 1]}`;
-}
-
-function BottomBar({
-  items,
-  user,
-  onUserClick,
-}: {
-  items: NavItem[];
-  user: User;
-  onUserClick: () => void;
-}) {
-  const { t } = useTranslation();
-  return (
-    <nav
-      className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around"
-      style={{
-        height: 60,
-        borderTop: "1px solid rgba(255,255,255,0.06)",
-        background: "rgba(10,10,15,0.88)",
-        backdropFilter: "blur(24px)",
-        WebkitBackdropFilter: "blur(24px)",
-        paddingBottom: "env(safe-area-inset-bottom, 0px)",
-      }}
-    >
-      {items.map(({ icon: Icon, label, path }) => (
-        <NavLink
-          key={path}
-          to={path}
-          end={path === "/apps"}
-          className="flex flex-col items-center justify-center flex-1 no-underline"
-          style={({ isActive }) => ({
-            gap: 2,
-            padding: "4px 8px",
-            color: isActive ? "var(--brand-primary)" : "var(--text-muted)",
-            fontSize: 10,
-            fontWeight: isActive ? 600 : 400,
-            transition: "color 0.15s",
-          })}
-        >
-          {({ isActive }) => (
-            <>
-              <Icon size={21} strokeWidth={isActive ? 2 : 1.5} />
-              <span
-                style={{ fontSize: 10, lineHeight: 1, whiteSpace: "nowrap" }}
-              >
-                {label}
-              </span>
-            </>
-          )}
-        </NavLink>
-      ))}
-      <NavLink
-        to="/changelog"
-        className="flex flex-col items-center justify-center flex-1 no-underline"
-        style={({ isActive }) => ({
-          gap: 2,
-          padding: "4px 8px",
-          color: isActive ? "var(--brand-primary)" : "var(--text-muted)",
-          fontSize: 10,
-          fontWeight: isActive ? 600 : 400,
-          transition: "color 0.15s",
-        })}
-      >
-        {({ isActive }) => (
-          <>
-            <Megaphone size={21} strokeWidth={isActive ? 2 : 1.5} />
-            <span style={{ fontSize: 10, lineHeight: 1, whiteSpace: "nowrap" }}>
-              {t("nav.changelog")}
-            </span>
-          </>
-        )}
-      </NavLink>
-      <button
-        onClick={onUserClick}
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 2,
-          padding: "4px 8px",
-          color: "var(--text-muted)",
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          fontSize: 10,
-          fontFamily: "inherit",
-          flex: 1,
-        }}
-      >
-        <User size={21} strokeWidth={1.5} />
-        <span style={{ fontSize: 10, lineHeight: 1 }}>{t("nav.account")}</span>
-      </button>
-    </nav>
-  );
 }
 
 function UpdateAvailableBanner() {
@@ -200,52 +40,17 @@ function UpdateAvailableBanner() {
       target="_blank"
       rel="noopener noreferrer"
       title={t("nav.updateAvailable", { version: data.tag_name })}
+      className="mb-2 flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-[13px] font-medium no-underline transition-colors"
       style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        padding: "9px 12px",
-        borderRadius: 10,
-        border: "1px solid rgba(var(--brand-primary-rgb), 0.25)",
-        background: "rgba(var(--brand-primary-rgb), 0.10)",
-        color: "var(--text)",
-        cursor: "pointer",
-        fontSize: 13,
-        textAlign: "left" as const,
-        width: "100%",
-        fontFamily: "inherit",
-        fontWeight: 500,
-        textDecoration: "none",
-        marginBottom: 8,
-        transition: "background 0.15s",
+        borderColor: "color-mix(in srgb, var(--primary) 25%, transparent)",
+        background: "var(--primary-tint)",
+        color: "var(--text-primary)",
       }}
     >
-      <ArrowUpCircle size={15} strokeWidth={1.5} style={{ flexShrink: 0 }} />
-      <span
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 1,
-          overflow: "hidden",
-          minWidth: 0,
-        }}
-      >
-        <span
-          style={{
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {t("nav.updateAvailableLabel")}
-        </span>
-        <span
-          style={{
-            fontSize: 12,
-            fontWeight: 700,
-            color: "var(--brand-light, var(--text))",
-          }}
-        >
+      <Icon name="upgrade" size={16} />
+      <span className="flex min-w-0 flex-col">
+        <span className="truncate">{t("nav.updateAvailableLabel")}</span>
+        <span className="text-xs font-bold" style={{ color: "var(--primary)" }}>
           {data.tag_name}
         </span>
       </span>
@@ -258,14 +63,13 @@ export default function DashboardShell({ user }: { user: User | null }) {
   const { t, i18n } = useTranslation();
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
-  const [showUserMenu, setShowUserMenu] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
 
   const { data: brandConfig } = useQuery({
     queryKey: ["brand-config"],
     queryFn: async () => {
       const res = await fetch("/dashboard/api/config");
-      return res.json() as Promise<{ theme: string; company_name: string }>;
+      return res.json() as Promise<{ company_name: string }>;
     },
     staleTime: 30000,
   });
@@ -280,7 +84,8 @@ export default function DashboardShell({ user }: { user: User | null }) {
     staleTime: 60000,
   });
 
-  const companyName = brandConfig?.company_name || brandAssets?.company_name || t("app.title");
+  const companyName =
+    brandConfig?.company_name || brandAssets?.company_name || t("app.title");
 
   useEffect(() => {
     if (user?.language && user.language !== i18n.language) {
@@ -297,7 +102,9 @@ export default function DashboardShell({ user }: { user: User | null }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ language: lang }),
       });
-    } catch {}
+    } catch {
+      // persistência é best-effort; idioma já trocou localmente
+    }
   }
 
   if (!user) return <Navigate to="/login" replace />;
@@ -312,484 +119,52 @@ export default function DashboardShell({ user }: { user: User | null }) {
       qc.clear();
       window.location.href = "/dashboard/login";
     } finally {
+      setLoggingOut(false);
     }
   };
 
-  const items = navItems(user, t);
-  const sections = navSections(user, t);
+  const footer = (
+    <SidebarFooter
+      user={user}
+      currentLang={i18n.language}
+      onChangePassword={() => setShowChangePassword(true)}
+      onSaveLanguage={saveLanguage}
+      onLogout={() => setShowLogoutDialog(true)}
+    />
+  );
 
   return (
     <div
-      className="grid grid-cols-[240px_1fr] max-md:grid-cols-1"
-      style={{
-        minHeight: "100vh",
-        background:
-          "radial-gradient(ellipse at 20% 50%, rgba(var(--brand-primary-rgb),0.15) 0%, transparent 50%), radial-gradient(ellipse at 80% 20%, rgba(var(--brand-secondary-rgb),0.15) 0%, transparent 50%), var(--bg)",
-      }}
+      className="grid min-h-screen grid-cols-[240px_1fr] max-md:grid-cols-1"
+      style={{ background: "var(--bg-page)" }}
     >
-      {/* Sidebar — hidden on mobile */}
-      <motion.aside
-        initial={{ x: -20, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
-        transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
-        className="max-md:hidden flex flex-col"
-        style={{
-          position: "sticky",
-          top: 0,
-          height: "100vh",
-          borderRight: "1px solid rgba(255,255,255,0.06)",
-          padding: "24px 12px",
-        }}
-      >
-        {/* Logo */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            padding: "0 8px",
-            marginBottom: 32,
-          }}
-        >
-          <img
-            src={logoType}
-            alt="Zeep Orbit"
-            style={{
-              width: 42,
-              height: 42,
-              borderRadius: 8,
-              border: "1px solid rgba(255,255,255,0.10)",
-              objectFit: "cover",
-            }}
-          />
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span
-              style={{
-                fontSize: 16,
-                fontWeight: 700,
-                lineHeight: 1.3,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {companyName}
-            </span>
-            <p
-              style={{
-                fontSize: 12,
-                fontWeight: 400,
-                lineHeight: 1,
-                color: "var(--text-muted)",
-              }}
-            >
-              {t("app.subtitle")}
-            </p>
-          </div>
-        </div>
+      <Sidebar companyName={companyName} banner={<UpdateAvailableBanner />} footer={footer} />
 
-        {/* Nav */}
-        <nav
-          style={{ flex: 1, display: "flex", flexDirection: "column", gap: 14 }}
-        >
-          {sections.map((section) => (
-            <div key={section.title} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 600,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                  color: "var(--text-muted)",
-                  padding: "0 12px",
-                  marginBottom: 4,
-                  opacity: 0.6,
-                }}
-              >
-                {section.title}
-              </span>
-              {section.items.map(({ icon: Icon, label, path }) => (
-                <NavLink
-                  key={path}
-                  to={path}
-                  end={path === "/apps"}
-                  style={({ isActive }) => ({
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    padding: "9px 12px",
-                    borderRadius: 10,
-                    border: "none",
-                    background: isActive
-                      ? "rgba(var(--brand-primary-rgb), 0.12)"
-                      : "transparent",
-                    color: isActive ? "var(--text)" : "var(--text-muted)",
-                    cursor: "pointer",
-                    fontSize: 14,
-                    textAlign: "left",
-                    width: "100%",
-                    fontFamily: "inherit",
-                    fontWeight: isActive ? 600 : 400,
-                    position: "relative",
-                    textDecoration: "none",
-                    transition: "background 0.15s, color 0.15s",
-                  })}
-                >
-                  {({ isActive }) => (
-                    <>
-                      {isActive && (
-                        <motion.div
-                          layoutId="nav-active-indicator"
-                          style={{
-                            position: "absolute",
-                            left: 0,
-                            top: "20%",
-                            bottom: "20%",
-                            width: 3,
-                            borderRadius: 2,
-                            background: "var(--accent)",
-                          }}
-                          transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
-                        />
-                      )}
-                      <Icon size={15} strokeWidth={1.5} />
-                      {label}
-                    </>
-                  )}
-                </NavLink>
-              ))}
-            </div>
-          ))}
-        </nav>
-
-        <UpdateAvailableBanner />
-
-        {/* Changelog */}
-        <NavLink
-          to="/changelog"
-          style={({ isActive }) => ({
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            padding: "9px 12px",
-            borderRadius: 10,
-            border: "none",
-            background: isActive
-              ? "rgba(var(--brand-primary-rgb), 0.12)"
-              : "transparent",
-            color: isActive ? "var(--text)" : "var(--text-muted)",
-            cursor: "pointer",
-            fontSize: 14,
-            textAlign: "left" as const,
-            width: "100%",
-            fontFamily: "inherit",
-            fontWeight: isActive ? 600 : 400,
-            position: "relative" as const,
-            textDecoration: "none",
-            transition: "background 0.15s, color 0.15s",
-            marginBottom: 12,
-          })}
-        >
-          {({ isActive }) => (
-            <>
-              {isActive && (
-                <motion.div
-                  layoutId="nav-active-indicator"
-                  style={{
-                    position: "absolute",
-                    left: 0,
-                    top: "20%",
-                    bottom: "20%",
-                    width: 3,
-                    borderRadius: 2,
-                    background: "var(--accent)",
-                  }}
-                  transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
-                />
-              )}
-              <Megaphone size={15} strokeWidth={1.5} />
-              {t("nav.changelog")}
-            </>
-          )}
-        </NavLink>
-
-        {/* User */}
-        <div
-          style={{
-            borderTop: "1px solid rgba(255,255,255,0.06)",
-            paddingTop: 14,
-          }}
-        >
-          <div style={{ padding: "0 8px", marginBottom: 10, textAlign: "center" }}>
-            <p
-              style={{
-                fontSize: 13,
-                fontWeight: 600,
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              {(user as any).name ? firstLastName((user as any).name) : user.email}
-            </p>
-            <p
-              style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}
-            >
-              {user.role}
-            </p>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, paddingBottom: 12 }}>
-            <a
-              href="https://github.com/zeeplabs/zeep-orbit"
-              target="_blank"
-              rel="noopener noreferrer"
-              title="GitHub"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 34,
-                height: 34,
-                borderRadius: 10,
-                border: "1px solid var(--border)",
-                background: "rgba(255,255,255,0.04)",
-                color: "var(--text-muted)",
-                cursor: "pointer",
-                textDecoration: "none",
-                transition: "color 0.15s, background 0.15s",
-              }}
-            >
-              <Github size={14} strokeWidth={1.5} />
-            </a>
-            <button
-              onClick={() => setShowChangePassword(true)}
-              title={t("nav.changePassword")}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 34,
-                height: 34,
-                borderRadius: 10,
-                border: "1px solid var(--border)",
-                background: "rgba(255,255,255,0.04)",
-                color: "var(--text-muted)",
-                cursor: "pointer",
-                transition: "color 0.15s, background 0.15s",
-              }}
-            >
-              <Lock size={14} strokeWidth={1.5} />
-            </button>
-            <button
-              onClick={() => saveLanguage(i18n.language === "pt-BR" ? "en" : "pt-BR")}
-              title={i18n.language === "pt-BR" ? t("language.ptBR") : t("language.en")}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 34,
-                height: 34,
-                borderRadius: 10,
-                border: "1px solid var(--border)",
-                background: "rgba(255,255,255,0.04)",
-                cursor: "pointer",
-                fontSize: 15,
-                lineHeight: 1,
-                transition: "background 0.15s",
-              }}
-            >
-              {i18n.language === "pt-BR" ? "🇧🇷" : "🇺🇸"}
-            </button>
-            <button
-              onClick={() => setShowLogoutDialog(true)}
-              title={t("nav.logout")}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: 34,
-                height: 34,
-                borderRadius: 10,
-                border: "1px solid var(--border)",
-                background: "rgba(255,255,255,0.04)",
-                color: "var(--text-muted)",
-                cursor: "pointer",
-                transition: "color 0.15s, background 0.15s",
-              }}
-            >
-              <LogOut size={14} strokeWidth={1.5} />
-            </button>
-          </div>
-        </div>
-
-        <p className="text-[11px] text-white/15 text-center pb-3">
-          <a href="https://zeeplabs.com.br" target="_blank" rel="noopener noreferrer" className="text-white/15 hover:text-white transition-colors">Zeep Labs</a> - v{pkg.version}
-        </p>
-      </motion.aside>
-
-      {/* Main content */}
-      <main
-        className="max-md:pb-[65px]"
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          minHeight: "100vh",
-        }}
-      >
-        <div
-          className="max-md:px-4 max-md:py-4"
-          style={{ width: "100%", padding: 40, minWidth: 0 }}
-        >
+      <main className="flex min-h-screen justify-center max-md:pb-[65px]">
+        <div className="w-full min-w-0 p-10 max-md:px-4 max-md:py-4">
           <Outlet />
         </div>
       </main>
 
-      {/* Mobile bottom bar */}
-      <BottomBar
-        items={items}
+      <MobileNav
         user={user}
-        onUserClick={() => setShowUserMenu((prev) => !prev)}
+        currentLang={i18n.language}
+        onChangePassword={() => setShowChangePassword(true)}
+        onSaveLanguage={saveLanguage}
+        onLogout={() => setShowLogoutDialog(true)}
       />
 
-      {/* Mobile user menu popover */}
-      {showUserMenu && (
-        <>
-          <div
-            onClick={() => setShowUserMenu(false)}
-            style={{ position: "fixed", inset: 0, zIndex: 51 }}
-          />
-          <div
-            style={{
-              position: "fixed",
-              bottom: 72,
-              right: 16,
-              zIndex: 52,
-              background: "rgba(20,20,28,0.95)",
-              backdropFilter: "blur(20px)",
-              WebkitBackdropFilter: "blur(20px)",
-              border: "1px solid rgba(255,255,255,0.10)",
-              borderRadius: 16,
-              padding: "16px 0",
-              minWidth: 200,
-              boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-            }}
-          >
-            <div style={{ padding: "0 16px", marginBottom: 12 }}>
-              <p style={{ fontSize: 14, fontWeight: 600 }}>{(user as any).name || user.email}</p>
-              <p
-                style={{
-                  fontSize: 12,
-                  color: "var(--text-muted)",
-                  marginTop: 2,
-                }}
-              >
-                {user.role}
-              </p>
-            </div>
-            <div
-              style={{
-                borderTop: "1px solid rgba(255,255,255,0.06)",
-                paddingTop: 8,
-              }}
-            >
-              <button
-                onClick={() => {
-                  setShowUserMenu(false);
-                  setShowChangePassword(true);
-                }}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "10px 16px",
-                  width: "100%",
-                  border: "none",
-                  background: "transparent",
-                  color: "var(--text-muted)",
-                  fontSize: 14,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                }}
-              >
-                <Lock size={16} strokeWidth={1.5} /> {t("nav.changePassword")}
-              </button>
-              <button
-                onClick={() => {
-                  setShowUserMenu(false);
-                  setShowLogoutDialog(true);
-                }}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "10px 16px",
-                  width: "100%",
-                  border: "none",
-                  background: "transparent",
-                  color: "var(--text-muted)",
-                  fontSize: 14,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                }}
-              >
-                <LogOut size={16} strokeWidth={1.5} /> {t("nav.logout")}
-              </button>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* Logout confirmation dialog */}
-      <Dialog
+      <ConfirmDialog
         open={showLogoutDialog}
-        onOpenChange={(open) => {
-          if (!open) setShowLogoutDialog(false);
-        }}
-      >
-        <DialogContent
-          className="max-w-[380px] border border-white/[0.10] bg-[#0D0D14]/60 backdrop-blur-xl rounded-2xl p-0 gap-0"
-          style={{ boxShadow: "0 0 40px rgba(var(--brand-primary-rgb), 0.10)" }}
-        >
-          <div className="bg-white/[0.04] shadow-[inset_0_1px_1px_rgba(255,255,255,0.10)] rounded-[calc(1rem-2px)] px-7 pb-6 pt-7">
-            <DialogHeader className="mb-0">
-              <div className="w-11 h-11 rounded-xl bg-white/[0.08] border border-white/[0.10] flex items-center justify-center mb-[18px]">
-                <LogOut
-                  size={18}
-                  strokeWidth={1.5}
-                  className="text-[#94A3B8]"
-                />
-              </div>
-              <DialogTitle className="text-base font-bold text-[#F8FAFC] mb-2">
-                {t("nav.logoutConfirm")}
-              </DialogTitle>
-              <DialogDescription className="text-[13px] text-[#94A3B8] leading-relaxed mb-6">
-                {t("nav.logoutDesc")}
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter className="flex flex-row gap-2.5 sm:flex-row sm:justify-start sm:space-x-0">
-              <Button
-                variant="outline"
-                onClick={() => setShowLogoutDialog(false)}
-                disabled={loggingOut}
-                className="flex-1 rounded-xl border-white/[0.10] bg-white/[0.06] text-[#94A3B8] hover:bg-white/[0.10] hover:text-[#F8FAFC] font-medium"
-              >
-                {t("nav.logoutCancel")}
-              </Button>
-              <Button
-                onClick={handleLogout}
-                disabled={loggingOut}
-                className="flex-1 rounded-xl border-0 text-white font-semibold disabled:opacity-40"
-                style={{
-                  background:
-                    "linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))",
-                }}
-              >
-                {loggingOut ? t("nav.loggingOut") : t("nav.logoutConfirmBtn")}
-              </Button>
-            </DialogFooter>
-          </div>
-        </DialogContent>
-      </Dialog>
+        title={t("nav.logoutConfirm")}
+        message={t("nav.logoutDesc")}
+        confirmLabel={loggingOut ? t("nav.loggingOut") : t("nav.logoutConfirmBtn")}
+        cancelLabel={t("nav.logoutCancel")}
+        icon="logout"
+        loading={loggingOut}
+        onConfirm={handleLogout}
+        onCancel={() => setShowLogoutDialog(false)}
+      />
 
       <ChangePasswordModal
         open={showChangePassword}

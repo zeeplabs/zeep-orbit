@@ -58,11 +58,11 @@ Legenda status: ☐ pending · ◐ in progress · ☑ done
 
 ## Fase 1.5 — Shell + navegação
 
-- [ ] **T15.1** — `AppShell` (grid sidebar+conteúdo) + `Sidebar` nova, itens de nav envoltos em `RoleGate` (omite, não desabilita). `[DRD-20, DRD-21, DRD-24]`
-- [ ] **T15.2** — `SidebarFooter`: `ThemeToggle` + `LanguageToggle` + logout com `ConfirmDialog`. `[DRD-20]`
-- [ ] **T15.3** — Rota `/403` (acesso negado genérico) + guard de rota para navegação direta a tela bloqueada. `[DRD-22]`
-- [ ] **T15.4** — `MobileTabBar` (Apps/Data/Logs) + `MobileMoreSheet` (bottom-sheet com resto da nav + footer). Alternar shell por viewport. `[DRD-23]`
-- [ ] **T15.5** — Migrar `DashboardShell.tsx` legado para o novo `AppShell`, preservando leitura de role da sessão; remover switcher client-side de role da renderização de produção. `[DRD-24]`
+- [x] **T15.1** — `AppShell` (grid sidebar+conteúdo) + `Sidebar` nova, itens de nav envoltos em `RoleGate` (omite, não desabilita). `[DRD-20, DRD-21, DRD-24]`
+- [x] **T15.2** — `SidebarFooter`: `ThemeToggle` + `LanguageToggle` + logout com `ConfirmDialog`. `[DRD-20]`
+- [x] **T15.3** — Rota `/403` (acesso negado genérico) + guard de rota para navegação direta a tela bloqueada. `[DRD-22]`
+- [x] **T15.4** — `MobileTabBar` (Apps/Data/Logs) + `MobileMoreSheet` (bottom-sheet com resto da nav + footer). Alternar shell por viewport. `[DRD-23]`
+- [x] **T15.5** — Migrar `DashboardShell.tsx` legado para o novo `AppShell`, preservando leitura de role da sessão; remover switcher client-side de role da renderização de produção. `[DRD-24]`
 
 **Checkpoint Fase 1.5**: cada papel omite os itens corretos; `/403` cobre URL bloqueada; mobile mostra tab bar + more sheet; toggles de tema/idioma/logout funcionam.
 

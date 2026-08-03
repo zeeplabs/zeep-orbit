@@ -431,7 +431,6 @@
   "frontendApps.deployRetry": "Retry deploy",
   "frontendApps.saveDomain": "Salvar",
   "frontendApps.dnsHint": "Configuração DNS: adicione este registro CNAME no seu provedor de DNS:",
-  "github.deployConfig": "Configuração de Deploy (Render)",
   "github.deployNone": "Sem config de deploy",
   "apps.typeModalTitle": "Que tipo de app você quer criar?",
   "apps.typeModalDesc": "Escolha o tipo que melhor atende sua necessidade.",
@@ -545,5 +544,11 @@
   "dataBrowser.deleteConfirmMsg": "Tem certeza que deseja excluir este registro? Esta ação não pode ser desfeita.",
   "dataBrowser.deleting": "Excluindo...",
   "dataBrowser.removeFilter": "Remover filtro",
-  "dataBrowser.filters": "Filtros"
+  "dataBrowser.filters": "Filtros",
+  "nav.more": "Mais",
+  "theme.dark": "Tema escuro",
+  "theme.light": "Tema claro",
+  "accessDenied.title": "Acesso negado",
+  "accessDenied.desc": "Você não tem permissão para ver esta página.",
+  "accessDenied.back": "Voltar para Apps"
 }
