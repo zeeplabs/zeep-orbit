@@ -98,6 +98,7 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/myapp/tasks
 | **Data Browser**        | GUI to browse, filter, edit, export CSV, delete rows     |
 | **User Management**     | Manage dashboard users and app users                     |
 | **Role-based access**   | 4 platform roles (superadmin/admin/auditor/member) with a permission matrix for UI and backend |
+| **Per-app roles**       | 3 per-app roles (admin/editor/viewer) with membership management UI; ≥1 admin invariant enforced via transaction |
 | **Audit Logs**          | Action history with filters (who did what, when, IP)     |
 | **CORS**                | Cross-origin support for SPAs and mobile apps            |
 | **OpenAPI Docs**        | Auto-generated Swagger UI per app                        |
@@ -183,6 +184,7 @@ The web dashboard is embedded in the binary and accessible at `/dashboard`:
 - **Data Browser** — browse, filter, sort, edit inline, delete, and export CSV
 - **Users** — manage dashboard users (superadmin/admin/auditor/member roles)
 - **App Users** — view users registered in each app, deactivate accounts, reset sessions
+- **Members** — per-app membership management (admin/editor/viewer roles); the "Members" tab in each app's details page lets admins add, change role, and remove members; the ≥1 admin invariant prevents removing the last admin
 - **Integrations** — GitHub App config, deploy templates, Render deploy provider
 - **Logs** — real-time request log with metrics breakdown
 - **Audit** — action history with user, action type, resource, IP, and pagination

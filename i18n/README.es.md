@@ -96,6 +96,7 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/miapp/tareas
 | **Data Browser**        | GUI para navegar, filtrar, editar, exportar CSV, eliminar filas |
 | **Gestión de usuarios** | Administra usuarios del dashboard y usuarios de cada app |
 | **Acceso por rol**      | 4 roles de plataforma (superadmin/admin/auditor/member) con matriz de permisos para UI y backend |
+| **Roles por app**        | 3 roles por app (admin/editor/viewer) con UI de gestión de miembros; invariante ≥1 admin aplicado via transacción |
 | **Audit Logs**          | Historial de acciones con filtros (quién, qué, cuándo, IP) |
 | **CORS**                | Soporte cross-origin para SPAs y apps móviles            |
 | **Documentación OpenAPI** | Swagger UI auto-generado por app                       |
@@ -181,6 +182,7 @@ El dashboard web está embebido en el binario y es accesible en `/dashboard`:
 - **Data Browser** — navega, filtra, ordena, edita en línea, elimina y exporta a CSV
 - **Usuarios** — administra usuarios del dashboard (roles superadmin/admin/auditor/member)
 - **Usuarios de App** — visualiza usuarios registrados en cada app, desactiva cuentas, reinicia sesiones
+- **Miembros** — gestión de miembros por app (roles admin/editor/viewer); la pestaña "Miembros" en la página de detalles de la app permite al admin añadir, cambiar rol y eliminar miembros; el invariante ≥1 admin impide eliminar al último admin
 - **Integraciones** — configuración de GitHub App, plantillas de deploy, proveedor de deploy Render
 - **Logs** — log de requests en tiempo real con desglose de métricas
 - **Auditoría** — historial de acciones con usuario, tipo de acción, recurso, IP y paginación

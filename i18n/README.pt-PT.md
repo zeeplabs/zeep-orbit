@@ -96,6 +96,7 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/aminhaapp/tarefas
 | **Data Browser**        | GUI para navegar, filtrar, editar, exportar CSV e eliminar registos |
 | **Gestão de Utilizadores** | Gerir utilizadores do dashboard e utilizadores de cada app |
 | **Acesso por função**     | 4 funções de plataforma (superadmin/admin/auditor/member) com matriz de permissões para UI e backend |
+| **Funções por aplicação** | 3 funções por aplicação (admin/editor/viewer) com UI de gestão de membros; invariante ≥1 admin aplicado via transação |
 | **Audit Logs**          | Histórico de ações com filtros (quem fez o quê, quando, IP) |
 | **CORS**                | Suporte cross-origin para SPAs e apps móveis             |
 | **Documentação OpenAPI** | Swagger UI gerado automaticamente por aplicação          |
@@ -181,6 +182,7 @@ O dashboard web está embutido no binário e é acessível em `/dashboard`:
 - **Data Browser** — navegue, filtre, ordene, edite em linha, elimine e exporte para CSV
 - **Utilizadores** — gestão de utilizadores do dashboard (funções superadmin/admin/auditor/member)
 - **Utilizadores da Aplicação** — visualize utilizadores registados em cada aplicação, desative contas, reinicie sessões
+- **Membros** — gestão de membros por aplicação (funções admin/editor/viewer); o separador "Membros" na página de detalhes da aplicação permite ao admin adicionar, alterar função e remover membros; o invariante ≥1 admin impede remover o último admin
 - **Integrações** — configuração da GitHub App, templates de deploy, fornecedor de deploy Render
 - **Logs** — registo de pedidos em tempo real com detalhe de métricas
 - **Auditoria** — histórico de ações com utilizador, tipo de ação, recurso, IP e paginação

@@ -96,6 +96,7 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/meu-app/tarefas
 | **Data Browser**         | Navegar, filtrar, ordenar, editar, exportar CSV, excluir |
 | **Gestão de Usuários**   | Gerencie usuários do dashboard e usuários dos apps      |
 | **Acesso por papel**     | 4 papéis de plataforma (superadmin/admin/auditor/member) com matriz de permissão para UI e backend |
+| **Papéis por app**       | 3 papéis por app (admin/editor/viewer) com UI de gestão de membros; invariante ≥1 admin enforced via transação |
 | **Audit Log**            | Histórico de ações com filtros (quem fez o quê, quando)  |
 | **CORS**                 | Suporte cross-origin para SPAs e apps mobile             |
 | **Docs OpenAPI**         | Swagger UI gerado automaticamente por app                |
@@ -181,6 +182,7 @@ O dashboard web é embarcado no binário e acessível em `/dashboard`:
 - **Data Browser** — navegue, filtre, ordene, edite inline, exclua e exporte CSV
 - **Usuários** — gerencie usuários do dashboard (papéis superadmin/admin/auditor/member)
 - **App Users** — veja usuários cadastrados em cada app, desative contas, resete sessões
+- **Membros** — gestão de membros por app (papéis admin/editor/viewer); a aba "Membros" na página de detalhes do app permite ao admin adicionar, mudar papel e remover membros; o invariante ≥1 admin impede remover o último admin
 - **Integrações** — config do GitHub App, templates de deploy, provider Render
 - **Logs** — log de requisições em tempo real com métricas
 - **Auditoria** — histórico de ações com usuário, tipo, recurso, IP e paginação
