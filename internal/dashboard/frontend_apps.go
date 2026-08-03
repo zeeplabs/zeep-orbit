@@ -55,7 +55,7 @@ func (h *FrontendAppsHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	apps, err := ListFrontendApps(r.Context(), h.pool, user.ID, user.Role)
+	apps, err := ListFrontendApps(r.Context(), h.pool, user)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 		return
@@ -77,7 +77,7 @@ func (h *FrontendAppsHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app, err := GetFrontendApp(r.Context(), h.pool, id, user.ID, user.Role)
+	app, _, err := GetFrontendApp(r.Context(), h.pool, id, user)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
@@ -225,9 +225,13 @@ func (h *FrontendAppsHandler) Retry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app, err := GetFrontendApp(r.Context(), h.pool, id, user.ID, user.Role)
+	app, role, err := GetFrontendApp(r.Context(), h.pool, id, user)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	if !role.CanManage() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}
 
@@ -304,13 +308,17 @@ func (h *FrontendAppsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app, err := GetFrontendApp(r.Context(), h.pool, id, user.ID, user.Role)
+	app, role, err := GetFrontendApp(r.Context(), h.pool, id, user)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
+	if !role.CanManage() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
 
-	if err := ArchiveFrontendApp(r.Context(), h.pool, id, user.ID, user.Role); err != nil {
+	if err := ArchiveFrontendApp(r.Context(), h.pool, id, user); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 		return
 	}
@@ -366,11 +374,17 @@ func (h *FrontendAppsHandler) SyncStatus(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
-	_ = user
 
 	id := chi.URLParam(r, "id")
 	if id == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		return
+	}
+
+	// Read access — any member can see the sync status. The role is discarded;
+	// we just need the existence check that GetFrontendApp provides.
+	if _, _, err := GetFrontendApp(r.Context(), h.pool, id, user); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
 
@@ -397,6 +411,18 @@ func (h *FrontendAppsHandler) RevealKey(w http.ResponseWriter, r *http.Request) 
 	id := chi.URLParam(r, "id")
 	if id == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id required"})
+		return
+	}
+
+	// RevealKey exposes the private deploy key — admin only. Resolve the role
+	// before touching the credential so non-admins get 403, not 404.
+	_, role, err := GetFrontendApp(r.Context(), h.pool, id, user)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	if !role.CanManage() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}
 
@@ -442,9 +468,13 @@ func (h *FrontendAppsHandler) SyncRetry(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	app, err := GetFrontendApp(r.Context(), h.pool, id, user.ID, user.Role)
+	app, role, err := GetFrontendApp(r.Context(), h.pool, id, user)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	if !role.CanManage() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}
 
@@ -486,9 +516,13 @@ func (h *FrontendAppsHandler) SyncRegenerate(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	app, err := GetFrontendApp(r.Context(), h.pool, id, user.ID, user.Role)
+	app, role, err := GetFrontendApp(r.Context(), h.pool, id, user)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	if !role.CanManage() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}
 
@@ -647,9 +681,13 @@ func (h *FrontendAppsHandler) DeployRetry(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	app, err := GetFrontendApp(r.Context(), h.pool, id, user.ID, user.Role)
+	app, role, err := GetFrontendApp(r.Context(), h.pool, id, user)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	if !role.CanManage() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}
 
@@ -680,7 +718,7 @@ func (h *FrontendAppsHandler) DeployRetry(w http.ResponseWriter, r *http.Request
 	meta, _ := json.Marshal(map[string]string{"frontend_app_id": id})
 	h.audit(r.Context(), user.ID, user.Email, "frontend_app.deploy.retry", "frontend_app", app.ID, app.Name, meta, r.RemoteAddr)
 
-	updated, _ := GetFrontendApp(r.Context(), h.pool, id, user.ID, user.Role)
+	updated, _, _ := GetFrontendApp(r.Context(), h.pool, id, user)
 	if updated != nil {
 		writeJSON(w, http.StatusOK, updated)
 	} else {
@@ -712,9 +750,13 @@ func (h *FrontendAppsHandler) SetCustomDomain(w http.ResponseWriter, r *http.Req
 
 	subdomain := strings.TrimSpace(body.Subdomain)
 
-	app, err := GetFrontendApp(r.Context(), h.pool, id, user.ID, user.Role)
+	app, role, err := GetFrontendApp(r.Context(), h.pool, id, user)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	if !role.CanManage() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}
 

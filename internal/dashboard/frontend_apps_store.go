@@ -103,53 +103,58 @@ func CreateFrontendApp(ctx context.Context, pool *db.Pool, input FrontendAppInpu
 	return &a, nil
 }
 
-func GetFrontendApp(ctx context.Context, pool *db.Pool, id, userID, role string) (*FrontendApp, error) {
-	var a FrontendApp
-	var err error
-
-	if role == "superadmin" {
-		err = scanApp(&a,
-			pool.QueryRow(ctx,
-				`SELECT fa.id, fa.name, fa.slug, fa.template_id,
-				 COALESCE(gt.name, ''), fa.github_repo_url, fa.status,
-				 fa.error_message, fa.created_by, fa.created_at, fa.archived_at,
-				 `+faExtraColsSelect+`
-				 FROM zeep_system.frontend_apps fa
-				 LEFT JOIN zeep_system.github_templates gt ON gt.id = fa.template_id
-				 LEFT JOIN zeep_system.dashboard_users u ON u.id = fa.owner_id
-				 WHERE fa.id = $1 AND fa.archived_at IS NULL`,
-				id,
-			))
-	} else {
-		err = scanApp(&a,
-			pool.QueryRow(ctx,
-				`SELECT fa.id, fa.name, fa.slug, fa.template_id,
-				 COALESCE(gt.name, ''), fa.github_repo_url, fa.status,
-				 fa.error_message, fa.created_by, fa.created_at, fa.archived_at,
-				 `+faExtraColsSelect+`
-				 FROM zeep_system.frontend_apps fa
-				 LEFT JOIN zeep_system.github_templates gt ON gt.id = fa.template_id
-				 LEFT JOIN zeep_system.dashboard_users u ON u.id = fa.owner_id
-				 WHERE fa.id = $1 AND fa.archived_at IS NULL AND fa.owner_id = $2`,
-				id, userID,
-			))
+// Returns the frontend app plus the user's role on it. ErrNotFound is returned
+// both when the app doesn't exist (including archived — archived apps are
+// invisible to everyone per spec T-05) and when the user has no access.
+// "Doesn't exist for you" is the security-sensitive default.
+func GetFrontendApp(ctx context.Context, pool *db.Pool, id string, user *DashboardUser) (*FrontendApp, AppRole, error) {
+	role, err := ResolveAppRole(ctx, pool, user, AppRef{FrontendAppID: id})
+	if err != nil {
+		if errors.Is(err, ErrInvalidAppRef) {
+			return nil, "", ErrNotFound
+		}
+		return nil, "", err
 	}
+	if !role.Effective() {
+		return nil, "", ErrNotFound
+	}
+
+	var a FrontendApp
+	err = scanApp(&a,
+		pool.QueryRow(ctx,
+			`SELECT fa.id, fa.name, fa.slug, fa.template_id,
+			 COALESCE(gt.name, ''), fa.github_repo_url, fa.status,
+			 fa.error_message, fa.created_by, fa.created_at, fa.archived_at,
+			 `+faExtraColsSelect+`
+			 FROM zeep_system.frontend_apps fa
+			 LEFT JOIN zeep_system.github_templates gt ON gt.id = fa.template_id
+			 LEFT JOIN zeep_system.dashboard_users u ON u.id = fa.owner_id
+			 WHERE fa.id = $1 AND fa.archived_at IS NULL`,
+			id,
+		))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
+			return nil, "", ErrNotFound
 		}
-		return nil, fmt.Errorf("dashboard: get frontend app: %w", err)
+		return nil, "", fmt.Errorf("dashboard: get frontend app: %w", err)
 	}
-	return &a, nil
+	return &a, role, nil
 }
 
-func ListFrontendApps(ctx context.Context, pool *db.Pool, userID, role string) ([]FrontendApp, error) {
+// superadmin or CanReadAnyApp (admin/auditor global) → all non-archived apps.
+// Members → only apps in app_members for this user. Archived apps are always
+// invisible (the spec for T-05).
+func ListFrontendApps(ctx context.Context, pool *db.Pool, user *DashboardUser) ([]FrontendApp, error) {
+	if user == nil {
+		return nil, errors.New("dashboard: ListFrontendApps called with nil user")
+	}
+
 	var (
 		rows pgx.Rows
 		err  error
 	)
 
-	if role == "superadmin" {
+	if user.Role == "superadmin" || CanReadAnyApp(user.Role) {
 		rows, err = pool.Query(ctx,
 			`SELECT fa.id, fa.name, fa.slug, fa.template_id,
 			 COALESCE(gt.name, ''), fa.github_repo_url, fa.status,
@@ -170,9 +175,10 @@ func ListFrontendApps(ctx context.Context, pool *db.Pool, userID, role string) (
 			 FROM zeep_system.frontend_apps fa
 			 LEFT JOIN zeep_system.github_templates gt ON gt.id = fa.template_id
 			 LEFT JOIN zeep_system.dashboard_users u ON u.id = fa.owner_id
-			 WHERE fa.archived_at IS NULL AND fa.owner_id = $1
+			 INNER JOIN zeep_system.app_members m ON m.frontend_app_id = fa.id AND m.user_id = $1
+			 WHERE fa.archived_at IS NULL
 			 ORDER BY fa.created_at DESC`,
-			userID,
+			user.ID,
 		)
 	}
 	if err != nil {
@@ -257,22 +263,17 @@ func UpdateFrontendAppDomain(ctx context.Context, pool *db.Pool, id, customDomai
 	return nil
 }
 
-func ArchiveFrontendApp(ctx context.Context, pool *db.Pool, id, userID, role string) error {
-	if role != "superadmin" {
-		var ownerID string
-		err := pool.QueryRow(ctx,
-			`SELECT COALESCE(owner_id::text, '') FROM zeep_system.frontend_apps
-			 WHERE id = $1 AND archived_at IS NULL`, id,
-		).Scan(&ownerID)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return ErrNotFound
-			}
-			return fmt.Errorf("dashboard: archive frontend app check: %w", err)
-		}
-		if ownerID != userID {
-			return ErrNotFound
-		}
+// Requires CanManage() — admin only. Returns ErrForbidden if the user can see
+// the app but cannot archive it; ErrNotFound if the app doesn't exist (or is
+// already archived — archived apps are invisible per spec T-05) or the user
+// has no access at all.
+func ArchiveFrontendApp(ctx context.Context, pool *db.Pool, id string, user *DashboardUser) error {
+	role, err := ResolveAppRole(ctx, pool, user, AppRef{FrontendAppID: id})
+	if err != nil {
+		return err
+	}
+	if !role.CanManage() {
+		return ErrForbidden
 	}
 
 	tag, err := pool.Exec(ctx,
