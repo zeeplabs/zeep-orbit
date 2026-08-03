@@ -552,5 +552,7 @@
   "accessDenied.back": "Back to Apps",
   "users.colUser": "User",
   "users.colRole": "Role",
-  "users.colCreated": "Created"
+  "users.colCreated": "Created",
+  "common.previous": "Previous",
+  "common.next": "Next"
 }

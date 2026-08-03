@@ -553,5 +553,7 @@
   "accessDenied.back": "Voltar para Apps",
   "users.colUser": "Usuário",
   "users.colRole": "Papel",
-  "users.colCreated": "Criado em"
+  "users.colCreated": "Criado em",
+  "common.previous": "Anterior",
+  "common.next": "Próximo"
 }
