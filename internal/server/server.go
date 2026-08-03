@@ -228,6 +228,20 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Post("/api/frontend-apps/{id}/sync/regenerate", frontendAppsH.SyncRegenerate)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/frontend-apps/{id}/deploy/retry", frontendAppsH.DeployRetry)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/frontend-apps/{id}/custom-domain", frontendAppsH.SetCustomDomain)
+		// Member management API (T-06 of rbac-per-app). Four handlers
+		// (`dashH.ListAppMembers`, `dashH.AddAppMember`,
+		// `dashH.UpdateAppMember`, `dashH.RemoveAppMember`) are mounted
+		// at both /api/apps/{id}/members and
+		// /api/frontend-apps/{id}/members — the handler determines the
+		// axis from the request URL path.
+		r.With(dashboard.RequireAuth(pool)).Get("/api/apps/{id}/members", dashH.ListAppMembers)
+		r.With(dashboard.RequireAuth(pool)).Post("/api/apps/{id}/members", dashH.AddAppMember)
+		r.With(dashboard.RequireAuth(pool)).Patch("/api/apps/{id}/members/{userId}", dashH.UpdateAppMember)
+		r.With(dashboard.RequireAuth(pool)).Delete("/api/apps/{id}/members/{userId}", dashH.RemoveAppMember)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/frontend-apps/{id}/members", dashH.ListAppMembers)
+		r.With(dashboard.RequireAuth(pool)).Post("/api/frontend-apps/{id}/members", dashH.AddAppMember)
+		r.With(dashboard.RequireAuth(pool)).Patch("/api/frontend-apps/{id}/members/{userId}", dashH.UpdateAppMember)
+		r.With(dashboard.RequireAuth(pool)).Delete("/api/frontend-apps/{id}/members/{userId}", dashH.RemoveAppMember)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/deploy-provider/status", deployProviderH.Status)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/deploy-provider/config", deployProviderH.UpsertConfig)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/deploy-provider/config", deployProviderH.UpdateFields)
