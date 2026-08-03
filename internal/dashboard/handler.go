@@ -821,7 +821,7 @@ func (h *Handler) ListApps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	apps, err := ListApps(r.Context(), h.pool, user.ID, user.Role)
+	apps, err := ListApps(r.Context(), h.pool, user)
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
@@ -923,7 +923,7 @@ func (h *Handler) GetApp(w http.ResponseWriter, r *http.Request) {
 
 	appID := chi.URLParam(r, "id")
 
-	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	app, _, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -957,7 +957,24 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app, err := UpdateApp(r.Context(), h.pool, appID, user.ID, user.Role, body.AuthEmailEnabled)
+	// App config (auth_providers / storage_config / rate_limit_config) is
+	// management-level — only admin can change it. Editor has CanWrite but
+	// not CanManage, so they're blocked here even though they can edit tables.
+	_, role, err := GetApp(r.Context(), h.pool, appID, user)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+	if !role.CanManage() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+
+	app, err := UpdateApp(r.Context(), h.pool, appID, user, body.AuthEmailEnabled)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -1024,7 +1041,7 @@ func (h *Handler) DeleteApp(w http.ResponseWriter, r *http.Request) {
 
 	appID := chi.URLParam(r, "id")
 
-	existing, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	existing, _, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -1034,7 +1051,7 @@ func (h *Handler) DeleteApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := DeleteApp(r.Context(), h.pool, appID, user.ID, user.Role); err != nil {
+	if err := DeleteApp(r.Context(), h.pool, appID, user); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 			return
@@ -1060,13 +1077,17 @@ func (h *Handler) CreateAppTable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appID := chi.URLParam(r, "id")
-	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	app, role, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 			return
 		}
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+	if !role.CanWrite() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}
 
@@ -1104,7 +1125,7 @@ func (h *Handler) CreateAppTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	updated, _, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
@@ -1126,7 +1147,7 @@ func (h *Handler) UpdateAppTable(w http.ResponseWriter, r *http.Request) {
 
 	appID := chi.URLParam(r, "id")
 	tableID := chi.URLParam(r, "tableId")
-	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	app, _, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -1188,7 +1209,7 @@ func (h *Handler) UpdateAppTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	updated, _, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
@@ -1211,7 +1232,7 @@ func (h *Handler) DeleteAppTable(w http.ResponseWriter, r *http.Request) {
 
 	appID := chi.URLParam(r, "id")
 	tableID := chi.URLParam(r, "tableId")
-	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	app, _, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -1236,7 +1257,7 @@ func (h *Handler) DeleteAppTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	updated, _, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
@@ -1527,7 +1548,7 @@ func (h *Handler) ListLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
+	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user)
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
@@ -1559,7 +1580,7 @@ func (h *Handler) LogsMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
+	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user)
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
@@ -1594,7 +1615,7 @@ func (h *Handler) ListDataBrowserApps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
+	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user)
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
@@ -1644,7 +1665,7 @@ func (h *Handler) DataBrowserQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
+	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user)
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
@@ -1738,7 +1759,7 @@ func (h *Handler) DataBrowserExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
+	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user)
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
@@ -1876,7 +1897,7 @@ func (h *Handler) DataBrowserCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ownership, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
+	ownership, err := ListOwnedAppNames(r.Context(), h.pool, user)
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
@@ -1938,7 +1959,7 @@ func (h *Handler) DataBrowserUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ownership, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
+	ownership, err := ListOwnedAppNames(r.Context(), h.pool, user)
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
@@ -1998,7 +2019,7 @@ func (h *Handler) DataBrowserDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ownership, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
+	ownership, err := ListOwnedAppNames(r.Context(), h.pool, user)
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
@@ -2050,7 +2071,7 @@ func (h *Handler) ListAppUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appID := chi.URLParam(r, "id")
-	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	app, _, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "app not found"})
@@ -2104,7 +2125,7 @@ func (h *Handler) DeactivateAppUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appID := chi.URLParam(r, "id")
-	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	app, _, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "app not found"})
 		return
@@ -2135,7 +2156,7 @@ func (h *Handler) ActivateAppUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appID := chi.URLParam(r, "id")
-	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	app, _, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "app not found"})
 		return
@@ -2166,7 +2187,7 @@ func (h *Handler) ResetAppUserSessions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appID := chi.URLParam(r, "id")
-	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	app, _, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "app not found"})
 		return
@@ -2257,7 +2278,7 @@ func (h *Handler) ListAppTokens(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appID := chi.URLParam(r, "id")
-	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	app, _, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
@@ -2283,7 +2304,7 @@ func (h *Handler) CreateAppToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appID := chi.URLParam(r, "id")
-	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	app, _, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
@@ -2353,7 +2374,7 @@ func (h *Handler) RevokeAppToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appID := chi.URLParam(r, "id")
-	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	app, _, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
@@ -2382,7 +2403,7 @@ func (h *Handler) RegenerateAppSecret(w http.ResponseWriter, r *http.Request) {
 
 	appID := chi.URLParam(r, "id")
 
-	if _, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role); err != nil {
+	if _, _, err := GetApp(r.Context(), h.pool, appID, user); err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
@@ -2410,7 +2431,7 @@ func (h *Handler) RegenerateAppSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	appRow, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	appRow, _, err := GetApp(r.Context(), h.pool, appID, user)
 	if err == nil {
 		h.reg.Register(appRowToRegistryApp(appRow))
 	}
@@ -2427,9 +2448,13 @@ func (h *Handler) GetAppSecret(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appID := chi.URLParam(r, "id")
-	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	app, role, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	if !role.CanManage() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}
 

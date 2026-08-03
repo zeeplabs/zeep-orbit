@@ -13,6 +13,11 @@ import (
 // ErrNotFound is returned when a record is not found.
 var ErrNotFound = errors.New("not found")
 
+// ErrForbidden is returned when the caller has no permission to perform the
+// action. The record may exist; the store layer is telling the caller "you
+// can't touch this." Handlers map this to HTTP 403.
+var ErrForbidden = errors.New("forbidden")
+
 // DashboardUser represents a row in zeep_system.dashboard_users.
 type DashboardUser struct {
 	ID           string    `json:"id"`
