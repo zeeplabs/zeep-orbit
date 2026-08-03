@@ -94,7 +94,8 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/meu-app/tarefas
 | ------------------------ | -------------------------------------------------------- |
 | **Web Dashboard**        | Interface dark premium para gerenciar tudo              |
 | **Data Browser**         | Navegar, filtrar, ordenar, editar, exportar CSV, excluir |
-| **Gestão de Usuários**   | Gerencie admins do dashboard e usuários dos apps         |
+| **Gestão de Usuários**   | Gerencie usuários do dashboard e usuários dos apps      |
+| **Acesso por papel**     | 4 papéis de plataforma (superadmin/admin/auditor/member) com matriz de permissão para UI e backend |
 | **Audit Log**            | Histórico de ações com filtros (quem fez o quê, quando)  |
 | **CORS**                 | Suporte cross-origin para SPAs e apps mobile             |
 | **Docs OpenAPI**         | Swagger UI gerado automaticamente por app                |
@@ -178,7 +179,7 @@ O dashboard web é embarcado no binário e acessível em `/dashboard`:
 
 - **Apps** — crie apps backend (banco + API) ou frontend (repositório GitHub + deploy)
 - **Data Browser** — navegue, filtre, ordene, edite inline, exclua e exporte CSV
-- **Usuários** — gerencie admins do dashboard (papéis superadmin/admin)
+- **Usuários** — gerencie usuários do dashboard (papéis superadmin/admin/auditor/member)
 - **App Users** — veja usuários cadastrados em cada app, desative contas, resete sessões
 - **Integrações** — config do GitHub App, templates de deploy, provider Render
 - **Logs** — log de requisições em tempo real com métricas
