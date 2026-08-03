@@ -107,7 +107,9 @@ func rbacTestPool(t *testing.T) *db.Pool {
 	}
 
 	// Roda o provisioner real — ele cria tudo: dashboard_users, apps,
-	// app_ownership, app_members (com indices + CHECK), frontend_apps, etc.
+	// app_members (com indices + CHECK), frontend_apps, etc.
+	// T-08 dropa a tabela pré-rbac `app_ownership` (co-owners foram
+	// migrados em T-02 para `app_members`).
 	if err := ProvisionZeepSystem(ctx, pool); err != nil {
 		pool.Close()
 		t.Fatalf("ProvisionZeepSystem: %v", err)

@@ -133,19 +133,22 @@ func TestOwnershipMigration(t *testing.T) {
 	// rbacTestPool já rodou o ProvisionZeepSystem uma vez (com dados vazios,
 	// então o INSERT...SELECT de T-02 não populou nada). Agora inserimos
 	// dados de fixture e rodamos o provisioner de novo — é nessa segunda
-	// passada que os 3 INSERTs de T-02 vão popular app_members.
+	// passada que os INSERTs de T-02 vão popular app_members.
+	//
+	// rbac-per-app T-08: the third migration source (pre-rbac `app_ownership`
+	// co-owners) no longer exists — that table is dropped by the provisioner
+	// itself. So this test now covers the two remaining sources: `apps.owner_id`
+	// and `frontend_apps.created_by` (resolved by email).
 
-	// Users: owner (backend), co-owner, frontend creator resolvível, e
-	// ninguém para o frontend app órfão.
+	// Users: owner (backend), frontend creator resolvível, e ninguém para
+	// o frontend app órfão.
 	const (
 		ownerID    = "00000000-0000-0000-0000-00000000b001"
-		coownerID  = "00000000-0000-0000-0000-00000000b002"
 		creatorID  = "00000000-0000-0000-0000-00000000b003"
 		noUserMail = "deleted@example.com" // frontend app com created_by = este email; não existe em dashboard_users
 	)
 	for _, u := range []struct{ id, email, role string }{
 		{ownerID, "owner-mig@example.com", "member"},
-		{coownerID, "coowner-mig@example.com", "member"},
 		{creatorID, "creator-mig@example.com", "member"},
 	} {
 		if _, err := pool.Exec(ctx,
@@ -161,13 +164,6 @@ func TestOwnershipMigration(t *testing.T) {
 		`INSERT INTO zeep_system.apps (name, owner_id) VALUES ('mig-app', $1) RETURNING id`,
 		ownerID).Scan(&backendID); err != nil {
 		t.Fatalf("seed backend: %v", err)
-	}
-
-	// Co-owner via app_ownership.
-	if _, err := pool.Exec(ctx,
-		`INSERT INTO zeep_system.app_ownership (user_id, app_id) VALUES ($1, $2)`,
-		coownerID, backendID); err != nil {
-		t.Fatalf("seed app_ownership: %v", err)
 	}
 
 	// 2 frontend apps: 1 com creator resolvível, 1 com email órfão.
@@ -203,15 +199,16 @@ func TestOwnershipMigration(t *testing.T) {
 	}
 
 	// Roda o provisioner de novo — é aqui que os INSERTs de T-02 populam
-	// app_members a partir de apps.owner_id, app_ownership e
-	// frontend_apps.created_by resolvido.
+	// app_members a partir de apps.owner_id e frontend_apps.created_by
+	// resolvido. T-08 também dropa `app_ownership` aqui.
 	if err := ProvisionZeepSystem(ctx, pool); err != nil {
 		t.Fatalf("second ProvisionZeepSystem: %v", err)
 	}
 
-	// Esperado:
+	// Esperado (T-08: o co-owner via `app_ownership` não é mais migrado
+	// porque a tabela não existe mais — o backend app tem só 1 admin,
+	// que é o owner):
 	//   - owner → admin do backend
-	//   - co-owner → admin do backend
 	//   - creator → admin do frontend resolvido
 	//   - frontend órfão → sem admin (preservado, superadmin pode entrar)
 	cases := []struct {
@@ -221,7 +218,6 @@ func TestOwnershipMigration(t *testing.T) {
 		wantUsers []string
 	}{
 		{"owner do backend", backendID, false, []string{ownerID}},
-		{"co-owner do backend", backendID, false, []string{coownerID}},
 		{"creator do frontend resolvido", frontendResolvedID, true, []string{creatorID}},
 	}
 	for _, c := range cases {
@@ -246,9 +242,9 @@ func TestOwnershipMigration(t *testing.T) {
 		})
 	}
 
-	// Backend app deve ter 2 admins (owner + co-owner).
-	if n, err := CountAppAdmins(ctx, pool, AppRef{BackendAppID: backendID}); err != nil || n != 2 {
-		t.Errorf("CountAppAdmins(backend após migração) = %d, %v; want 2, nil", n, err)
+	// Backend app deve ter 1 admin (owner) — co-owner removido em T-08.
+	if n, err := CountAppAdmins(ctx, pool, AppRef{BackendAppID: backendID}); err != nil || n != 1 {
+		t.Errorf("CountAppAdmins(backend após migração) = %d, %v; want 1, nil", n, err)
 	}
 	// Frontend resolvido: 1 admin.
 	if n, err := CountAppAdmins(ctx, pool, AppRef{FrontendAppID: frontendResolvedID}); err != nil || n != 1 {
@@ -263,21 +259,23 @@ func TestOwnershipMigration(t *testing.T) {
 	if err := ProvisionZeepSystem(ctx, pool); err != nil {
 		t.Fatalf("third ProvisionZeepSystem: %v", err)
 	}
-	if n, err := CountAppAdmins(ctx, pool, AppRef{BackendAppID: backendID}); err != nil || n != 2 {
-		t.Errorf("após segunda migração: CountAppAdmins(backend) = %d, %v; want 2, nil (não pode duplicar)", n, err)
+	if n, err := CountAppAdmins(ctx, pool, AppRef{BackendAppID: backendID}); err != nil || n != 1 {
+		t.Errorf("após segunda migração: CountAppAdmins(backend) = %d, %v; want 1, nil (não pode duplicar)", n, err)
 	}
 	if n, err := CountAppAdmins(ctx, pool, AppRef{FrontendAppID: frontendResolvedID}); err != nil || n != 1 {
 		t.Errorf("após segunda migração: CountAppAdmins(frontend resolvido) = %d, %v; want 1, nil (não pode duplicar)", n, err)
 	}
 
-	// app_ownership NÃO foi removida (T-08 faz isso) — deve continuar existindo.
+	// T-08: `app_ownership` foi removida pelo provisioner. Confirmar
+	// que não existe mais — se um futuro commit reintroduzir a tabela,
+	// este teste quebra como um guard rail.
 	var stillExists bool
 	if err := pool.QueryRow(ctx,
 		`SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'zeep_system' AND table_name = 'app_ownership')`,
 	).Scan(&stillExists); err != nil {
 		t.Fatalf("check app_ownership exists: %v", err)
 	}
-	if !stillExists {
-		t.Error("app_ownership deveria continuar existindo até T-08")
+	if stillExists {
+		t.Error("app_ownership deveria ter sido removida em T-08; se você está vendo isso, alguém reintroduziu a tabela sem remover a guarda")
 	}
 }
