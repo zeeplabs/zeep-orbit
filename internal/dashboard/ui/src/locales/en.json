@@ -549,5 +549,8 @@
   "theme.light": "Light theme",
   "accessDenied.title": "Access denied",
   "accessDenied.desc": "You don't have permission to view this page.",
-  "accessDenied.back": "Back to Apps"
+  "accessDenied.back": "Back to Apps",
+  "users.colUser": "User",
+  "users.colRole": "Role",
+  "users.colCreated": "Created"
 }

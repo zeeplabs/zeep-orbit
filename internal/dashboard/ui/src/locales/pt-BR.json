@@ -550,5 +550,8 @@
   "theme.light": "Tema claro",
   "accessDenied.title": "Acesso negado",
   "accessDenied.desc": "Você não tem permissão para ver esta página.",
-  "accessDenied.back": "Voltar para Apps"
+  "accessDenied.back": "Voltar para Apps",
+  "users.colUser": "Usuário",
+  "users.colRole": "Papel",
+  "users.colCreated": "Criado em"
 }
