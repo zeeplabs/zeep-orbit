@@ -147,6 +147,8 @@
   "users.role": "Permissão",
   "users.roleAdmin": "Admin",
   "users.roleSuperadmin": "Superadmin",
+  "users.roleAuditor": "Auditor",
+  "users.roleMember": "Member",
   "users.cancel": "Cancelar",
   "users.createBtn": "Criar",
   "users.creating": "Criando...",
