@@ -184,6 +184,39 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 		)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_frontend_apps_slug
 		 ON zeep_system.frontend_apps (slug) WHERE archived_at IS NULL`,
+		// rbac-per-app T-01: unified per-app membership. One row per (user, app)
+		// with role admin/editor/viewer. The `app_ownership` table created
+		// earlier is the pre-existing co-ownership mechanism; it is kept as a
+		// fallback through T-08 of rbac-per-app and dropped only after
+		// enforcement is 100% on `ResolveAppRole`. From T-04 onward this table
+		// is the source of truth for "can this user act on this app?".
+		//
+		// Schema notes:
+		//   - Exactly one of backend_app_id / frontend_app_id is set (CHECK).
+		//   - UNIQUE is partial per axis (WHERE backend_app_id IS NOT NULL /
+		//     WHERE frontend_app_id IS NOT NULL) so the same user can be admin
+		//     of a backend app and viewer of a frontend app without conflict.
+		//   - ON DELETE CASCADE on user_id cleans up membership when a
+		//     dashboard user is deleted (spec edge case).
+		//   - Created after both `apps` AND `frontend_apps` exist (the FK to
+		//     frontend_apps would fail otherwise — see the move in the
+		//     provisioner ordering).
+		`CREATE TABLE IF NOT EXISTS zeep_system.app_members (
+			id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+			backend_app_id  UUID        REFERENCES zeep_system.apps(id)          ON DELETE CASCADE,
+			frontend_app_id UUID        REFERENCES zeep_system.frontend_apps(id) ON DELETE CASCADE,
+			user_id         UUID        NOT NULL REFERENCES zeep_system.dashboard_users(id) ON DELETE CASCADE,
+			role            TEXT        NOT NULL CHECK (role IN ('admin', 'editor', 'viewer')),
+			created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+			CHECK ((backend_app_id IS NOT NULL AND frontend_app_id IS NULL)
+			    OR (backend_app_id IS NULL     AND frontend_app_id IS NOT NULL))
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_app_members_backend_unique
+		 ON zeep_system.app_members(backend_app_id, user_id) WHERE backend_app_id IS NOT NULL`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_app_members_frontend_unique
+		 ON zeep_system.app_members(frontend_app_id, user_id) WHERE frontend_app_id IS NOT NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_app_members_user
+		 ON zeep_system.app_members(user_id)`,
 		`CREATE TABLE IF NOT EXISTS zeep_system.frontend_app_sync_credentials (
 			id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			frontend_app_id        UUID NOT NULL UNIQUE REFERENCES zeep_system.frontend_apps(id),
