@@ -16,7 +16,32 @@ const TABS = [
   { value: "database", icon: "database", labelKey: "settings.tabDatabase" },
   { value: "auth", icon: "public", labelKey: "settings.tabAuth" },
   { value: "storage", icon: "hard_drive", labelKey: "settings.tabStorage" },
+  { value: "license", icon: "workspace_premium", labelKey: "settings.tabLicense" },
 ] as const;
+
+// Disabled roadmap control: handoff shows it, backend not built yet (D-DT08 pattern).
+function SoonRow({ label, description }: { label: string; description: string }) {
+  const { t } = useTranslation();
+  return (
+    <div className="opacity-60" title={t("apps.soon")}>
+      <SettingRow
+        label={
+          <span className="flex items-center gap-2">
+            {label}
+            <span
+              className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
+              style={{ background: "var(--accent-tint)", color: "var(--accent)" }}
+            >
+              {t("apps.soon")}
+            </span>
+          </span>
+        }
+        description={description}
+        control={<Switch checked={false} disabled />}
+      />
+    </div>
+  );
+}
 
 export default function BrandSettingsPage() {
   const { t } = useTranslation();
@@ -29,7 +54,7 @@ export default function BrandSettingsPage() {
 
   return (
     <>
-      <PageHeader title={t("brand.title")} subtitle={t("brand.subtitle")} />
+      <PageHeader title={t("settings.pageTitle")} subtitle={t("settings.pageSubtitle")} />
 
       <Tabs value={tab} onValueChange={setTab} className="w-full">
         <TabsList className="mb-6 h-auto w-full justify-start gap-1 overflow-x-auto rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-1.5">
@@ -55,6 +80,9 @@ export default function BrandSettingsPage() {
         </TabsContent>
         <TabsContent value="storage" className="mt-0">
           <GlobalStorageCard />
+        </TabsContent>
+        <TabsContent value="license" className="mt-0">
+          <LicenseTab />
         </TabsContent>
       </Tabs>
     </>
@@ -153,6 +181,9 @@ function SoftDeleteCard() {
         control={<Switch checked={enabled} onCheckedChange={setEnabled} />}
       />
       <div className="mt-4 border-t border-[var(--border)] pt-4">
+        <SoonRow label={t("settings.requireApproval")} description={t("settings.requireApprovalDesc")} />
+      </div>
+      <div className="mt-4 border-t border-[var(--border)] pt-4">
         <Button onClick={handleSave} disabled={saving} className="gap-2">
           <Icon name="save" size={16} />
           {saving ? t("system.saving") : t("system.save")}
@@ -227,17 +258,21 @@ function GoogleAuthProviderCard() {
   if (loading) return <p className="text-[13px] text-[var(--text-secondary)]">{t("app.loading")}</p>;
 
   return (
-    <ProviderCard
-      name="Google"
-      icon="public"
-      description={t("settings.googleDesc")}
-      status={
-        enabled
-          ? { label: t("settings.active"), tone: "success" }
-          : { label: t("settings.inactive"), tone: "neutral" }
-      }
-      defaultOpen
-    >
+    <div className="flex flex-col gap-4">
+      <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-5">
+        <SoonRow label={t("settings.require2fa")} description={t("settings.require2faDesc")} />
+      </div>
+      <ProviderCard
+        name="Google"
+        icon="public"
+        description={t("settings.googleDesc")}
+        status={
+          enabled
+            ? { label: t("settings.active"), tone: "success" }
+            : { label: t("settings.inactive"), tone: "neutral" }
+        }
+        defaultOpen
+      >
       <div className="flex flex-col gap-4">
         <SettingRow
           label={t("settings.active")}
@@ -305,7 +340,8 @@ function GoogleAuthProviderCard() {
           </Button>
         </div>
       </div>
-    </ProviderCard>
+      </ProviderCard>
+    </div>
   );
 }
 
@@ -409,5 +445,35 @@ function GlobalStorageCard() {
         </div>
       </div>
     </ProviderCard>
+  );
+}
+
+function LicenseTab() {
+  const { t } = useTranslation();
+  return (
+    <div className="flex items-start gap-3 rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-5">
+      <div
+        className="flex size-9 shrink-0 items-center justify-center rounded-[10px]"
+        style={{ background: "var(--accent-tint)", color: "var(--accent)" }}
+      >
+        <Icon name="workspace_premium" size={18} />
+      </div>
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-[14px] font-semibold text-[var(--text-primary)]">
+            {t("settings.licenseSoonTitle")}
+          </span>
+          <span
+            className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
+            style={{ background: "var(--accent-tint)", color: "var(--accent)" }}
+          >
+            {t("apps.soon")}
+          </span>
+        </div>
+        <p className="mt-1 text-[13px] text-[var(--text-secondary)]">
+          {t("settings.licenseSoonDesc")}
+        </p>
+      </div>
+    </div>
   );
 }

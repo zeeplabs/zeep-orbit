@@ -2,7 +2,7 @@ import { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
 interface SettingRowProps {
-  label: string
+  label: ReactNode
   description?: ReactNode
   /** Controle à direita (Switch, Select, Input, Button...). */
   control?: ReactNode
