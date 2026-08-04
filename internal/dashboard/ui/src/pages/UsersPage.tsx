@@ -218,6 +218,19 @@ export default function UsersPage() {
       render: (u) => <RoleBadge role={u.role} />,
     },
     {
+      key: "signIn",
+      header: t("users.colSignIn"),
+      render: (u) => {
+        const isGoogle = u.sign_in === "google";
+        return (
+          <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--text-secondary)]">
+            <Icon name={isGoogle ? "account_circle" : "mail"} size={13} />
+            {isGoogle ? t("users.signInGoogle") : t("users.signInEmail")}
+          </span>
+        );
+      },
+    },
+    {
       key: "created",
       header: t("users.colCreated"),
       render: (u) => (

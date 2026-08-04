@@ -192,6 +192,8 @@ export interface UserDef {
   name?: string
   role: string
   created_at: string
+  /** Derived sign-in method: "google" when the account is linked to Google, "email" otherwise. */
+  sign_in?: string
 }
 
 export interface CreateUserInput {

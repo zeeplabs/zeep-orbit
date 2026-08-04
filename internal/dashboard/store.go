@@ -28,6 +28,10 @@ type DashboardUser struct {
 	Role         string    `json:"role"`
 	Language     string    `json:"language,omitempty"`
 	CreatedAt    time.Time `json:"created_at"`
+	// SignIn is the derived sign-in method ("google" when the account is
+	// linked to a Google identity, "email" otherwise). Not a stored column;
+	// populated by list/read queries so the dashboard can show a SIGN-IN column.
+	SignIn string `json:"sign_in,omitempty"`
 }
 
 // GetUserByEmail fetches a dashboard user by email.
@@ -161,7 +165,7 @@ func BootstrapFirstSuperadmin(ctx context.Context, pool *db.Pool, email, name, p
 // ListUsers returns all dashboard users (password hash excluded from results).
 func ListUsers(ctx context.Context, pool *db.Pool) ([]*DashboardUser, error) {
 	rows, err := pool.Query(ctx,
-		`SELECT id, email, COALESCE(name, ''), role, COALESCE(language, 'en'), created_at
+		`SELECT id, email, COALESCE(name, ''), role, COALESCE(language, 'en'), created_at, COALESCE(google_id, '')
 		 FROM zeep_system.dashboard_users
 		 ORDER BY created_at DESC`,
 	)
@@ -173,12 +177,22 @@ func ListUsers(ctx context.Context, pool *db.Pool) ([]*DashboardUser, error) {
 	var users []*DashboardUser
 	for rows.Next() {
 		var u DashboardUser
-		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Language, &u.CreatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Language, &u.CreatedAt, &u.GoogleID); err != nil {
 			return nil, fmt.Errorf("dashboard: list users scan: %w", err)
 		}
+		u.SignIn = signInMethod(u.GoogleID)
 		users = append(users, &u)
 	}
 	return users, nil
+}
+
+// signInMethod derives the sign-in method shown in the dashboard from the
+// presence of a linked Google identity.
+func signInMethod(googleID string) string {
+	if googleID != "" {
+		return "google"
+	}
+	return "email"
 }
 
 // GetUser fetches a dashboard user by ID (without password hash).

@@ -384,7 +384,7 @@ export default function DataBrowserPage() {
                 </Button>
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExport} disabled={isExporting}>
                   <Icon name={isExporting ? "progress_activity" : "download"} size={15} className={isExporting ? "animate-spin" : undefined} />
-                  CSV
+                  {t("dataBrowser.exportCsv")}
                 </Button>
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={handleRefresh} disabled={isRefreshing || queryFetching}>
                   <Icon name="refresh" size={15} className={isRefreshing || queryFetching ? "animate-spin" : undefined} />
