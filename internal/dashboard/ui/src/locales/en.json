@@ -283,6 +283,8 @@
   "settings.require2faDesc": "Dashboard users without 2FA are prompted to set it up before continuing.",
   "settings.requireApproval": "Require schema-change approval",
   "settings.requireApprovalDesc": "Table and column changes wait for another Admin to approve before applying.",
+  "settings.maxCsvExportRows": "Max rows per CSV export",
+  "settings.maxCsvExportRowsHint": "The Data Browser CSV export stops after this many rows.",
   "settings.saved": "Saved!",
   "settings.error": "Error saving",
   "settings.preview": "Preview",

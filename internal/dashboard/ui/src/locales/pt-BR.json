@@ -283,6 +283,8 @@
   "settings.require2faDesc": "Usuários do dashboard sem 2FA são solicitados a configurá-lo antes de continuar.",
   "settings.requireApproval": "Exigir aprovação de mudança de schema",
   "settings.requireApprovalDesc": "Mudanças de tabela e coluna aguardam aprovação de outro Admin antes de aplicar.",
+  "settings.maxCsvExportRows": "Máximo de linhas por exportação CSV",
+  "settings.maxCsvExportRowsHint": "A exportação CSV do Data Browser para após esse número de linhas.",
   "settings.saved": "Salvo!",
   "settings.error": "Erro ao salvar",
   "settings.preview": "Prévia",

@@ -143,6 +143,7 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
 		`ALTER TABLE zeep_system.system_config ADD COLUMN IF NOT EXISTS storage_config JSONB NOT NULL DEFAULT '{}'`,
+		`ALTER TABLE zeep_system.system_config ADD COLUMN IF NOT EXISTS max_csv_export_rows INT NOT NULL DEFAULT 10000`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_system_config_singleton
 		 ON zeep_system.system_config ((TRUE))`,
 		`INSERT INTO zeep_system.system_config (soft_delete_enabled)

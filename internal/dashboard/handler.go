@@ -400,15 +400,19 @@ func (h *Handler) UpdateSystemConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)
-	var body struct {
-		SoftDeleteEnabled bool                 `json:"soft_delete_enabled"`
-		StorageConfig     *GlobalStorageConfig `json:"storage_config,omitempty"`
-	}
-	if !h.decodeJSONBody(w, r, &body) {
+	var patch systemConfigPatch
+	if !h.decodeJSONBody(w, r, &patch) {
 		return
 	}
 
-	cfg, err := UpsertSystemConfig(r.Context(), h.pool, body.SoftDeleteEnabled, body.StorageConfig)
+	current, err := GetSystemConfig(r.Context(), h.pool)
+	if err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "failed to load system config", err)
+		return
+	}
+	merged := mergeSystemConfig(*current, patch)
+
+	cfg, err := UpsertSystemConfig(r.Context(), h.pool, &merged)
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "failed to update system config", err)
 		return
@@ -1781,7 +1785,10 @@ func (h *Handler) DataBrowserExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	const exportLimit = 10000
+	exportLimit := 10000
+	if sysCfg, cfgErr := GetSystemConfig(r.Context(), h.pool); cfgErr == nil && sysCfg.MaxCSVExportRows > 0 {
+		exportLimit = sysCfg.MaxCSVExportRows
+	}
 	params := make(map[string]string)
 	params["limit"] = strconv.Itoa(exportLimit)
 	params["offset"] = "0"

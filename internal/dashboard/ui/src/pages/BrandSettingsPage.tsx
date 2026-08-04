@@ -144,11 +144,15 @@ function SoftDeleteCard() {
   const [enabled, setEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [maxCsvRows, setMaxCsvRows] = useState(10000);
 
   useEffect(() => {
     fetch("/dashboard/api/config/system", { credentials: "include" })
       .then((r) => r.json())
-      .then((d) => setEnabled(d.soft_delete_enabled))
+      .then((d) => {
+        setEnabled(d.soft_delete_enabled);
+        setMaxCsvRows(d.max_csv_export_rows ?? 10000);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -160,7 +164,7 @@ function SoftDeleteCard() {
         method: "PUT",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ soft_delete_enabled: enabled }),
+        body: JSON.stringify({ soft_delete_enabled: enabled, max_csv_export_rows: maxCsvRows }),
       });
       if (!res.ok) throw new Error(t("system.error"));
       toast.success(t("system.saved"));
@@ -182,6 +186,19 @@ function SoftDeleteCard() {
       />
       <div className="mt-4 border-t border-[var(--border)] pt-4">
         <SoonRow label={t("settings.requireApproval")} description={t("settings.requireApprovalDesc")} />
+      </div>
+      <div className="mt-4 border-t border-[var(--border)] pt-4">
+        <Label className="text-[13px] font-semibold text-[var(--text-secondary)]">
+          {t("settings.maxCsvExportRows")}
+        </Label>
+        <Input
+          type="number"
+          min={1}
+          value={maxCsvRows}
+          onChange={(e) => setMaxCsvRows(Math.max(1, Number(e.target.value) || 1))}
+          className="mt-2 max-w-[200px]"
+        />
+        <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">{t("settings.maxCsvExportRowsHint")}</p>
       </div>
       <div className="mt-4 border-t border-[var(--border)] pt-4">
         <Button onClick={handleSave} disabled={saving} className="gap-2">
