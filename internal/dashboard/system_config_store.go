@@ -17,16 +17,18 @@ type GlobalStorageConfig struct {
 }
 
 type SystemConfig struct {
-	SoftDeleteEnabled bool                 `json:"soft_delete_enabled"`
-	StorageConfig     *GlobalStorageConfig `json:"storage_config,omitempty"`
-	MaxCSVExportRows  int                  `json:"max_csv_export_rows"`
+	SoftDeleteEnabled  bool                 `json:"soft_delete_enabled"`
+	StorageConfig      *GlobalStorageConfig `json:"storage_config,omitempty"`
+	MaxCSVExportRows   int                  `json:"max_csv_export_rows"`
+	StatementTimeoutMs int                  `json:"statement_timeout_ms"`
 }
 
 // systemConfigPatch is a partial update: a nil field means "leave unchanged".
 type systemConfigPatch struct {
-	SoftDeleteEnabled *bool                `json:"soft_delete_enabled,omitempty"`
-	StorageConfig     *GlobalStorageConfig `json:"storage_config,omitempty"`
-	MaxCSVExportRows  *int                 `json:"max_csv_export_rows,omitempty"`
+	SoftDeleteEnabled  *bool                `json:"soft_delete_enabled,omitempty"`
+	StorageConfig      *GlobalStorageConfig `json:"storage_config,omitempty"`
+	MaxCSVExportRows   *int                 `json:"max_csv_export_rows,omitempty"`
+	StatementTimeoutMs *int                 `json:"statement_timeout_ms,omitempty"`
 }
 
 // mergeSystemConfig overlays only the fields present in the patch onto the
@@ -41,6 +43,9 @@ func mergeSystemConfig(cur SystemConfig, patch systemConfigPatch) SystemConfig {
 	if patch.MaxCSVExportRows != nil {
 		cur.MaxCSVExportRows = *patch.MaxCSVExportRows
 	}
+	if patch.StatementTimeoutMs != nil {
+		cur.StatementTimeoutMs = *patch.StatementTimeoutMs
+	}
 	return cur
 }
 
@@ -48,9 +53,9 @@ func GetSystemConfig(ctx context.Context, pool *db.Pool) (*SystemConfig, error) 
 	var cfg SystemConfig
 	var rawStorage []byte
 	err := pool.QueryRow(ctx,
-		`SELECT soft_delete_enabled, storage_config, COALESCE(max_csv_export_rows, 10000)
+		`SELECT soft_delete_enabled, storage_config, COALESCE(max_csv_export_rows, 10000), COALESCE(statement_timeout_ms, 30000)
 		 FROM zeep_system.system_config LIMIT 1`,
-	).Scan(&cfg.SoftDeleteEnabled, &rawStorage, &cfg.MaxCSVExportRows)
+	).Scan(&cfg.SoftDeleteEnabled, &rawStorage, &cfg.MaxCSVExportRows, &cfg.StatementTimeoutMs)
 	if err != nil {
 		return &SystemConfig{}, nil
 	}
@@ -76,15 +81,20 @@ func UpsertSystemConfig(ctx context.Context, pool *db.Pool, cfg *SystemConfig) (
 	if maxCSV <= 0 {
 		maxCSV = 10000
 	}
+	stmtTimeout := cfg.StatementTimeoutMs
+	if stmtTimeout < 0 {
+		stmtTimeout = 0
+	}
 
 	_, err := pool.Exec(ctx,
-		`INSERT INTO zeep_system.system_config (soft_delete_enabled, storage_config, max_csv_export_rows)
-		 VALUES ($1, $2::jsonb, $3)
+		`INSERT INTO zeep_system.system_config (soft_delete_enabled, storage_config, max_csv_export_rows, statement_timeout_ms)
+		 VALUES ($1, $2::jsonb, $3, $4)
 		 ON CONFLICT ((TRUE)) DO UPDATE
 		   SET soft_delete_enabled = $1,
 		       storage_config = $2::jsonb,
-		       max_csv_export_rows = $3`,
-		cfg.SoftDeleteEnabled, rawJSON, maxCSV,
+		       max_csv_export_rows = $3,
+		       statement_timeout_ms = $4`,
+		cfg.SoftDeleteEnabled, rawJSON, maxCSV, stmtTimeout,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("upsert system config: %w", err)

@@ -145,6 +145,7 @@ function SoftDeleteCard() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [maxCsvRows, setMaxCsvRows] = useState(10000);
+  const [statementTimeoutMs, setStatementTimeoutMs] = useState(30000);
 
   useEffect(() => {
     fetch("/dashboard/api/config/system", { credentials: "include" })
@@ -152,6 +153,7 @@ function SoftDeleteCard() {
       .then((d) => {
         setEnabled(d.soft_delete_enabled);
         setMaxCsvRows(d.max_csv_export_rows ?? 10000);
+        setStatementTimeoutMs(d.statement_timeout_ms ?? 30000);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -164,7 +166,11 @@ function SoftDeleteCard() {
         method: "PUT",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ soft_delete_enabled: enabled, max_csv_export_rows: maxCsvRows }),
+        body: JSON.stringify({
+          soft_delete_enabled: enabled,
+          max_csv_export_rows: maxCsvRows,
+          statement_timeout_ms: statementTimeoutMs,
+        }),
       });
       if (!res.ok) throw new Error(t("system.error"));
       toast.success(t("system.saved"));
@@ -199,6 +205,19 @@ function SoftDeleteCard() {
           className="mt-2 max-w-[200px]"
         />
         <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">{t("settings.maxCsvExportRowsHint")}</p>
+      </div>
+      <div className="mt-4 border-t border-[var(--border)] pt-4">
+        <Label className="text-[13px] font-semibold text-[var(--text-secondary)]">
+          {t("settings.statementTimeoutMs")}
+        </Label>
+        <Input
+          type="number"
+          min={0}
+          value={statementTimeoutMs}
+          onChange={(e) => setStatementTimeoutMs(Math.max(0, Number(e.target.value) || 0))}
+          className="mt-2 max-w-[200px]"
+        />
+        <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">{t("settings.statementTimeoutMsHint")}</p>
       </div>
       <div className="mt-4 border-t border-[var(--border)] pt-4">
         <Button onClick={handleSave} disabled={saving} className="gap-2">

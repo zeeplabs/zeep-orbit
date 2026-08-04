@@ -87,7 +87,10 @@ func cmdServe() *cobra.Command {
 
 			sysCfg, err := dashboard.GetSystemConfig(context.Background(), pool)
 			if err == nil {
-				reg.SetSystemConfig(registry.SystemConfig{SoftDeleteEnabled: sysCfg.SoftDeleteEnabled})
+				reg.SetSystemConfig(registry.SystemConfig{
+					SoftDeleteEnabled:  sysCfg.SoftDeleteEnabled,
+					StatementTimeoutMs: sysCfg.StatementTimeoutMs,
+				})
 			}
 
 			fmt.Printf("zeep-orbit starting on :%d (%d apps loaded)\n", port, len(reg.Apps()))

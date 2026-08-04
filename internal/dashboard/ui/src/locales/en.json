@@ -285,6 +285,8 @@
   "settings.requireApprovalDesc": "Table and column changes wait for another Admin to approve before applying.",
   "settings.maxCsvExportRows": "Max rows per CSV export",
   "settings.maxCsvExportRowsHint": "The Data Browser CSV export stops after this many rows.",
+  "settings.statementTimeoutMs": "Statement timeout (ms)",
+  "settings.statementTimeoutMsHint": "Aborts any app query running longer than this. 0 disables the timeout.",
   "settings.saved": "Saved!",
   "settings.error": "Error saving",
   "settings.preview": "Preview",

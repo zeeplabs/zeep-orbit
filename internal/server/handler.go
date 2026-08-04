@@ -73,23 +73,27 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-
-	// COUNT
-	var count int
 	filterArgs := q.Args[:len(q.Args)-2]
-	if err := h.pool.QueryRow(ctx, q.CountSQL, filterArgs...).Scan(&count); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to count rows")
-		return
-	}
 
-	rows, err := h.pool.Query(ctx, q.SQL, q.Args...)
+	var count int
+	var data []map[string]any
+	err = h.pool.WithTimeout(ctx, h.reg.SystemConfig().StatementTimeoutMs, func(qx db.Querier) error {
+		if err := qx.QueryRow(ctx, q.CountSQL, filterArgs...).Scan(&count); err != nil {
+			return err
+		}
+		rows, err := qx.Query(ctx, q.SQL, q.Args...)
+		if err != nil {
+			return err
+		}
+		data, err = pgx.CollectRows(rows, pgx.RowToMap)
+		return err
+	})
 	if err != nil {
+		if db.IsStatementTimeout(err) {
+			writeError(w, http.StatusServiceUnavailable, "query exceeded statement timeout")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "failed to query rows")
-		return
-	}
-	data, err := pgx.CollectRows(rows, pgx.RowToMap)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to collect rows")
 		return
 	}
 	if data == nil {
@@ -141,14 +145,21 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := h.pool.Query(r.Context(), q.SQL, q.Args...)
+	var row map[string]any
+	err = h.pool.WithTimeout(r.Context(), h.reg.SystemConfig().StatementTimeoutMs, func(qx db.Querier) error {
+		rows, err := qx.Query(r.Context(), q.SQL, q.Args...)
+		if err != nil {
+			return err
+		}
+		row, err = pgx.CollectOneRow(rows, pgx.RowToMap)
+		return err
+	})
 	if err != nil {
+		if db.IsStatementTimeout(err) {
+			writeError(w, http.StatusServiceUnavailable, "query exceeded statement timeout")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "failed to insert row")
-		return
-	}
-	row, err := pgx.CollectOneRow(rows, pgx.RowToMap)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to collect inserted row: "+err.Error())
 		return
 	}
 
@@ -180,18 +191,25 @@ func (h *Handler) HandleGetByID(w http.ResponseWriter, r *http.Request) {
 
 	q := query.BuildGetByID(app.SchemaName, tableName, id, ownerID)
 
-	rows, err := h.pool.Query(r.Context(), q.SQL, q.Args...)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to query row")
-		return
-	}
-	row, err := pgx.CollectOneRow(rows, pgx.RowToMap)
+	var row map[string]any
+	err := h.pool.WithTimeout(r.Context(), h.reg.SystemConfig().StatementTimeoutMs, func(qx db.Querier) error {
+		rows, err := qx.Query(r.Context(), q.SQL, q.Args...)
+		if err != nil {
+			return err
+		}
+		row, err = pgx.CollectOneRow(rows, pgx.RowToMap)
+		return err
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "failed to collect row")
+		if db.IsStatementTimeout(err) {
+			writeError(w, http.StatusServiceUnavailable, "query exceeded statement timeout")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to query row")
 		return
 	}
 
@@ -233,18 +251,25 @@ func (h *Handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := h.pool.Query(r.Context(), q.SQL, q.Args...)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to update row")
-		return
-	}
-	row, err := pgx.CollectOneRow(rows, pgx.RowToMap)
+	var row map[string]any
+	err = h.pool.WithTimeout(r.Context(), h.reg.SystemConfig().StatementTimeoutMs, func(qx db.Querier) error {
+		rows, err := qx.Query(r.Context(), q.SQL, q.Args...)
+		if err != nil {
+			return err
+		}
+		row, err = pgx.CollectOneRow(rows, pgx.RowToMap)
+		return err
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "failed to collect updated row")
+		if db.IsStatementTimeout(err) {
+			writeError(w, http.StatusServiceUnavailable, "query exceeded statement timeout")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to update row")
 		return
 	}
 
@@ -276,13 +301,25 @@ func (h *Handler) HandleDelete(w http.ResponseWriter, r *http.Request) {
 
 	q := query.BuildDelete(app.SchemaName, tableName, id, ownerID, h.reg.SystemConfig().SoftDeleteEnabled)
 
-	tag, err := h.pool.Exec(r.Context(), q.SQL, q.Args...)
+	var affected int64
+	err := h.pool.WithTimeout(r.Context(), h.reg.SystemConfig().StatementTimeoutMs, func(qx db.Querier) error {
+		tag, err := qx.Exec(r.Context(), q.SQL, q.Args...)
+		if err != nil {
+			return err
+		}
+		affected = tag.RowsAffected()
+		return nil
+	})
 	if err != nil {
+		if db.IsStatementTimeout(err) {
+			writeError(w, http.StatusServiceUnavailable, "query exceeded statement timeout")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "failed to delete row")
 		return
 	}
 
-	if tag.RowsAffected() == 0 {
+	if affected == 0 {
 		writeError(w, http.StatusNotFound, "not found")
 		return
 	}

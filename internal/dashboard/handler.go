@@ -422,7 +422,10 @@ func (h *Handler) UpdateSystemConfig(w http.ResponseWriter, r *http.Request) {
 		cfg.StorageConfig.SecretAccessKey = ""
 	}
 
-	h.reg.SetSystemConfig(registry.SystemConfig{SoftDeleteEnabled: cfg.SoftDeleteEnabled})
+	h.reg.SetSystemConfig(registry.SystemConfig{
+		SoftDeleteEnabled:  cfg.SoftDeleteEnabled,
+		StatementTimeoutMs: cfg.StatementTimeoutMs,
+	})
 
 	writeJSON(w, http.StatusOK, cfg)
 	h.audit(r.Context(), user.ID, user.Email, "config.system.update", "config", "system", "", nil, r.RemoteAddr)
