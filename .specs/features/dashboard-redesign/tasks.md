@@ -99,6 +99,20 @@ Ordem por risco/tráfego. Cada task: substituir markup por composição de níve
 
 ---
 
+## Fase 4 — Fidelidade ao handoff (visual-validation pós-Fase 2/3)
+
+Gaps **estruturais** achados na auditoria live-render × spec inline do handoff (sessão 2026-08-04), além do sweep de copy/casing (esse já aplicado direto nas locales). Meta: release **pixel/feature-exato ao handoff**. Cada task marca se é front puro ou exige backend/spec própria. **Regra dura**: não scaffoldar UI para backend inexistente — task com dependência de backend só fecha com o endpoint real.
+
+- [ ] **T4.1** — **Data Browser: subtítulo interpola nome do app** (`App users` screen). Handoff (linha 2489): `End users registered inside employee-directory.` — atual é fixo "this app". Trocar `appUsers.subtitle` para `End users registered inside {{app}}.` (en+pt-BR) e passar o nome do app em `AppUsersPage` (o componente já tem o id; confirmar se já resolve o nome ou precisa buscar). **Front puro.** Pequeno. `[DRD-52]`
+- [ ] **T4.2** — **Integrations: renomear header** de "GitHub" para "Integrations". Handoff (linha ~1430): título `Integrations` / subtítulo `Connect code hosting and deploy providers for your apps.` Ajustar `github.title`/`github.subtitle` (ou migrar o `PageHeader` para `integrations.*`). **Front puro.** Pequeno. Não confundir com T4.5. `[DRD-53]`
+- [ ] **T4.3** — **Dashboard users: coluna `SIGN-IN`**. Handoff (linha ~1230) tem colunas `USER / ROLE / SIGN-IN / CREATED / ACTIONS`; atual não tem SIGN-IN (método de login por usuário: email vs Google). **Exige backend**: `GET /dashboard/api/users` precisa expor o provider de autenticação de cada dashboard user (e possivelmente último método usado). Front: nova coluna no `DataTable` + `StatusPill`/ícone (`mail`/Google) + i18n. Fecha só com o campo real na resposta. `[DRD-50]`
+- [ ] **T4.4** — **Data Browser: `Export CSV`**. Handoff (linha ~945) tem botão `download → Export CSV` na toolbar. **Exige backend**: endpoint de export streaming do CSV da tabela atual respeitando os filtros ativos (schema-per-app via `schemaNameForDB`). Front: botão na toolbar + wire + toast de erro. Amarra com o limite `Max rows per CSV export` que o handoff Settings mostra (ver T4.5). Fecha só com o endpoint real. `[DRD-51]`
+- [ ] **T4.5** — **Settings: consolidar na página única do handoff** (linha ~1683). Handoff = uma página `Settings` com tabs `Branding / Database / Auth provider / Storage / License` e conteúdo muito mais rico que o atual `BrandSettingsPage`: aba Database (Data retention + soft delete + retention period; Schema safety + Require RLS by default + Require schema-change approval `NEW`; Limits + Max rows per CSV export + Statement timeout + Max connections per app), Auth provider (Require 2FA for all admins), tab License (Enterprise). **Feature/arquitetura, não copy — spec própria.** Cruza `two-factor-auth`, `enterprise-licensing`, `observability-integrations` e exige backend para cada controle novo (retention, schema-change approval, statement timeout, pool cap, 2FA-required, licença). NÃO recriar a UI "exata" antes do backend de cada controle existir (senão vira UI morta). Ação: abrir `.specs/features/dashboard-settings-consolidation/` (spec.md/design.md/tasks.md) mapeando cada controle ao seu backend/spec. `[DRD-54]`
+
+**Checkpoint Fase 4**: T4.1/T4.2 mergeáveis sozinhas (front puro). T4.3/T4.4 dependem de contrato backend confirmado. T4.5 vira spec própria antes de qualquer código.
+
+---
+
 ## Requirement Coverage
 
 | Requirement ID | Tasks | Status |
@@ -125,8 +139,13 @@ Ordem por risco/tráfego. Cada task: substituir markup por composição de níve
 | DRD-40 | T0.3, T2.* | Done |
 | DRD-41 | T0.3 | Done |
 | DRD-42 | T3.1 | Done |
+| DRD-50 | T4.3 | Pending (backend) |
+| DRD-51 | T4.4 | Pending (backend) |
+| DRD-52 | T4.1 | Pending (front) |
+| DRD-53 | T4.2 | Pending (front) |
+| DRD-54 | T4.5 | Pending (spec própria) |
 
-**Coverage**: 22/22 requisitos mapeados a tasks. **Pendentes**: T3.3 (CHANGELOG consolidation + README 4 línguas), T3.4 (coord com net-new features).
+**Coverage**: 27/27 requisitos mapeados a tasks. **Pendentes**: T3.3 (CHANGELOG consolidation + README 4 línguas), T3.4 (coord com net-new features), Fase 4 (T4.1-T4.5 — fidelidade ao handoff; T4.1/T4.2 front puro, T4.3/T4.4 dependem de backend, T4.5 vira spec própria).
 
 ---
 

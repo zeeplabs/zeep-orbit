@@ -40,19 +40,12 @@ function UpdateAvailableBanner() {
       target="_blank"
       rel="noopener noreferrer"
       title={t("nav.updateAvailable", { version: data.tag_name })}
-      className="mb-2 flex items-center gap-2.5 rounded-[10px] border px-3 py-2.5 text-[13px] font-medium no-underline transition-colors"
-      style={{
-        borderColor: "color-mix(in srgb, var(--primary) 25%, transparent)",
-        background: "var(--primary-tint)",
-        color: "var(--text-primary)",
-      }}
+      className="mb-2 flex items-center gap-2 rounded-[8px] px-2.5 py-2 text-[12px] font-semibold no-underline transition-colors"
+      style={{ background: "var(--primary-tint)", color: "var(--primary)" }}
     >
-      <Icon name="upgrade" size={16} />
-      <span className="flex min-w-0 flex-col">
-        <span className="truncate">{t("nav.updateAvailableLabel")}</span>
-        <span className="text-xs font-bold" style={{ color: "var(--primary)" }}>
-          {data.tag_name}
-        </span>
+      <Icon name="arrow_circle_up" size={16} />
+      <span className="truncate">
+        {t("nav.updateShort", { version: data.tag_name })}
       </span>
     </a>
   );

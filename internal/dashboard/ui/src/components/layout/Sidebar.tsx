@@ -55,8 +55,8 @@ export function Sidebar({ companyName, banner, footer }: SidebarProps) {
 
   return (
     <aside
-      className="sticky top-0 flex h-screen flex-col border-r border-[var(--border)] bg-[var(--surface)] px-3 py-6 max-md:hidden"
-      style={{ width: 240 }}
+      className="sticky top-0 flex h-screen flex-col border-r border-[var(--border)] bg-[var(--surface)] px-3.5 py-5 max-md:hidden"
+      style={{ width: 264 }}
     >
       {/* Logo */}
       <div className="mb-8 flex items-center gap-2.5 px-2">

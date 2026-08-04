@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
+  useApp,
   useAppUsers,
   useDeactivateAppUser,
   useActivateAppUser,
@@ -49,6 +50,7 @@ const providerIcon = (p: string) => (p === 'google' ? 'verified_user' : 'mail')
 export default function AppUsersPage() {
   const { t, i18n } = useTranslation()
   const { id } = useParams<{ id: string }>()
+  const { data: app } = useApp(id || '')
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [page, setPage] = useState(0)
@@ -243,7 +245,7 @@ export default function AppUsersPage() {
         {t('appUsers.back')}
       </Link>
 
-      <PageHeader title={t('appUsers.title')} subtitle={t('appUsers.subtitle')} />
+      <PageHeader title={t('appUsers.title')} subtitle={t('appUsers.subtitle', { app: app?.name || id })} />
 
       {/* Toolbar: provider counts + search + refresh */}
       <div className="mb-5 flex flex-wrap items-center gap-3">
