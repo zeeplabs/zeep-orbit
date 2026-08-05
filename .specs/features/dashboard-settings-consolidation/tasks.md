@@ -14,8 +14,8 @@ Origem: T4.5 do `dashboard-redesign` (Fase 4 — fidelidade ao handoff). Cada ta
 
 ## Fase 1 — Entregável sem backend novo (mergeável já)
 
-- [ ] **S1.1** — Renomear o título da página para `Settings` (handoff) mantendo a tab "Branding". Ajustar `PageHeader` do `BrandSettingsPage` (novo `settings.pageTitle`/`settings.pageSubtitle` en+pt) sem tocar no conteúdo das tabs existentes.
-- [ ] **S1.2** — Auditar as tabs que já existem (Branding/Auth Google/Storage) contra o inline-spec do handoff (casing/copy/spacing/ordem de campos) e alinhar o que for só apresentação.
+- [x] **S1.1** — Renomear o título da página para `Settings` (handoff) mantendo a tab "Branding". Ajustar `PageHeader` do `BrandSettingsPage` (novo `settings.pageTitle`/`settings.pageSubtitle` en+pt) sem tocar no conteúdo das tabs existentes. Feito no commit da linha "Settings page consolidated toward the handoff" (CHANGELOG `[Unreleased]`).
+- [x] **S1.2** — Auditar as tabs que já existem (Branding/Auth Google/Storage) contra o inline-spec do handoff (casing/copy/spacing/ordem de campos) e alinhar o que for só apresentação. Maior parte já alinhada na mesma leva (soft-delete description; storage "Access key"/"Secret key"). Gap residual encontrado e corrigido nesta sessão: `settings.bucketName` "Bucket name" → "Bucket prefix" (en+pt-BR), único rótulo divergindo do handoff. Divergências estruturais confirmadas como intencionais (não mexer): Branding sem seletor de tema (DRD-02) e sem upload de logo/ícone (removido, ver CHANGELOG "Custom logo upload"); Auth provider mantém campo "Redirect URL" que o handoff não mostra (necessário para configurar o callback OAuth).
 
 ## Fase 2 — Database tab: controles net-new (cada um depende de backend real)
 

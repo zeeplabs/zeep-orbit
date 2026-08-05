@@ -305,7 +305,7 @@
   "settings.googleDesc": "Google login (AES-256-GCM encrypted credentials)",
   "settings.globalStorage": "Global Storage",
   "settings.globalStorageDesc": "Configure global S3 so admins only need a bucket name when creating apps",
-  "settings.bucketName": "Bucket name",
+  "settings.bucketName": "Bucket prefix",
   "settings.accessKeyId": "Access key",
   "settings.secretAccessKey": "Secret key (leave empty to keep current)",
   "settings.savedSuccess": "Saved successfully",
