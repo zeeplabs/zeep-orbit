@@ -93,6 +93,20 @@ func cmdServe() *cobra.Command {
 				})
 			}
 
+			go func() {
+				ticker := time.NewTicker(6 * time.Hour)
+				defer ticker.Stop()
+				for range ticker.C {
+					cfg, err := dashboard.GetSystemConfig(context.Background(), pool)
+					if err != nil || cfg.RetentionDays <= 0 || !cfg.SoftDeleteEnabled {
+						continue
+					}
+					if _, err := dashboard.PurgeExpiredSoftDeletes(context.Background(), pool, reg, cfg.RetentionDays); err != nil {
+						fmt.Fprintf(os.Stderr, "purge error: %v\n", err)
+					}
+				}
+			}()
+
 			fmt.Printf("zeep-orbit starting on :%d (%d apps loaded)\n", port, len(reg.Apps()))
 
 			srv, err := server.New(reg, pool, port)

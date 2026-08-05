@@ -21,10 +21,10 @@ Origem: T4.5 do `dashboard-redesign` (Fase 4 — fidelidade ao handoff). Cada ta
 
 > Regra dura: cada controle só entra na UI quando o backend correspondente persiste **e** faz efeito. Sem backend = não renderiza.
 
-- [ ] **S2.1** — **Retention period + purga**: config em `system_config_store` + rotina de purga de soft-deleted após N dias. UI só depois do job existir. Default: ver S0.1.
-- [ ] **S2.2** — **Require RLS by default**: default global lido em `CreateAppTable` (nova tabela nasce Restricted). Config + enforcement + UI.
-- [ ] **S2.3** — **Max rows per CSV export**: trocar o cap fixo `10000` do `DataBrowserExport` (handler.go) por leitura da config. Amarra com T4.4 do `dashboard-redesign`. Config + wire + UI.
-- [ ] **S2.4** — **Statement timeout**: config + enforcement real (`SET statement_timeout` por conexão/consulta das queries de app). Validar que aplica, não só persiste. UI.
+- [x] **S2.1** — **Retention period + purga**: config em `system_config_store` + rotina de purga de soft-deleted após N dias. UI só depois do job existir. Default: ver S0.1. Ticker 6h no boot (`cmd/zeep/main.go`), audit-log por execução, confirm dialog no front.
+- [x] **S2.2** — **Require RLS by default**: default global lido em `CreateAppTable` (nova tabela nasce Restricted). Config + enforcement + UI. Commit `03cb880` (backend) + `6f9c3c1` (S2.2b — create-table form segue o setting).
+- [x] **S2.3** — **Max rows per CSV export**: trocar o cap fixo `10000` do `DataBrowserExport` (handler.go) por leitura da config. Amarra com T4.4 do `dashboard-redesign`. Config + wire + UI. Commit `30c3ec8`.
+- [x] **S2.4** — **Statement timeout**: config + enforcement real (`SET statement_timeout` por conexão/consulta das queries de app). Validar que aplica, não só persiste. UI. Commit `735aa68`.
 - [ ] **S2.5** — **Max connections per app (pool cap)**: config + cap no pool Postgres por app (`registry`/`db`). **Higher-risk (runtime multi-app)** — validar infra (S0.1 Q4) antes. UI só após enforcement seguro.
 - [ ] **S2.6** — **Require schema-change approval**: SOMENTE se S0.1 decidir que entra aqui. Caso contrário, abrir `.specs/features/schema-change-approval/` e deixar o toggle desligado/oculto até lá.
 

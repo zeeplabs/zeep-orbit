@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -149,6 +149,8 @@ function SoftDeleteCard() {
   const [maxCsvRows, setMaxCsvRows] = useState(10000);
   const [statementTimeoutMs, setStatementTimeoutMs] = useState(30000);
   const [requireRlsDefault, setRequireRlsDefault] = useState(false);
+  const [retentionDays, setRetentionDays] = useState(0);
+  const hydratedRetentionDays = useRef(0);
 
   useEffect(() => {
     if (!sysCfg) return;
@@ -156,9 +158,15 @@ function SoftDeleteCard() {
     setMaxCsvRows(sysCfg.max_csv_export_rows ?? 10000);
     setStatementTimeoutMs(sysCfg.statement_timeout_ms ?? 30000);
     setRequireRlsDefault(sysCfg.require_rls_default ?? false);
+    setRetentionDays(sysCfg.retention_days ?? 0);
+    hydratedRetentionDays.current = sysCfg.retention_days ?? 0;
   }, [sysCfg]);
 
   const handleSave = async () => {
+    if (retentionDays > 0 && retentionDays !== hydratedRetentionDays.current) {
+      const confirmed = window.confirm(t("settings.retentionDaysConfirm", { days: retentionDays }));
+      if (!confirmed) return;
+    }
     setSaving(true);
     try {
       const res = await fetch("/dashboard/api/config/system", {
@@ -170,6 +178,7 @@ function SoftDeleteCard() {
           max_csv_export_rows: maxCsvRows,
           statement_timeout_ms: statementTimeoutMs,
           require_rls_default: requireRlsDefault,
+          retention_days: retentionDays,
         }),
       });
       if (!res.ok) throw new Error(t("system.error"));
@@ -226,6 +235,19 @@ function SoftDeleteCard() {
           className="mt-2 max-w-[200px]"
         />
         <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">{t("settings.statementTimeoutMsHint")}</p>
+      </div>
+      <div className="mt-4 border-t border-[var(--border)] pt-4">
+        <Label className="text-[13px] font-semibold text-[var(--text-secondary)]">
+          {t("settings.retentionDays")}
+        </Label>
+        <Input
+          type="number"
+          min={0}
+          value={retentionDays}
+          onChange={(e) => setRetentionDays(Math.max(0, Number(e.target.value) || 0))}
+          className="mt-2 max-w-[200px]"
+        />
+        <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">{t("settings.retentionDaysHint")}</p>
       </div>
       <div className="mt-4 border-t border-[var(--border)] pt-4">
         <Button onClick={handleSave} disabled={saving} className="gap-2">

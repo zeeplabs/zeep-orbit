@@ -76,3 +76,21 @@ func TestMergeSystemConfigRequireRLSDefault(t *testing.T) {
 		t.Fatalf("require_rls_default false must be applied, got %v", merged.RequireRLSDefault)
 	}
 }
+
+func TestMergeSystemConfigRetentionDays(t *testing.T) {
+	cur := SystemConfig{RetentionDays: 30, SoftDeleteEnabled: true}
+
+	// Absent from patch → preserved.
+	sd := false
+	merged := mergeSystemConfig(cur, systemConfigPatch{SoftDeleteEnabled: &sd})
+	if merged.RetentionDays != 30 {
+		t.Fatalf("retention_days must be preserved when absent, got %d", merged.RetentionDays)
+	}
+
+	// Present zero → applied (0 disables purge; it is a real value, not "absent").
+	zero := 0
+	merged = mergeSystemConfig(cur, systemConfigPatch{RetentionDays: &zero})
+	if merged.RetentionDays != 0 {
+		t.Fatalf("retention_days 0 must be applied (disabled), got %d", merged.RetentionDays)
+	}
+}

@@ -17,6 +17,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **Require RLS by default** (Settings → Database): when enabled, a new app table created without an explicit access level defaults to Restricted (owner-scoped RLS) instead of Public. Off by default; only applies when the app has email auth enabled (Restricted requires it), and never overrides an access level the client sends explicitly.
 - Dashboard create-table form now defaults new tables to Restricted (owner-scoped) when "Require RLS by default" is enabled and the app has email auth — previously the setting only affected API/omitted-`rls` creates.
 
+- **Retention period + soft-delete purge** (Settings → Database, `dashboard-settings-consolidation` spec, slice S2.1): a new global `retention_days` setting (default 0 = off) drives a background job that hard-deletes soft-deleted rows older than the configured window, across every app table, on a 6h cadence. Off by default and gated on soft-delete being enabled; each run — including zero-row runs — writes an `audit_log` entry (`system.purge.run`) so the job's activity is auditable. Enabling purge (raising the value above 0) prompts a confirm dialog in the UI, since the action is irreversible. New i18n keys `settings.retentionDays` / `settings.retentionDaysHint` / `settings.retentionDaysConfirm` (en + pt-BR).
+
 ### Changed
 
 - **Statement timeout (behavior change):** app data-plane queries now run under a global `statement_timeout` defaulting to **30s** — queries running longer are aborted by Postgres (HTTP 503 `query exceeded statement timeout`). Set **Settings → Database → Statement timeout** to `0` to restore the previous unbounded behavior. Each CRUD op now runs inside a short transaction to scope the limit.

@@ -75,6 +75,7 @@ export interface SystemConfig {
   max_csv_export_rows: number
   statement_timeout_ms: number
   require_rls_default: boolean
+  retention_days: number
 }
 
 export function useSystemConfig(): UseQueryResult<SystemConfig> {
