@@ -3,17 +3,20 @@ import { useTranslation } from 'react-i18next'
 import { PageHeader } from '@/components/patterns'
 import { Icon } from '@/components/ui/icon'
 import { cn } from '@/lib/utils'
+import { highlight, type SdkLang } from '@/lib/prism'
 
 interface SdkEntry {
   name: string
   pkg: string
   install: string
   snippet: string
+  lang: SdkLang
 }
 
 const sdks: SdkEntry[] = [
   {
     name: 'TypeScript',
+    lang: 'typescript',
     pkg: '@zeeptech/orbit-client',
     install: 'npm install @zeeptech/orbit-client',
     snippet: `import { OrbitClient } from '@zeeptech/orbit-client'
@@ -28,6 +31,7 @@ const rows = await orbit.table('invoices').findMany({ limit: 10 })`,
   },
   {
     name: 'Go',
+    lang: 'go',
     pkg: 'github.com/zeeplabs/orbit-go',
     install: 'go get github.com/zeeplabs/orbit-go',
     snippet: `import "github.com/zeeplabs/orbit-go"
@@ -42,6 +46,7 @@ rows, _ := client.Table("invoices").FindMany(ctx, &orbit.FindManyParams{Limit: 1
   },
   {
     name: 'Python',
+    lang: 'python',
     pkg: 'zeeplabs-orbit-client',
     install: 'pip install zeeplabs-orbit-client',
     snippet: `from zeeplabs_orbit_client import OrbitClient, ClientConfig
@@ -56,6 +61,7 @@ rows = orbit.table("invoices").find_many(limit=10)`,
   },
   {
     name: 'Rust',
+    lang: 'rust',
     pkg: 'zeep-orbit-client',
     install: 'cargo add zeep-orbit-client',
     snippet: `use zeep_orbit_client::{OrbitClient, ClientConfig};
@@ -71,6 +77,7 @@ let rows = orbit.table("invoices")
   },
   {
     name: 'Java',
+    lang: 'java',
     pkg: 'com.zeeplabs:orbit-client',
     install: `<!-- pom.xml -->
 <dependency>
@@ -87,6 +94,7 @@ ListResponse resp = orbit
   },
   {
     name: 'PHP',
+    lang: 'php',
     pkg: 'zeeplabs/orbit-client',
     install: 'composer require zeeplabs/orbit-client',
     snippet: `$orbit = new Zeeplabs\\Orbit\\OrbitClient(
@@ -192,7 +200,7 @@ export default function SdkPage() {
                   fontFamily: 'var(--font-mono)',
                 }}
               >
-                <code>{sdk.snippet}</code>
+                <code dangerouslySetInnerHTML={{ __html: highlight(sdk.snippet, sdk.lang) }} />
               </pre>
               <div className="absolute right-2 top-2">
                 <CopyButton value={sdk.snippet} label={t('sdk.copySnippet')} />

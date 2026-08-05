@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./styles/tokens.css";
+@import "./styles/prism.css";
 
 @theme {
   --color-bg: #0A0A0F;
