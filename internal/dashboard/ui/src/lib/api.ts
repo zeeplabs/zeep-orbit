@@ -741,47 +741,22 @@ export interface AuditLogResponse {
   offset: number
 }
 
-const ACTION_LABELS: Record<string, string> = {
-  'app.create': 'App Criado',
-  'app.update': 'App Atualizado',
-  'app.delete': 'App Excluído',
-  'user.create': 'Usuário Criado',
-  'user.delete': 'Usuário Excluído',
-  'user.login': 'Login',
-  'user.logout': 'Logout',
-  'user.password.change': 'Senha Alterada',
-  'config.update': 'Config. Alterada',
-  'auth.provider.update': 'Provider Auth',
-  'app.user.deactivate': 'Usuário App Desat.',
-  'app.user.activate': 'Usuário App Ativ.',
-  'app.user.sessions.reset': 'Sessões Reset.',
-  'app_member.added': 'Membro Adic.',
-  'app_member.role_changed': 'Papel Membro Alt.',
-  'app_member.removed': 'Membro Remov.',
-  'data.create': 'Registro Criado',
-  'data.update': 'Registro Atualizado',
-  'data.delete': 'Registro Excluído',
-  'bootstrap.complete': 'Bootstrap',
-}
-
-export function auditActionLabel(action: string): string {
-  return ACTION_LABELS[action] || action
-}
-
 export function useAuditLog(
   limit = 50,
   offset = 0,
   action?: string,
-  userId?: string,
+  category?: string,
+  userEmail?: string,
 ): UseQueryResult<AuditLogResponse> {
   return useQuery({
-    queryKey: ['audit-log', limit, offset, action, userId],
+    queryKey: ['audit-log', limit, offset, action, category, userEmail],
     queryFn: () => {
       const params = new URLSearchParams()
       params.set('limit', String(limit))
       params.set('offset', String(offset))
       if (action) params.set('action', action)
-      if (userId) params.set('user', userId)
+      if (category) params.set('category', category)
+      if (userEmail) params.set('user_email', userEmail)
       return apiFetch<AuditLogResponse>(`/dashboard/api/audit-log?${params}`)
     },
   })

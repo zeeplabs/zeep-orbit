@@ -2268,10 +2268,11 @@ func (h *Handler) ListAuditLog(w http.ResponseWriter, r *http.Request) {
 	}
 
 	entries, total, err := ListAuditLog(r.Context(), h.pool, AuditLogFilter{
-		Action: r.URL.Query().Get("action"),
-		UserID: r.URL.Query().Get("user"),
-		Limit:  limit,
-		Offset: offset,
+		Action:    r.URL.Query().Get("action"),
+		Category:  r.URL.Query().Get("category"),
+		UserEmail: r.URL.Query().Get("user_email"),
+		Limit:     limit,
+		Offset:    offset,
 	})
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)

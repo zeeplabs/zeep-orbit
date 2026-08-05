@@ -47,11 +47,40 @@ func InsertAuditLog(ctx context.Context, pool *db.Pool, userID, userEmail, actio
 	return nil
 }
 
+// auditCategories groups action strings into the coarse filter buckets shown
+// in the Audit log UI (All/Create/Modify/Delete/Auth) — a fixed lookup table,
+// not a fuzzy string match, so new actions must be added here explicitly.
+var auditCategories = map[string][]string{
+	"create": {
+		"app.create", "user.create", "data.create", "app.table.create",
+		"app.token.create", "frontend_app.create", "github.template.create",
+		"app_member.added",
+	},
+	"modify": {
+		"app.update", "data.update", "config.update", "config.system.update",
+		"auth.provider.update", "app.table.update", "deploy_provider.config.update",
+		"app_member.role_changed", "user.role_changed", "user.password.change",
+		"app.user.sessions.reset", "github.config.update", "github.template.update",
+		"app.secret.regenerate", "frontend_app.sync.regenerate", "frontend_app.sync.retry",
+		"frontend_app.retry", "frontend_app.deploy.retry",
+	},
+	"delete": {
+		"app.delete", "user.delete", "data.delete", "app.table.delete",
+		"frontend_app.delete", "github.config.delete", "github.template.delete",
+		"app_member.removed", "app.token.revoke",
+	},
+	"auth": {
+		"user.login", "user.logout", "app.user.activate", "app.user.deactivate",
+		"app.secret.view", "frontend_app.sync.reveal", "github.install", "bootstrap.complete",
+	},
+}
+
 type AuditLogFilter struct {
-	Action string
-	UserID string
-	Limit  int
-	Offset int
+	Action    string
+	Category  string
+	UserEmail string
+	Limit     int
+	Offset    int
 }
 
 func ListAuditLog(ctx context.Context, pool *db.Pool, f AuditLogFilter) ([]AuditEntry, int, error) {
@@ -64,9 +93,14 @@ func ListAuditLog(ctx context.Context, pool *db.Pool, f AuditLogFilter) ([]Audit
 		args = append(args, f.Action)
 		n++
 	}
-	if f.UserID != "" {
-		where += fmt.Sprintf(" AND user_id = $%d", n)
-		args = append(args, f.UserID)
+	if actions, ok := auditCategories[f.Category]; ok {
+		where += fmt.Sprintf(" AND action = ANY($%d)", n)
+		args = append(args, actions)
+		n++
+	}
+	if f.UserEmail != "" {
+		where += fmt.Sprintf(" AND user_email ILIKE $%d", n)
+		args = append(args, "%"+f.UserEmail+"%")
 		n++
 	}
 
