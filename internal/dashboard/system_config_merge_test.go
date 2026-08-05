@@ -58,3 +58,21 @@ func TestMergeSystemConfigStatementTimeout(t *testing.T) {
 		t.Fatalf("statement timeout should update to 5000, got %d", merged.StatementTimeoutMs)
 	}
 }
+
+func TestMergeSystemConfigRequireRLSDefault(t *testing.T) {
+	cur := SystemConfig{RequireRLSDefault: true, StatementTimeoutMs: 30000}
+
+	// Absent from patch → preserved.
+	n := 5000
+	merged := mergeSystemConfig(cur, systemConfigPatch{StatementTimeoutMs: &n})
+	if !merged.RequireRLSDefault {
+		t.Fatalf("require_rls_default must be preserved when absent, got %v", merged.RequireRLSDefault)
+	}
+
+	// Present false → applied (turning it off is a real change, not "absent").
+	off := false
+	merged = mergeSystemConfig(cur, systemConfigPatch{RequireRLSDefault: &off})
+	if merged.RequireRLSDefault {
+		t.Fatalf("require_rls_default false must be applied, got %v", merged.RequireRLSDefault)
+	}
+}

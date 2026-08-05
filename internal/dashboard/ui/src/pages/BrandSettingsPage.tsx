@@ -146,6 +146,7 @@ function SoftDeleteCard() {
   const [saving, setSaving] = useState(false);
   const [maxCsvRows, setMaxCsvRows] = useState(10000);
   const [statementTimeoutMs, setStatementTimeoutMs] = useState(30000);
+  const [requireRlsDefault, setRequireRlsDefault] = useState(false);
 
   useEffect(() => {
     fetch("/dashboard/api/config/system", { credentials: "include" })
@@ -154,6 +155,7 @@ function SoftDeleteCard() {
         setEnabled(d.soft_delete_enabled);
         setMaxCsvRows(d.max_csv_export_rows ?? 10000);
         setStatementTimeoutMs(d.statement_timeout_ms ?? 30000);
+        setRequireRlsDefault(d.require_rls_default ?? false);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -170,6 +172,7 @@ function SoftDeleteCard() {
           soft_delete_enabled: enabled,
           max_csv_export_rows: maxCsvRows,
           statement_timeout_ms: statementTimeoutMs,
+          require_rls_default: requireRlsDefault,
         }),
       });
       if (!res.ok) throw new Error(t("system.error"));
@@ -190,6 +193,13 @@ function SoftDeleteCard() {
         description={t("system.softDeleteDesc")}
         control={<Switch checked={enabled} onCheckedChange={setEnabled} />}
       />
+      <div className="mt-4 border-t border-[var(--border)] pt-4">
+        <SettingRow
+          label={t("settings.requireRlsDefault")}
+          description={t("settings.requireRlsDefaultHint")}
+          control={<Switch checked={requireRlsDefault} onCheckedChange={setRequireRlsDefault} />}
+        />
+      </div>
       <div className="mt-4 border-t border-[var(--border)] pt-4">
         <SoonRow label={t("settings.requireApproval")} description={t("settings.requireApprovalDesc")} />
       </div>

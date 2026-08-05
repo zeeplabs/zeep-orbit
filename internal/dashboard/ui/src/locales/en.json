@@ -287,6 +287,8 @@
   "settings.maxCsvExportRowsHint": "The Data Browser CSV export stops after this many rows.",
   "settings.statementTimeoutMs": "Statement timeout (ms)",
   "settings.statementTimeoutMsHint": "Aborts any app query running longer than this. 0 disables the timeout.",
+  "settings.requireRlsDefault": "Require RLS by default",
+  "settings.requireRlsDefaultHint": "New tables created without an explicit access level default to Restricted (owner-scoped). Only applies when the app has email auth enabled.",
   "settings.saved": "Saved!",
   "settings.error": "Error saving",
   "settings.preview": "Preview",

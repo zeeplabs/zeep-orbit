@@ -287,6 +287,8 @@
   "settings.maxCsvExportRowsHint": "A exportação CSV do Data Browser para após esse número de linhas.",
   "settings.statementTimeoutMs": "Timeout de consulta (ms)",
   "settings.statementTimeoutMsHint": "Cancela qualquer consulta de app que passe desse tempo. 0 desativa o timeout.",
+  "settings.requireRlsDefault": "Exigir RLS por padrão",
+  "settings.requireRlsDefaultHint": "Tabelas novas criadas sem nível de acesso explícito nascem Restritas (por dono). Só se aplica quando o app tem autenticação por e-mail habilitada.",
   "settings.saved": "Salvo!",
   "settings.error": "Erro ao salvar",
   "settings.preview": "Prévia",

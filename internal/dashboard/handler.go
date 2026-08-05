@@ -98,6 +98,19 @@ func validateAppInput(name string) error {
 	return nil
 }
 
+// resolveTableRLS applies the global "require RLS by default" setting: when a
+// create request omits the access level and the setting is on AND the app has
+// email auth (required for owner-scoped RLS), the table defaults to Restricted
+// ("enabled"). An explicit access level from the client is always respected,
+// and without email auth an omitted level stays Public (empty) — forcing
+// Restricted there would fail provisioning (owner_id FK needs _auth_users).
+func resolveTableRLS(requested string, requireRLSDefault, authEmailEnabled bool) string {
+	if requested == "" && requireRLSDefault && authEmailEnabled {
+		return "enabled"
+	}
+	return requested
+}
+
 // validateTableInput checks a single table before it reaches the provisioner
 // DDL: safe identifiers, known column types, no duplicate name against the
 // app's other tables (otherTables — exclude the table being updated, if any),
@@ -1103,6 +1116,13 @@ func (h *Handler) CreateAppTable(w http.ResponseWriter, r *http.Request) {
 	if !h.decodeJSONBody(w, r, &body) {
 		return
 	}
+
+	sysCfg, err := GetSystemConfig(r.Context(), h.pool)
+	if err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "failed to load system config", err)
+		return
+	}
+	body.RLS = resolveTableRLS(body.RLS, sysCfg.RequireRLSDefault, app.AuthEmailEnabled)
 
 	table := AppTableRow{Name: body.Name, RLS: body.RLS, Columns: body.Columns, Indexes: body.Indexes}
 	if err := validateTableInput(table, app.AuthEmailEnabled, app.Tables); err != nil {
