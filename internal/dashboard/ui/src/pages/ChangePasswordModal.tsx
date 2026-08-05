@@ -129,13 +129,7 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
                     {t("changePassword.title")}
                   </p>
                 </div>
-                <Button
-                  onClick={handleClose}
-                  className="w-full rounded-[10px] border-0 text-white font-semibold h-10"
-                  style={{
-                    background: 'linear-gradient(to bottom right, var(--primary), var(--accent))',
-                  }}
-                >
+                <Button onClick={handleClose} className="w-full">
                   Fechar
                 </Button>
               </div>
@@ -262,10 +256,7 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
                     size="sm"
                     onClick={handleSubmit}
                     disabled={isPending}
-                    className="flex-1 rounded-[10px] border-0 text-white font-semibold disabled:opacity-40"
-                    style={{
-                      background: 'linear-gradient(to bottom right, var(--primary), var(--accent))',
-                    }}
+                    className="flex-1"
                   >
                     {isPending ? (
                       <>
