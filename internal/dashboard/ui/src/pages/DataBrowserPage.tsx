@@ -59,7 +59,7 @@ type Row = Record<string, unknown>;
 export default function DataBrowserPage() {
   const { t } = useTranslation();
   const filterOps = filterOperators(t);
-  const [expandedApps, setExpandedApps] = useState<Set<string>>(new Set());
+  const [collapsedApps, setCollapsedApps] = useState<Set<string>>(new Set());
   const [selectedTable, setSelectedTable] = useState<{
     app: string;
     table: string;
@@ -106,7 +106,7 @@ export default function DataBrowserPage() {
   const deleteRow = useDeleteDataBrowserRow();
 
   const toggleApp = (name: string) => {
-    setExpandedApps((prev) => {
+    setCollapsedApps((prev) => {
       const next = new Set(prev);
       if (next.has(name)) next.delete(name);
       else next.add(name);
@@ -263,13 +263,8 @@ export default function DataBrowserPage() {
   const tableColumns: Column<Row>[] = columns.map((col) => ({
     key: col.name,
     sortable: true,
-    className: "max-w-[260px]",
-    header: (
-      <span className="inline-flex items-center gap-1.5">
-        {col.name}
-        <span className="font-mono text-[10px] font-normal opacity-50">{col.type}</span>
-      </span>
-    ),
+    className: "max-w-[260px] normal-case font-normal",
+    header: col.name,
     render: (row: Row) => {
       const val = row[col.name];
       const isNull = val === null || val === undefined;
@@ -291,37 +286,30 @@ export default function DataBrowserPage() {
   }));
 
   return (
-    <div className="grid min-h-full grid-cols-[240px_1fr] gap-4 max-md:flex max-md:flex-col">
+    <div className="grid h-full min-h-full items-stretch grid-cols-[240px_1fr] gap-4 max-md:flex max-md:flex-col">
       {/* Tree panel */}
-      <div className="overflow-hidden rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-3 max-md:max-h-[220px] max-md:overflow-y-auto">
+      <div className="h-full overflow-hidden rounded-[14px] bg-[var(--surface)] py-4 max-md:h-auto max-md:max-h-[220px] max-md:overflow-y-auto">
         <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
           {t("dataBrowser.appsLabel")}
         </div>
         {appsLoading ? (
           <div className="px-3 py-2 text-[13px] text-[var(--text-tertiary)]">{t("app.loading")}</div>
         ) : (
-          <div className="flex flex-col gap-0.5">
+          <div className="flex flex-col gap-3">
             {(apps || []).map((app) => {
-              const isExpanded = expandedApps.has(app.name);
-              const isActive = selectedTable?.app === app.name;
+              const isCollapsed = collapsedApps.has(app.name);
               return (
-                <div key={app.name}>
+                <div key={app.name} className="flex flex-col gap-0.5">
                   <button
                     onClick={() => toggleApp(app.name)}
-                    className={cn(
-                      "flex w-full cursor-pointer items-center gap-2 rounded-[8px] border-none px-3 py-2 text-left text-[13px] text-[var(--text-primary)] transition-colors hover:bg-[var(--hover-surface)]",
-                      isActive ? "bg-[var(--hover-surface)]" : "bg-transparent",
-                    )}
+                    className="flex w-full cursor-pointer items-center gap-2 rounded-md border-none bg-transparent px-3 py-1.5 text-left text-[13px] font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--hover-surface)]"
                   >
-                    <Icon name={isExpanded ? "expand_more" : "chevron_right"} size={16} className="text-[var(--text-tertiary)]" />
-                    <Icon name="database" size={15} className="text-[var(--text-tertiary)]" />
-                    <span className="truncate font-medium">{app.name}</span>
-                    <span className="ml-auto rounded-full bg-[var(--sunken)] px-1.5 py-0.5 text-[10px] text-[var(--text-tertiary)]">
-                      {app.tables.length}
-                    </span>
+                    <Icon name={isCollapsed ? "chevron_right" : "expand_more"} size={16} className="text-[var(--text-tertiary)]" />
+                    <Icon name="folder" size={16} className="text-[var(--text-tertiary)]" />
+                    <span className="truncate">{app.name}</span>
                   </button>
-                  {isExpanded && (
-                    <div className="ml-2 flex flex-col gap-0.5">
+                  {!isCollapsed && (
+                    <div className="flex flex-col gap-0.5">
                       {app.tables.map((table) => {
                         const isTableActive =
                           selectedTable?.app === app.name && selectedTable?.table === table.name;
@@ -337,7 +325,10 @@ export default function DataBrowserPage() {
                             )}
                           >
                             <Icon name="table_chart" size={14} />
-                            <span className="truncate">{table.name}</span>
+                            <span className="flex-1 truncate">{table.name}</span>
+                            <span className="rounded-full bg-[var(--sunken)] px-1.5 py-0.5 text-[10px] text-[var(--text-tertiary)]">
+                              {table.count}
+                            </span>
                           </button>
                         );
                       })}
@@ -358,11 +349,8 @@ export default function DataBrowserPage() {
           <>
             {/* Toolbar */}
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-[var(--text-primary)]">
-                <Icon name="table_chart" size={16} className="text-[var(--text-tertiary)]" />
-                <span className="text-sm font-semibold">
-                  {selectedTable.app}.{selectedTable.table}
-                </span>
+              <div className="flex items-baseline gap-2 text-[var(--text-primary)]">
+                <span className="text-lg font-bold">{selectedTable.table}</span>
                 <span className="text-xs text-[var(--text-tertiary)]">
                   {t("dataBrowser.columnsCount", { count: columns.length })}
                 </span>
@@ -386,9 +374,15 @@ export default function DataBrowserPage() {
                   <Icon name={isExporting ? "progress_activity" : "download"} size={15} className={isExporting ? "animate-spin" : undefined} />
                   {t("dataBrowser.exportCsv")}
                 </Button>
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={handleRefresh} disabled={isRefreshing || queryFetching}>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  title={t("dataBrowser.refresh")}
+                  aria-label={t("dataBrowser.refresh")}
+                  onClick={handleRefresh}
+                  disabled={isRefreshing || queryFetching}
+                >
                   <Icon name="refresh" size={15} className={isRefreshing || queryFetching ? "animate-spin" : undefined} />
-                  {t("dataBrowser.refresh")}
                 </Button>
               </div>
             </div>

@@ -2,7 +2,7 @@
 
 **Spec**: `.specs/features/rbac-per-app/spec.md`
 **Design**: `.specs/features/rbac-per-app/design.md`
-**Status**: Draft
+**Status**: ✅ Done (verificado 2026-08-05) — T-01 a T-12 implementados e shipados (T-07 reservado, nunca usado). Status "Draft" ficou desatualizado; nenhuma lacuna de código encontrada na auditoria. Ver nota de verificação por task abaixo.
 
 > Convenção de Gate: sem `TESTING.md` no repo — inferido do `Makefile` (`go test ./...`, `go vet ./...`, `gofmt -l`, `npx tsc -b`, `npm run build`), mesmo critério das demais specs.
 
@@ -51,6 +51,8 @@ Fase 6: Frontend                              Fase 7: Docs
 
 ### T-01: `app_members` table + `ResolveAppRole` ⭐ MVP
 
+**✅ Done** (verificado 2026-08-05) — `internal/dashboard/rbac.go` (`ResolveAppRole`, `AppRole`, `AppRef`), `app_members` provisionada em `provisioner.go`, matriz de testes em `rbac_test.go::TestResolveAppRole`.
+
 - **What**: Migration criando `zeep_system.app_members` (UNIQUE parcial por eixo, CHECK de "exactly one" FK, índice em user_id para lookup reverso). Função `ResolveAppRole` em `internal/dashboard/rbac.go` com `AppRole`/`AppRef` e a integração `CanReadAnyApp` (cross-spec com `dashboard-global-roles` T-06).
 - **Where**: `internal/dashboard/provisioner.go` (adiciona statements no array `stmts`), `internal/dashboard/rbac.go` (novo), `internal/dashboard/rbac_test.go` (novo).
 - **Depends on**: nenhuma
@@ -78,6 +80,8 @@ Fase 6: Frontend                              Fase 7: Docs
 
 ### T-02: Migração de dados existentes sem perda de acesso
 
+**✅ Done** (verificado 2026-08-05) — migração idempotente em `ProvisionZeepSystem` (`provisioner.go`), confirmada pelo CHANGELOG.md ("co-owner rows... migrated to `app_members` as `admin` in T-02").
+
 - **What**: Migration que popula `app_members` a partir de `apps.owner_id`, `app_ownership` (co-donos) e `frontend_apps.created_by` (que resolve para `dashboard_users.email`). `created_by` que não resolve para usuário existente é deixado sem membership (app órfão, acessível só por superadmin). `apps.owner_id` e `app_ownership` **não são removidos** — só deixam de ser fonte de autorização. Tudo dentro da mesma transação de `ProvisionZeepSystem`.
 - **Where**: `internal/dashboard/provisioner.go` (statements adicionais com `INSERT ... SELECT ... ON CONFLICT DO NOTHING`).
 - **Depends on**: T-01
@@ -92,6 +96,8 @@ Fase 6: Frontend                              Fase 7: Docs
 ---
 
 ### T-03: Invariante "≥1 admin por app" (transacional, lock)
+
+**✅ Done** (verificado 2026-08-05) — CHANGELOG.md confirma "the '≥1 admin' invariant is enforced inside the store via transaction + `SELECT ... FOR UPDATE`".
 
 - **What**: Helper `CountAppAdmins(ctx, pool, app AppRef) (int, error)` + lógica de "rejeitar mudança se resultaria em zero admin". Lock via `SELECT ... FOR UPDATE` na transação que faz o `UPDATE`/`DELETE` em `app_members`. Mesmo padrão de T-05 de `dashboard-global-roles` (invariante "≥1 superadmin").
 - **Where**: `internal/dashboard/app_members_store.go` (novo), onde os endpoints de T-06 vão usar.
@@ -108,6 +114,8 @@ Fase 6: Frontend                              Fase 7: Docs
 
 ### T-04: Enforcement em handlers de apps backend
 
+**✅ Done** (verificado 2026-08-05) — `apps_store.go`/`handler.go` usam `ResolveAppRole`/`role.CanWrite()`, sem JOIN em `app_ownership` restante.
+
 - **What**: Substituir filtros baseados em `apps.owner_id` e `app_ownership` (em `apps_store.go` linhas 60-61, 174-175, 298-300 e os handlers correspondentes em `handler.go`) por filtros via `app_members` + `ResolveAppRole`. Handlers de `app_tables` (table create/list/edit/delete) também passam a checar `role.CanWrite()` / `role.CanManage()`. `apps.owner_id` continua existindo como metadado (não removido).
 - **Where**: `internal/dashboard/apps_store.go`, `internal/dashboard/handler.go` (handlers `ListApps`, `GetApp`, `DeleteApp`, `GetAppSecret`, `GetAppAuthProviders`, e os de `app_tables`).
 - **Depends on**: T-01, T-02 (precisa dos dados migrados pra não quebrar acesso)
@@ -123,6 +131,8 @@ Fase 6: Frontend                              Fase 7: Docs
 
 ### T-05: Enforcement em handlers de apps frontend
 
+**✅ Done** (verificado 2026-08-05) — mesmo tratamento de T-04 aplicado a `frontend_apps.go`/`frontend_apps_store.go`, confirmado pelo CHANGELOG.md.
+
 - **What**: Mesmo tratamento de T-04 mas para `frontend_apps.go`/`frontend_apps_store.go` e handlers relacionados (`GET /frontend-apps`, `GET /frontend-apps/{id}`, archive, deploy, sync credentials). Apps arquivados para não-membros (mesmo padrão de "não existe" já usado).
 - **Where**: `internal/dashboard/frontend_apps.go`, `internal/dashboard/frontend_apps_store.go`, `internal/dashboard/handler.go` (handlers de frontend apps).
 - **Depends on**: T-01, T-02
@@ -137,6 +147,8 @@ Fase 6: Frontend                              Fase 7: Docs
 ---
 
 ### T-06: API de gestão de membros (POST/GET/PATCH/DELETE)
+
+**✅ Done** (verificado 2026-08-05) — rotas de members wireadas em `handler.go`, audit-log `app_member.added`/`role_changed`/`removed` confirmado pelo CHANGELOG.md.
 
 - **What**: 4 endpoints × 2 eixos = 8 rotas (ou 4 se unificadas sob `/members` com switch no handler pelo tipo de app):
   - `POST /dashboard/api/apps/{id}/members` `{user_id, role}` → 201
@@ -168,6 +180,8 @@ Fase 6: Frontend                              Fase 7: Docs
 
 ### T-08: Remoção de `app_ownership` + cleanup de queries
 
+**✅ Done** (verificado 2026-08-05) — `grep app_ownership internal/` só retorna comentários explicativos, zero JOIN/query real restante; `provisioner.go` faz `DROP TABLE IF EXISTS zeep_system.app_ownership`.
+
 - **What**: `DROP TABLE zeep_system.app_ownership` no provisioner. Remover todos os `LEFT JOIN app_ownership` em `apps_store.go` (linhas 60-61, 174-175, 298-300). Atualizar testes que usam `app_ownership` para usar `app_members`. `apps.owner_id` e `frontend_apps.created_by`/`owner_id` **não são removidos** — continuam como metadado.
 - **Where**: `internal/dashboard/provisioner.go` (DROP TABLE), `internal/dashboard/apps_store.go` (remove JOINs), `internal/dashboard/apps_store_test.go`, `internal/dashboard/frontend_apps_store_test.go` (atualiza fixtures).
 - **Depends on**: T-04 e T-05 (enforcement tem que estar 100% em `ResolveAppRole` antes de remover o fallback `app_ownership`)
@@ -182,6 +196,8 @@ Fase 6: Frontend                              Fase 7: Docs
 ---
 
 ### T-09: Frontend — página Members no AppDetailsPage
+
+**✅ Done** (verificado 2026-08-05) — `AppMembersList.tsx` wireado na tab Members de `AppDetailsPage.tsx` (`appDetails.tabMembers`), ambos os eixos (`axis="backend"`/`"frontend"`).
 
 - **What**: Nova aba "Members" em `AppDetailsPage` (backend e frontend) listando os membros com role, e botões "Add member" / "Change role" / "Remove" gated por `AppRoleAdmin` no app. Componente reusável (mesma página para backend/frontend, com prop `appType`).
 - **Where**: `internal/dashboard/ui/src/pages/AppDetailsPage.tsx` (nova tab), `internal/dashboard/ui/src/components/patterns/AppMembersList.tsx` (novo), mutações via `useApi`.
@@ -198,6 +214,8 @@ Fase 6: Frontend                              Fase 7: Docs
 
 ### T-10: i18n en/pt-BR das strings novas
 
+**✅ Done** (verificado 2026-08-05) — `appMembers.*` (32 chaves, incluindo `roleAdmin`/`roleEditor`/`roleViewer`) presentes e com paridade exata em `en.json`/`pt-BR.json`.
+
 - **What**: Labels de role (`Admin`/`Editor`/`Viewer`), mensagens de erro (já vêm do backend em inglês, AGENTS §4), e strings da UI de Members em `en.json` e `pt-BR.json`.
 - **Where**: `internal/dashboard/ui/src/locales/en.json`, `pt-BR.json`.
 - **Depends on**: T-09
@@ -213,6 +231,8 @@ Fase 6: Frontend                              Fase 7: Docs
 
 ### T-11: README + CHANGELOG
 
+**✅ Done** (verificado 2026-08-05) — `README.md` (tabela Platform linha 101 + seção Dashboard linha 187) e as 3 traduções (`i18n/README.pt-BR.md`, `.pt-PT.md`, `.es.md`) documentam os 3 papéis por app; `CHANGELOG.md` tem entrada completa sob `[Unreleased]`.
+
 - **What**: Documentar os 3 níveis de role per-app (`admin`/`editor`/`viewer`) e a função `ResolveAppRole` no `README.md` (tabela Platform + seção Dashboard) e entrada em `CHANGELOG.md` sob `## [Unreleased]`. Mirror nas 3 traduções (AGENTS §6).
 - **Where**: `README.md`, `i18n/README.{pt-BR,pt-PT,es}.md`, `CHANGELOG.md`.
 - **Depends on**: T-01 a T-10
@@ -225,6 +245,8 @@ Fase 6: Frontend                              Fase 7: Docs
 ---
 
 ### T-12: Integração final com `dashboard-global-roles` T-06
+
+**✅ Done** (verificado 2026-08-05) — comentário em `rbac.go` (linhas 57-60) referencia `dashboard-global-roles/design.md` explicitamente; `rbac_test.go` cobre o caminho cross-spec (`"admin global x backend/frontend (no membership)" → AppRoleViewer`) e o fallback seguro (`"member x backend/frontend (no membership)" → ""`, mesmo caminho de código que roda quando `CanReadAnyApp` é `false`).
 
 - **What**: Verificar que `CanReadAnyApp` é realmente chamado dentro de `ResolveAppRole` (já está em T-01, mas garantir que o teste cobre o caminho). Adicionar teste explícito do "cross-spec": `ResolveAppRole(admin global, app de terceiro) == AppRoleViewer`. Adicionar teste de regressão: se `CanReadAnyApp` retornar `false` (caso `dashboard-global-roles` ainda não esteja implementada), `ResolveAppRole` cai no lookup normal em `app_members` sem crash.
 - **Where**: `internal/dashboard/rbac_test.go` (testes adicionais), comentário em `rbac.go` referenciando `dashboard-global-roles/design.md`.

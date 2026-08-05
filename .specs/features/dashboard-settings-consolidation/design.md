@@ -104,7 +104,7 @@ type SystemConfig struct {
 
 - **Statement timeout 30s** = mudança de comportamento → CHANGELOG + README config.
 - **Purga** = destrutiva → off default, confirm dialog, audit-log, hard-delete só de já-soft-deleted.
-- **Pool cap** = risco de starvation multi-app → adiado até validar infra (fora deste design).
+- **Pool cap** = risco de starvation multi-app → adiado até validar infra (fora deste design). Nota técnica (2026-08-05): o pool hoje é **único e global** — `internal/db/client.go` cria um `pgxpool` compartilhado por processo com `MaxConns=10` fixo (não por app), passado a todos os handlers/apps. Qualquer cap por app implementado em Go será inerentemente **per-replica** (mesmo padrão do rate-limiter de RPM em `internal/server/ratelimit.go`, que já é per-processo/per-réplica) — não bound global cross-fleet sem um coordenador compartilhado (ex.: semáforo via Redis), que é escopo maior que "um campo de config simples". Isso não decide S2.5, só evita reinventar a roda quando ela for desengavetada: cap por app = `N × réplicas`, documentar isso explicitamente na UI/copy pra não dar falsa sensação de garantia global. `MaxConns=10` global também fica marcado como possível ponto de decisão futura (torná-lo configurável, eixo separado do cap por app).
 - **`require_rls_default`** acoplado à regra "Restricted exige email auth" — não pode forçar Restricted em app sem auth.
 - **`UpsertSystemConfig`** cresce em parâmetros a cada controle → migrar assinatura para receber o struct.
 

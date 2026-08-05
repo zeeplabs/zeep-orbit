@@ -29,9 +29,10 @@ function formatTime(iso: string) {
   });
 }
 
-function formatBody(body: string): string {
+function formatBodyInline(body: string): string {
   try {
-    return JSON.stringify(JSON.parse(body), null, 2);
+    const compact = JSON.stringify(JSON.parse(body)).replace(/,/g, ", ").replace(/:/g, ": ");
+    return `{ ${compact.slice(1, -1)} }`;
   } catch {
     return body;
   }
@@ -53,33 +54,33 @@ function methodTone(method: string): StatusTone {
   }
 }
 
+const METHOD_FG: Record<StatusTone, string> = {
+  success: "var(--success)",
+  warning: "var(--warning)",
+  danger: "var(--danger)",
+  primary: "var(--primary)",
+  neutral: "var(--text-secondary)",
+};
+
+function methodColor(method: string): string {
+  return METHOD_FG[methodTone(method)];
+}
+
 interface StatCardProps {
   icon: string;
   label: string;
   value: string | number;
-  sub?: string;
   fg?: string;
-  bg?: string;
 }
 
-function StatCard({ icon, label, value, sub, fg, bg }: StatCardProps) {
+function StatCard({ icon, label, value, fg }: StatCardProps) {
   return (
     <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-5 max-md:p-3">
-      <div className="mb-3 flex items-center gap-2.5 max-md:mb-2">
-        <div
-          className="flex size-9 items-center justify-center rounded-[10px] max-md:size-8"
-          style={{ background: bg ?? "var(--hover-surface)", color: fg ?? "var(--text-tertiary)" }}
-        >
-          <Icon name={icon} size={16} />
-        </div>
-        <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">
-          {label}
-        </span>
-      </div>
-      <div className="text-[28px] font-extrabold leading-none tracking-tight text-[var(--text-primary)] max-md:text-[22px]">
+      <Icon name={icon} size={18} style={{ color: fg ?? "var(--text-tertiary)" }} />
+      <div className="mt-3 text-[28px] font-extrabold leading-none tracking-tight text-[var(--text-primary)] max-md:text-[22px]">
         {value}
       </div>
-      {sub && <div className="mt-1.5 text-[12px] text-[var(--text-tertiary)]">{sub}</div>}
+      <div className="mt-1.5 text-[12px] text-[var(--text-tertiary)]">{label}</div>
     </div>
   );
 }
@@ -127,7 +128,11 @@ export default function LogsPage() {
       key: "method",
       header: t("logs.colMethod"),
       width: 90,
-      render: (e) => <StatusPill label={e.method} tone={methodTone(e.method)} dot={false} />,
+      render: (e) => (
+        <span className="text-[12.5px] font-semibold" style={{ color: methodColor(e.method) }}>
+          {e.method}
+        </span>
+      ),
     },
     {
       key: "path",
@@ -139,16 +144,10 @@ export default function LogsPage() {
     {
       key: "app",
       header: t("logs.colApp"),
-      width: 120,
-      render: (e) =>
-        e.app ? (
-          <span className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--hover-surface)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-secondary)]">
-            <Icon name="dns" size={11} />
-            {e.app}
-          </span>
-        ) : (
-          <span className="text-[11px] text-[var(--text-tertiary)]">—</span>
-        ),
+      width: 140,
+      render: (e) => (
+        <span className="text-[12.5px] text-[var(--text-secondary)]">{e.app || "—"}</span>
+      ),
     },
     {
       key: "latency",
@@ -187,15 +186,17 @@ export default function LogsPage() {
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--success)] opacity-75" />
                   <span className="relative inline-flex size-2 rounded-full bg-[var(--success)]" />
                 </span>
-                <span className="text-[11px] font-medium text-[var(--success)] tabular-nums">{countdown}s</span>
+                <span className="text-[11px] font-medium text-[var(--success)] tabular-nums">
+                  {t("logs.autoRefreshing", { s: countdown })}
+                </span>
               </span>
             )}
             <button
               onClick={() => setAutoRefresh((v) => !v)}
-              className="h-9 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-3 text-[12px] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)] cursor-pointer"
+              className="h-9 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-3 text-[12px] font-medium text-[var(--text-primary)] transition-colors hover:text-[var(--text-primary)] cursor-pointer"
               title={autoRefresh ? t("logs.refreshOff") : t("logs.refreshOn")}
             >
-              {autoRefresh ? t("logs.modeAuto") : t("logs.modeManual")}
+              {autoRefresh ? t("logs.switchToManual") : t("logs.switchToAuto")}
             </button>
             <button
               onClick={() => refetch()}
@@ -204,77 +205,62 @@ export default function LogsPage() {
             >
               <Icon name="refresh" size={16} />
             </button>
-            <Select
-              value={appFilter || ALL}
-              onValueChange={(v) => setAppFilter(v === ALL ? "" : v)}
-            >
-              <SelectTrigger className="h-9 w-[160px] text-[12px]">
-                <SelectValue placeholder={t("logs.filterAll")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL}>{t("logs.filterAll")}</SelectItem>
-                {apps?.map((a) => (
-                  <SelectItem key={a.id} value={a.name}>{a.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
         }
       />
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard
-          icon="bar_chart"
+          icon="trending_up"
           label={t("logs.totalReqs")}
           value={metrics?.total_requests ?? "-"}
-          sub={t("logs.totalSub")}
           fg="var(--primary)"
-          bg="var(--primary-tint)"
         />
         <StatCard
-          icon="schedule"
+          icon="speed"
           label={t("logs.avgLatency")}
-          value={metrics?.avg_latency_ms != null ? `${metrics.avg_latency_ms}ms` : "-"}
-          sub={t("logs.avgLatencySub")}
+          value={metrics?.avg_latency_ms != null ? `${metrics.avg_latency_ms} ms` : "-"}
+          fg="var(--text-tertiary)"
         />
         <StatCard
           icon="warning"
           label={t("logs.errors4xx")}
           value={metrics?.errors_4xx ?? "-"}
-          sub={t("logs.errors4xxSub")}
           fg="var(--warning)"
-          bg="var(--warning-tint)"
         />
         <StatCard
           icon="error"
           label={t("logs.errors5xx")}
           value={metrics?.errors_5xx ?? "-"}
-          sub={t("logs.errors5xxSub")}
           fg="var(--danger)"
-          bg="var(--danger-tint)"
         />
       </div>
 
-      {metrics?.method_breakdown && (
-        <div className="mb-6 flex flex-wrap items-center gap-2">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">
-            {t("logs.methods")}
-          </span>
-          {Object.entries(metrics.method_breakdown).map(([method, count]) => (
-            <StatusPill key={method} label={`${method} ${count}`} tone={methodTone(method)} dot={false} />
-          ))}
-          {metrics.requests_per_app && Object.keys(metrics.requests_per_app).length > 0 && (
-            <>
-              <span className="ml-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">
-                {t("logs.apps")}:
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-3">
+          {metrics?.method_breakdown &&
+            Object.entries(metrics.method_breakdown).map(([method, count]) => (
+              <span key={method} className="inline-flex items-center gap-1.5 text-[12px] text-[var(--text-secondary)]">
+                <span className="size-1.5 rounded-full" style={{ background: methodColor(method) }} />
+                {method} · {count}
               </span>
-              {Object.entries(metrics.requests_per_app).map(([app, count]) => (
-                <StatusPill key={app} label={`${app} ${count}`} tone="neutral" dot={false} />
-              ))}
-            </>
-          )}
+            ))}
         </div>
-      )}
+        <Select
+          value={appFilter || ALL}
+          onValueChange={(v) => setAppFilter(v === ALL ? "" : v)}
+        >
+          <SelectTrigger className="h-9 w-[160px] text-[12px]">
+            <SelectValue placeholder={t("logs.filterAll")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>{t("logs.filterAll")}</SelectItem>
+            {apps?.map((a) => (
+              <SelectItem key={a.id} value={a.name}>{a.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
       <DataTable
         columns={columns}
@@ -305,20 +291,25 @@ export default function LogsPage() {
             </DetailField>
             {e.req_body && (
               <div className="col-span-2">
-                <DetailField label="Request Body">
-                  <pre className="max-h-[200px] overflow-x-auto rounded-[10px] bg-[var(--bg-page)] p-3 text-[11px] leading-relaxed text-[var(--text-secondary)]">
-                    {formatBody(e.req_body)}
-                  </pre>
-                </DetailField>
+                <pre className="overflow-x-auto rounded-[10px] bg-[var(--bg-page)] p-3 text-[12px] leading-relaxed text-[var(--text-secondary)]">
+                  <span className="font-semibold text-[var(--text-primary)]">Request: </span>
+                  {formatBodyInline(e.req_body)}
+                </pre>
               </div>
             )}
             {e.res_body && (
               <div className="col-span-2">
-                <DetailField label="Response Body">
-                  <pre className="max-h-[200px] overflow-x-auto rounded-[10px] bg-[var(--bg-page)] p-3 text-[11px] leading-relaxed text-[var(--text-secondary)]">
-                    {formatBody(e.res_body)}
-                  </pre>
-                </DetailField>
+                <pre
+                  className="overflow-x-auto rounded-[10px] p-3 text-[12px] leading-relaxed"
+                  style={
+                    e.status >= 400
+                      ? { background: "var(--danger-tint)", color: "var(--danger)" }
+                      : { background: "var(--bg-page)", color: "var(--text-secondary)" }
+                  }
+                >
+                  <span className="font-semibold">Response: </span>
+                  {formatBodyInline(e.res_body)}
+                </pre>
               </div>
             )}
           </div>

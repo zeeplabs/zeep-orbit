@@ -8,7 +8,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { PageHeader, ProviderCard, SettingRow } from "@/components/patterns";
+import {
+  PageHeader,
+  ProviderCard,
+  SettingRow,
+  StatusPill,
+  EnterpriseBadge,
+  UpgradeModal,
+  AboutPanel,
+} from "@/components/patterns";
+import type { StatusTone } from "@/components/patterns";
 import { useBrandConfig, useUpdateBrandConfig, useSystemConfig } from "../lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -53,6 +62,13 @@ export default function BrandSettingsPage() {
     setSearchParams({ tab: value }, { replace: true });
   };
 
+  useEffect(() => {
+    if (tab === "license") {
+      setTab("branding");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+
   return (
     <>
       <PageHeader title={t("settings.pageTitle")} subtitle={t("settings.pageSubtitle")} />
@@ -63,9 +79,19 @@ export default function BrandSettingsPage() {
             <TabsTrigger
               key={tb.value}
               value={tb.value}
-              className="gap-1.5 rounded-[8px] text-[13px] text-[var(--text-secondary)] data-[state=active]:bg-[var(--hover-surface)] data-[state=active]:text-[var(--text-primary)] data-[state=active]:shadow-none"
+              disabled={tb.value === "license"}
+              title={tb.value === "license" ? t("apps.soon") : undefined}
+              className="gap-1.5 rounded-[8px] text-[13px] text-[var(--text-secondary)] data-[state=active]:bg-[var(--hover-surface)] data-[state=active]:text-[var(--text-primary)] data-[state=active]:shadow-none disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Icon name={tb.icon} size={14} /> {t(tb.labelKey)}
+              {tb.value === "license" && (
+                <span
+                  className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                  style={{ background: "var(--hover-surface)", color: "var(--text-tertiary)" }}
+                >
+                  {t("apps.soon")}
+                </span>
+              )}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -120,22 +146,28 @@ function BrandingTab() {
   };
 
   return (
-    <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-5">
-      <Label className="text-[13px] font-semibold text-[var(--text-secondary)]">
-        {t("brand.companyName")}
-      </Label>
-      <Input
-        value={companyName}
-        onChange={(e) => setCompanyName(e.target.value)}
-        placeholder="Zeep Tecnologia"
-        className="mt-2 max-w-md"
-      />
-      <div className="mt-5">
-        <Button onClick={handleSave} disabled={!data || update.isPending} className="gap-2">
-          <Icon name="save" size={16} />
-          {update.isPending ? t("brand.saving") : t("brand.save")}
-        </Button>
+    <div className="flex flex-wrap items-start gap-6">
+      <div className="min-w-[420px] flex-1 rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-5">
+        <Label className="text-[13px] font-semibold text-[var(--text-secondary)]">
+          {t("brand.companyName")}
+        </Label>
+        <Input
+          value={companyName}
+          onChange={(e) => setCompanyName(e.target.value)}
+          placeholder="Zeep Tecnologia"
+          className="mt-2 max-w-md"
+        />
+        <div className="mt-5">
+          <Button onClick={handleSave} disabled={!data || update.isPending} className="gap-2">
+            <Icon name="save" size={16} />
+            {update.isPending ? t("brand.saving") : t("brand.save")}
+          </Button>
+        </div>
       </div>
+      <AboutPanel
+        title={t("settings.aboutBrandingTitle")}
+        lines={[t("settings.aboutBrandingLine1")]}
+      />
     </div>
   );
 }
@@ -194,7 +226,8 @@ function SoftDeleteCard() {
   if (loading) return <p className="text-[13px] text-[var(--text-secondary)]">{t("app.loading")}</p>;
 
   return (
-    <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-5">
+    <div className="flex flex-wrap items-start gap-6">
+    <div className="min-w-[420px] flex-1 rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-5">
       <SettingRow
         label={t("system.softDelete")}
         description={t("system.softDeleteDesc")}
@@ -255,6 +288,11 @@ function SoftDeleteCard() {
           {saving ? t("system.saving") : t("system.save")}
         </Button>
       </div>
+    </div>
+      <AboutPanel
+        title={t("settings.aboutDatabaseTitle")}
+        lines={[t("settings.aboutDatabaseLine1"), t("settings.aboutDatabaseLine2"), t("settings.aboutDatabaseLine3")]}
+      />
     </div>
   );
 }
@@ -324,7 +362,8 @@ function GoogleAuthProviderCard() {
   if (loading) return <p className="text-[13px] text-[var(--text-secondary)]">{t("app.loading")}</p>;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-wrap items-start gap-6">
+    <div className="flex min-w-[420px] flex-1 flex-col gap-4">
       <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-5">
         <SoonRow label={t("settings.require2fa")} description={t("settings.require2faDesc")} />
       </div>
@@ -407,6 +446,14 @@ function GoogleAuthProviderCard() {
         </div>
       </div>
       </ProviderCard>
+      <ProviderCard name="Microsoft Entra ID" icon="badge" description={t("settings.authProviderEntraDesc")} badge={t("apps.soon")} disabled />
+      <ProviderCard name="Sign in with Apple" icon="phonelink_lock" description={t("settings.authProviderAppleDesc")} badge={t("apps.soon")} disabled />
+      <ProviderCard name="GitHub" icon="code" description={t("settings.authProviderGithubDesc")} badge={t("apps.soon")} disabled />
+    </div>
+      <AboutPanel
+        title={t("settings.aboutAuthTitle")}
+        lines={[t("settings.aboutAuthLine1"), t("settings.aboutAuthLine2")]}
+      />
     </div>
   );
 }
@@ -468,6 +515,8 @@ function GlobalStorageCard() {
   if (loading) return <p className="text-[13px] text-[var(--text-secondary)]">{t("app.loading")}</p>;
 
   return (
+    <div className="flex flex-wrap items-start gap-6">
+    <div className="flex min-w-[420px] flex-1 flex-col gap-4">
     <ProviderCard
       name={t("settings.globalStorage")}
       icon="hard_drive"
@@ -511,35 +560,219 @@ function GlobalStorageCard() {
         </div>
       </div>
     </ProviderCard>
+      <ProviderCard name="Azure Blob Storage" icon="web_stories" description={t("settings.storageProviderAzureDesc")} badge={t("apps.soon")} disabled />
+      <ProviderCard name="Google Cloud Storage" icon="cloud_queue" description={t("settings.storageProviderGcsDesc")} badge={t("apps.soon")} disabled />
+    </div>
+      <AboutPanel
+        title={t("settings.aboutStorageTitle")}
+        lines={[t("settings.aboutStorageLine1"), t("settings.aboutStorageLine2")]}
+      />
+    </div>
   );
 }
 
+type LicensePreviewState = "free" | "enterprise" | "trial" | "expired";
+
+const LICENSE_PREVIEW_STATES: LicensePreviewState[] = ["free", "enterprise", "trial", "expired"];
+
+const CORE_FEATURE_KEYS = [
+  "unlimitedAppsSchemas",
+  "instantRestApi",
+  "emailGoogleAuth",
+  "dataBrowserLogs",
+  "auditLog",
+] as const;
+
+const ENTERPRISE_FEATURE_KEYS = [
+  ...CORE_FEATURE_KEYS,
+  "ssoEntraApple",
+  "schemaChangeApproval",
+  "rbacPerApp",
+  "prioritySupport",
+] as const;
+
+/**
+ * License tab: UI-only preview (no `internal/enterprise` backend exists yet —
+ * see spec `enterprise-licensing`, ainda não aberta). Dados abaixo são mock,
+ * chaveados pelo seletor "Preview state"; nenhum botão persiste nada real.
+ */
 function LicenseTab() {
   const { t } = useTranslation();
+  const [previewState, setPreviewState] = useState<LicensePreviewState>("free");
+  const [licenseKey, setLicenseKey] = useState("");
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+
+  const previewOnly = () => toast.info(t("settings.licensePreviewOnly"));
+
+  const badgeByState: Record<LicensePreviewState, { label: string; tone: StatusTone } | null> = {
+    free: null,
+    enterprise: { label: t("settings.licenseActive"), tone: "success" },
+    trial: { label: t("settings.licenseTrial"), tone: "warning" },
+    expired: { label: t("settings.licenseExpired"), tone: "danger" },
+  };
+
+  const planLabelByState: Record<LicensePreviewState, string> = {
+    free: t("settings.licensePlanFree"),
+    enterprise: t("settings.licensePlanEnterprise"),
+    trial: t("settings.licensePlanTrial"),
+    expired: t("settings.licensePlanExpiredLabel"),
+  };
+
+  const featureKeysByState: Record<LicensePreviewState, readonly string[]> = {
+    free: CORE_FEATURE_KEYS,
+    enterprise: ENTERPRISE_FEATURE_KEYS,
+    trial: ENTERPRISE_FEATURE_KEYS,
+    expired: CORE_FEATURE_KEYS,
+  };
+
+  const ctaLabelByState: Record<LicensePreviewState, string | null> = {
+    free: t("settings.licenseAddLicense"),
+    enterprise: null,
+    trial: t("settings.licenseUpgradeNow"),
+    expired: t("settings.licenseRenewLicense"),
+  };
+
+  const badge = badgeByState[previewState];
+  const ctaLabel = ctaLabelByState[previewState];
+
   return (
-    <div className="flex items-start gap-3 rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-5">
-      <div
-        className="flex size-9 shrink-0 items-center justify-center rounded-[10px]"
-        style={{ background: "var(--accent-tint)", color: "var(--accent)" }}
-      >
-        <Icon name="workspace_premium" size={18} />
-      </div>
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="text-[14px] font-semibold text-[var(--text-primary)]">
-            {t("settings.licenseSoonTitle")}
+    <div className="flex flex-wrap items-start gap-6">
+      <div className="flex min-w-[420px] flex-1 flex-col gap-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="mr-1 text-[11.5px] text-[var(--text-tertiary)]">
+            {t("settings.licensePreviewLabel")}
           </span>
-          <span
-            className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
-            style={{ background: "var(--accent-tint)", color: "var(--accent)" }}
-          >
-            {t("apps.soon")}
-          </span>
+          {LICENSE_PREVIEW_STATES.map((state) => (
+            <button
+              key={state}
+              type="button"
+              onClick={() => setPreviewState(state)}
+              className="cursor-pointer rounded-full px-3 py-1.5 text-[12px] font-bold"
+              style={
+                previewState === state
+                  ? { background: "var(--primary)", color: "#fff" }
+                  : { background: "var(--hover-surface)", color: "var(--text-secondary)" }
+              }
+            >
+              {t(`settings.licenseState.${state}`)}
+            </button>
+          ))}
         </div>
-        <p className="mt-1 text-[13px] text-[var(--text-secondary)]">
-          {t("settings.licenseSoonDesc")}
-        </p>
+        <p className="text-[11.5px] text-[var(--text-tertiary)]">{t("settings.licensePreviewHint")}</p>
+
+        <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-5">
+          <div className="mb-1.5 flex items-center gap-2">
+            <span className="text-[18px] font-bold text-[var(--text-primary)]">
+              {t("settings.licensePlanPrefix", { plan: planLabelByState[previewState] })}
+            </span>
+            {badge && <StatusPill label={badge.label} tone={badge.tone} />}
+          </div>
+          {previewState !== "free" && (
+            <div className="mb-1 text-[12.5px] text-[var(--text-tertiary)]">
+              {t("settings.licenseLicensedTo", { org: "Zeep Tecnologia" })}
+            </div>
+          )}
+          {previewState === "trial" && (
+            <div className="mb-3.5 flex items-center gap-1.5 text-[12.5px] font-semibold" style={{ color: "var(--warning)" }}>
+              <Icon name="schedule" size={15} />
+              {t("settings.licenseTrialExpiry")}
+            </div>
+          )}
+          {previewState === "expired" && (
+            <div className="mb-3.5 flex items-center gap-1.5 text-[12.5px] font-semibold" style={{ color: "var(--warning)" }}>
+              <Icon name="schedule" size={15} />
+              {t("settings.licenseExpiredOn")}
+            </div>
+          )}
+
+          <div className="my-3.5 h-px bg-[var(--border)]" />
+
+          <div className="mb-2.5 text-[12px] font-bold uppercase tracking-wide text-[var(--text-tertiary)]">
+            {t("settings.licenseIncluded", { plan: planLabelByState[previewState] })}
+          </div>
+          <div className="mb-4 flex flex-col gap-2">
+            {featureKeysByState[previewState].map((key) => (
+              <div key={key} className="flex items-center gap-2 text-[13px] text-[var(--text-primary)]">
+                <Icon name="check_circle" size={16} className="text-[var(--success)]" />
+                {t(`settings.licenseFeature.${key}`)}
+              </div>
+            ))}
+          </div>
+
+          {ctaLabel && (
+            <div className="flex flex-wrap items-center gap-3">
+              <Button onClick={previewOnly}>{ctaLabel}</Button>
+              <a href="#license-key" className="text-[12.5px] font-semibold text-[var(--primary)]">
+                {t("settings.licenseContactSupport")}
+              </a>
+            </div>
+          )}
+        </div>
+
+        <div id="license-key" className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-5">
+          <div className="mb-1 text-[13px] font-bold text-[var(--text-primary)]">
+            {t("settings.licenseKeySectionTitle")}
+          </div>
+          <p className="mb-3 text-[12.5px] text-[var(--text-secondary)]">{t("settings.licenseKeySectionDesc")}</p>
+          <textarea
+            rows={3}
+            value={licenseKey}
+            onChange={(e) => setLicenseKey(e.target.value)}
+            placeholder={t("settings.licenseKeyPlaceholder")}
+            className="mb-2.5 w-full resize-none rounded-[9px] border border-[var(--border-strong)] bg-[var(--bg-page)] p-3 font-mono text-[12px] text-[var(--text-primary)] outline-none"
+          />
+          <div className="flex items-center gap-2.5">
+            <Button onClick={previewOnly} disabled={!licenseKey}>
+              {t("settings.saveLicense")}
+            </Button>
+            <span className="text-[12px] text-[var(--text-tertiary)]">{t("settings.licenseKeyHint")}</span>
+          </div>
+        </div>
+
+        <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-5">
+          <div className="mb-3 text-[13px] font-bold text-[var(--text-primary)]">
+            {t("settings.enterpriseBadgeSectionTitle")}
+          </div>
+          <div className="flex flex-wrap items-center gap-6">
+            <div>
+              <div className="mb-2 text-[11.5px] text-[var(--text-tertiary)]">
+                {t("settings.enterpriseBadgeInlineLabel")}
+              </div>
+              <div className="flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]">
+                {t("settings.enterpriseBadgeFeatureName")}
+                <EnterpriseBadge onClick={() => setUpgradeOpen(true)} />
+              </div>
+            </div>
+            <div>
+              <div className="mb-2 text-[11.5px] text-[var(--text-tertiary)]">
+                {t("settings.enterpriseBadgeLockedActionLabel")}
+              </div>
+              <Button variant="outline" onClick={() => setUpgradeOpen(true)} className="gap-2">
+                <Icon name="lock" size={16} />
+                {t("settings.enterpriseBadgeLockedButton")}
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
+
+      <AboutPanel
+        title={t("settings.aboutLicensingTitle")}
+        lines={[t("settings.aboutLicensingLine1"), t("settings.aboutLicensingLine2"), t("settings.aboutLicensingLine3")]}
+      />
+
+      <UpgradeModal
+        open={upgradeOpen}
+        feature={t("settings.enterpriseBadgeFeatureName")}
+        description={t("settings.licenseSoonDesc")}
+        confirmLabel={t("settings.licenseContactSupport")}
+        cancelLabel={t("brand.cancel")}
+        onUpgrade={() => {
+          setUpgradeOpen(false);
+          previewOnly();
+        }}
+        onClose={() => setUpgradeOpen(false)}
+      />
     </div>
   );
 }

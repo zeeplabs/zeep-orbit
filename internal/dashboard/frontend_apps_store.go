@@ -203,6 +203,46 @@ func ListFrontendApps(ctx context.Context, pool *db.Pool, user *DashboardUser) (
 	return apps, nil
 }
 
+// DeployedApp is the minimal shape needed to fan out to the deploy provider's
+// API for the "Recent Deploys" widget — no need for the full FrontendApp.
+type DeployedApp struct {
+	ID              string
+	Name            string
+	DeployServiceID string
+}
+
+// ListWithDeployService returns up to limit non-archived frontend apps that
+// have a deploy service already created, most recently created first. There
+// is no updated_at column on frontend_apps, so creation order is the best
+// available proxy for "recently active."
+func ListWithDeployService(ctx context.Context, pool *db.Pool, limit int) ([]DeployedApp, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT id, name, deploy_service_id
+		 FROM zeep_system.frontend_apps
+		 WHERE archived_at IS NULL AND deploy_service_id != ''
+		 ORDER BY created_at DESC
+		 LIMIT $1`,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("dashboard: list frontend apps with deploy service: %w", err)
+	}
+	defer rows.Close()
+
+	apps := make([]DeployedApp, 0)
+	for rows.Next() {
+		var a DeployedApp
+		if err := rows.Scan(&a.ID, &a.Name, &a.DeployServiceID); err != nil {
+			return nil, fmt.Errorf("dashboard: list frontend apps with deploy service scan: %w", err)
+		}
+		apps = append(apps, a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("dashboard: list frontend apps with deploy service rows: %w", err)
+	}
+	return apps, nil
+}
+
 func UpdateFrontendAppStatus(ctx context.Context, pool *db.Pool, id, status, errorMessage, repoURL string) (*FrontendApp, error) {
 	var a FrontendApp
 	err := scanApp(&a,

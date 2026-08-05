@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -28,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { PageHeader, EmptyState, LoadingState, StatusPill, DataTable } from '@/components/patterns'
+import { PageHeader, EmptyState, LoadingState, StatusPill, DataTable, ProviderTabs, AboutPanel } from '@/components/patterns'
 import type { Column } from '@/components/patterns'
 import { cn } from '@/lib/utils'
 
@@ -127,28 +128,37 @@ export default function GitHubIntegrationPage() {
       <PageHeader title={t('github.title')} subtitle={t('github.subtitle')} />
 
       <Tabs value={tab} onValueChange={setTab} className="w-full">
-        <TabsList>
-          <TabsTrigger value="config">
+        <TabsList className="mb-6 h-auto w-full justify-start gap-1 overflow-x-auto rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-1.5">
+          <TabsTrigger
+            value="config"
+            className="gap-1.5 rounded-[8px] text-[13px] text-[var(--text-secondary)] data-[state=active]:bg-[var(--hover-surface)] data-[state=active]:text-[var(--text-primary)] data-[state=active]:shadow-none"
+          >
             <Icon name="link" size={14} />
             {t('github.tabConfig')}
           </TabsTrigger>
-          <TabsTrigger value="templates">
+          <TabsTrigger
+            value="templates"
+            className="gap-1.5 rounded-[8px] text-[13px] text-[var(--text-secondary)] data-[state=active]:bg-[var(--hover-surface)] data-[state=active]:text-[var(--text-primary)] data-[state=active]:shadow-none"
+          >
             <Icon name="code" size={14} />
             {t('github.tabTemplates')}
           </TabsTrigger>
-          <TabsTrigger value="deploy">
+          <TabsTrigger
+            value="deploy"
+            className="gap-1.5 rounded-[8px] text-[13px] text-[var(--text-secondary)] data-[state=active]:bg-[var(--hover-surface)] data-[state=active]:text-[var(--text-primary)] data-[state=active]:shadow-none"
+          >
             <Icon name="rocket_launch" size={14} />
             {t('deploy.tabDeploy')}
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="config">
+        <TabsContent value="config" className="mt-0">
           <GitHubConfigTab />
         </TabsContent>
-        <TabsContent value="templates">
+        <TabsContent value="templates" className="mt-0">
           <GitHubTemplatesTab />
         </TabsContent>
-        <TabsContent value="deploy">
+        <TabsContent value="deploy" className="mt-0">
           <DeployTab />
         </TabsContent>
       </Tabs>
@@ -169,7 +179,6 @@ function GitHubConfigTab() {
   const [clientId, setClientId] = useState('')
   const [clientSecret, setClientSecret] = useState('')
   const [privateKey, setPrivateKey] = useState('')
-  const [webhookSecret, setWebhookSecret] = useState('')
   const [showSecret, setShowSecret] = useState(false)
   const [showPrivateKey, setShowPrivateKey] = useState(false)
 
@@ -177,8 +186,16 @@ function GitHubConfigTab() {
   const [showDisconnectDialog, setShowDisconnectDialog] = useState(false)
   const [installing, setInstalling] = useState(false)
 
+  const [linkedTemplates, setLinkedTemplates] = useState<GitHubTemplate[]>([])
+
   useEffect(() => {
     fetchStatus()
+    fetch('/dashboard/api/github/templates', { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setLinkedTemplates(data))
+      .catch(() => {
+        // non-critical, section just renders empty
+      })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -223,7 +240,6 @@ function GitHubConfigTab() {
           client_id: clientId,
           client_secret: clientSecret,
           private_key: privateKey,
-          webhook_secret: webhookSecret,
         }),
       })
       const data = await res.json()
@@ -236,7 +252,6 @@ function GitHubConfigTab() {
       setMessageType('success')
       setClientSecret('')
       setPrivateKey('')
-      setWebhookSecret('')
       await fetchStatus()
     } catch {
       setMessage(t('common.errorSaving'))
@@ -296,47 +311,81 @@ function GitHubConfigTab() {
   if (loading) return <LoadingState rows={4} />
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-wrap items-start gap-6">
+      <div className="flex min-w-[420px] flex-1 flex-col gap-6">
+      <div className="flex flex-col gap-3">
+        <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
+          {t('integrations.codeHostSectionTitle')}
+        </div>
+        <ProviderTabs
+          value="github"
+          items={[
+            { key: 'github', name: 'GitHub', icon: 'code' },
+            { key: 'gitlab', name: 'GitLab', icon: 'merge_type', disabled: true, badge: t('apps.soon') },
+            { key: 'bitbucket', name: 'Bitbucket', icon: 'account_tree', disabled: true, badge: t('apps.soon') },
+          ]}
+        />
+      </div>
+
       <div
         className="flex flex-col gap-6 rounded-[14px] border p-6"
         style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
       >
         <div className="flex items-center justify-between">
-          <div>
-            <div className="text-[15px] font-bold" style={{ color: 'var(--text-primary)' }}>
-              GitHub App
-            </div>
-            <p className="mt-0.5 text-[12px]" style={{ color: 'var(--text-secondary)' }}>
-              {t('github.configDesc')}
-            </p>
-          </div>
-          {status?.configured && (
-            <div className="flex items-center gap-3">
-              <StatusPill
-                label={status.connected ? t('github.connected') : t('github.notConnected')}
-                tone={status.connected ? 'success' : 'warning'}
+          {status?.configured ? (
+            <div className="flex items-center gap-2">
+              <span
+                className="size-2 rounded-full"
+                style={{ background: status.connected ? 'var(--success)' : 'var(--warning)' }}
               />
-              {status.connected && status.org_login && (
-                <span className="text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
-                  {status.org_login}
-                </span>
-              )}
+              <span
+                className="text-[13px] font-semibold"
+                style={{ color: status.connected ? 'var(--success)' : 'var(--warning)' }}
+              >
+                {status.connected
+                  ? `${t('github.connected')} · ${status.org_login}`
+                  : t('github.notConnected')}
+              </span>
             </div>
+          ) : (
+            <div>
+              <div className="text-[15px] font-bold" style={{ color: 'var(--text-primary)' }}>
+                GitHub App
+              </div>
+              <p className="mt-0.5 text-[12px]" style={{ color: 'var(--text-secondary)' }}>
+                {t('github.configDesc')}
+              </p>
+            </div>
+          )}
+          {status?.configured && (
+            <Button
+              onClick={() => setShowDisconnectDialog(true)}
+              disabled={disconnecting}
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+            >
+              <Icon name="link_off" size={14} />
+              {t('github.disconnect')}
+            </Button>
           )}
         </div>
 
-        <div className="flex max-w-lg flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="gh-app-id" className="text-[12px] font-semibold">
-              {t('github.appId')}
-            </Label>
-            <Input id="gh-app-id" value={appId} onChange={(e) => setAppId(e.target.value)} placeholder="123456" />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="gh-app-slug" className="text-[12px] font-semibold">
-              {t('github.appSlug')}
-            </Label>
-            <Input id="gh-app-slug" value={appSlug} onChange={(e) => setAppSlug(e.target.value)} placeholder="my-orbit-app" />
+        <div className="flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="gh-app-id" className="text-[12px] font-semibold">
+                {t('github.appId')}
+              </Label>
+              <Input id="gh-app-id" value={appId} onChange={(e) => setAppId(e.target.value)} placeholder="123456" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="gh-app-slug" className="text-[12px] font-semibold">
+                {t('github.appSlug')}
+              </Label>
+              <Input id="gh-app-slug" value={appSlug} onChange={(e) => setAppSlug(e.target.value)} placeholder="my-orbit-app" />
+            </div>
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="gh-client-id" className="text-[12px] font-semibold">
@@ -398,18 +447,6 @@ function GitHubConfigTab() {
               </button>
             </div>
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="gh-webhook-secret" className="text-[12px] font-semibold">
-              {t('github.webhookSecret')}
-            </Label>
-            <Input
-              id="gh-webhook-secret"
-              type="password"
-              value={webhookSecret}
-              onChange={(e) => setWebhookSecret(e.target.value)}
-              placeholder={status?.configured ? '•••••••• (empty = keep current)' : t('github.webhookSecret')}
-            />
-          </div>
         </div>
 
         <PageFooter message={message} type={messageType} />
@@ -428,31 +465,19 @@ function GitHubConfigTab() {
           </Button>
 
           {status?.configured && (
-            <>
-              <Button
-                onClick={handleInstall}
-                disabled={installing || status.connected}
-                variant="outline"
-                className="gap-2"
-              >
-                {installing ? (
-                  <Icon name="progress_activity" size={14} className="animate-spin" />
-                ) : (
-                  <Icon name="link" size={14} />
-                )}
-                {status.connected ? t('github.installed') : t('github.install')}
-              </Button>
-              <Button
-                onClick={() => setShowDisconnectDialog(true)}
-                disabled={disconnecting}
-                variant="outline"
-                className="gap-2"
-                style={{ color: 'var(--danger)' }}
-              >
-                <Icon name="link_off" size={14} />
-                {t('github.disconnect')}
-              </Button>
-            </>
+            <Button
+              onClick={handleInstall}
+              disabled={installing || status.connected}
+              variant="outline"
+              className="gap-2"
+            >
+              {installing ? (
+                <Icon name="progress_activity" size={14} className="animate-spin" />
+              ) : (
+                <Icon name="link" size={14} />
+              )}
+              {status.connected ? t('github.installed') : t('github.install')}
+            </Button>
           )}
         </div>
       </div>
@@ -483,6 +508,35 @@ function GitHubConfigTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {linkedTemplates.length > 0 && (
+        <div
+          className="flex flex-col gap-1 rounded-[14px] border p-2"
+          style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
+        >
+          <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
+            {t('integrations.linkedTemplatesTitle')}
+          </div>
+          {linkedTemplates.map((tpl) => (
+            <div key={tpl.id} className="flex items-center gap-3 rounded-[10px] px-3 py-2.5" style={{ color: 'var(--text-primary)' }}>
+              <Icon name="frame_source" size={16} style={{ color: 'var(--text-tertiary)' }} />
+              <span className="flex-1 truncate text-[13px] font-medium">{tpl.name}</span>
+              <span className="truncate font-mono text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
+                {tpl.github_owner}/{tpl.github_repo}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      </div>
+      <AboutPanel
+        title={t('integrations.aboutCodeHostingTitle')}
+        lines={[
+          t('integrations.aboutCodeHostingLine1'),
+          t('integrations.aboutCodeHostingLine2'),
+          t('integrations.aboutCodeHostingLine3'),
+        ]}
+      />
     </div>
   )
 }
@@ -891,8 +945,11 @@ function DeployTab() {
   const [message, setMessage] = useState<string | null>(null)
   const [messageType, setMessageType] = useState<'success' | 'error'>('success')
 
+  const [recentDeploys, setRecentDeploys] = useState<{ appName: string; status: string; time: string }[]>([])
+
   useEffect(() => {
     fetchStatus()
+    fetchRecentDeploys()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -908,6 +965,18 @@ function DeployTab() {
       }
     } catch {
       // non-critical
+    }
+  }
+
+  const fetchRecentDeploys = async () => {
+    try {
+      const res = await fetch('/dashboard/api/deploy-provider/recent-deploys', { credentials: 'include' })
+      if (res.ok) {
+        const data = await res.json()
+        setRecentDeploys(data.deploys || [])
+      }
+    } catch {
+      toast.error(t('integrations.recentDeploysError'))
     }
   }
 
@@ -945,7 +1014,25 @@ function DeployTab() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-wrap items-start gap-6">
+      <div className="flex min-w-[420px] flex-1 flex-col gap-6">
+      <div className="flex flex-col gap-3">
+        <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
+          {t('integrations.deployProviderSectionTitle')}
+        </div>
+        <ProviderTabs
+          value="render"
+          items={[
+            { key: 'render', name: 'Render', icon: 'rocket_launch' },
+            { key: 'cloudflare', name: 'Cloudflare Pages', icon: 'cloud', disabled: true, badge: t('apps.soon') },
+            { key: 'digitalocean', name: 'DigitalOcean', icon: 'water_drop', disabled: true, badge: t('apps.soon') },
+            { key: 'aws', name: 'AWS', icon: 'cloud_queue', disabled: true, badge: t('apps.soon') },
+            { key: 'azure', name: 'Azure', icon: 'web_stories', disabled: true, badge: t('apps.soon') },
+            { key: 'gcp', name: 'Google Cloud', icon: 'cloud_circle', disabled: true, badge: t('apps.soon') },
+          ]}
+        />
+      </div>
+
       <div
         className="flex flex-col gap-6 rounded-[14px] border p-6"
         style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
@@ -1052,6 +1139,38 @@ function DeployTab() {
           </Button>
         </div>
       </div>
+
+      <div
+        className="flex flex-col gap-1 rounded-[14px] border p-2"
+        style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
+      >
+        <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
+          {t('integrations.recentDeploysTitle')}
+        </div>
+        {recentDeploys.length === 0 ? (
+          <p className="px-3 py-2 text-[13px]" style={{ color: 'var(--text-tertiary)' }}>
+            {t('integrations.recentDeploysEmpty')}
+          </p>
+        ) : (
+          recentDeploys.map((d, i) => (
+            <div key={i} className="flex items-center gap-3 rounded-[10px] px-3 py-2.5">
+              <Icon name="rocket_launch" size={16} style={{ color: 'var(--text-tertiary)' }} />
+              <span className="flex-1 truncate text-[13px] font-medium" style={{ color: 'var(--text-primary)' }}>
+                {d.appName}
+              </span>
+              <StatusPill label={d.status} tone={d.status === 'Live' ? 'success' : 'danger'} />
+              <span className="w-16 shrink-0 text-right text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
+                {d.time}
+              </span>
+            </div>
+          ))
+        )}
+      </div>
+      </div>
+      <AboutPanel
+        title={t('integrations.aboutDeployProvidersTitle')}
+        lines={[t('integrations.aboutDeployProvidersLine1')]}
+      />
     </div>
   )
 }

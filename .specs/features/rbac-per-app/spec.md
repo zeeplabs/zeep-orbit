@@ -6,11 +6,11 @@ zeep-orbit hoje tem só dois níveis de acesso globais (`admin`, `superadmin` em
 
 ## Goals
 
-- [ ] Cada app (backend ou frontend) tem membros individuais, cada um com uma role: `admin`, `editor` ou `viewer`
-- [ ] `superadmin` global continua com acesso irrestrito a qualquer app, sem precisar de membership explícita (camada separada, não substitui o role por app)
-- [ ] Usuário `admin` global só acessa apps onde é membro explícito — fecha o gap de visibilidade total documentado em specs anteriores
-- [ ] Modelo de ownership unificado entre backend apps e frontend apps (hoje são dois mecanismos diferentes: `owner_id`+`app_ownership` vs. nenhum)
-- [ ] Dados existentes migram sem perda: donos/co-donos atuais de backend apps e criadores de frontend apps (quando resolvíveis) tornam-se `admin` do respectivo app
+- [x] Cada app (backend ou frontend) tem membros individuais, cada um com uma role: `admin`, `editor` ou `viewer` — `app_members` (T-01).
+- [x] `superadmin` global continua com acesso irrestrito a qualquer app, sem precisar de membership explícita (camada separada, não substitui o role por app) — bypass em `ResolveAppRole` (T-01).
+- [x] ~~Usuário `admin` global só acessa apps onde é membro explícito~~ — **superado por decisão cross-spec** (`dashboard-global-roles` T-06, formalizada em T-01/T-12 aqui): `admin`/`auditor` global recebem acesso **viewer** (leitura) a qualquer app via `CanReadAnyApp`, não acesso zero. Decisão documentada em `dashboard-global-roles/design.md` e no `CHANGELOG.md`; escritas continuam bloqueadas por `CanWrite()`.
+- [x] Modelo de ownership unificado entre backend apps e frontend apps (hoje são dois mecanismos diferentes: `owner_id`+`app_ownership` vs. nenhum) — `app_ownership` dropado (T-08), `app_members` é a única fonte de autorização para os dois eixos.
+- [x] Dados existentes migram sem perda: donos/co-donos atuais de backend apps e criadores de frontend apps (quando resolvíveis) tornam-se `admin` do respectivo app — migração idempotente em `ProvisionZeepSystem` (T-02).
 
 ## Out of Scope
 

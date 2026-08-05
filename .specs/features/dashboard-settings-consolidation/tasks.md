@@ -10,7 +10,7 @@ Origem: T4.5 do `dashboard-redesign` (Fase 4 — fidelidade ao handoff). Cada ta
 
 ## Fase 0 — Decisão (bloqueia todo o resto)
 
-- [ ] **S0.1** — Brainstorm de produto/infra fechando as Open Questions da spec: defaults (retention/timeout/pool/CSV rows), se schema-change-approval entra aqui ou vira spec própria, se o release pode sair com tabs parciais, risco do pool cap. Saída: `design.md`.
+- [x] **S0.1** — Brainstorm de produto/infra fechando as Open Questions da spec: defaults (retention/timeout/pool/CSV rows), se schema-change-approval entra aqui ou vira spec própria, se o release pode sair com tabs parciais, risco do pool cap. Saída: `design.md`. Aprovado 2026-08-04 (checkbox estava desatualizado — decisões já implementadas em S2.1-S2.4). Nota técnica de arquitetura de pool (pgxpool único/global, `MaxConns=10`, cap seria per-replica) adicionada em 2026-08-05 pra quando S2.5 for desengavetado.
 
 ## Fase 1 — Entregável sem backend novo (mergeável já)
 
@@ -26,12 +26,13 @@ Origem: T4.5 do `dashboard-redesign` (Fase 4 — fidelidade ao handoff). Cada ta
 - [x] **S2.3** — **Max rows per CSV export**: trocar o cap fixo `10000` do `DataBrowserExport` (handler.go) por leitura da config. Amarra com T4.4 do `dashboard-redesign`. Config + wire + UI. Commit `30c3ec8`.
 - [x] **S2.4** — **Statement timeout**: config + enforcement real (`SET statement_timeout` por conexão/consulta das queries de app). Validar que aplica, não só persiste. UI. Commit `735aa68`.
 - [ ] **S2.5** — **Max connections per app (pool cap)**: config + cap no pool Postgres por app (`registry`/`db`). **Higher-risk (runtime multi-app)** — validar infra (S0.1 Q4) antes. UI só após enforcement seguro.
-- [ ] **S2.6** — **Require schema-change approval**: SOMENTE se S0.1 decidir que entra aqui. Caso contrário, abrir `.specs/features/schema-change-approval/` e deixar o toggle desligado/oculto até lá.
+- [ ] **S2.6** — **Require schema-change approval**: SOMENTE se S0.1 decidir que entra aqui. Caso contrário, abrir `.specs/features/schema-change-approval/` e deixar o toggle desligado/oculto até lá. **Deliberadamente adiado (2026-08-05)**: brainstorm iniciado (escopo do gate: tudo vs só destrutivo vs tabela-mas-não-índice; quem aprova; UX da fila; interação com roles admin/editor/viewer) — Julio pediu pra pausar e retomar depois. Toggle continua como `SoonRow` desabilitado (já é o estado atual, nada muda na UI). Sem spec aberta ainda.
 
 ## Fase 3 — Slots cross-spec
 
 - [ ] **S3.1** — **Require 2FA for all admins**: toggle que liga a policy quando `two-factor-auth` entregar o backend. Coordenar contrato com aquela spec; até lá, oculto ou desabilitado com nota.
 - [ ] **S3.2** — **Tab License**: slot da 5ª tab lendo o estado de licença que `enterprise-licensing` expõe. Sem reimplementar licensing aqui.
+  - **Parcial (2026-08-05)**: UI mock completa implementada (plan card, feature checklist, preview state switcher Free/Enterprise/Trial/Expired, license-key textarea, demo do `EnterpriseBadge`/`UpgradeModal`) batendo com o handoff. Dados 100% hardcoded, nenhum botão persiste — segue bloqueado no backend real (`internal/enterprise`, verificação de license key, resolução de plano) até `enterprise-licensing` abrir.
 
 ## Fase 4 — Fechamento
 

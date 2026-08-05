@@ -421,6 +421,7 @@ export interface DataBrowserColumn {
 export interface DataBrowserTable {
   name: string
   columns: DataBrowserColumn[]
+  count: number
 }
 
 export interface DataBrowserApp {

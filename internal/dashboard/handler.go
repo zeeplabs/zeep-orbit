@@ -1626,6 +1626,7 @@ type DataBrowserTableColumn struct {
 type DataBrowserTable struct {
 	Name    string                   `json:"name"`
 	Columns []DataBrowserTableColumn `json:"columns"`
+	Count   int                      `json:"count"`
 }
 
 // DataBrowserApp represents an app in the data browser tree.
@@ -1666,7 +1667,14 @@ func (h *Handler) ListDataBrowserApps(w http.ResponseWriter, r *http.Request) {
 			if t.RLS == "owner" {
 				cols = append(cols, DataBrowserTableColumn{Name: "owner_id", Type: "uuid"})
 			}
-			tables = append(tables, DataBrowserTable{Name: t.Name, Columns: cols})
+
+			var count int
+			if q, err := query.BuildList(app.SchemaName, t.Name, t, nil, "", h.reg.SystemConfig().SoftDeleteEnabled); err == nil {
+				filterArgs := q.Args[:len(q.Args)-2]
+				_ = h.pool.QueryRow(r.Context(), q.CountSQL, filterArgs...).Scan(&count)
+			}
+
+			tables = append(tables, DataBrowserTable{Name: t.Name, Columns: cols, Count: count})
 		}
 		resp = append(resp, DataBrowserApp{Name: app.Config.Name, Tables: tables})
 	}

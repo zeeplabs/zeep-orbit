@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/zeeplabs/zeep-orbit/internal/deploy"
@@ -17,11 +19,15 @@ const renderAPIBase = "https://api.render.com/v1"
 type Client struct {
 	apiKey     string
 	httpClient *http.Client
+	// baseURL defaults to renderAPIBase; overridable in tests to point at an
+	// httptest.Server instead of the real Render API.
+	baseURL string
 }
 
 func NewClient(apiKey string) *Client {
 	return &Client{
-		apiKey: apiKey,
+		apiKey:  apiKey,
+		baseURL: renderAPIBase,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -29,7 +35,7 @@ func NewClient(apiKey string) *Client {
 }
 
 func (c *Client) do(ctx context.Context, method, path string, body interface{}) (*http.Response, []byte, error) {
-	url := renderAPIBase + path
+	url := c.baseURL + path
 
 	var bodyReader io.Reader
 	if body != nil {
@@ -311,6 +317,59 @@ func (p *RenderProvider) DeleteService(ctx context.Context, serviceID string) er
 		return nil // already deleted — not an error for best-effort
 	}
 	return fmt.Errorf("render: delete service failed (status %d): %s", resp.StatusCode, string(body))
+}
+
+// Deploy is one entry in a service's deploy history, as returned by
+// GET /services/{id}/deploys.
+type Deploy struct {
+	ID         string
+	Status     string
+	CreatedAt  time.Time
+	FinishedAt *time.Time
+}
+
+type deployListEntry struct {
+	Deploy struct {
+		ID         string     `json:"id"`
+		Status     string     `json:"status"`
+		CreatedAt  time.Time  `json:"createdAt"`
+		FinishedAt *time.Time `json:"finishedAt"`
+	} `json:"deploy"`
+}
+
+// ListDeploys returns up to limit recent deploys for serviceID, filtered to
+// statuses. Read-only — used to populate the dashboard's "Recent Deploys"
+// list, no side effects on Render.
+func (c *Client) ListDeploys(ctx context.Context, serviceID string, limit int, statuses []string) ([]Deploy, error) {
+	q := url.Values{}
+	q.Set("limit", strconv.Itoa(limit))
+	for _, s := range statuses {
+		q.Add("status", s)
+	}
+
+	resp, body, err := c.do(ctx, http.MethodGet, "/services/"+serviceID+"/deploys?"+q.Encode(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("render: list deploys: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("render: list deploys failed (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var entries []deployListEntry
+	if err := json.Unmarshal(body, &entries); err != nil {
+		return nil, fmt.Errorf("render: parse deploys: %w", err)
+	}
+
+	deploys := make([]Deploy, 0, len(entries))
+	for _, e := range entries {
+		deploys = append(deploys, Deploy{
+			ID:         e.Deploy.ID,
+			Status:     e.Deploy.Status,
+			CreatedAt:  e.Deploy.CreatedAt,
+			FinishedAt: e.Deploy.FinishedAt,
+		})
+	}
+	return deploys, nil
 }
 
 func (p *RenderProvider) AddCustomDomain(ctx context.Context, serviceID, domain string) error {

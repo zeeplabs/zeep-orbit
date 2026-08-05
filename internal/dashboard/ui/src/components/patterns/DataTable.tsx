@@ -81,12 +81,10 @@ export function DataTable<T>({
   const colCount = columns.length + (expandable ? 1 : 0) + (rowActions ? 1 : 0)
 
   return (
-    <div
-      className={cn(
-        'overflow-hidden rounded-[14px] border border-[var(--border)] bg-[var(--surface)]',
-        className
-      )}
-    >
+    <div className={className}>
+      <div
+        className="overflow-hidden rounded-[14px] border border-[var(--border)] bg-[var(--surface)]"
+      >
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-sm">
           <thead>
@@ -191,30 +189,30 @@ export function DataTable<T>({
           action={empty?.action}
         />
       )}
+      </div>
 
       {pagination && pagination.pageCount > 1 && (
-        <div className="flex items-center justify-between gap-3 border-t border-[var(--border)] px-4 py-3">
+        <div className="flex items-center justify-between gap-3 pt-3">
           <div className="text-xs text-[var(--text-tertiary)]">{pagination.label}</div>
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
-              size="sm"
+              size="icon"
+              title={pagination.prevLabel}
+              aria-label={pagination.prevLabel}
               disabled={pagination.page <= 1}
               onClick={() => pagination.onPageChange(pagination.page - 1)}
             >
               <Icon name="chevron_left" size={16} />
-              {pagination.prevLabel}
             </Button>
-            <span className="text-xs text-[var(--text-secondary)]">
-              {pagination.page} / {pagination.pageCount}
-            </span>
             <Button
               variant="outline"
-              size="sm"
+              size="icon"
+              title={pagination.nextLabel}
+              aria-label={pagination.nextLabel}
               disabled={pagination.page >= pagination.pageCount}
               onClick={() => pagination.onPageChange(pagination.page + 1)}
             >
-              {pagination.nextLabel}
               <Icon name="chevron_right" size={16} />
             </Button>
           </div>

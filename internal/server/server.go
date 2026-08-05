@@ -245,6 +245,7 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Get("/api/deploy-provider/status", deployProviderH.Status)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/deploy-provider/config", deployProviderH.UpsertConfig)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/deploy-provider/config", deployProviderH.UpdateFields)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/deploy-provider/recent-deploys", deployProviderH.RecentDeploys)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/changelog", dashboard.ChangelogHandler)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/version-check", dashboard.VersionCheckHandler)
 		r.Handle("/*", dashboard.StaticHandler())
