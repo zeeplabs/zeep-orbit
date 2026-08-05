@@ -580,6 +580,7 @@
   "appDetails.googleClientIdPlaceholder": "Google OAuth Client ID",
   "appDetails.googleClientSecretPlaceholder": "Client Secret",
   "tableCard.restrictedHint": "\"Restricted\" requires email authentication to be enabled for this app.",
+  "tableCard.defaultRlsHint": "Restricted by default for this workspace. New email-auth tables start owner-scoped; switch to Public to opt out.",
   "tableCard.autoColumnsNote": "The columns below are created automatically and cannot be edited or removed.",
   "tableCard.referenceFk": "Reference another table (FK)",
   "tableCard.relationshipsInfoBtn": "Learn more about relationships",

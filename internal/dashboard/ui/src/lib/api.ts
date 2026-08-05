@@ -70,6 +70,21 @@ export function usePublicConfig() {
   })
 }
 
+export interface SystemConfig {
+  soft_delete_enabled: boolean
+  max_csv_export_rows: number
+  statement_timeout_ms: number
+  require_rls_default: boolean
+}
+
+export function useSystemConfig(): UseQueryResult<SystemConfig> {
+  return useQuery({
+    queryKey: ['system-config'],
+    queryFn: () => apiFetch<SystemConfig>('/dashboard/api/config/system'),
+    staleTime: 60000,
+  })
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, { credentials: 'include', ...init })
   if (!res.ok) {

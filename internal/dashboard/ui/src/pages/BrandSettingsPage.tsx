@@ -9,7 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { PageHeader, ProviderCard, SettingRow } from "@/components/patterns";
-import { useBrandConfig, useUpdateBrandConfig } from "../lib/api";
+import { useBrandConfig, useUpdateBrandConfig, useSystemConfig } from "../lib/api";
+import { useQueryClient } from "@tanstack/react-query";
 
 const TABS = [
   { value: "branding", icon: "palette", labelKey: "settings.tabBranding" },
@@ -141,25 +142,21 @@ function BrandingTab() {
 
 function SoftDeleteCard() {
   const { t } = useTranslation();
+  const { data: sysCfg, isLoading: loading } = useSystemConfig();
+  const queryClient = useQueryClient();
   const [enabled, setEnabled] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [maxCsvRows, setMaxCsvRows] = useState(10000);
   const [statementTimeoutMs, setStatementTimeoutMs] = useState(30000);
   const [requireRlsDefault, setRequireRlsDefault] = useState(false);
 
   useEffect(() => {
-    fetch("/dashboard/api/config/system", { credentials: "include" })
-      .then((r) => r.json())
-      .then((d) => {
-        setEnabled(d.soft_delete_enabled);
-        setMaxCsvRows(d.max_csv_export_rows ?? 10000);
-        setStatementTimeoutMs(d.statement_timeout_ms ?? 30000);
-        setRequireRlsDefault(d.require_rls_default ?? false);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+    if (!sysCfg) return;
+    setEnabled(sysCfg.soft_delete_enabled);
+    setMaxCsvRows(sysCfg.max_csv_export_rows ?? 10000);
+    setStatementTimeoutMs(sysCfg.statement_timeout_ms ?? 30000);
+    setRequireRlsDefault(sysCfg.require_rls_default ?? false);
+  }, [sysCfg]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -177,6 +174,7 @@ function SoftDeleteCard() {
       });
       if (!res.ok) throw new Error(t("system.error"));
       toast.success(t("system.saved"));
+      queryClient.invalidateQueries({ queryKey: ["system-config"] });
     } catch (err) {
       toast.error((err as Error).message);
     } finally {

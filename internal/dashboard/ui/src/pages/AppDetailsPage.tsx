@@ -12,6 +12,7 @@ import {
   useCreateAppToken,
   useRevokeAppToken,
   useRegenerateAppSecret,
+  useSystemConfig,
   AppToken,
   TableDef,
 } from "../lib/api";
@@ -144,8 +145,8 @@ export default function AppDetailsPage() {
   );
 }
 
-function emptyDraftTable(): TableDef {
-  return { name: "", rls: "disabled", columns: [] };
+function emptyDraftTable(defaultRls: string): TableDef {
+  return { name: "", rls: defaultRls, columns: [] };
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -175,8 +176,12 @@ function DatabaseTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data
   const updateTable = useUpdateAppTable(app.id);
   const deleteTable = useDeleteAppTable(app.id);
 
+  const { data: sysCfg } = useSystemConfig();
+  const requireRls = Boolean(sysCfg?.require_rls_default) && app.auth_email_enabled;
+  const defaultRls = requireRls ? "enabled" : "disabled";
+
   const addTable = () => {
-    setDraftTable(emptyDraftTable());
+    setDraftTable(emptyDraftTable(defaultRls));
     setEditingKey("draft");
   };
 
@@ -219,6 +224,7 @@ function DatabaseTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data
             table={draftTable}
             otherTables={app.tables.filter((other) => other.id)}
             authEmailEnabled={app.auth_email_enabled}
+            draftRlsHint={requireRls ? t("tableCard.defaultRlsHint") : ""}
             locked={false}
             startInEdit
             onEnterEdit={() => setEditingKey("draft")}

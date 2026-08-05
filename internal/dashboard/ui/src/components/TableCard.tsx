@@ -96,6 +96,7 @@ interface TableCardProps {
   table: TableDef;
   otherTables: TableDef[];
   authEmailEnabled: boolean;
+  draftRlsHint?: string;
   locked: boolean;
   startInEdit: boolean;
   onEnterEdit: () => void;
@@ -112,6 +113,7 @@ export default function TableCard({
   table,
   otherTables,
   authEmailEnabled,
+  draftRlsHint,
   locked,
   startInEdit,
   onEnterEdit,
@@ -292,6 +294,11 @@ export default function TableCard({
       {!authEmailEnabled && (
         <p className="px-4 text-[11px] text-[var(--text-secondary)]">
           {t("tableCard.restrictedHint")}
+        </p>
+      )}
+      {isDraft && draftRlsHint && (
+        <p className="px-4 text-[11px] text-[var(--text-secondary)]">
+          {draftRlsHint}
         </p>
       )}
 

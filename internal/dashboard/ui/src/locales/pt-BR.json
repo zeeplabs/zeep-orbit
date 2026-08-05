@@ -580,6 +580,7 @@
   "appDetails.googleClientIdPlaceholder": "Google OAuth Client ID",
   "appDetails.googleClientSecretPlaceholder": "Client Secret",
   "tableCard.restrictedHint": "\"Restrito\" exige autenticação por e-mail ligada para este app.",
+  "tableCard.defaultRlsHint": "Restrito por padrão neste workspace. Novas tabelas com login por email começam restritas ao dono; troque para Público para desativar.",
   "tableCard.autoColumnsNote": "As colunas abaixo são criadas automaticamente e não podem ser editadas ou removidas.",
   "tableCard.referenceFk": "Referenciar outra tabela (FK)",
   "tableCard.relationshipsInfoBtn": "Saiba mais sobre relacionamentos",
