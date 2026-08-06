@@ -8,8 +8,14 @@ const PAGE_SIZE = 10
 
 type SectionType = 'features' | 'improvements' | 'fixes' | 'security' | 'breaking'
 
+/** Campo bilíngue vindo direto do changelog.json — sem chaves i18n, texto fica no próprio dado. */
+interface LocalizedText {
+  en: string
+  'pt-BR': string
+}
+
 interface SectionItem {
-  description: string
+  description: LocalizedText
 }
 
 interface Section {
@@ -21,9 +27,13 @@ interface ChangelogEntry {
   id?: string
   version: string
   release_date: string
-  title: string
-  summary: string
+  title: LocalizedText
+  summary: LocalizedText
   sections: Section[]
+}
+
+function localize(text: LocalizedText, lang: string): string {
+  return text[lang as keyof LocalizedText] || text.en
 }
 
 function parseSections(sections: unknown): Section[] {
@@ -92,7 +102,7 @@ function ChangelogEntryView({ entry }: { entry: ChangelogEntry }) {
             className="mb-1 text-base font-bold"
             style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}
           >
-            {entry.title}
+            {localize(entry.title, i18n.language)}
           </h3>
         )}
         {entry.summary && (
@@ -100,7 +110,7 @@ function ChangelogEntryView({ entry }: { entry: ChangelogEntry }) {
             className="mb-3.5 text-[13px]"
             style={{ color: 'var(--text-secondary)' }}
           >
-            {entry.summary}
+            {localize(entry.summary, i18n.language)}
           </p>
         )}
         <div className="flex flex-col gap-2">
@@ -120,7 +130,7 @@ function ChangelogEntryView({ entry }: { entry: ChangelogEntry }) {
                       {t(`changelog.sectionType.${section.type}`)}
                     </span>
                     <span style={{ color: 'var(--text-secondary)' }}>
-                      {item.description}
+                      {localize(item.description, i18n.language)}
                     </span>
                   </div>
                 ))}

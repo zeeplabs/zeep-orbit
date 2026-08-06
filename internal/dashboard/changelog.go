@@ -17,7 +17,7 @@ func ChangelogHandler(w http.ResponseWriter, r *http.Request) {
 	_ = user
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "public, max-age=3600")
+	w.Header().Set("Cache-Control", "no-cache")
 	w.WriteHeader(http.StatusOK)
 	w.Write(changelogData)
 }
