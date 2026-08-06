@@ -602,7 +602,7 @@ AFTER CLONE
           {(apps?.length ?? 0) > 0 && (
             <>
               <SectionHeader icon="grid_view" label={t("apps.backendSection")} count={apps?.length ?? 0} />
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,340px))] gap-4">
                 {(apps || []).map((app) => (
                   <AppCard key={app.id} app={app} currentUserId={me?.id}
                     onEdit={handleEdit} onDelete={setDeleteTarget} onUsers={handleUsers} />
@@ -614,7 +614,7 @@ AFTER CLONE
           {frontendApps.length > 0 && (
             <div className={cn((apps?.length ?? 0) > 0 && "mt-10")}>
               <SectionHeader icon="language" label={t("apps.frontendSection")} count={frontendApps.length} />
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,340px))] gap-4">
                 {frontendApps.map((app) => (
                   <FrontendCard key={app.id} app={app}
                     onSync={openSync}

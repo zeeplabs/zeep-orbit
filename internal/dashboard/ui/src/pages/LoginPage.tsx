@@ -146,7 +146,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="h-auto rounded-[10px] border px-3.5 py-2.5 text-[14px]"
+                className="h-auto rounded-[10px] border bg-white px-3.5 py-2.5 text-[14px] text-black"
               />
             </div>
             <div>
@@ -162,7 +162,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="h-auto rounded-[10px] border px-3.5 py-2.5 pr-10 text-[14px]"
+                  className="h-auto rounded-[10px] border bg-white px-3.5 py-2.5 pr-10 text-[14px] text-black"
                 />
                 <button
                   type="button"

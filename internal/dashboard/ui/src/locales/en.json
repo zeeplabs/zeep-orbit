@@ -1,6 +1,6 @@
 {
   "app.title": "Orbit",
-  "app.subtitle": "Complete platform for tech teams",
+  "app.subtitle": "Platform for tech teams",
   "app.loading": "Loading...",
   "common.connectionError": "Connection error",
   "common.errorSaving": "Error saving",
@@ -124,8 +124,8 @@
   "onboarding.done": "All set!",
   "onboarding.doneDesc": "The superadmin was created successfully. You can now log into the dashboard with the configured credentials.",
   "onboarding.goLogin": "Go to login",
-  "login.title": "One backend for every app your team ships.",
-  "login.subtitle": "Self-hosted, schema-in REST-out. Your Postgres, your infrastructure, infinite apps from a single dashboard.",
+  "login.title": "Everything you need to build and ship.",
+  "login.subtitle": "Self-hosted backend APIs, frontend deployment, and team management for the apps your company runs on.",
   "login.email": "Email",
   "login.password": "Password",
   "login.signIn": "Sign In",

@@ -1,6 +1,6 @@
 {
   "app.title": "Orbit",
-  "app.subtitle": "Plataforma completa para times de tecnologia",
+  "app.subtitle": "Plataforma para times de tecnologia",
   "app.loading": "Carregando...",
   "common.connectionError": "Erro de conexão",
   "common.errorSaving": "Erro ao salvar",
@@ -124,8 +124,8 @@
   "onboarding.done": "Tudo pronto!",
   "onboarding.doneDesc": "O superadmin foi criado com sucesso. Agora você pode entrar no dashboard com as credenciais configuradas.",
   "onboarding.goLogin": "Ir para o login",
-  "login.title": "Um backend para cada app que seu time lança.",
-  "login.subtitle": "Self-hosted, schema-in REST-out. Seu Postgres, sua infraestrutura, infinitos apps a partir de um único painel.",
+  "login.title": "Tudo que você precisa pra construir e lançar.",
+  "login.subtitle": "APIs de backend, deploy de frontend e gerenciamento de time self-hosted, para os apps que sua empresa roda.",
   "login.email": "Email",
   "login.password": "Senha",
   "login.signIn": "Entrar",

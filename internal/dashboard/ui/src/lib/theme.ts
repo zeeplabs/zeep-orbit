@@ -10,7 +10,7 @@ import { useCallback, useEffect, useState } from 'react'
 export type ThemeMode = 'dark' | 'light'
 
 const STORAGE_KEY = 'zeep.theme'
-const DEFAULT_MODE: ThemeMode = 'dark'
+const DEFAULT_MODE: ThemeMode = 'light'
 
 export function getInitialThemeMode(): ThemeMode {
   try {

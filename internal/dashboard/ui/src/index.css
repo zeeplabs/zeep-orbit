@@ -94,6 +94,12 @@ body {
   100% { transform: translateX(100%); }
 }
 
+/* Cursor pointer global em todo elemento clicável, mesmo <button> cru sem o componente Button */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
 /* Brand-aware utility classes */
 .brand-focus {
   outline: none;

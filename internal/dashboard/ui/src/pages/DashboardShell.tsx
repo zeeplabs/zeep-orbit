@@ -129,7 +129,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
 
   return (
     <div
-      className="grid min-h-screen grid-cols-[240px_1fr] max-md:grid-cols-1"
+      className="grid min-h-screen grid-cols-[264px_1fr] max-md:grid-cols-1"
       style={{ background: "var(--bg-page)" }}
     >
       <Sidebar companyName={companyName} banner={<UpdateAvailableBanner />} footer={footer} />

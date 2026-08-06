@@ -5,7 +5,7 @@ import { Icon } from '@/components/ui/icon'
 import { useCurrentRole } from '@/lib/useCurrentRole'
 import { hasPlatformPermission } from '@/lib/permissions'
 import { NAV_SECTIONS, NavItemDef } from './nav'
-import logoType from '@/assets/images/logo/logotype.svg'
+import orbitWordmark from '@/assets/images/logo/orbit-transparent.png'
 
 function label(key: string, t: (k: string) => string): string {
   return key.includes('.') ? t(key) : key
@@ -58,23 +58,19 @@ export function Sidebar({ companyName, banner, footer }: SidebarProps) {
       className="sticky top-0 flex h-screen flex-col border-r border-[var(--border)] bg-[var(--surface)] px-3.5 py-5 max-md:hidden"
       style={{ width: 264 }}
     >
-      {/* Logo */}
-      <div className="mb-8 flex items-center gap-2.5 px-2">
-        <img
-          src={logoType}
-          alt="Zeep Orbit"
-          className="h-[38px] w-[38px] rounded-[10px] border border-[var(--border)] object-cover"
-        />
-        <div className="flex min-w-0 flex-col">
-          <span
-            className="truncate text-[15px] font-bold leading-tight text-[var(--text-primary)]"
-            style={{ fontFamily: 'var(--font-display)' }}
-          >
-            {companyName}
-          </span>
+      {/* Logo (handoff: ícone + wordmark PNG + subtítulo) */}
+      <div className="mb-4 flex items-center gap-2.5 px-2">
+        <div className="flex items-start min-w-0 flex-col">
+          <img src={orbitWordmark} alt="Orbit" className="mb-0.5 h-[20px] w-auto object-contain" />
           <span className="text-[11px] text-[var(--text-tertiary)]">{t('app.subtitle')}</span>
         </div>
       </div>
+
+      {/* Company name (branding white-label), separado do nav por divisória fina */}
+      <div className="mb-4 truncate px-2 text-[13px] font-semibold text-[var(--text-secondary)]">
+        {companyName}
+      </div>
+      <div className="mb-4 border-t border-[var(--border)]" />
 
       {/* Nav */}
       <nav className="flex flex-1 flex-col gap-4">
