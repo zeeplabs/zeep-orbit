@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
@@ -40,12 +40,41 @@ function formatDate(iso: string, lang: string) {
   })
 }
 
-function formatDateTime(iso: string | null, lang: string) {
+function formatRelativeTime(iso: string | null, t: (k: string, opts?: Record<string, unknown>) => string): string {
   if (!iso) return '—'
-  return new Date(iso).toLocaleString(lang)
+  const diffMs = Date.now() - new Date(iso).getTime()
+  const minutes = Math.floor(diffMs / 60000)
+  if (minutes < 1) return t('appUsers.justNow')
+  if (minutes < 60) return t('appUsers.minutesAgo', { count: minutes })
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return t('appUsers.hoursAgo', { count: hours })
+  const days = Math.floor(hours / 24)
+  return t('appUsers.daysAgo', { count: days })
 }
 
 const providerIcon = (p: string) => (p === 'google' ? 'verified_user' : 'mail')
+
+function ProviderCell({ provider }: { provider: string }) {
+  const isGoogle = provider === 'google'
+  return (
+    <div
+      className="inline-flex items-center gap-1.5 text-[12px]"
+      style={{ color: 'var(--text-secondary)' }}
+    >
+      {isGoogle ? (
+        <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true">
+          <path fill="#4285F4" d="M15.68 8.18c0-.58-.05-1.14-.15-1.68H8v3.18h4.3a3.68 3.68 0 0 1-1.6 2.42v2h2.6c1.52-1.4 2.38-3.46 2.38-5.92z" />
+          <path fill="#34A853" d="M8 16c2.16 0 3.97-.72 5.3-1.9l-2.6-2c-.72.48-1.64.77-2.7.77-2.08 0-3.84-1.4-4.47-3.3H.85v2.07A8 8 0 0 0 8 16z" />
+          <path fill="#FBBC05" d="M3.53 9.57A4.8 4.8 0 0 1 3.28 8c0-.55.1-1.08.25-1.57V4.36H.85A8 8 0 0 0 0 8c0 1.29.31 2.5.85 3.64l2.68-2.07z" />
+          <path fill="#EA4335" d="M8 3.18c1.18 0 2.23.4 3.06 1.2l2.3-2.3C11.96.9 10.15.14 8 .14A8 8 0 0 0 .85 4.36l2.68 2.07C4.16 4.53 5.92 3.18 8 3.18z" />
+        </svg>
+      ) : (
+        <Icon name="mail" size={14} style={{ color: 'var(--text-tertiary)' }} />
+      )}
+      {provider === 'google' ? 'Google' : 'Email'}
+    </div>
+  )
+}
 
 export default function AppUsersPage() {
   const { t, i18n } = useTranslation()
@@ -66,10 +95,13 @@ export default function AppUsersPage() {
   const activate = useActivateAppUser()
   const resetSessions = useResetAppUserSessions()
 
-  const handleSearch = () => {
-    setDebouncedSearch(search)
-    setPage(0)
-  }
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search)
+      setPage(0)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [search])
 
   const clearSearch = () => {
     setSearch('')
@@ -123,15 +155,7 @@ export default function AppUsersPage() {
     {
       key: 'provider',
       header: t('appUsers.table.provider'),
-      render: (u) => (
-        <div
-          className="inline-flex items-center gap-1.5 text-[12px]"
-          style={{ color: 'var(--text-secondary)' }}
-        >
-          <Icon name={providerIcon(u.provider)} size={14} style={{ color: 'var(--text-tertiary)' }} />
-          {u.provider}
-        </div>
-      ),
+      render: (u) => <ProviderCell provider={u.provider} />,
     },
     {
       key: 'status',
@@ -139,7 +163,8 @@ export default function AppUsersPage() {
       render: (u) => (
         <StatusPill
           label={u.active ? t('appUsers.active') : t('appUsers.inactive')}
-          tone={u.active ? 'success' : 'danger'}
+          tone={u.active ? 'success' : 'neutral'}
+          dot={false}
         />
       ),
     },
@@ -148,7 +173,7 @@ export default function AppUsersPage() {
       header: t('appUsers.table.lastAccess'),
       render: (u) => (
         <span className="text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
-          {formatDateTime(u.last_sign_in_at, i18n.language)}
+          {formatRelativeTime(u.last_sign_in_at, t)}
         </span>
       ),
     },
@@ -270,45 +295,26 @@ export default function AppUsersPage() {
           </div>
         )}
 
-        <div className="flex flex-1 items-center gap-2" style={{ minWidth: 240 }}>
-          <div className="relative max-w-sm flex-1">
-            <Input
-              type="text"
-              placeholder={t('appUsers.search')}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleSearch()
-              }}
-              className="h-9 rounded-[10px] border pl-9 pr-9 text-[12.5px]"
-            />
-            <Icon
-              name="search"
-              size={15}
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+        <div className="relative ml-auto w-[260px]">
+          <Input
+            type="text"
+            placeholder={t('appUsers.search')}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-9 rounded-[10px] border pr-8 text-[12.5px]"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={clearSearch}
+              title={t('appUsers.clearSearch')}
+              aria-label={t('appUsers.clearSearch')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center justify-center"
               style={{ color: 'var(--text-tertiary)' }}
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={clearSearch}
-                title={t('appUsers.clearSearch')}
-                aria-label={t('appUsers.clearSearch')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center justify-center"
-                style={{ color: 'var(--text-tertiary)' }}
-              >
-                <Icon name="close" size={15} />
-              </button>
-            )}
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleSearch}
-            className="h-9 shrink-0 rounded-[8px]"
-          >
-            {t('appUsers.searchBtn')}
-          </Button>
+            >
+              <Icon name="close" size={15} />
+            </button>
+          )}
         </div>
 
         <Button
@@ -339,7 +345,7 @@ export default function AppUsersPage() {
             : { title: t('appUsers.empty'), icon: 'group' }
         }
         pagination={
-          total > pageSize
+          total > 0
             ? {
                 page: currentPage,
                 pageCount: totalPages,

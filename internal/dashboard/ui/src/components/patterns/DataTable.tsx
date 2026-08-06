@@ -191,7 +191,7 @@ export function DataTable<T>({
       )}
       </div>
 
-      {pagination && pagination.pageCount > 1 && (
+      {pagination && (
         <div className="flex items-center justify-between gap-3 pt-3">
           <div className="text-xs text-[var(--text-tertiary)]">{pagination.label}</div>
           <div className="flex items-center gap-2">
