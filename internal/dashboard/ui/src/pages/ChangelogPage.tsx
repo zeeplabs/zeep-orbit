@@ -38,13 +38,13 @@ function parseSections(sections: unknown): Section[] {
   return []
 }
 
-/** Mapeia o tipo da seção (do backend) para os tokens de cor canônicos do handoff. */
-const sectionTone: Record<SectionType, { bg: string; color: string }> = {
-  features: { bg: 'var(--success-tint)', color: 'var(--success)' },
-  improvements: { bg: 'var(--primary-tint)', color: 'var(--primary)' },
-  fixes: { bg: 'var(--warning-tint)', color: 'var(--warning)' },
-  security: { bg: 'var(--danger-tint)', color: 'var(--danger)' },
-  breaking: { bg: 'var(--accent-tint)', color: 'var(--accent)' },
+/** Mapeia o tipo da seção (do backend) pro `typeColor` do handoff (linha 2831). */
+const sectionTone: Record<SectionType, string> = {
+  features: 'var(--primary)',
+  improvements: 'var(--success)',
+  fixes: 'var(--warning)',
+  security: 'var(--danger)',
+  breaking: 'var(--accent)',
 }
 
 function formatReleaseDate(dateStr: string, lang: string): string {
@@ -105,7 +105,7 @@ function ChangelogEntryView({ entry }: { entry: ChangelogEntry }) {
         )}
         <div className="flex flex-col gap-2">
           {sections.map((section, si) => {
-            const tone = sectionTone[section.type] || sectionTone.fixes
+            const color = sectionTone[section.type] || sectionTone.fixes
             return (
               <div key={si} className="flex flex-col gap-2">
                 {section.items.map((item, ii) => (
@@ -114,8 +114,8 @@ function ChangelogEntryView({ entry }: { entry: ChangelogEntry }) {
                     className="flex items-start gap-2.5 text-[12.5px]"
                   >
                     <span
-                      className="mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold leading-none"
-                      style={{ background: tone.bg, color: tone.color }}
+                      className="mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold leading-none text-white opacity-90"
+                      style={{ background: color }}
                     >
                       {t(`changelog.sectionType.${section.type}`)}
                     </span>
