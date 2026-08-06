@@ -9,6 +9,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-08-06
+
 ### Added
 
 - **Table relationships (foreign keys) and indexes** in the schema builder — table config now accepts `references` (table/column/`on_delete`) and `indexes`. Adds schema validation (unknown table/column, invalid `on_delete`, index name collisions, circular FK dependencies), topological table ordering so referenced tables are created/altered before their dependents, idempotent index provisioning (no implicit drop), and `DropTable` now refuses to drop a table still referenced by another table's FK with a clear error instead of leaking a raw Postgres error. Data Browser's `TableCard` surfaces FKs and indexes read-only in the UI.
