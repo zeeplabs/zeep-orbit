@@ -54,14 +54,18 @@ var ErrInvalidAppRef = errors.New("rbac: AppRef must have exactly one of Backend
 //
 // Resolution order (first match wins):
 //  1. user is superadmin → AppRoleAdmin (bypass app_members entirely).
-//  2. CanReadAnyApp(user.Role) is true (admin/auditor global) → AppRoleViewer.
-//     This is the cross-spec extension documented in
-//     dashboard-global-roles/design.md ("Where the extensão de `CanReadAnyApp`
-//     é implementada → Dentro de `ResolveAppRole` (spec `rbac-per-app`)").
-//     Gives global admin/auditor read access to any app without explicit
-//     membership; writes are still blocked at the handler via CanWrite().
-//  3. Look up app_members for (user_id, app). Returns the stored role, or ""
-//     if the user is not a member of the app.
+//  2. Look up app_members for (user_id, app). If a row exists, that role
+//     wins — explicit per-app membership is more specific than the
+//     platform-wide fallback below, so a global admin/auditor who is also
+//     an explicit editor/admin on this particular app keeps that role
+//     instead of being downgraded.
+//  3. No membership row: CanReadAnyApp(user.Role) is true (admin/auditor
+//     global) → AppRoleViewer. This is the cross-spec extension documented
+//     in dashboard-global-roles/design.md ("Where the extensão de
+//     `CanReadAnyApp` é implementada → Dentro de `ResolveAppRole` (spec
+//     `rbac-per-app`)"). Gives global admin/auditor read access to any app
+//     without explicit membership; writes are still blocked at the handler
+//     via CanWrite().
 //
 // Returns ("", ErrInvalidAppRef) if AppRef is malformed.
 // Returns ("", nil) when the user is not a member and has no platform-level
@@ -78,14 +82,7 @@ func ResolveAppRole(ctx context.Context, pool *db.Pool, user *DashboardUser, app
 	if user.Role == "superadmin" {
 		return AppRoleAdmin, nil
 	}
-	// 2. Cross-spec: admin/auditor global gets read-only access to any app.
-	//    If dashboard-global-roles is not yet implemented (CanReadAnyApp
-	//    always false), this branch is skipped and we fall through to the
-	//    normal membership lookup — safe default.
-	if CanReadAnyApp(user.Role) {
-		return AppRoleViewer, nil
-	}
-	// 3. Normal path: member must be in app_members.
+	// 2. Explicit membership wins over the platform-wide fallback below.
 	var role string
 	var err error
 	if app.BackendAppID != "" {
@@ -97,11 +94,18 @@ func ResolveAppRole(ctx context.Context, pool *db.Pool, user *DashboardUser, app
 			`SELECT role FROM zeep_system.app_members WHERE frontend_app_id = $1 AND user_id = $2`,
 			app.FrontendAppID, user.ID).Scan(&role)
 	}
-	if errors.Is(err, pgx.ErrNoRows) {
-		return "", nil
-	}
-	if err != nil {
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return "", fmt.Errorf("rbac: query app_members: %w", err)
 	}
-	return AppRole(role), nil
+	if err == nil {
+		return AppRole(role), nil
+	}
+	// 3. No membership row. Cross-spec: admin/auditor global gets read-only
+	//    access to any app. If dashboard-global-roles is not yet implemented
+	//    (CanReadAnyApp always false), this branch is skipped and the caller
+	//    gets "" (no access) — safe default.
+	if CanReadAnyApp(user.Role) {
+		return AppRoleViewer, nil
+	}
+	return "", nil
 }

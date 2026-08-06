@@ -139,7 +139,7 @@ function CreateSuperadminStep({ onSuccess }: { onSuccess: () => void }) {
           </Label>
           <Input
             type="password"
-            placeholder="From your environment variables"
+            placeholder={t('onboarding.bootstrapSecretPlaceholder')}
             value={secret}
             onChange={(e) => setSecret(e.target.value)}
             required

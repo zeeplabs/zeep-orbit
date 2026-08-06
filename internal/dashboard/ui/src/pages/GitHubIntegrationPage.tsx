@@ -858,22 +858,22 @@ function GitHubTemplatesTab() {
               </p>
               <div className="flex flex-col gap-3">
                 <div className="flex flex-col gap-1.5">
-                  <Label className="text-[12px] font-semibold">Service Type</Label>
+                  <Label className="text-[12px] font-semibold">{t('github.serviceType')}</Label>
                   <Select value={renderServiceType || 'none'} onValueChange={(v) => setRenderServiceType(v === 'none' ? '' : v)}>
                     <SelectTrigger>
                       <SelectValue placeholder={t('github.deployNone')} />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">{t('github.deployNone')}</SelectItem>
-                      <SelectItem value="static_site">Static Site</SelectItem>
-                      <SelectItem value="web_service">Web Service</SelectItem>
+                      <SelectItem value="static_site">{t('github.deployStaticSite')}</SelectItem>
+                      <SelectItem value="web_service">{t('github.deployWebService')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 {renderServiceType && (
                   <>
                     <div className="flex flex-col gap-1.5">
-                      <Label className="text-[12px] font-semibold">Build Command</Label>
+                      <Label className="text-[12px] font-semibold">{t('github.buildCommand')}</Label>
                       <Input
                         value={buildCommand}
                         onChange={(e) => setBuildCommand(e.target.value)}
@@ -882,7 +882,7 @@ function GitHubTemplatesTab() {
                     </div>
                     {renderServiceType === 'static_site' && (
                       <div className="flex flex-col gap-1.5">
-                        <Label className="text-[12px] font-semibold">Publish Path</Label>
+                        <Label className="text-[12px] font-semibold">{t('github.publishPath')}</Label>
                         <Input
                           value={publishPath}
                           onChange={(e) => setPublishPath(e.target.value)}
@@ -892,7 +892,7 @@ function GitHubTemplatesTab() {
                     )}
                     {renderServiceType === 'web_service' && (
                       <div className="flex flex-col gap-1.5">
-                        <Label className="text-[12px] font-semibold">Start Command</Label>
+                        <Label className="text-[12px] font-semibold">{t('github.startCommand')}</Label>
                         <Input
                           value={startCommand}
                           onChange={(e) => setStartCommand(e.target.value)}

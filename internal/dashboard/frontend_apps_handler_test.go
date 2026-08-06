@@ -139,9 +139,22 @@ func frontendHandlerTestPool(t *testing.T) (*Handler, *FrontendAppsHandler, map[
 	return nil, fh, actors, faID, scID
 }
 
+// authPassed is a wantExact sentinel meaning "the RBAC gate let this actor
+// through". These handlers keep going into GitHub/deploy/state validation
+// after the auth check and legitimately answer 4xx for reasons unrelated to
+// permissions (Retry answers 400 "app is not in failed state" whenever the
+// app isn't failed; the test fixture has no GitHub config at all). A status
+// range can't express that — the only thing the matrix can assert for such a
+// case is that the response is not one of the auth rejections.
+const authPassed = -1
+
 // faRBACCase describes one cell of the RBAC matrix for frontend_apps handlers.
-// For "should pass" cases that go through GitHub/deploy, we assert the status
-// is NOT 4xx (auth check passed, downstream may fail).
+//
+// A path may use the {id} placeholder (the shared fixture app) or the
+// {freshId} placeholder (a dedicated app created for that single case).
+// Delete archives the app it acts on, so every Delete case expected to
+// succeed must use {freshId} — otherwise the first success archives the
+// shared app and every later case sees 404 instead of its real status.
 type faRBACCase struct {
 	name             string
 	actor            string
@@ -162,6 +175,47 @@ func TestFrontendAppsRBACMatrix(t *testing.T) {
 	// will close it).
 	_ = actors
 
+	ctx := context.Background()
+
+	// freshFrontendApp creates a throwaway frontend app with the same
+	// membership seeding as the fixture app, for cases that consume the app
+	// they act on (Delete archives it).
+	var freshSeq int
+	freshFrontendApp := func(t *testing.T) string {
+		t.Helper()
+		var templateID string
+		if err := fh.pool.QueryRow(ctx,
+			`SELECT id FROM zeep_system.github_templates LIMIT 1`).Scan(&templateID); err != nil {
+			t.Fatalf("read github template: %v", err)
+		}
+		freshSeq++
+		slug := fmt.Sprintf("fresh-%d-%d", time.Now().UnixNano(), freshSeq)
+		var id string
+		if err := fh.pool.QueryRow(ctx,
+			`INSERT INTO zeep_system.frontend_apps
+			 (name, slug, template_id, created_by, owner_id)
+			 VALUES ($1, $1, $2, $3, $4) RETURNING id`,
+			slug, templateID, actors["loner"].Email, actors["loner"].ID,
+		).Scan(&id); err != nil {
+			t.Fatalf("seed fresh frontend app: %v", err)
+		}
+		for _, pr := range []struct{ userKey, role string }{
+			{"loner", "admin"},
+			{"appadmin", "admin"},
+			{"appeditor", "editor"},
+			{"appviewer", "viewer"},
+		} {
+			if _, err := fh.pool.Exec(ctx,
+				`INSERT INTO zeep_system.app_members (frontend_app_id, user_id, role)
+				 VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+				id, actors[pr.userKey].ID, pr.role,
+			); err != nil {
+				t.Fatalf("seed %s as %s on fresh app: %v", pr.userKey, pr.role, err)
+			}
+		}
+		return id
+	}
+
 	// Helper: build a request with the actor's user in context and the given
 	// path/body, then dispatch to the named handler method.
 	call := func(t *testing.T, c faRBACCase) int {
@@ -170,9 +224,13 @@ func TestFrontendAppsRBACMatrix(t *testing.T) {
 		if !ok {
 			t.Fatalf("unknown actor %q", c.actor)
 		}
-		path := c.path
-		// Substitute {id} placeholder with faID.
-		path = strings.ReplaceAll(path, "{id}", faID)
+		// {id} targets the shared fixture app; {freshId} gets a dedicated one.
+		appID := faID
+		if strings.Contains(c.path, "{freshId}") {
+			appID = freshFrontendApp(t)
+		}
+		path := strings.ReplaceAll(c.path, "{id}", appID)
+		path = strings.ReplaceAll(path, "{freshId}", appID)
 
 		var body *bytes.Reader
 		if c.body != "" {
@@ -188,7 +246,7 @@ func TestFrontendAppsRBACMatrix(t *testing.T) {
 
 		// Attach chi URL param so chi.URLParam(r, "id") works.
 		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("id", faID)
+		rctx.URLParams.Add("id", appID)
 		req = req.WithContext(withCtxValue(req, rctx))
 		w := httptest.NewRecorder()
 
@@ -198,6 +256,13 @@ func TestFrontendAppsRBACMatrix(t *testing.T) {
 
 	checkStatus := func(t *testing.T, got int, c faRBACCase) {
 		t.Helper()
+		if c.wantExact == authPassed {
+			switch got {
+			case http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound:
+				t.Errorf("status = %d, want the RBAC gate to let this actor through", got)
+			}
+			return
+		}
 		if c.wantExact != 0 {
 			if got != c.wantExact {
 				t.Errorf("status = %d, want %d", got, c.wantExact)
@@ -245,26 +310,26 @@ func TestFrontendAppsRBACMatrix(t *testing.T) {
 		{"outsider_sync_status", "outsider", http.MethodGet, "/dashboard/api/frontend-apps/{id}/sync", "", fh.SyncStatus, 0, 404, 404},
 
 		// --- Retry (POST /frontend-apps/{id}/retry) — CanManage required ---
-		// For "should pass" cases, the handler will fail at the GitHub config
-		// step (return 400 "github not connected"). We assert status < 400
-		// (no 403/404 from auth).
-		{"super_retry", "super", http.MethodPost, "/dashboard/api/frontend-apps/{id}/retry", "", fh.Retry, 0, 200, 399},
+		// The fixture app is not in "failed" state, so every actor that
+		// clears the auth gate gets 400 "app is not in failed state" — hence
+		// authPassed rather than a 2xx/3xx range.
+		{"super_retry", "super", http.MethodPost, "/dashboard/api/frontend-apps/{id}/retry", "", fh.Retry, authPassed, 0, 0},
 		{"admin_global_retry", "admin", http.MethodPost, "/dashboard/api/frontend-apps/{id}/retry", "", fh.Retry, 0, 403, 403},
 		{"auditor_global_retry", "auditor", http.MethodPost, "/dashboard/api/frontend-apps/{id}/retry", "", fh.Retry, 0, 403, 403},
-		{"loner_retry", "loner", http.MethodPost, "/dashboard/api/frontend-apps/{id}/retry", "", fh.Retry, 0, 200, 399},
-		{"appadmin_retry", "appadmin", http.MethodPost, "/dashboard/api/frontend-apps/{id}/retry", "", fh.Retry, 0, 200, 399},
+		{"loner_retry", "loner", http.MethodPost, "/dashboard/api/frontend-apps/{id}/retry", "", fh.Retry, authPassed, 0, 0},
+		{"appadmin_retry", "appadmin", http.MethodPost, "/dashboard/api/frontend-apps/{id}/retry", "", fh.Retry, authPassed, 0, 0},
 		{"appeditor_retry", "appeditor", http.MethodPost, "/dashboard/api/frontend-apps/{id}/retry", "", fh.Retry, 0, 403, 403},
 		{"appviewer_retry", "appviewer", http.MethodPost, "/dashboard/api/frontend-apps/{id}/retry", "", fh.Retry, 0, 403, 403},
 		{"outsider_retry", "outsider", http.MethodPost, "/dashboard/api/frontend-apps/{id}/retry", "", fh.Retry, 0, 404, 404},
 
 		// --- Delete (DELETE /frontend-apps/{id}) — CanManage required ---
-		// For "should pass" cases, the handler will fail at the GitHub archival
-		// step. We assert status < 400 (no 403/404 from auth).
-		{"super_delete", "super", http.MethodDelete, "/dashboard/api/frontend-apps/{id}", "", fh.Delete, 0, 200, 399},
+		// Success cases act on their own {freshId} app: Delete archives the
+		// app, so reusing the shared fixture would 404 every later case.
+		{"super_delete", "super", http.MethodDelete, "/dashboard/api/frontend-apps/{freshId}", "", fh.Delete, 0, 200, 399},
 		{"admin_global_delete", "admin", http.MethodDelete, "/dashboard/api/frontend-apps/{id}", "", fh.Delete, 0, 403, 403},
 		{"auditor_global_delete", "auditor", http.MethodDelete, "/dashboard/api/frontend-apps/{id}", "", fh.Delete, 0, 403, 403},
-		{"loner_delete", "loner", http.MethodDelete, "/dashboard/api/frontend-apps/{id}", "", fh.Delete, 0, 200, 399},
-		{"appadmin_delete", "appadmin", http.MethodDelete, "/dashboard/api/frontend-apps/{id}", "", fh.Delete, 0, 200, 399},
+		{"loner_delete", "loner", http.MethodDelete, "/dashboard/api/frontend-apps/{freshId}", "", fh.Delete, 0, 200, 399},
+		{"appadmin_delete", "appadmin", http.MethodDelete, "/dashboard/api/frontend-apps/{freshId}", "", fh.Delete, 0, 200, 399},
 		{"appeditor_delete", "appeditor", http.MethodDelete, "/dashboard/api/frontend-apps/{id}", "", fh.Delete, 0, 403, 403},
 		{"appviewer_delete", "appviewer", http.MethodDelete, "/dashboard/api/frontend-apps/{id}", "", fh.Delete, 0, 403, 403},
 		{"outsider_delete", "outsider", http.MethodDelete, "/dashboard/api/frontend-apps/{id}", "", fh.Delete, 0, 404, 404},

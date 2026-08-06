@@ -138,19 +138,19 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
                 {!isSuperAdminAction && (
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 6 }}>
-                      Senha atual
+                      {t("changePassword.current")}
                     </label>
                     <div style={{ position: "relative" }}>
                       <input
                         type={showCurrent ? "text" : "password"}
                         value={currentPassword}
                         onChange={(e) => setCurrentPassword(e.target.value)}
-                        placeholder="Sua senha atual"
+                        placeholder={t("changePassword.currentPlaceholder")}
                         className={inputClass}
                       />
                       <button
                         type="button"
-                        title="Show/hide current password"
+                        title={t("changePassword.showCurrentPassword")}
                         onClick={() => setShowCurrent(!showCurrent)}
                         style={{
                           position: "absolute",
@@ -172,19 +172,19 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
 
                 <div>
                   <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 6 }}>
-                    Nova senha
+                    {t("changePassword.new")}
                   </label>
                   <div style={{ position: "relative" }}>
                     <input
                       type={showNew ? "text" : "password"}
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="Mínimo 8 caracteres"
+                      placeholder={t("changePassword.newPlaceholder")}
                       className={inputClass}
                     />
                     <button
                       type="button"
-                      title="Show/hide new password"
+                      title={t("changePassword.showNewPassword")}
                       onClick={() => setShowNew(!showNew)}
                       style={{
                         position: "absolute",
@@ -205,19 +205,19 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
 
                 <div>
                   <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 6 }}>
-                    Confirmar nova senha
+                    {t("changePassword.confirm")}
                   </label>
                   <div style={{ position: "relative" }}>
                     <input
                       type={showConfirm ? "text" : "password"}
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="Repita a nova senha"
+                      placeholder={t("changePassword.confirmPlaceholder")}
                       className={inputClass}
                     />
                     <button
                       type="button"
-                      title="Show/hide confirm password"
+                      title={t("changePassword.showConfirmPassword")}
                       onClick={() => setShowConfirm(!showConfirm)}
                       style={{
                         position: "absolute",

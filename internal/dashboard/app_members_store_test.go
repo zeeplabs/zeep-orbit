@@ -279,3 +279,85 @@ func TestOwnershipMigration(t *testing.T) {
 		t.Error("app_ownership deveria ter sido removida em T-08; se você está vendo isso, alguém reintroduziu a tabela sem remover a guarda")
 	}
 }
+
+// TestConcurrentAdminDemotionsDoNotDeadlock: two admins on the same app
+// call UpdateAppMemberRole against each other at the same time (A demotes
+// B, B demotes A, concurrently). Before the lockAppMembers fix, each call
+// locked the target row first and the admin set second — with two admins
+// racing, the lock order could invert between the two transactions and
+// Postgres would abort one with a 40P01 deadlock error instead of the
+// clean ErrLastAppAdmin/success split the invariant is supposed to produce.
+// This test fails (via a raw pgconn deadlock error surfacing from one of
+// the two calls) if that regresses.
+func TestConcurrentAdminDemotionsDoNotDeadlock(t *testing.T) {
+	pool := rbacTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	const (
+		adminAID = "00000000-0000-0000-0000-00000000d001"
+		adminBID = "00000000-0000-0000-0000-00000000d002"
+	)
+	for _, u := range []struct{ id, email string }{
+		{adminAID, "deadlock-a@example.com"},
+		{adminBID, "deadlock-b@example.com"},
+	} {
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO zeep_system.dashboard_users (id, email, role) VALUES ($1, $2, 'member')`,
+			u.id, u.email); err != nil {
+			t.Fatalf("seed user %s: %v", u.email, err)
+		}
+	}
+	var backendID string
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO zeep_system.apps (name, owner_id) VALUES ('app-deadlock', $1) RETURNING id`,
+		adminAID).Scan(&backendID); err != nil {
+		t.Fatalf("seed backend: %v", err)
+	}
+	// Both are admins — CreateApp's owner-membership insert only covers the
+	// owner, so add B explicitly.
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO zeep_system.app_members (backend_app_id, user_id, role) VALUES ($1, $2, 'admin')
+		 ON CONFLICT (backend_app_id, user_id) WHERE backend_app_id IS NOT NULL DO NOTHING`,
+		backendID, adminAID); err != nil {
+		t.Fatalf("seed admin A membership: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO zeep_system.app_members (backend_app_id, user_id, role) VALUES ($1, $2, 'admin')`,
+		backendID, adminBID); err != nil {
+		t.Fatalf("seed admin B membership: %v", err)
+	}
+
+	// Run N rounds to make a lock-order race actually likely to trigger,
+	// re-promoting whoever got demoted back to admin between rounds.
+	for round := 0; round < 20; round++ {
+		results := make(chan error, 2)
+		go func() {
+			results <- UpdateAppMemberRole(ctx, pool, AppRef{BackendAppID: backendID}, adminBID, AppRoleEditor)
+		}()
+		go func() {
+			results <- UpdateAppMemberRole(ctx, pool, AppRef{BackendAppID: backendID}, adminAID, AppRoleEditor)
+		}()
+		err1 := <-results
+		err2 := <-results
+
+		for _, err := range []error{err1, err2} {
+			if err != nil && !errors.Is(err, ErrLastAppAdmin) {
+				t.Fatalf("round %d: unexpected error (want nil or ErrLastAppAdmin, got a raw driver error if this is a deadlock): %v", round, err)
+			}
+		}
+		// Exactly one of the two calls must have succeeded (the other one
+		// necessarily sees "would leave 0 admins" and gets ErrLastAppAdmin,
+		// since demoting both simultaneously is never valid) — restore both
+		// to admin before the next round.
+		succeeded := err1 == nil || err2 == nil
+		if !succeeded {
+			t.Fatalf("round %d: both calls failed, want exactly one success", round)
+		}
+		if _, err := pool.Exec(ctx,
+			`UPDATE zeep_system.app_members SET role = 'admin' WHERE backend_app_id = $1`,
+			backendID); err != nil {
+			t.Fatalf("round %d: restore admins: %v", round, err)
+		}
+	}
+}

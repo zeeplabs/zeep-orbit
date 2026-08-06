@@ -114,8 +114,8 @@ func appMembersHandlerTestPool(t *testing.T) (*db.Pool, *Handler, map[string]*Da
 	// Frontend app: seed a github_templates row first (FK is NOT NULL).
 	var templateID string
 	if err := pool.QueryRow(ctx,
-		`INSERT INTO zeep_system.github_templates (name, repo, path, created_by) VALUES ($1, $2, $3, $4) RETURNING id`,
-		"tpl-members", "owner/repo", "/", actors["super"].Email,
+		`INSERT INTO zeep_system.github_templates (name, github_owner, github_repo, created_by) VALUES ($1, $2, $3, $4) RETURNING id`,
+		"tpl-members", "owner", "repo", actors["super"].Email,
 	).Scan(&templateID); err != nil {
 		pool.Close()
 		t.Fatalf("create github template: %v", err)
@@ -190,18 +190,26 @@ func callAppMember(t *testing.T, h *Handler, actors map[string]*DashboardUser, b
 	default:
 		t.Fatalf("cannot determine axis from pathFmt %q", c.pathFmt)
 	}
+	// pathFmt has either 1 %s (appID only — list/add) or 2 (appID + userID —
+	// update/remove). hasUserID drives both the URL substitution and the
+	// chi route param below; a literal "{userId}" substring never appears
+	// in pathFmt, so checking for %s count is the only reliable signal.
+	hasUserID := strings.Count(c.pathFmt, "%s") == 2
+
 	// userID is either the actor's own id (default for "actor tries to
 	// do something to themselves") or whatever the case provides.
 	var userIDArg string
 	if c.userParam != "" {
 		userIDArg = c.userParam
-	} else if strings.Contains(c.pathFmt, "%s") && strings.Contains(c.pathFmt, "{userId}") {
-		// Second %s is the userId; default to actor's own id.
+	} else if hasUserID {
 		userIDArg = actor.ID
-	} else {
-		userIDArg = ""
 	}
-	path := fmt.Sprintf(c.pathFmt, appID, userIDArg)
+	var path string
+	if hasUserID {
+		path = fmt.Sprintf(c.pathFmt, appID, userIDArg)
+	} else {
+		path = fmt.Sprintf(c.pathFmt, appID)
+	}
 	var body *bytes.Reader
 	if c.body != "" {
 		body = bytes.NewReader([]byte(c.body))
@@ -215,7 +223,7 @@ func callAppMember(t *testing.T, h *Handler, actors map[string]*DashboardUser, b
 	req = withUser(req, actor)
 	rctx := chi.NewRouteContext()
 	switch {
-	case strings.Contains(c.pathFmt, "{userId}"):
+	case hasUserID:
 		rctx.URLParams.Add("id", appID)
 		rctx.URLParams.Add("userId", userIDArg)
 	default:
@@ -279,13 +287,39 @@ func TestAppMembersRBACMatrix(t *testing.T) {
 		return u.ID
 	}
 
+	// seedMember creates a fresh user and pre-seeds it as a 'viewer'
+	// member of the given app. Every Remove case that expects 204 needs
+	// its OWN pre-seeded target: the cases run sequentially against a
+	// shared app, so a target consumed by the first successful DELETE is
+	// gone (404) by the time the next success case reaches it.
+	seedMember := func(suffix, column, appID string) string {
+		id := uniqueUser(suffix)
+		if _, err := pool.Exec(context.Background(),
+			fmt.Sprintf(`INSERT INTO zeep_system.app_members (%s, user_id, role) VALUES ($1, $2, 'viewer')`, column),
+			appID, id,
+		); err != nil {
+			t.Fatalf("seed member %s: %v", suffix, err)
+		}
+		return id
+	}
+	beMember := func(suffix string) string { return seedMember(suffix, "backend_app_id", backendAppID) }
+	feMember := func(suffix string) string { return seedMember(suffix, "frontend_app_id", frontendAppID) }
+
 	// Backend axis: List/Add/Update/Remove.
 	beTarget := uniqueUser("be") // not a member — used for Add success cases
 	beOther := uniqueUser("be2") // not a member — used for Update/Delete success cases
+	beThird := uniqueUser("be3") // not a member — a distinct target for the second Add success case (appadmin), since beOther is already consumed by the loner Add success case above it
+	// One pre-seeded member per Remove-expects-204 case.
+	beRemove1 := beMember("berm1") // consumed by be_super_remove
+	beRemove2 := beMember("berm2") // consumed by be_loner_remove
+	beRemove3 := beMember("berm3") // consumed by be_appadmin_remove
 
 	// Frontend axis: List/Add/Update/Remove (mirror of backend).
 	feTarget := uniqueUser("fe")
 	feOther := uniqueUser("fe2")
+	feThird := uniqueUser("fe3")   // distinct target for the second Add success case (appadmin) — feOther is consumed by fe_loner_add
+	feRemove1 := feMember("ferm1") // consumed by fe_super_remove
+	feRemove2 := feMember("ferm2") // consumed by fe_appadmin_remove
 
 	cases := []appMemberCase{
 		// ===== Backend app — List (GET) — CanManage required =====
@@ -310,7 +344,7 @@ func TestAppMembersRBACMatrix(t *testing.T) {
 		{"be_loner_add", "loner", http.MethodPost, "/dashboard/api/apps/%s/members",
 			`{"user_id":"` + beOther + `","role":"editor"}`, "", 201, 0, 0},
 		{"be_appadmin_add", "appadmin", http.MethodPost, "/dashboard/api/apps/%s/members",
-			`{"user_id":"` + beOther + `","role":"editor"}`, "", 201, 0, 0},
+			`{"user_id":"` + beThird + `","role":"editor"}`, "", 201, 0, 0},
 		{"be_appeditor_add", "appeditor", http.MethodPost, "/dashboard/api/apps/%s/members",
 			`{"user_id":"` + beOther + `","role":"editor"}`, "", 0, 403, 403},
 		{"be_appviewer_add", "appviewer", http.MethodPost, "/dashboard/api/apps/%s/members",
@@ -338,12 +372,13 @@ func TestAppMembersRBACMatrix(t *testing.T) {
 			`{"role":"viewer"}`, beTarget, 0, 403, 403},
 
 		// ===== Backend app — Remove (DELETE) — CanManage required =====
-		// Actor removes beTarget.
-		{"be_super_remove", "super", http.MethodDelete, "/dashboard/api/apps/%s/members/%s", "", beTarget, 204, 0, 0},
+		// Each success case removes its own pre-seeded member; the 403
+		// cases share beTarget since they never reach the store.
+		{"be_super_remove", "super", http.MethodDelete, "/dashboard/api/apps/%s/members/%s", "", beRemove1, 204, 0, 0},
 		{"be_admin_global_remove", "admin", http.MethodDelete, "/dashboard/api/apps/%s/members/%s", "", beTarget, 0, 403, 403},
 		{"be_auditor_global_remove", "auditor", http.MethodDelete, "/dashboard/api/apps/%s/members/%s", "", beTarget, 0, 403, 403},
-		{"be_loner_remove", "loner", http.MethodDelete, "/dashboard/api/apps/%s/members/%s", "", beTarget, 204, 0, 0},
-		{"be_appadmin_remove", "appadmin", http.MethodDelete, "/dashboard/api/apps/%s/members/%s", "", beTarget, 204, 0, 0},
+		{"be_loner_remove", "loner", http.MethodDelete, "/dashboard/api/apps/%s/members/%s", "", beRemove2, 204, 0, 0},
+		{"be_appadmin_remove", "appadmin", http.MethodDelete, "/dashboard/api/apps/%s/members/%s", "", beRemove3, 204, 0, 0},
 		{"be_appeditor_remove", "appeditor", http.MethodDelete, "/dashboard/api/apps/%s/members/%s", "", beTarget, 0, 403, 403},
 		{"be_appviewer_remove", "appviewer", http.MethodDelete, "/dashboard/api/apps/%s/members/%s", "", beTarget, 0, 403, 403},
 		{"be_outsider_remove", "outsider", http.MethodDelete, "/dashboard/api/apps/%s/members/%s", "", beTarget, 0, 403, 403},
@@ -363,7 +398,7 @@ func TestAppMembersRBACMatrix(t *testing.T) {
 		{"fe_loner_add", "loner", http.MethodPost, "/dashboard/api/frontend-apps/%s/members",
 			`{"user_id":"` + feOther + `","role":"editor"}`, "", 201, 0, 0},
 		{"fe_appadmin_add", "appadmin", http.MethodPost, "/dashboard/api/frontend-apps/%s/members",
-			`{"user_id":"` + feOther + `","role":"editor"}`, "", 201, 0, 0},
+			`{"user_id":"` + feThird + `","role":"editor"}`, "", 201, 0, 0},
 		{"fe_appeditor_add", "appeditor", http.MethodPost, "/dashboard/api/frontend-apps/%s/members",
 			`{"user_id":"` + feOther + `","role":"editor"}`, "", 0, 403, 403},
 		{"fe_outsider_add", "outsider", http.MethodPost, "/dashboard/api/frontend-apps/%s/members",
@@ -378,8 +413,8 @@ func TestAppMembersRBACMatrix(t *testing.T) {
 		{"fe_outsider_update", "outsider", http.MethodPatch, "/dashboard/api/frontend-apps/%s/members/%s",
 			`{"role":"viewer"}`, feTarget, 0, 403, 403},
 
-		{"fe_super_remove", "super", http.MethodDelete, "/dashboard/api/frontend-apps/%s/members/%s", "", feTarget, 204, 0, 0},
-		{"fe_appadmin_remove", "appadmin", http.MethodDelete, "/dashboard/api/frontend-apps/%s/members/%s", "", feTarget, 204, 0, 0},
+		{"fe_super_remove", "super", http.MethodDelete, "/dashboard/api/frontend-apps/%s/members/%s", "", feRemove1, 204, 0, 0},
+		{"fe_appadmin_remove", "appadmin", http.MethodDelete, "/dashboard/api/frontend-apps/%s/members/%s", "", feRemove2, 204, 0, 0},
 		{"fe_appeditor_remove", "appeditor", http.MethodDelete, "/dashboard/api/frontend-apps/%s/members/%s", "", feTarget, 0, 403, 403},
 		{"fe_outsider_remove", "outsider", http.MethodDelete, "/dashboard/api/frontend-apps/%s/members/%s", "", feTarget, 0, 403, 403},
 	}
@@ -431,13 +466,23 @@ func TestAppMembersIndependentTest(t *testing.T) {
 	// Helper to dispatch a request.
 	do := func(t *testing.T, actor *DashboardUser, method, pathFmt, body, userIDArg string) (int, *httptest.ResponseRecorder) {
 		t.Helper()
+		// pathFmt has either 1 %s (appID only) or 2 (appID + userID) — a
+		// literal "{userId}" substring never appears in it, so the %s count
+		// is the only reliable signal for both the URL substitution and the
+		// chi route param below.
+		hasUserID := strings.Count(pathFmt, "%s") == 2
 		var uid string
 		if userIDArg != "" {
 			uid = userIDArg
-		} else if strings.Contains(pathFmt, "{userId}") {
+		} else if hasUserID {
 			uid = actor.ID
 		}
-		path := fmt.Sprintf(pathFmt, backendAppID, uid)
+		var path string
+		if hasUserID {
+			path = fmt.Sprintf(pathFmt, backendAppID, uid)
+		} else {
+			path = fmt.Sprintf(pathFmt, backendAppID)
+		}
 		var r *bytes.Reader
 		if body != "" {
 			r = bytes.NewReader([]byte(body))
@@ -450,7 +495,7 @@ func TestAppMembersIndependentTest(t *testing.T) {
 		}
 		req = withUser(req, actor)
 		rctx := chi.NewRouteContext()
-		if strings.Contains(pathFmt, "{userId}") {
+		if hasUserID {
 			rctx.URLParams.Add("id", backendAppID)
 			rctx.URLParams.Add("userId", uid)
 		} else {
@@ -593,13 +638,23 @@ func TestAppMembersEdgeCases(t *testing.T) {
 	// Helper.
 	do := func(t *testing.T, actor *DashboardUser, method, pathFmt, body, userIDArg string) int {
 		t.Helper()
+		// pathFmt has either 1 %s (appID only) or 2 (appID + userID) — a
+		// literal "{userId}" substring never appears in it, so the %s count
+		// is the only reliable signal for both the URL substitution and the
+		// chi route param below.
+		hasUserID := strings.Count(pathFmt, "%s") == 2
 		var uid string
 		if userIDArg != "" {
 			uid = userIDArg
-		} else if strings.Contains(pathFmt, "{userId}") {
+		} else if hasUserID {
 			uid = actor.ID
 		}
-		path := fmt.Sprintf(pathFmt, backendAppID, uid)
+		var path string
+		if hasUserID {
+			path = fmt.Sprintf(pathFmt, backendAppID, uid)
+		} else {
+			path = fmt.Sprintf(pathFmt, backendAppID)
+		}
 		var r *bytes.Reader
 		if body != "" {
 			r = bytes.NewReader([]byte(body))
@@ -612,7 +667,7 @@ func TestAppMembersEdgeCases(t *testing.T) {
 		}
 		req = withUser(req, actor)
 		rctx := chi.NewRouteContext()
-		if strings.Contains(pathFmt, "{userId}") {
+		if hasUserID {
 			rctx.URLParams.Add("id", backendAppID)
 			rctx.URLParams.Add("userId", uid)
 		} else {

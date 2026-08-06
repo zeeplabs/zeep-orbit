@@ -31,23 +31,36 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			role         TEXT        NOT NULL CHECK (role IN ('superadmin','admin','auditor','member')),
 			created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
-		// dashboard-global-roles T-01: 2→4 role tiers. Existing 'admin' users are
-		// reclassified as 'member' (renamed to fit the new model: 'admin' is now a
-		// platform-management role distinct from the per-app "owner" pattern that
-		// 'member' replaces). 'superadmin' is untouched.
+		// dashboard-global-roles T-01: 2→4 role tiers. Existing 'admin' users
+		// (under the OLD 2-value model) are reclassified as 'member' ('admin' is
+		// now a platform-management role distinct from the per-app "owner"
+		// pattern that 'member' replaces). 'superadmin' is untouched.
 		//
-		// Order is non-trivial and was previously wrong (UPDATE-first crashed because
-		// the OLD 2-value constraint rejects 'member' mid-flight). Correct order:
-		//   1. DROP the old constraint (no constraint active during the UPDATE)
-		//   2. UPDATE admin→member (now allowed because no CHECK is in effect)
-		//   3. ADD the new 4-value constraint
-		// All three run inside the same transaction; the window without a CHECK is
-		// atomic and invisible to other sessions. Re-running is a no-op (DROP IF
-		// EXISTS swallows the second-drop; UPDATE matches no rows; ADD replaces).
-		`ALTER TABLE zeep_system.dashboard_users DROP CONSTRAINT IF EXISTS dashboard_users_role_check`,
-		`UPDATE zeep_system.dashboard_users SET role = 'member' WHERE role = 'admin'`,
-		`ALTER TABLE zeep_system.dashboard_users ADD CONSTRAINT dashboard_users_role_check
-		 CHECK (role IN ('superadmin','admin','auditor','member'))`,
+		// This one-time demotion must run EXACTLY ONCE, not on every boot — once
+		// 'admin' becomes a valid, assignable role again (via CreateUser /
+		// UpdateUserRole), re-running the bare UPDATE on every ProvisionZeepSystem
+		// call would silently demote every admin created after the migration on
+		// the next restart/deploy. Guard: only run DROP/UPDATE/ADD while the OLD
+		// 2-value constraint (no 'auditor' in its definition) is still in effect;
+		// once the 4-value constraint is installed, this whole block is a no-op
+		// forever after, regardless of how many admins exist.
+		`DO $do$
+		 BEGIN
+		   IF EXISTS (
+		     SELECT 1 FROM pg_constraint c
+		     JOIN pg_class t ON t.oid = c.conrelid
+		     JOIN pg_namespace n ON n.oid = t.relnamespace
+		     WHERE n.nspname = 'zeep_system' AND t.relname = 'dashboard_users'
+		       AND c.conname = 'dashboard_users_role_check'
+		       AND pg_get_constraintdef(c.oid) NOT LIKE '%auditor%'
+		   ) THEN
+		     ALTER TABLE zeep_system.dashboard_users DROP CONSTRAINT dashboard_users_role_check;
+		     UPDATE zeep_system.dashboard_users SET role = 'member' WHERE role = 'admin';
+		     ALTER TABLE zeep_system.dashboard_users ADD CONSTRAINT dashboard_users_role_check
+		       CHECK (role IN ('superadmin','admin','auditor','member'));
+		   END IF;
+		 END
+		 $do$`,
 		`ALTER TABLE zeep_system.dashboard_users ADD COLUMN IF NOT EXISTS google_id TEXT`,
 		`ALTER TABLE zeep_system.dashboard_users ADD COLUMN IF NOT EXISTS name TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE zeep_system.dashboard_users ADD COLUMN IF NOT EXISTS language TEXT NOT NULL DEFAULT 'en'`,

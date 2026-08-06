@@ -3,23 +3,23 @@
     {
       "version": "v0.5.1",
       "release_date": "2026-07-31",
-      "title": "Render Deploy Reliability & GitHub Integration Access Control",
-      "summary": "Fixes to the Render deploy flow (orphaned services, transient errors, wrong Project placement), template visibility for admins, and a missing role guard on the GitHub Integration page.",
+      "title": {"en": "Render Deploy Reliability & GitHub Integration Access Control", "pt-BR": "Confiabilidade do Deploy Render e Controle de Acesso da Integração GitHub"},
+      "summary": {"en": "Fixes to the Render deploy flow (orphaned services, transient errors, wrong Project placement), template visibility for admins, and a missing role guard on the GitHub Integration page.", "pt-BR": "Correções no fluxo de deploy do Render (serviços órfãos, erros transitórios, Project incorreto), visibilidade de templates para admins, e uma verificação de papel ausente na página de Integração GitHub."},
       "sections": [
         {
           "type": "features",
           "items": [
-            {"description": "Render Environment ID field in Deploy Provider config (superadmin) — required when the configured Project has more than one Environment, since the app can no longer guess which one to deploy into"}
+            {"description": {"en": "Render Environment ID field in Deploy Provider config (superadmin) — required when the configured Project has more than one Environment, since the app can no longer guess which one to deploy into", "pt-BR": "Campo Render Environment ID na configuração do Deploy Provider (superadmin) — obrigatório quando o Project configurado tem mais de um Environment, já que o app não consegue mais adivinhar qual usar"}}
           ]
         },
         {
           "type": "fixes",
           "items": [
-            {"description": "GitHub Integration page (config, templates, deploy provider) had no role guard on the frontend — admins could reach the superadmin-only page and see forms silently 403 on every action"},
-            {"description": "Admin users couldn't see GitHub templates in the frontend-app creation modal — the templates list endpoint was superadmin-only, now open to any authenticated role"},
-            {"description": "Frontend app deploy could leave an orphaned Render service after a failure — the Render service ID is now persisted immediately after creation, before any later step that could fail"},
-            {"description": "Frontend app creation intermittently failed to deploy due to transient 404/500 errors from Render right after creating the service — now retried with backoff"},
-            {"description": "Deployed Render services were never placed in the configured Project — Render's API uses environmentId, not projectId; the configured Project is now resolved to its Environment and used correctly"}
+            {"description": {"en": "GitHub Integration page (config, templates, deploy provider) had no role guard on the frontend — admins could reach the superadmin-only page and see forms silently 403 on every action", "pt-BR": "A página de Integração GitHub (config, templates, deploy provider) não tinha verificação de papel no frontend — admins conseguiam acessar a página exclusiva de superadmin e viam os formulários falharem com 403 silenciosamente em toda ação"}},
+            {"description": {"en": "Admin users couldn't see GitHub templates in the frontend-app creation modal — the templates list endpoint was superadmin-only, now open to any authenticated role", "pt-BR": "Usuários admin não viam os templates do GitHub no modal de criação de frontend app — o endpoint de listagem de templates era exclusivo de superadmin, agora aberto a qualquer papel autenticado"}},
+            {"description": {"en": "Frontend app deploy could leave an orphaned Render service after a failure — the Render service ID is now persisted immediately after creation, before any later step that could fail", "pt-BR": "O deploy de frontend app podia deixar um serviço Render órfão após uma falha — o ID do serviço Render agora é persistido imediatamente após a criação, antes de qualquer etapa seguinte que pudesse falhar"}},
+            {"description": {"en": "Frontend app creation intermittently failed to deploy due to transient 404/500 errors from Render right after creating the service — now retried with backoff", "pt-BR": "A criação de frontend app falhava intermitentemente no deploy devido a erros transitórios 404/500 do Render logo após criar o serviço — agora com retry e backoff"}},
+            {"description": {"en": "Deployed Render services were never placed in the configured Project — Render's API uses environmentId, not projectId; the configured Project is now resolved to its Environment and used correctly", "pt-BR": "Serviços do Render implantados nunca eram colocados no Project configurado — a API do Render usa environmentId, não projectId; o Project configurado agora é resolvido para seu Environment e usado corretamente"}}
           ]
         }
       ]

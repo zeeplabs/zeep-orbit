@@ -187,50 +187,23 @@ func UpdateAppMemberRole(ctx context.Context, pool *db.Pool, app AppRef, userID 
 	}
 	defer tx.Rollback(ctx)
 
-	// Lock the target's current row and read the old role.
-	var oldRole string
-	var query string
-	var arg any
-	if app.BackendAppID != "" {
-		query = `SELECT role FROM zeep_system.app_members
-		         WHERE backend_app_id = $1 AND user_id = $2 FOR UPDATE`
-		arg = app.BackendAppID
-	} else {
-		query = `SELECT role FROM zeep_system.app_members
-		         WHERE frontend_app_id = $1 AND user_id = $2 FOR UPDATE`
-		arg = app.FrontendAppID
+	members, err := lockAppMembers(ctx, tx, app)
+	if err != nil {
+		return err
 	}
-	if err := tx.QueryRow(ctx, query, arg, userID).Scan(&oldRole); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
-		}
-		return fmt.Errorf("rbac: read app member: %w", err)
+	oldRole, ok := memberRole(members, userID)
+	if !ok {
+		return ErrNotFound
 	}
 
 	// Invariant: demoting the last admin would leave the app with zero
 	// admins. Only meaningful when the old role is 'admin' and the new
 	// role is something else.
 	if oldRole == string(AppRoleAdmin) && newRole != AppRoleAdmin {
-		var count int
-		if app.BackendAppID != "" {
-			if err := tx.QueryRow(ctx,
-				`SELECT COUNT(*) FROM zeep_system.app_members
-				 WHERE backend_app_id = $1 AND role = 'admin' FOR UPDATE`,
-				app.BackendAppID).Scan(&count); err != nil {
-				return fmt.Errorf("rbac: count admins under lock: %w", err)
-			}
-		} else {
-			if err := tx.QueryRow(ctx,
-				`SELECT COUNT(*) FROM zeep_system.app_members
-				 WHERE frontend_app_id = $1 AND role = 'admin' FOR UPDATE`,
-				app.FrontendAppID).Scan(&count); err != nil {
-				return fmt.Errorf("rbac: count admins under lock: %w", err)
-			}
-		}
 		// After the UPDATE, this user will no longer be an admin. The
 		// remaining count must be ≥ 1 — meaning the locked count is
 		// currently ≥ 2 (this user + at least one other).
-		if count < 2 {
+		if countAdmins(members) < 2 {
 			return ErrLastAppAdmin
 		}
 	}
@@ -271,53 +244,21 @@ func RemoveAppMember(ctx context.Context, pool *db.Pool, app AppRef, userID stri
 	}
 	defer tx.Rollback(ctx)
 
-	// Read the target's current role under FOR UPDATE so a concurrent
-	// UpdateAppMemberRole can't change it between our check and our delete.
-	var oldRole string
-	if app.BackendAppID != "" {
-		if err := tx.QueryRow(ctx,
-			`SELECT role FROM zeep_system.app_members
-			 WHERE backend_app_id = $1 AND user_id = $2 FOR UPDATE`,
-			app.BackendAppID, userID).Scan(&oldRole); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return ErrNotFound
-			}
-			return fmt.Errorf("rbac: read app member: %w", err)
-		}
-	} else {
-		if err := tx.QueryRow(ctx,
-			`SELECT role FROM zeep_system.app_members
-			 WHERE frontend_app_id = $1 AND user_id = $2 FOR UPDATE`,
-			app.FrontendAppID, userID).Scan(&oldRole); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return ErrNotFound
-			}
-			return fmt.Errorf("rbac: read app member: %w", err)
-		}
+	members, err := lockAppMembers(ctx, tx, app)
+	if err != nil {
+		return err
+	}
+	oldRole, ok := memberRole(members, userID)
+	if !ok {
+		return ErrNotFound
 	}
 
 	// Invariant: removing the last admin would leave the app with zero
-	// admins. Lock the admin count and check.
+	// admins.
 	if oldRole == string(AppRoleAdmin) {
-		var count int
-		if app.BackendAppID != "" {
-			if err := tx.QueryRow(ctx,
-				`SELECT COUNT(*) FROM zeep_system.app_members
-				 WHERE backend_app_id = $1 AND role = 'admin' FOR UPDATE`,
-				app.BackendAppID).Scan(&count); err != nil {
-				return fmt.Errorf("rbac: count admins under lock: %w", err)
-			}
-		} else {
-			if err := tx.QueryRow(ctx,
-				`SELECT COUNT(*) FROM zeep_system.app_members
-				 WHERE frontend_app_id = $1 AND role = 'admin' FOR UPDATE`,
-				app.FrontendAppID).Scan(&count); err != nil {
-				return fmt.Errorf("rbac: count admins under lock: %w", err)
-			}
-		}
 		// After the DELETE, this user will no longer be an admin. The
 		// remaining count must be ≥ 1.
-		if count < 2 {
+		if countAdmins(members) < 2 {
 			return ErrLastAppAdmin
 		}
 	}
@@ -341,6 +282,88 @@ func RemoveAppMember(ctx context.Context, pool *db.Pool, app AppRef, userID stri
 		return fmt.Errorf("rbac: commit tx: %w", err)
 	}
 	return nil
+}
+
+// memberLock is one row of an app's membership, locked FOR UPDATE.
+type memberLock struct {
+	userID string
+	role   string
+}
+
+// lockAppMembers locks every membership row for app, in a single query,
+// ordered by user_id — the canonical, single lock order used by both
+// UpdateAppMemberRole and RemoveAppMember. Must be called inside an open tx.
+//
+// A single query locking the whole set (rather than "lock the target row,
+// then separately lock the admin rows") matters for more than just the
+// aggregate-with-FOR-UPDATE restriction below: locking in two steps means
+// the order depends on which row the caller happens to touch first, so two
+// admins demoting/removing each other concurrently could lock in reversed
+// order and deadlock (Postgres error 40P01) — the transaction that loses
+// the deadlock gets a raw 500 instead of the clean ErrLastAppAdmin/success
+// split the invariant is supposed to produce. A single ORDER BY user_id
+// FOR UPDATE query is order-independent: every caller acquires the same
+// locks in the same order, regardless of which user initiated the request.
+//
+// This also sidesteps Postgres rejecting `SELECT COUNT(*) ... FOR UPDATE`
+// outright ("FOR UPDATE is not allowed with aggregate functions",
+// SQLSTATE 0A000) — the locking query here has no aggregate; counting
+// happens in Go over the already-locked rows via countAdmins.
+func lockAppMembers(ctx context.Context, tx pgx.Tx, app AppRef) ([]memberLock, error) {
+	var (
+		rows pgx.Rows
+		err  error
+	)
+	if app.BackendAppID != "" {
+		rows, err = tx.Query(ctx,
+			`SELECT user_id, role FROM zeep_system.app_members
+			 WHERE backend_app_id = $1 ORDER BY user_id FOR UPDATE`,
+			app.BackendAppID)
+	} else {
+		rows, err = tx.Query(ctx,
+			`SELECT user_id, role FROM zeep_system.app_members
+			 WHERE frontend_app_id = $1 ORDER BY user_id FOR UPDATE`,
+			app.FrontendAppID)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("rbac: lock app members: %w", err)
+	}
+	defer rows.Close()
+
+	var members []memberLock
+	for rows.Next() {
+		var m memberLock
+		if err := rows.Scan(&m.userID, &m.role); err != nil {
+			return nil, fmt.Errorf("rbac: scan locked member: %w", err)
+		}
+		members = append(members, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rbac: iterate locked members: %w", err)
+	}
+	return members, nil
+}
+
+// memberRole returns userID's role among the locked members, and whether
+// they're a member at all.
+func memberRole(members []memberLock, userID string) (string, bool) {
+	for _, m := range members {
+		if m.userID == userID {
+			return m.role, true
+		}
+	}
+	return "", false
+}
+
+// countAdmins counts admin rows among the already-locked members.
+func countAdmins(members []memberLock) int {
+	n := 0
+	for _, m := range members {
+		if m.role == string(AppRoleAdmin) {
+			n++
+		}
+	}
+	return n
 }
 
 // validAppRole reports whether r is one of the three AppRole constants.

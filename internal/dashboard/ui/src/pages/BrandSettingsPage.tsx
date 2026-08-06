@@ -390,7 +390,7 @@ function GoogleAuthProviderCard() {
               <Label className="mb-1.5 block text-[12px] font-medium uppercase tracking-wider text-[var(--text-secondary)]">
                 {t("settings.clientId")}
               </Label>
-              <Input value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder="Google OAuth Client ID" />
+              <Input value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder={t("settings.clientIdPlaceholder")} />
             </div>
             <div>
               <Label className="mb-1.5 block text-[12px] font-medium uppercase tracking-wider text-[var(--text-secondary)]">
@@ -538,7 +538,7 @@ function GlobalStorageCard() {
           <div className="flex max-w-lg flex-col gap-4">
             <Input value={endpoint} onChange={(e) => setEndpoint(e.target.value)} placeholder="https://s3.amazonaws.com" />
             <div className="flex gap-3">
-              <Input value={region} onChange={(e) => setRegion(e.target.value)} placeholder="Region (us-east-1)" />
+              <Input value={region} onChange={(e) => setRegion(e.target.value)} placeholder={t("settings.regionPlaceholder")} />
               <Input value={bucket} onChange={(e) => setBucket(e.target.value)} placeholder={t("settings.bucketName")} />
             </div>
             <Input value={accessKeyId} onChange={(e) => setAccessKeyId(e.target.value)} placeholder={t("settings.accessKeyId")} />

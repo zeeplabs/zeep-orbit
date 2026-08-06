@@ -160,7 +160,19 @@ func TestAppsRBACMatrix(t *testing.T) {
 		if !ok {
 			t.Fatalf("unknown actor %q", c.actor)
 		}
-		path := fmt.Sprintf(c.pathFmt, appID, tableID)
+		// pathFmt has 0, 1, or 2 %s placeholders depending on the case — only
+		// pass as many args as it actually takes, or fmt.Sprintf appends a
+		// "%!(EXTRA ...)" suffix that corrupts the URL (and, in turn, the
+		// synthesized HTTP request line).
+		var path string
+		switch strings.Count(c.pathFmt, "%s") {
+		case 0:
+			path = c.pathFmt
+		case 1:
+			path = fmt.Sprintf(c.pathFmt, appID)
+		default:
+			path = fmt.Sprintf(c.pathFmt, appID, tableID)
+		}
 		var body *bytes.Reader
 		if c.body != "" {
 			body = bytes.NewReader([]byte(c.body))
@@ -292,14 +304,18 @@ func TestAppsRBACMatrix(t *testing.T) {
 		// --- CreateAppTable (POST /apps/{id}/tables) — CanWrite required ---
 		// Admin/editor/loner/appadmin/super pass auth; viewer/global/outsider
 		// are blocked. Status is provisioner-dependent for pass cases.
-		{"super_create_table", "super", http.MethodPost, "/dashboard/api/apps/%s/tables", `{"name":"t1","columns":[{"name":"x","type":"text"}]}`, 0, 200, 299},
-		{"admin_global_create_table", "admin", http.MethodPost, "/dashboard/api/apps/%s/tables", `{"name":"t1","columns":[{"name":"x","type":"text"}]}`, 0, 403, 403},
-		{"auditor_global_create_table", "auditor", http.MethodPost, "/dashboard/api/apps/%s/tables", `{"name":"t1","columns":[{"name":"x","type":"text"}]}`, 0, 403, 403},
-		{"loner_create_table", "loner", http.MethodPost, "/dashboard/api/apps/%s/tables", `{"name":"t1","columns":[{"name":"x","type":"text"}]}`, 0, 200, 299},
-		{"appadmin_create_table", "appadmin", http.MethodPost, "/dashboard/api/apps/%s/tables", `{"name":"t1","columns":[{"name":"x","type":"text"}]}`, 0, 200, 299},
-		{"appeditor_create_table", "appeditor", http.MethodPost, "/dashboard/api/apps/%s/tables", `{"name":"t1","columns":[{"name":"x","type":"text"}]}`, 0, 200, 299},
-		{"appviewer_create_table", "appviewer", http.MethodPost, "/dashboard/api/apps/%s/tables", `{"name":"t1","columns":[{"name":"x","type":"text"}]}`, 0, 403, 403},
-		{"outsider_create_table", "outsider", http.MethodPost, "/dashboard/api/apps/%s/tables", `{"name":"t1","columns":[{"name":"x","type":"text"}]}`, 0, 404, 404},
+		// Table names must be unique per success case: the cases run
+		// sequentially against the same app, so a second CREATE with an
+		// already-taken name is rejected by validateTableInput with 400
+		// (a name collision, not an auth failure).
+		{"super_create_table", "super", http.MethodPost, "/dashboard/api/apps/%s/tables", `{"name":"t_super","columns":[{"name":"x","type":"text"}]}`, 0, 200, 299},
+		{"admin_global_create_table", "admin", http.MethodPost, "/dashboard/api/apps/%s/tables", `{"name":"t_admin","columns":[{"name":"x","type":"text"}]}`, 0, 403, 403},
+		{"auditor_global_create_table", "auditor", http.MethodPost, "/dashboard/api/apps/%s/tables", `{"name":"t_auditor","columns":[{"name":"x","type":"text"}]}`, 0, 403, 403},
+		{"loner_create_table", "loner", http.MethodPost, "/dashboard/api/apps/%s/tables", `{"name":"t_loner","columns":[{"name":"x","type":"text"}]}`, 0, 200, 299},
+		{"appadmin_create_table", "appadmin", http.MethodPost, "/dashboard/api/apps/%s/tables", `{"name":"t_appadmin","columns":[{"name":"x","type":"text"}]}`, 0, 200, 299},
+		{"appeditor_create_table", "appeditor", http.MethodPost, "/dashboard/api/apps/%s/tables", `{"name":"t_appeditor","columns":[{"name":"x","type":"text"}]}`, 0, 200, 299},
+		{"appviewer_create_table", "appviewer", http.MethodPost, "/dashboard/api/apps/%s/tables", `{"name":"t_appviewer","columns":[{"name":"x","type":"text"}]}`, 0, 403, 403},
+		{"outsider_create_table", "outsider", http.MethodPost, "/dashboard/api/apps/%s/tables", `{"name":"t_outsider","columns":[{"name":"x","type":"text"}]}`, 0, 404, 404},
 
 		// --- UpdateAppTable (PUT /apps/{id}/tables/{tableId}) — CanWrite required ---
 		{"super_update_table", "super", http.MethodPut, "/dashboard/api/apps/%s/tables/%s", `{"rls":"","columns":[{"name":"x","type":"text"}]}`, 0, 200, 299},
@@ -314,7 +330,10 @@ func TestAppsRBACMatrix(t *testing.T) {
 		// --- DeleteAppTable (DELETE /apps/{id}/tables/{tableId}) — CanWrite required ---
 		{"admin_global_delete_table", "admin", http.MethodDelete, "/dashboard/api/apps/%s/tables/%s", "", 0, 403, 403},
 		{"auditor_global_delete_table", "auditor", http.MethodDelete, "/dashboard/api/apps/%s/tables/%s", "", 0, 403, 403},
-		{"appeditor_delete_table", "appeditor", http.MethodDelete, "/dashboard/api/apps/%s/tables/%s", "", 0, 403, 403},
+		// Table deletion is a CanWrite operation (same as create/update), so
+		// an app editor is allowed through — this case belongs to the
+		// "should succeed" set, not the blocked set.
+		{"appeditor_delete_table", "appeditor", http.MethodDelete, "/dashboard/api/apps/%s/tables/%s", "", 0, 200, 299},
 		{"appviewer_delete_table", "appviewer", http.MethodDelete, "/dashboard/api/apps/%s/tables/%s", "", 0, 403, 403},
 		{"outsider_delete_table", "outsider", http.MethodDelete, "/dashboard/api/apps/%s/tables/%s", "", 0, 404, 404},
 

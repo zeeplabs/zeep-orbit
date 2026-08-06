@@ -178,6 +178,16 @@ func TestResolveAppRole(t *testing.T) {
 		t.Fatalf("seed alice frontend: %v", err)
 	}
 
+	// admin@example.com (global admin) also has an explicit 'editor' row on
+	// the backend app — this must win over the CanReadAnyApp→viewer fallback.
+	// Regression guard for the axis-order bug: a global admin/auditor with
+	// explicit per-app membership must NOT be downgraded to viewer.
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO zeep_system.app_members (backend_app_id, user_id, role) VALUES ($1, $2, 'editor')`,
+		backendAppID, users[1].id); err != nil {
+		t.Fatalf("seed admin-global editor membership: %v", err)
+	}
+
 	// Member sem nenhuma membership em lugar nenhum.
 	memberNoMembership := &DashboardUser{ID: users[3].id, Role: "member"}
 
@@ -191,11 +201,15 @@ func TestResolveAppRole(t *testing.T) {
 		{"superadmin x backend", &DashboardUser{ID: users[0].id, Role: "superadmin"}, AppRef{BackendAppID: backendAppID}, AppRoleAdmin},
 		{"superadmin x frontend", &DashboardUser{ID: users[0].id, Role: "superadmin"}, AppRef{FrontendAppID: frontendAppID}, AppRoleAdmin},
 
-		// admin/auditor global: CanReadAnyApp true → viewer (cross-spec extension).
-		{"admin global x backend (no membership)", &DashboardUser{ID: users[1].id, Role: "admin"}, AppRef{BackendAppID: backendAppID}, AppRoleViewer},
+		// admin/auditor global with NO explicit membership: CanReadAnyApp true
+		// → viewer (cross-spec extension, fallback only).
 		{"admin global x frontend (no membership)", &DashboardUser{ID: users[1].id, Role: "admin"}, AppRef{FrontendAppID: frontendAppID}, AppRoleViewer},
 		{"auditor global x backend (no membership)", &DashboardUser{ID: users[2].id, Role: "auditor"}, AppRef{BackendAppID: backendAppID}, AppRoleViewer},
 		{"auditor global x frontend (no membership)", &DashboardUser{ID: users[2].id, Role: "auditor"}, AppRef{FrontendAppID: frontendAppID}, AppRoleViewer},
+
+		// Regression: admin global WITH an explicit per-app membership row
+		// must get that row's role, not be downgraded to viewer.
+		{"admin global x backend (explicit editor row)", &DashboardUser{ID: users[1].id, Role: "admin"}, AppRef{BackendAppID: backendAppID}, AppRoleEditor},
 
 		// member sem membership: "" (sem acesso).
 		{"member x backend (no membership)", memberNoMembership, AppRef{BackendAppID: backendAppID}, ""},

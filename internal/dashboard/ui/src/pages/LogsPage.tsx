@@ -277,16 +277,16 @@ export default function LogsPage() {
         onToggleExpand={(id) => setExpandedRow((cur) => (cur === id ? null : id))}
         renderExpanded={(e) => (
           <div className="grid grid-cols-2 gap-4 text-[12px]">
-            <DetailField label="Query">
+            <DetailField label={t("logs.detailQuery")}>
               <code className="break-all text-[var(--text-secondary)]">{e.query || "—"}</code>
             </DetailField>
-            <DetailField label="Content-Type">
+            <DetailField label={t("logs.detailContentType")}>
               <code className="text-[var(--text-secondary)]">{e.content_type || "—"}</code>
             </DetailField>
-            <DetailField label="Remote Addr">
+            <DetailField label={t("logs.detailRemoteAddr")}>
               <code className="text-[var(--text-secondary)]">{e.remote_addr || "—"}</code>
             </DetailField>
-            <DetailField label="User-Agent">
+            <DetailField label={t("logs.detailUserAgent")}>
               <code className="block max-w-[300px] truncate text-[var(--text-secondary)]">{e.user_agent || "—"}</code>
             </DetailField>
             {e.req_body && (

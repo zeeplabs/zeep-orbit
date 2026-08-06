@@ -351,7 +351,7 @@ function LoginTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]>
                 />
                 <button
                   type="button"
-                  title="Show/hide secret"
+                  title={t("appDetails.showHideSecret")}
                   onClick={() => setShowGoogleSecret(!showGoogleSecret)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer border-none bg-transparent text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
                 >
@@ -504,7 +504,7 @@ function StorageTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"
                     />
                     <button
                       type="button"
-                      title="Show/hide secret"
+                      title={t("appDetails.showHideSecret")}
                       onClick={() => setShowStorageSecret(!showStorageSecret)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer border-none bg-transparent text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
                     >
@@ -574,7 +574,7 @@ function ApiTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]> }
             variant="outline"
             size="icon"
             className="size-8 shrink-0"
-            title="Copy to clipboard"
+            title={t("common.copyToClipboard")}
             onClick={() => { navigator.clipboard.writeText(baseUrl); toast.success(t("appDetails.copied")); }}
           >
             <Icon name="content_copy" size={15} />
@@ -674,7 +674,7 @@ function TokensTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]
         {revealedSecret ? (
           <div className="flex items-center gap-2 rounded-[10px] border border-[var(--border)] bg-[var(--sunken)] px-4 py-3">
             <code className="flex-1 break-all font-mono text-sm text-[var(--primary)]">{revealedSecret}</code>
-            <Button variant="outline" size="icon" className="size-8 shrink-0" title="Copy to clipboard"
+            <Button variant="outline" size="icon" className="size-8 shrink-0" title={t("common.copyToClipboard")}
               onClick={() => { navigator.clipboard.writeText(revealedSecret); toast.success(t("appDetails.copied")); }}>
               <Icon name="content_copy" size={15} />
             </Button>
@@ -707,7 +707,7 @@ function TokensTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]
                   {statusBadge(tok)}
                   {!tok.revoked_at && (
                     <Button variant="outline" size="icon" className="size-8 text-[var(--text-secondary)] hover:text-[var(--danger)]"
-                      title="Revoke token" onClick={() => revokeToken.mutate(tok.id)}>
+                      title={t("appDetails.revokeTokenAction")} onClick={() => revokeToken.mutate(tok.id)}>
                       <Icon name="close" size={15} />
                     </Button>
                   )}
@@ -824,7 +824,7 @@ function TokenRevealModal({ jwt, onClose }: { jwt: string; onClose: () => void }
         </DialogHeader>
         <div className="flex items-center gap-2 rounded-[10px] border border-[var(--border)] bg-[var(--sunken)] px-4 py-3">
           <code className="max-h-32 flex-1 overflow-y-auto break-all font-mono text-sm text-[var(--primary)]">{jwt}</code>
-          <Button variant="outline" size="icon" className="size-9 shrink-0" title="Copy to clipboard"
+          <Button variant="outline" size="icon" className="size-9 shrink-0" title={t("common.copyToClipboard")}
             onClick={() => { navigator.clipboard.writeText(jwt); setCopied(true); }}>
             <Icon name="content_copy" size={16} />
           </Button>

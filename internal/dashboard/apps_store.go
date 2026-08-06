@@ -309,6 +309,24 @@ func UpdateAppStorageConfig(ctx context.Context, pool *db.Pool, appID string, cf
 	return nil
 }
 
+// ResolveAppRoleByName looks up a backend app's ID by name and resolves the
+// user's effective role on it via ResolveAppRole. Used by handlers that only
+// have the app name (e.g. the Data Browser, which addresses apps by name via
+// the registry, not by UUID). Returns ErrNotFound if no app has that name.
+func ResolveAppRoleByName(ctx context.Context, pool *db.Pool, user *DashboardUser, appName string) (AppRole, error) {
+	var appID string
+	err := pool.QueryRow(ctx,
+		`SELECT id FROM zeep_system.apps WHERE name = $1`, appName,
+	).Scan(&appID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("dashboard: lookup app by name: %w", err)
+	}
+	return ResolveAppRole(ctx, pool, user, AppRef{BackendAppID: appID})
+}
+
 // superadmin or CanReadAnyApp (admin/auditor global) → nil (no filter).
 // Members → names of apps in app_members for this user. Used by the table-name
 // collision checks in the handler layer; mirrors ListApps' filter.

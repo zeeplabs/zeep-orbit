@@ -136,7 +136,7 @@ export default function GoogleSetupPage() {
               <Input
                 id="googleSetup-password"
                 type={showPassword ? 'text' : 'password'}
-                placeholder="Min. 8 characters"
+                placeholder={t('googleSetup.passwordPlaceholder')}
                 autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
