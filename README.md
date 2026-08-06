@@ -71,12 +71,15 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/myapp/tasks
 | Feature                | Description                                              |
 | ---------------------- | -------------------------------------------------------- |
 | **Schema → REST**      | Define tables in the dashboard → instant CRUD API        |
+| **Relationships & Indexes** | Foreign keys (`references` + `on_delete`) and indexes in the schema builder, validated and ordered automatically |
 | **Auth by Email**      | Built-in email/password register & login per app         |
 | **Google OAuth**       | Sign in with Google — both dashboard and per-app         |
-| **Row-Level Security** | Auto-filter data by owner (`rls: owner`)                 |
+| **Row-Level Security** | Auto-filter data by owner (`rls: owner`), with an optional "require RLS by default" for new tables |
 | **App Tokens**         | JWT management for apps without email auth (create, revoke, refresh) |
 | **Per-App Health**     | `GET /{app}/health` for monitoring and readiness probes  |
 | **Soft Delete**        | Configurable soft delete toggle (dashboard settings)     |
+| **Retention & Purge**  | Background job hard-deletes soft-deleted rows past the retention window (off by default, audit-logged) |
+| **Query Timeout**      | Global `statement_timeout` on app data-plane queries (default 30s, `0` disables) |
 | **Rate Limiting**      | Per-app, per-IP sliding window (configurable RPM)        |
 | **File Storage**       | Per-app S3-compatible storage (DO Spaces, AWS, MinIO)    |
 
@@ -89,14 +92,17 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/myapp/tasks
 | **One-Click Deploy**     | Create repo from template, deploy to Render automatically |
 | **Custom Domains**       | Configure custom domain + DNS CNAME for each frontend    |
 | **Sync Credentials**     | Per-app deploy keys for local↔repo sync                  |
+| **Recent Deploys**       | Live list of the latest Render deploys across your frontend apps |
 
 ### Platform
 
 | Feature                 | Description                                              |
 | ----------------------- | -------------------------------------------------------- |
 | **Web Dashboard**       | Premium dark UI to manage everything                    |
-| **Data Browser**        | GUI to browse, filter, edit, export CSV, delete rows     |
-| **User Management**     | Manage dashboard admins and app users                    |
+| **Data Browser**        | GUI to browse, filter, edit, delete rows and export CSV (configurable row cap) |
+| **User Management**     | Manage dashboard users and app users                     |
+| **Role-based access**   | 4 platform roles (superadmin/admin/auditor/member) with a permission matrix for UI and backend |
+| **Per-app roles**       | 3 per-app roles (admin/editor/viewer) with membership management UI; ≥1 admin invariant enforced via transaction |
 | **Audit Logs**          | Action history with filters (who did what, when, IP)     |
 | **CORS**                | Cross-origin support for SPAs and mobile apps            |
 | **OpenAPI Docs**        | Auto-generated Swagger UI per app                        |
@@ -180,8 +186,9 @@ The web dashboard is embedded in the binary and accessible at `/dashboard`:
 
 - **Apps** — create backend apps (database + API) or frontend apps (GitHub repo + deploy)
 - **Data Browser** — browse, filter, sort, edit inline, delete, and export CSV
-- **Users** — manage dashboard admins (superadmin/admin roles)
+- **Users** — manage dashboard users (superadmin/admin/auditor/member roles)
 - **App Users** — view users registered in each app, deactivate accounts, reset sessions
+- **Members** — per-app membership management (admin/editor/viewer roles); the "Members" tab in each app's details page lets admins add, change role, and remove members; the ≥1 admin invariant prevents removing the last admin
 - **Integrations** — GitHub App config, deploy templates, Render deploy provider
 - **Logs** — real-time request log with metrics breakdown
 - **Audit** — action history with user, action type, resource, IP, and pagination
@@ -240,6 +247,10 @@ Options: `required` (NOT NULL), `unique`, `default` (SQL expression).
 
 Auto-generated columns: `id` (UUID), `created_at`, `updated_at`, `deleted_at` (nullable, used when soft delete is enabled).
 
+### Relationships & indexes
+
+A table can declare foreign keys (`references`: target table/column + `on_delete`) and indexes. The schema is validated before any DDL runs (unknown table/column, invalid `on_delete`, duplicate index names, circular FK dependencies), and tables are created in dependency order. Index provisioning is idempotent — nothing is dropped implicitly — and dropping a table still referenced by another table's foreign key is refused with a clear error.
+
 ### App Tokens
 
 For apps without email/password auth, you can create API tokens with configurable expiration (7d, 30d, 365d, or never). Tokens use JWT with unique `jti` — revocable individually, with a refresh endpoint that extends the expiration. Token revocation is checked per-request via an in-memory cache with immediate invalidation on revoke.
@@ -258,7 +269,7 @@ Frontend apps let you deploy websites and web apps with zero configuration:
 
 ### Deploy Provider
 
-- **Render** — configure API key, project ID, and base domain. Each frontend app deploys as a Render static site with automatic custom domain setup.
+- **Render** — configure API key, project ID, environment ID, and base domain. Each frontend app deploys as a Render static site with automatic custom domain setup. Render assigns services to an *Environment*, not a Project: the environment is auto-resolved when the project has exactly one, and must be set explicitly otherwise. The dashboard also shows the most recent deploys across your frontend apps.
 
 ### GitHub Integration
 
@@ -278,7 +289,7 @@ Zeep Orbit connects to GitHub via a **GitHub App** — never OAuth or a personal
 
 Generate a **private key** on the App's settings page (downloads a `.pem` file) and note the **App ID**, **App slug**, **Client ID**, and **Client Secret**.
 
-**2. Configure in the dashboard** — go to **Integrations → GitHub** and paste the App ID, App slug, Client ID, Client Secret, and the full contents of the private key `.pem` file. Webhook Secret can be any value (reserved for future use — not validated today).
+**2. Configure in the dashboard** — go to **Integrations → Configuration** and paste the App ID, App slug, Client ID, Client Secret, and the full contents of the private key `.pem` file.
 
 **3. Install** — click **Install**, which runs GitHub's native installation flow. Always choose **"Only select repositories"** and pick the repos this instance should manage — the API creates new repos and manages deploy keys only within that scope, never "All repositories".
 
@@ -469,29 +480,48 @@ To add a new entry: edit `internal/dashboard/changelog.json`, add your release t
 
 ## 🗺️ Roadmap
 
+Full detail (per-milestone checklists, linked specs) lives in [`.specs/project/ROADMAP.md`](.specs/project/ROADMAP.md) — this table is a summary, kept in sync with it.
+
 | Milestone | Status | Features |
 |---|---|---|
-| **M1 — MVP Core** | Done | Schema → REST, CLI, Docker Compose |
-| **M2 — Dashboard** | Done | App CRUD, Data Browser, Logs, Users, Auth, White-label |
-| **M3 — Governance** | Done | Audit Log, Soft Delete, Rate Limiting, App Tokens |
-| **M4 — Storage & Events** | Done | S3 File Storage, Per-App Storage Config |
-| **M5 — Frontend Deploy** | Done | GitHub Integration, Templates, Render Deploy, Custom Domains |
-| **M6 — i18n** | Done | pt-BR / English, language switcher |
-| **M7 — SDKs** | Done | TS, Go, Python, Rust, Java, PHP clients |
-| **M8 — AI & Automation** | Planned | Natural language schema creation, MCP server |
+| **M1 — MVP Core** | ✅ Done | Schema → REST, CLI, Docker Compose |
+| **M2 — Developer Experience** | ✅ Done | Dashboard, SDKs, relationships & indexes, migrations, filtering/sorting |
+| **M3 — Frontend Apps** | ✅ Done | GitHub Integration, Templates, Render Deploy, Custom Domains |
+| **M4 — Governance & Security** | 🔵 In progress | Audit Log, Soft Delete + retention/purge, SSO, Rate Limiting, [RBAC per app](.specs/features/rbac-per-app/) (admin/editor/viewer), [global dashboard roles](.specs/features/dashboard-global-roles/) (superadmin/admin/auditor/member) · planned: [2FA](.specs/features/two-factor-auth/), schema change approval |
+| **M5 — Storage & Events** | 🔵 In progress | S3 File Storage · planned: webhooks, event bus |
+| **M6 — i18n** | ✅ Done | pt-BR / English, language switcher |
+| **M7 — SDKs** | ✅ Done | TS, Go, Python, Rust, Java, PHP clients |
+| **M8 — Platform Services** | 🔵 In progress | planned: [SMTP/email integration](.specs/features/smtp-email-integration/) (invites, password reset), [observability integrations](.specs/features/observability-integrations/) (OpenTelemetry, Datadog, New Relic) |
+| **M9 — Enterprise Licensing** | 🔵 In progress | planned: [dual-license model](.specs/features/enterprise-licensing/) (MIT core + gated enterprise features) |
+
+### Planned — visible in the dashboard, not functional yet
+
+Some of these already appear in the dashboard as disabled controls or "Soon" badges so the roadmap is visible where it will land. They have **no backend today** and do nothing when clicked:
+
+| Item | Where it shows up |
+|---|---|
+| Two-factor authentication ([spec](.specs/features/two-factor-auth/)) | Settings → Auth provider ("Require 2FA for all admins"), Dashboard users ("Reset 2FA" row action) |
+| Schema-change approval | Settings → Database ("Require schema-change approval") |
+| Enterprise licensing ([spec](.specs/features/enterprise-licensing/)) | Settings → License (UI-only preview, tab locked) |
+| Code hosting: GitLab, Bitbucket | Integrations → Configuration (provider selector) |
+| Deploy providers: Cloudflare Pages, DigitalOcean, AWS, Azure, Google Cloud | Integrations → Deploy providers (provider selector) |
+| Dashboard auth providers: Microsoft Entra ID, Sign in with Apple, GitHub | Settings → Auth provider |
+| Storage providers: Azure Blob Storage, Google Cloud Storage | Settings → Storage |
+| AI-assisted app creation | Apps → "Create with AI" |
 
 ### Deferred / Backlog
 
 - Sign in with Apple (per-app)
 - TypeScript SDK code generator (`@zeeptech/orbit-generate`)
+- Official prompt snippets for Claude Code / Cursor / Lovable
+- MCP server for zeep-orbit operations
 - GraphQL auto-generation
 - Realtime subscriptions (WebSockets)
 - Edge functions
-- Schema change approval workflow
+- Multi-region support
 - Marketplace of app templates
-- Webhooks & Event Bus
-- RBAC with granular permissions
-- SSO / SAML integration
+- RBAC with granular per-action permissions (beyond the fixed admin/editor/viewer levels)
+- Microsoft Entra ID SSO
 
 ---
 

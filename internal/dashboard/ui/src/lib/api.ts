@@ -70,6 +70,22 @@ export function usePublicConfig() {
   })
 }
 
+export interface SystemConfig {
+  soft_delete_enabled: boolean
+  max_csv_export_rows: number
+  statement_timeout_ms: number
+  require_rls_default: boolean
+  retention_days: number
+}
+
+export function useSystemConfig(): UseQueryResult<SystemConfig> {
+  return useQuery({
+    queryKey: ['system-config'],
+    queryFn: () => apiFetch<SystemConfig>('/dashboard/api/config/system'),
+    staleTime: 60000,
+  })
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, { credentials: 'include', ...init })
   if (!res.ok) {
@@ -192,6 +208,8 @@ export interface UserDef {
   name?: string
   role: string
   created_at: string
+  /** Derived sign-in method: "google" when the account is linked to Google, "email" otherwise. */
+  sign_in?: string
 }
 
 export interface CreateUserInput {
@@ -403,6 +421,7 @@ export interface DataBrowserColumn {
 export interface DataBrowserTable {
   name: string
   columns: DataBrowserColumn[]
+  count: number
 }
 
 export interface DataBrowserApp {
@@ -722,44 +741,22 @@ export interface AuditLogResponse {
   offset: number
 }
 
-const ACTION_LABELS: Record<string, string> = {
-  'app.create': 'App Criado',
-  'app.update': 'App Atualizado',
-  'app.delete': 'App Excluído',
-  'user.create': 'Usuário Criado',
-  'user.delete': 'Usuário Excluído',
-  'user.login': 'Login',
-  'user.logout': 'Logout',
-  'user.password.change': 'Senha Alterada',
-  'config.update': 'Config. Alterada',
-  'auth.provider.update': 'Provider Auth',
-  'app.user.deactivate': 'Usuário App Desat.',
-  'app.user.activate': 'Usuário App Ativ.',
-  'app.user.sessions.reset': 'Sessões Reset.',
-  'data.create': 'Registro Criado',
-  'data.update': 'Registro Atualizado',
-  'data.delete': 'Registro Excluído',
-  'bootstrap.complete': 'Bootstrap',
-}
-
-export function auditActionLabel(action: string): string {
-  return ACTION_LABELS[action] || action
-}
-
 export function useAuditLog(
   limit = 50,
   offset = 0,
   action?: string,
-  userId?: string,
+  category?: string,
+  userEmail?: string,
 ): UseQueryResult<AuditLogResponse> {
   return useQuery({
-    queryKey: ['audit-log', limit, offset, action, userId],
+    queryKey: ['audit-log', limit, offset, action, category, userEmail],
     queryFn: () => {
       const params = new URLSearchParams()
       params.set('limit', String(limit))
       params.set('offset', String(offset))
       if (action) params.set('action', action)
-      if (userId) params.set('user', userId)
+      if (category) params.set('category', category)
+      if (userEmail) params.set('user_email', userEmail)
       return apiFetch<AuditLogResponse>(`/dashboard/api/audit-log?${params}`)
     },
   })
@@ -780,6 +777,118 @@ export function useUpdateBrandConfig(): UseMutationResult<
       }),
     onSuccess: (data) => {
       qc.setQueryData(['brand-config'], data)
+    },
+  })
+}
+
+
+// ---- App members (rbac-per-app T-06 + T-09) ----
+
+export type AppRole = 'admin' | 'editor' | 'viewer'
+
+export interface AppMember {
+  id: string
+  user_id: string
+  role: AppRole
+  created_at: string
+}
+
+export interface AppMemberListResponse {
+  members: AppMember[]
+}
+
+export type AppAxis = 'backend' | 'frontend'
+
+/** Builds the URL prefix for the membership management API. */
+function appMembersPath(axis: AppAxis, appId: string): string {
+  const base = axis === 'backend' ? 'apps' : 'frontend-apps'
+  return `/dashboard/api/${base}/${appId}/members`
+}
+
+/**
+ * Returns the membership list for an app. Per T-06 AC-6, the backend
+ * returns 403 for editor/viewer/non-member on every /members endpoint
+ * (including GET), so a non-admin caller will see `error` set rather
+ * than an empty list — the component should render a "no access" state.
+ */
+export function useAppMembers(
+  appId: string,
+  axis: AppAxis,
+): UseQueryResult<AppMemberListResponse> {
+  return useQuery({
+    queryKey: ['app-members', axis, appId],
+    queryFn: () => apiFetch<AppMemberListResponse>(appMembersPath(axis, appId)),
+    enabled: Boolean(appId),
+  })
+}
+
+export interface AddAppMemberInput {
+  user_id: string
+  role: AppRole
+}
+
+export function useAddAppMember(
+  appId: string,
+  axis: AppAxis,
+): UseMutationResult<AppMember, Error, AddAppMemberInput> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input) =>
+      apiFetch<AppMember>(appMembersPath(axis, appId), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['app-members', axis, appId] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+export interface UpdateAppMemberInput {
+  user_id: string
+  role: AppRole
+}
+
+export function useUpdateAppMember(
+  appId: string,
+  axis: AppAxis,
+): UseMutationResult<AppMember, Error, UpdateAppMemberInput> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ user_id, role }) =>
+      apiFetch<AppMember>(`${appMembersPath(axis, appId)}/${user_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['app-members', axis, appId] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+export function useRemoveAppMember(
+  appId: string,
+  axis: AppAxis,
+): UseMutationResult<void, Error, string> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (user_id: string) =>
+      apiFetch<void>(`${appMembersPath(axis, appId)}/${user_id}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['app-members', axis, appId] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
     },
   })
 }

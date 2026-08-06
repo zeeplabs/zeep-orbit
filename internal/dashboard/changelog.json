@@ -1,25 +1,61 @@
 {
   "entries": [
     {
-      "version": "v0.5.1",
-      "release_date": "2026-07-31",
-      "title": "Render Deploy Reliability & GitHub Integration Access Control",
-      "summary": "Fixes to the Render deploy flow (orphaned services, transient errors, wrong Project placement), template visibility for admins, and a missing role guard on the GitHub Integration page.",
+      "version": "v1.0.0",
+      "release_date": "2026-08-06",
+      "title": {"en": "Per-App Roles, 4-Tier Platform Roles & Dashboard Redesign", "pt-BR": "Papéis por App, 4 Níveis de Papel de Plataforma e Redesign do Dashboard"},
+      "summary": {"en": "Fine-grained access control at both the platform and per-app level, table relationships and indexes in the schema builder, retention/purge and query-timeout controls, a full dashboard visual redesign, and a round of security and stability fixes found in a pre-release audit.", "pt-BR": "Controle de acesso granular no nível de plataforma e por app, relacionamentos e índices no schema builder, controles de retenção/purge e timeout de query, um redesign visual completo do dashboard, e uma rodada de correções de segurança e estabilidade encontradas numa auditoria pré-release."},
       "sections": [
         {
           "type": "features",
           "items": [
-            {"description": "Render Environment ID field in Deploy Provider config (superadmin) — required when the configured Project has more than one Environment, since the app can no longer guess which one to deploy into"}
+            {"description": {"en": "Per-app roles (admin / editor / viewer) — every app now has per-user membership with a role that gates reads, writes, and management actions.", "pt-BR": "Papéis por app (admin / editor / viewer) — cada app agora tem membership por usuário com um papel que controla leitura, escrita e ações de gerenciamento."}},
+            {"description": {"en": "4-tier platform roles (superadmin / admin / auditor / member), replacing the old 2-tier model, with a single permission matrix driving both backend enforcement and the dashboard UI.", "pt-BR": "4 níveis de papel de plataforma (superadmin / admin / auditor / member), substituindo o modelo antigo de 2 níveis, com uma matriz de permissão única controlando tanto o backend quanto a UI do dashboard."}},
+            {"description": {"en": "Table relationships (foreign keys) and indexes in the schema builder, with validation, topological ordering, and idempotent provisioning.", "pt-BR": "Relacionamentos entre tabelas (foreign keys) e índices no schema builder, com validação, ordenação topológica e provisionamento idempotente."}},
+            {"description": {"en": "Retention period + soft-delete purge, configurable query statement timeout, and a configurable CSV export row cap (Settings → Database).", "pt-BR": "Período de retenção + purge de soft-delete, timeout de query configurável, e limite de linhas de exportação CSV configurável (Configurações → Database)."}},
+            {"description": {"en": "Render deploy provider: Environment ID field and a live \"Recent Deploys\" list.", "pt-BR": "Provedor de deploy Render: campo Environment ID e uma lista viva de \"Deploys Recentes\"."}},
+            {"description": {"en": "Full dashboard visual redesign — every screen re-skinned to the new design system, with framer-motion and lucide-react fully removed.", "pt-BR": "Redesign visual completo do dashboard — todas as telas com a nova identidade visual, com framer-motion e lucide-react totalmente removidos."}}
+          ]
+        },
+        {
+          "type": "security",
+          "items": [
+            {"description": {"en": "Fixed: a platform-wide admin/auditor with explicit per-app membership was incorrectly downgraded to viewer on that app instead of keeping their real role.", "pt-BR": "Corrigido: um admin/auditor de plataforma com membership explícita num app era incorretamente rebaixado a viewer nesse app em vez de manter seu papel real."}},
+            {"description": {"en": "Fixed: an app's JWT secret was exposed to any role with read access via GET /apps/{id}, instead of only to admins.", "pt-BR": "Corrigido: o JWT secret de um app era exposto a qualquer papel com acesso de leitura via GET /apps/{id}, em vez de só a admins."}},
+            {"description": {"en": "Fixed: several per-app actions (deactivate/reset user sessions, token issuance, table changes) and the Data Browser's write endpoints had no role gate, letting read-only roles perform writes.", "pt-BR": "Corrigido: várias ações por app (desativar/resetar sessões de usuário, emissão de token, mudanças de tabela) e os endpoints de escrita do Data Browser não tinham verificação de papel, permitindo que papéis read-only escrevessem."}},
+            {"description": {"en": "Fixed: the \"at least one admin per app\" invariant never actually ran due to an invalid Postgres query, and the two-admin concurrent-demotion path could deadlock — both are now correct under concurrency.", "pt-BR": "Corrigido: a invariante de \"pelo menos um admin por app\" nunca de fato rodava por uma query inválida no Postgres, e a demoção concorrente de dois admins podia causar deadlock — ambos agora funcionam corretamente sob concorrência."}}
           ]
         },
         {
           "type": "fixes",
           "items": [
-            {"description": "GitHub Integration page (config, templates, deploy provider) had no role guard on the frontend — admins could reach the superadmin-only page and see forms silently 403 on every action"},
-            {"description": "Admin users couldn't see GitHub templates in the frontend-app creation modal — the templates list endpoint was superadmin-only, now open to any authenticated role"},
-            {"description": "Frontend app deploy could leave an orphaned Render service after a failure — the Render service ID is now persisted immediately after creation, before any later step that could fail"},
-            {"description": "Frontend app creation intermittently failed to deploy due to transient 404/500 errors from Render right after creating the service — now retried with backoff"},
-            {"description": "Deployed Render services were never placed in the configured Project — Render's API uses environmentId, not projectId; the configured Project is now resolved to its Environment and used correctly"}
+            {"description": {"en": "Fixed: deleting an app without permission returned a 500 error instead of a clean 403.", "pt-BR": "Corrigido: apagar um app sem permissão retornava erro 500 em vez de um 403 limpo."}},
+            {"description": {"en": "Fixed: the role migration that introduced the 4-tier model could re-run and silently re-demote admins on every server restart.", "pt-BR": "Corrigido: a migração de papéis que introduziu o modelo de 4 níveis podia rodar de novo e rebaixar admins silenciosamente a cada restart do servidor."}},
+            {"description": {"en": "Hardened the soft-delete purge job against multi-replica races, partial failures, and a fragile date-interval query.", "pt-BR": "Robustez do job de purge de soft-delete contra corridas entre réplicas, falhas parciais, e uma query de intervalo de data fragilizada."}}
+          ]
+        }
+      ]
+    },
+    {
+      "version": "v0.5.1",
+      "release_date": "2026-07-31",
+      "title": {"en": "Render Deploy Reliability & GitHub Integration Access Control", "pt-BR": "Confiabilidade do Deploy Render e Controle de Acesso da Integração GitHub"},
+      "summary": {"en": "Fixes to the Render deploy flow (orphaned services, transient errors, wrong Project placement), template visibility for admins, and a missing role guard on the GitHub Integration page.", "pt-BR": "Correções no fluxo de deploy do Render (serviços órfãos, erros transitórios, Project incorreto), visibilidade de templates para admins, e uma verificação de papel ausente na página de Integração GitHub."},
+      "sections": [
+        {
+          "type": "features",
+          "items": [
+            {"description": {"en": "Render Environment ID field in Deploy Provider config (superadmin) — required when the configured Project has more than one Environment, since the app can no longer guess which one to deploy into", "pt-BR": "Campo Render Environment ID na configuração do Deploy Provider (superadmin) — obrigatório quando o Project configurado tem mais de um Environment, já que o app não consegue mais adivinhar qual usar"}}
+          ]
+        },
+        {
+          "type": "fixes",
+          "items": [
+            {"description": {"en": "GitHub Integration page (config, templates, deploy provider) had no role guard on the frontend — admins could reach the superadmin-only page and see forms silently 403 on every action", "pt-BR": "A página de Integração GitHub (config, templates, deploy provider) não tinha verificação de papel no frontend — admins conseguiam acessar a página exclusiva de superadmin e viam os formulários falharem com 403 silenciosamente em toda ação"}},
+            {"description": {"en": "Admin users couldn't see GitHub templates in the frontend-app creation modal — the templates list endpoint was superadmin-only, now open to any authenticated role", "pt-BR": "Usuários admin não viam os templates do GitHub no modal de criação de frontend app — o endpoint de listagem de templates era exclusivo de superadmin, agora aberto a qualquer papel autenticado"}},
+            {"description": {"en": "Frontend app deploy could leave an orphaned Render service after a failure — the Render service ID is now persisted immediately after creation, before any later step that could fail", "pt-BR": "O deploy de frontend app podia deixar um serviço Render órfão após uma falha — o ID do serviço Render agora é persistido imediatamente após a criação, antes de qualquer etapa seguinte que pudesse falhar"}},
+            {"description": {"en": "Frontend app creation intermittently failed to deploy due to transient 404/500 errors from Render right after creating the service — now retried with backoff", "pt-BR": "A criação de frontend app falhava intermitentemente no deploy devido a erros transitórios 404/500 do Render logo após criar o serviço — agora com retry e backoff"}},
+            {"description": {"en": "Deployed Render services were never placed in the configured Project — Render's API uses environmentId, not projectId; the configured Project is now resolved to its Environment and used correctly", "pt-BR": "Serviços do Render implantados nunca eram colocados no Project configurado — a API do Render usa environmentId, não projectId; o Project configurado agora é resolvido para seu Environment e usado corretamente"}}
           ]
         }
       ]
@@ -27,26 +63,26 @@
     {
       "version": "v0.5.0",
       "release_date": "2026-07-30",
-      "title": "Column Default Values & Reliability Fixes",
-      "summary": "Set default values (literal or SQL expression) on backend app table columns, an update-available sidebar banner, and fixes for dashboard login, app users listing, and auth API consistency.",
+      "title": {"en": "Column Default Values & Reliability Fixes", "pt-BR": "Valores Padrão de Coluna e Correções de Confiabilidade"},
+      "summary": {"en": "Set default values (literal or SQL expression) on backend app table columns, an update-available sidebar banner, and fixes for dashboard login, app users listing, and auth API consistency.", "pt-BR": "Defina valores padrão (literal ou expressão SQL) nas colunas das tabelas do app, um banner de atualização disponível na barra lateral, e correções para o login do dashboard, listagem de usuários do app e consistência da API de autenticação."},
       "sections": [
         {
           "type": "features",
           "items": [
-            {"description": "Column default value in the backend app schema builder — literal defaults for integer/bigint/numeric, a true/false picker for boolean, and gen_random_uuid()/now() SQL expressions for uuid/timestamptz, validated server-side against a strict allowlist before reaching the generated DDL"},
-            {"description": "Update notifications — sidebar banner alerts when a new Zeep Orbit release is available on GitHub, linking to the release page"}
+            {"description": {"en": "Column default value in the backend app schema builder — literal defaults for integer/bigint/numeric, a true/false picker for boolean, and gen_random_uuid()/now() SQL expressions for uuid/timestamptz, validated server-side against a strict allowlist before reaching the generated DDL", "pt-BR": "Valor padrão de coluna no construtor de schema do app backend — padrões literais para integer/bigint/numeric, seletor true/false para boolean, e expressões SQL gen_random_uuid()/now() para uuid/timestamptz, validados no servidor contra uma allowlist estrita antes de chegar ao DDL gerado"}},
+            {"description": {"en": "Update notifications — sidebar banner alerts when a new Zeep Orbit release is available on GitHub, linking to the release page", "pt-BR": "Notificações de atualização — banner na barra lateral avisa quando um novo release do Zeep Orbit está disponível no GitHub, com link pra página do release"}}
           ]
         },
         {
           "type": "fixes",
           "items": [
-            {"description": "Dashboard Google login failing behind multiple replicas — OAuth state was kept in an in-memory map per process; now signed stateless (HMAC-SHA256)"},
-            {"description": "GitHub App installation callback had the same in-memory state issue as Google login — fixed the same way"},
-            {"description": "/apps/{id}/users always returned an empty list when email auth was enabled, due to an incorrect schema name lookup"},
-            {"description": "PATCH /{app}/auth/me returned 405 despite being documented — route was registered as PUT"},
-            {"description": "Auth provider \"allowed domains\" field couldn't be cleared once set"},
-            {"description": "Google login button and brand theme flashed incorrectly on first paint of the login screen"},
-            {"description": "App token refresh endpoint was missing from the per-app Swagger docs"}
+            {"description": {"en": "Dashboard Google login failing behind multiple replicas — OAuth state was kept in an in-memory map per process; now signed stateless (HMAC-SHA256)", "pt-BR": "Login Google do dashboard falhando atrás de múltiplas réplicas — o estado OAuth era mantido em um map em memória por processo; agora é assinado e stateless (HMAC-SHA256)"}},
+            {"description": {"en": "GitHub App installation callback had the same in-memory state issue as Google login — fixed the same way", "pt-BR": "Callback de instalação do GitHub App tinha o mesmo problema de estado em memória do login Google — corrigido da mesma forma"}},
+            {"description": {"en": "/apps/{id}/users always returned an empty list when email auth was enabled, due to an incorrect schema name lookup", "pt-BR": "/apps/{id}/users sempre retornava lista vazia quando auth por email estava habilitado, devido a uma busca incorreta do nome do schema"}},
+            {"description": {"en": "PATCH /{app}/auth/me returned 405 despite being documented — route was registered as PUT", "pt-BR": "PATCH /{app}/auth/me retornava 405 apesar de estar documentado — a rota estava registrada como PUT"}},
+            {"description": {"en": "Auth provider \"allowed domains\" field couldn't be cleared once set", "pt-BR": "Campo \"domínios permitidos\" do provedor de auth não podia ser limpo depois de definido"}},
+            {"description": {"en": "Google login button and brand theme flashed incorrectly on first paint of the login screen", "pt-BR": "Botão de login Google e tema da marca piscavam incorretamente na primeira renderização da tela de login"}},
+            {"description": {"en": "App token refresh endpoint was missing from the per-app Swagger docs", "pt-BR": "Endpoint de refresh de token do app estava faltando na documentação Swagger por app"}}
           ]
         }
       ]
@@ -54,43 +90,43 @@
     {
       "version": "v0.4.0",
       "release_date": "2026-07-26",
-      "title": "Changelog, Brand Repositioning & Deploy Improvements",
-      "summary": "In-app changelog with all release history, brand repositioning to Tech Team Platform, custom domains for frontend apps, and major UI/UX improvements.",
+      "title": {"en": "Changelog, Brand Repositioning & Deploy Improvements", "pt-BR": "Changelog, Reposicionamento de Marca e Melhorias de Deploy"},
+      "summary": {"en": "In-app changelog with all release history, brand repositioning to Tech Team Platform, custom domains for frontend apps, and major UI/UX improvements.", "pt-BR": "Changelog no próprio app com todo o histórico de releases, reposicionamento de marca para Tech Team Platform, domínios customizados para apps frontend, e grandes melhorias de UI/UX."},
       "sections": [
         {
           "type": "features",
           "items": [
-            {"description": "Changelog page — embedded JSON with all 12 releases from v0.1.0 to v0.3.0, accessible at /changelog in the dashboard"},
-            {"description": "Custom domains for frontend apps — configure subdomain, live domain preview, DNS CNAME instructions, Render custom domain API integration"},
-            {"description": "Deploy retry button on frontend app cards when deploy fails"},
-            {"description": "Base domain configuration in Render deploy provider settings"},
-            {"description": "README in Portuguese (README.pt-BR.md) — GitHub auto-detects user locale"}
+            {"description": {"en": "Changelog page — embedded JSON with all 12 releases from v0.1.0 to v0.3.0, accessible at /changelog in the dashboard", "pt-BR": "Página de changelog — JSON embutido com todos os 12 releases de v0.1.0 a v0.3.0, acessível em /changelog no dashboard"}},
+            {"description": {"en": "Custom domains for frontend apps — configure subdomain, live domain preview, DNS CNAME instructions, Render custom domain API integration", "pt-BR": "Domínios customizados para apps frontend — configure subdomínio, preview de domínio ao vivo, instruções de DNS CNAME, integração com API de domínio customizado do Render"}},
+            {"description": {"en": "Deploy retry button on frontend app cards when deploy fails", "pt-BR": "Botão de retentar deploy nos cards de app frontend quando o deploy falha"}},
+            {"description": {"en": "Base domain configuration in Render deploy provider settings", "pt-BR": "Configuração de domínio base nas configurações do provedor de deploy Render"}},
+            {"description": {"en": "README in Portuguese (README.pt-BR.md) — GitHub auto-detects user locale", "pt-BR": "README em Português (README.pt-BR.md) — GitHub detecta automaticamente o idioma do usuário"}}
           ]
         },
         {
           "type": "improvements",
           "items": [
-            {"description": "Brand repositioning: 'Database-first backend platform' → 'The complete platform for tech teams' across login, onboarding, and app subtitle"},
-            {"description": "README rewritten for full platform scope — backend, frontend deploy, SDKs, and changelog with new roadmap"},
-            {"description": "Frontend app cards redesigned — header/content/footer layout, status rows per category"},
-            {"description": "Backend app cards restructured — cursor-pointer, creation date in footer"},
-            {"description": "Loading states and toast notifications added to all async operations throughout the dashboard"},
-            {"description": "Unified delete confirmation dialog with glass-morphism design"},
-            {"description": "Domain modal with live preview from base domain and DNS CNAME instructions"},
-            {"description": "Sync modal now shows description and 'View usage instructions' button instead of raw key reveal"},
-            {"description": "Global cursor-pointer on all button elements via base class"}
+            {"description": {"en": "Brand repositioning: 'Database-first backend platform' → 'The complete platform for tech teams' across login, onboarding, and app subtitle", "pt-BR": "Reposicionamento de marca: 'Plataforma backend database-first' → 'A plataforma completa para times de tecnologia' no login, onboarding e subtítulo do app"}},
+            {"description": {"en": "README rewritten for full platform scope — backend, frontend deploy, SDKs, and changelog with new roadmap", "pt-BR": "README reescrito pro escopo completo da plataforma — backend, deploy frontend, SDKs e changelog com novo roadmap"}},
+            {"description": {"en": "Frontend app cards redesigned — header/content/footer layout, status rows per category", "pt-BR": "Cards de app frontend redesenhados — layout header/content/footer, linhas de status por categoria"}},
+            {"description": {"en": "Backend app cards restructured — cursor-pointer, creation date in footer", "pt-BR": "Cards de app backend reestruturados — cursor-pointer, data de criação no footer"}},
+            {"description": {"en": "Loading states and toast notifications added to all async operations throughout the dashboard", "pt-BR": "Estados de carregamento e notificações toast adicionados a todas as operações assíncronas do dashboard"}},
+            {"description": {"en": "Unified delete confirmation dialog with glass-morphism design", "pt-BR": "Diálogo de confirmação de exclusão unificado com design glass-morphism"}},
+            {"description": {"en": "Domain modal with live preview from base domain and DNS CNAME instructions", "pt-BR": "Modal de domínio com preview ao vivo a partir do domínio base e instruções de DNS CNAME"}},
+            {"description": {"en": "Sync modal now shows description and 'View usage instructions' button instead of raw key reveal", "pt-BR": "Modal de sincronização agora mostra descrição e botão 'Ver instruções de uso' em vez de exibir a chave crua"}},
+            {"description": {"en": "Global cursor-pointer on all button elements via base class", "pt-BR": "Cursor-pointer global em todos os elementos de botão via classe base"}}
           ]
         },
         {
           "type": "fixes",
           "items": [
-            {"description": "Login page — subtitle now properly rendered instead of duplicating the title"},
-            {"description": "Login page — title and subtitle centered"},
-            {"description": "Render API — custom domain field name corrected to 'name' instead of 'domain'"},
-            {"description": "Render API — PATCH service endpoint used to assign projectId after creation"},
-            {"description": "Render API — owner object unwrapping from GET /v1/owners response"},
-            {"description": "Broken JSX in AppsPage causing build failure fixed"},
-            {"description": "Subdomain and base domain whitespace trimmed before constructing domain URL"}
+            {"description": {"en": "Login page — subtitle now properly rendered instead of duplicating the title", "pt-BR": "Página de login — subtítulo agora renderizado corretamente em vez de duplicar o título"}},
+            {"description": {"en": "Login page — title and subtitle centered", "pt-BR": "Página de login — título e subtítulo centralizados"}},
+            {"description": {"en": "Render API — custom domain field name corrected to 'name' instead of 'domain'", "pt-BR": "API Render — nome do campo de domínio customizado corrigido para 'name' em vez de 'domain'"}},
+            {"description": {"en": "Render API — PATCH service endpoint used to assign projectId after creation", "pt-BR": "API Render — endpoint PATCH de serviço usado pra atribuir projectId após a criação"}},
+            {"description": {"en": "Render API — owner object unwrapping from GET /v1/owners response", "pt-BR": "API Render — desempacotamento do objeto owner na resposta de GET /v1/owners"}},
+            {"description": {"en": "Broken JSX in AppsPage causing build failure fixed", "pt-BR": "JSX quebrado em AppsPage causando falha de build corrigido"}},
+            {"description": {"en": "Subdomain and base domain whitespace trimmed before constructing domain URL", "pt-BR": "Espaços em branco de subdomínio e domínio base removidos antes de construir a URL do domínio"}}
           ]
         }
       ]
@@ -98,29 +134,29 @@
     {
       "version": "v0.3.0",
       "release_date": "2026-07-25",
-      "title": "App Tokens & Security Fixes",
-      "summary": "JWT token management for apps without email auth, plus multiple security fixes found during code review.",
+      "title": {"en": "App Tokens & Security Fixes", "pt-BR": "Tokens de App e Correções de Segurança"},
+      "summary": {"en": "JWT token management for apps without email auth, plus multiple security fixes found during code review.", "pt-BR": "Gerenciamento de tokens JWT para apps sem auth por email, além de múltiplas correções de segurança encontradas durante revisão de código."},
       "sections": [
         {
           "type": "features",
           "items": [
-            {"description": "App Tokens — full JWT token management for apps without email/password auth: create tokens with expiration (7d/30d/365d/never), one-time JWT reveal, list with status badges, revoke individually"},
-            {"description": "Regenerate Secret — rotate JWT secret with 2-step confirmation, revokes all existing tokens for the app"},
-            {"description": "Reveal Secret — view the current JWT secret (audit-logged)"},
-            {"description": "Token Refresh endpoint — POST /{app}/auth/token/refresh exchanges a valid app token for a new one with same jti, extending expiration by original duration"},
-            {"description": "JWTMiddleware validates revocation/expiry per-request via in-memory jti cache (30s TTL) with fire-and-forget last_used_at touch"},
-            {"description": "New zeep_system.app_tokens table with full CRUD and cascade delete"}
+            {"description": {"en": "App Tokens — full JWT token management for apps without email/password auth: create tokens with expiration (7d/30d/365d/never), one-time JWT reveal, list with status badges, revoke individually", "pt-BR": "App Tokens — gerenciamento completo de tokens JWT para apps sem auth email/senha: criar tokens com expiração (7d/30d/365d/nunca), revelação única do JWT, listagem com badges de status, revogação individual"}},
+            {"description": {"en": "Regenerate Secret — rotate JWT secret with 2-step confirmation, revokes all existing tokens for the app", "pt-BR": "Regenerar Secret — rotaciona o secret JWT com confirmação em 2 etapas, revoga todos os tokens existentes do app"}},
+            {"description": {"en": "Reveal Secret — view the current JWT secret (audit-logged)", "pt-BR": "Revelar Secret — visualiza o secret JWT atual (registrado em audit log)"}},
+            {"description": {"en": "Token Refresh endpoint — POST /{app}/auth/token/refresh exchanges a valid app token for a new one with same jti, extending expiration by original duration", "pt-BR": "Endpoint de Refresh de Token — POST /{app}/auth/token/refresh troca um token de app válido por um novo com o mesmo jti, estendendo a expiração pela duração original"}},
+            {"description": {"en": "JWTMiddleware validates revocation/expiry per-request via in-memory jti cache (30s TTL) with fire-and-forget last_used_at touch", "pt-BR": "JWTMiddleware valida revogação/expiração a cada requisição via cache jti em memória (TTL de 30s) com atualização fire-and-forget de last_used_at"}},
+            {"description": {"en": "New zeep_system.app_tokens table with full CRUD and cascade delete", "pt-BR": "Nova tabela zeep_system.app_tokens com CRUD completo e cascade delete"}}
           ]
         },
         {
           "type": "security",
           "items": [
-            {"description": "IDOR fix — RegenerateAppSecret now enforces app ownership check (previously any authenticated dashboard user could rotate any app's JWT secret)"},
-            {"description": "Dead revocation check fix — JWTMiddleware had a nil keyFunc causing the entire DB revocation check to silently never run. Revoked tokens stayed valid until natural expiry"},
-            {"description": "Nil pointer fix — CreateAppToken panicked on registry cache miss. Now reads JWT secret from the already-loaded app row"},
-            {"description": "Stale revocation window fix — JTI cache now invalidated immediately on revoke/regenerate (previously gave revoked tokens up to 30s of extra validity)"},
-            {"description": "Predictable JTI fallback fix — randomJTI now returns an error instead of a fixed deterministic ID when crypto/rand.Read fails"},
-            {"description": "Missing rate limit — token refresh endpoint now rate-limited like register and login"}
+            {"description": {"en": "IDOR fix — RegenerateAppSecret now enforces app ownership check (previously any authenticated dashboard user could rotate any app's JWT secret)", "pt-BR": "Correção de IDOR — RegenerateAppSecret agora exige verificação de posse do app (antes, qualquer usuário autenticado do dashboard podia rotacionar o secret JWT de qualquer app)"}},
+            {"description": {"en": "Dead revocation check fix — JWTMiddleware had a nil keyFunc causing the entire DB revocation check to silently never run. Revoked tokens stayed valid until natural expiry", "pt-BR": "Correção de verificação de revogação morta — JWTMiddleware tinha um keyFunc nil que fazia a verificação de revogação no banco nunca rodar silenciosamente. Tokens revogados continuavam válidos até a expiração natural"}},
+            {"description": {"en": "Nil pointer fix — CreateAppToken panicked on registry cache miss. Now reads JWT secret from the already-loaded app row", "pt-BR": "Correção de nil pointer — CreateAppToken causava panic em cache miss do registry. Agora lê o secret JWT da linha do app já carregada"}},
+            {"description": {"en": "Stale revocation window fix — JTI cache now invalidated immediately on revoke/regenerate (previously gave revoked tokens up to 30s of extra validity)", "pt-BR": "Correção de janela de revogação obsoleta — cache JTI agora é invalidado imediatamente ao revogar/regenerar (antes dava até 30s de validade extra pra tokens revogados)"}},
+            {"description": {"en": "Predictable JTI fallback fix — randomJTI now returns an error instead of a fixed deterministic ID when crypto/rand.Read fails", "pt-BR": "Correção de fallback de JTI previsível — randomJTI agora retorna erro em vez de um ID determinístico fixo quando crypto/rand.Read falha"}},
+            {"description": {"en": "Missing rate limit — token refresh endpoint now rate-limited like register and login", "pt-BR": "Rate limit faltando — endpoint de refresh de token agora tem rate limit igual register e login"}}
           ]
         }
       ]
@@ -128,20 +164,20 @@
     {
       "version": "v0.2.0",
       "release_date": "2026-07-13",
-      "title": "Brand Config Persistence Fix",
-      "summary": "Fixed company name and theme resetting on restart. Removed logo upload feature.",
+      "title": {"en": "Brand Config Persistence Fix", "pt-BR": "Correção de Persistência da Configuração de Marca"},
+      "summary": {"en": "Fixed company name and theme resetting on restart. Removed logo upload feature.", "pt-BR": "Corrigido nome da empresa e tema resetando no restart. Removida funcionalidade de upload de logo."},
       "sections": [
         {
           "type": "fixes",
           "items": [
-            {"description": "Company name and theme no longer reset to defaults on restart — startup seeding now uses dedicated SeedBrandConfig with ON CONFLICT DO NOTHING instead of overwriting saved values"},
-            {"description": "ProvisionZeepSystem wraps all DDL in a single transaction with pg_advisory_xact_lock for safe concurrent pod startup"}
+            {"description": {"en": "Company name and theme no longer reset to defaults on restart — startup seeding now uses dedicated SeedBrandConfig with ON CONFLICT DO NOTHING instead of overwriting saved values", "pt-BR": "Nome da empresa e tema não resetam mais para o padrão no restart — o seeding de inicialização agora usa SeedBrandConfig dedicado com ON CONFLICT DO NOTHING em vez de sobrescrever valores salvos"}},
+            {"description": {"en": "ProvisionZeepSystem wraps all DDL in a single transaction with pg_advisory_xact_lock for safe concurrent pod startup", "pt-BR": "ProvisionZeepSystem envolve todo o DDL em uma única transação com pg_advisory_xact_lock para inicialização segura de pods concorrentes"}}
           ]
         },
         {
           "type": "improvements",
           "items": [
-            {"description": "Logo upload removed — dashboard and login page use the default Zeep Orbit logo"}
+            {"description": {"en": "Logo upload removed — dashboard and login page use the default Zeep Orbit logo", "pt-BR": "Upload de logo removido — dashboard e página de login usam o logo padrão do Zeep Orbit"}}
           ]
         }
       ]
@@ -149,20 +185,20 @@
     {
       "version": "v0.1.11",
       "release_date": "2026-07-02",
-      "title": "Google OAuth Fix & API Docs Branding",
-      "summary": "Fixed Google OAuth for multi-replica deployments. Improved API documentation branding.",
+      "title": {"en": "Google OAuth Fix & API Docs Branding", "pt-BR": "Correção do Google OAuth e Marca da Documentação da API"},
+      "summary": {"en": "Fixed Google OAuth for multi-replica deployments. Improved API documentation branding.", "pt-BR": "Corrigido Google OAuth para deployments com múltiplas réplicas. Marca da documentação da API melhorada."},
       "sections": [
         {
           "type": "fixes",
           "items": [
-            {"description": "Google OAuth now works with multiple replicas — state param replaced with stateless HMAC-SHA256 signed token, eliminating the need for shared in-memory state or sticky sessions"},
-            {"description": "API docs now show neutral 'API Documentation' title instead of hardcoded 'zeep-orbit API'"}
+            {"description": {"en": "Google OAuth now works with multiple replicas — state param replaced with stateless HMAC-SHA256 signed token, eliminating the need for shared in-memory state or sticky sessions", "pt-BR": "Google OAuth agora funciona com múltiplas réplicas — parâmetro state substituído por token assinado stateless HMAC-SHA256, eliminando a necessidade de estado compartilhado em memória ou sticky sessions"}},
+            {"description": {"en": "API docs now show neutral 'API Documentation' title instead of hardcoded 'zeep-orbit API'", "pt-BR": "Documentação da API agora mostra título neutro 'API Documentation' em vez de 'zeep-orbit API' fixo"}}
           ]
         },
         {
           "type": "improvements",
           "items": [
-            {"description": "Login page and app subtitle copy updated for clarity"}
+            {"description": {"en": "Login page and app subtitle copy updated for clarity", "pt-BR": "Texto da página de login e subtítulo do app atualizados para maior clareza"}}
           ]
         }
       ]
@@ -170,33 +206,33 @@
     {
       "version": "v0.1.10",
       "release_date": "2026-07-02",
-      "title": "Global S3, Brand Logos, Helm Fixes & i18n",
-      "summary": "Global S3 storage configuration, brand logo uploads, Helm chart fixes, and full dashboard i18n review.",
+      "title": {"en": "Global S3, Brand Logos, Helm Fixes & i18n", "pt-BR": "S3 Global, Logos de Marca, Correções de Helm e i18n"},
+      "summary": {"en": "Global S3 storage configuration, brand logo uploads, Helm chart fixes, and full dashboard i18n review.", "pt-BR": "Configuração de storage S3 global, upload de logos de marca, correções no chart Helm, e revisão completa de i18n do dashboard."},
       "sections": [
         {
           "type": "features",
           "items": [
-            {"description": "Global S3 Configuration — superadmin sets S3 credentials once; admins only provide a folder name when creating apps"},
-            {"description": "Brand Logos — upload custom login logo and sidebar icon, stored in global S3 bucket. Fallback to built-in SVGs when not configured"},
-            {"description": "Google Setup page — first-time Google login users prompted to set name and password as backup"},
-            {"description": "Public brand config endpoint — GET /dashboard/api/brand/config returns logo URLs unauthenticated"},
-            {"description": "Sonner toasts — replaced native alert() with toast notifications throughout the dashboard"}
+            {"description": {"en": "Global S3 Configuration — superadmin sets S3 credentials once; admins only provide a folder name when creating apps", "pt-BR": "Configuração S3 Global — superadmin define as credenciais S3 uma vez; admins só informam um nome de pasta ao criar apps"}},
+            {"description": {"en": "Brand Logos — upload custom login logo and sidebar icon, stored in global S3 bucket. Fallback to built-in SVGs when not configured", "pt-BR": "Logos de Marca — upload de logo de login e ícone de barra lateral customizados, armazenados no bucket S3 global. Fallback para SVGs embutidos quando não configurado"}},
+            {"description": {"en": "Google Setup page — first-time Google login users prompted to set name and password as backup", "pt-BR": "Página de Configuração Google — usuários de primeiro login Google são solicitados a definir nome e senha como backup"}},
+            {"description": {"en": "Public brand config endpoint — GET /dashboard/api/brand/config returns logo URLs unauthenticated", "pt-BR": "Endpoint público de config de marca — GET /dashboard/api/brand/config retorna URLs de logo sem autenticação"}},
+            {"description": {"en": "Sonner toasts — replaced native alert() with toast notifications throughout the dashboard", "pt-BR": "Toasts Sonner — alert() nativo substituído por notificações toast em todo o dashboard"}}
           ]
         },
         {
           "type": "fixes",
           "items": [
-            {"description": "Helm chart 404 — chart now packaged and served from the same Pages artifact as the repo"},
-            {"description": "Deployment --config flag — removed invalid --config flag from Helm deployment template"},
-            {"description": "Logo upload overwriting — uploading a new logo no longer clears the other logo"},
-            {"description": "Soft delete overwritten — saving global S3 config no longer resets soft_delete_enabled to false"}
+            {"description": {"en": "Helm chart 404 — chart now packaged and served from the same Pages artifact as the repo", "pt-BR": "404 no chart Helm — chart agora empacotado e servido a partir do mesmo artefato Pages do repositório"}},
+            {"description": {"en": "Deployment --config flag — removed invalid --config flag from Helm deployment template", "pt-BR": "Flag --config de deployment — flag --config inválida removida do template de deployment Helm"}},
+            {"description": {"en": "Logo upload overwriting — uploading a new logo no longer clears the other logo", "pt-BR": "Sobrescrita de upload de logo — enviar um novo logo não apaga mais o outro logo"}},
+            {"description": {"en": "Soft delete overwritten — saving global S3 config no longer resets soft_delete_enabled to false", "pt-BR": "Soft delete sobrescrito — salvar config S3 global não reseta mais soft_delete_enabled para false"}}
           ]
         },
         {
           "type": "improvements",
           "items": [
-            {"description": "Settings page redesigned with tabbed navigation (Branding, Logo, Database, Auth Provider, Storage)"},
-            {"description": "All user-facing strings reviewed and moved to i18n keys"}
+            {"description": {"en": "Settings page redesigned with tabbed navigation (Branding, Logo, Database, Auth Provider, Storage)", "pt-BR": "Página de Configurações redesenhada com navegação em abas (Marca, Logo, Banco de Dados, Provedor de Auth, Storage)"}},
+            {"description": {"en": "All user-facing strings reviewed and moved to i18n keys", "pt-BR": "Todos os textos exibidos ao usuário revisados e movidos para chaves de i18n"}}
           ]
         }
       ]
@@ -204,21 +240,21 @@
     {
       "version": "v0.1.9",
       "release_date": "2026-07-02",
-      "title": "OpenAPI File Endpoints & Todo App Files",
-      "summary": "Auto-generated OpenAPI docs for file endpoints, file management in the Todo example app, and docs refresh.",
+      "title": {"en": "OpenAPI File Endpoints & Todo App Files", "pt-BR": "Endpoints de Arquivo OpenAPI e Arquivos do App Todo"},
+      "summary": {"en": "Auto-generated OpenAPI docs for file endpoints, file management in the Todo example app, and docs refresh.", "pt-BR": "Documentação OpenAPI auto-gerada para endpoints de arquivo, gerenciamento de arquivos no app de exemplo Todo, e atualização da documentação."},
       "sections": [
         {
           "type": "features",
           "items": [
-            {"description": "OpenAPI docs now include file management endpoints for apps with storage enabled (list, upload, get, delete, download, signed URL)"},
-            {"description": "Todo example app now includes a complete file management page with upload progress, file list, signed URL generation, and delete"},
-            {"description": "CI workflows upgraded to Node.js 24"}
+            {"description": {"en": "OpenAPI docs now include file management endpoints for apps with storage enabled (list, upload, get, delete, download, signed URL)", "pt-BR": "Documentação OpenAPI agora inclui endpoints de gerenciamento de arquivos para apps com storage habilitado (listar, upload, obter, excluir, download, URL assinada)"}},
+            {"description": {"en": "Todo example app now includes a complete file management page with upload progress, file list, signed URL generation, and delete", "pt-BR": "App de exemplo Todo agora inclui uma página completa de gerenciamento de arquivos com progresso de upload, lista de arquivos, geração de URL assinada e exclusão"}},
+            {"description": {"en": "CI workflows upgraded to Node.js 24", "pt-BR": "Workflows de CI atualizados para Node.js 24"}}
           ]
         },
         {
           "type": "improvements",
           "items": [
-            {"description": "Docusaurus docs updated with sorting, soft delete, health check docs, and configuration page"}
+            {"description": {"en": "Docusaurus docs updated with sorting, soft delete, health check docs, and configuration page", "pt-BR": "Documentação Docusaurus atualizada com ordenação, soft delete, documentação de health check e página de configuração"}}
           ]
         }
       ]
@@ -226,23 +262,23 @@
     {
       "version": "v0.1.8",
       "release_date": "2026-07-01",
-      "title": "Health Endpoint, Soft Delete, CORS & RLS Fix",
-      "summary": "Per-app health endpoint, configurable soft delete, CORS support, hyphens in app names, and RLS fix.",
+      "title": {"en": "Health Endpoint, Soft Delete, CORS & RLS Fix", "pt-BR": "Endpoint de Health, Soft Delete, CORS e Correção de RLS"},
+      "summary": {"en": "Per-app health endpoint, configurable soft delete, CORS support, hyphens in app names, and RLS fix.", "pt-BR": "Endpoint de health por app, soft delete configurável, suporte a CORS, hífens em nomes de app, e correção de RLS."},
       "sections": [
         {
           "type": "features",
           "items": [
-            {"description": "Per-App Health Endpoint — GET /{app}/health for monitoring and readiness checks (no auth required)"},
-            {"description": "Soft Delete — configurable toggle in dashboard. When enabled, DELETE becomes UPDATE SET deleted_at. Use ?deleted=true to view soft-deleted records"},
-            {"description": "CORS support — cross-origin requests from SPAs and mobile apps work out of the box"},
-            {"description": "App names now support hyphens alongside underscores"}
+            {"description": {"en": "Per-App Health Endpoint — GET /{app}/health for monitoring and readiness checks (no auth required)", "pt-BR": "Endpoint de Health por App — GET /{app}/health para monitoramento e checagens de readiness (sem necessidade de auth)"}},
+            {"description": {"en": "Soft Delete — configurable toggle in dashboard. When enabled, DELETE becomes UPDATE SET deleted_at. Use ?deleted=true to view soft-deleted records", "pt-BR": "Soft Delete — toggle configurável no dashboard. Quando habilitado, DELETE vira UPDATE SET deleted_at. Use ?deleted=true para ver registros com soft delete"}},
+            {"description": {"en": "CORS support — cross-origin requests from SPAs and mobile apps work out of the box", "pt-BR": "Suporte a CORS — requisições cross-origin de SPAs e apps mobile funcionam sem configuração adicional"}},
+            {"description": {"en": "App names now support hyphens alongside underscores", "pt-BR": "Nomes de app agora suportam hífens além de underscores"}}
           ]
         },
         {
           "type": "fixes",
           "items": [
-            {"description": "RLS 'enabled' now correctly injects owner_id (previously only 'owner' RLS worked, causing INSERT failures)"},
-            {"description": "Improved error messages — HandleCreate now includes the actual pgx error in the response"}
+            {"description": {"en": "RLS 'enabled' now correctly injects owner_id (previously only 'owner' RLS worked, causing INSERT failures)", "pt-BR": "RLS 'enabled' agora injeta owner_id corretamente (antes só RLS 'owner' funcionava, causando falhas de INSERT)"}},
+            {"description": {"en": "Improved error messages — HandleCreate now includes the actual pgx error in the response", "pt-BR": "Mensagens de erro melhoradas — HandleCreate agora inclui o erro pgx real na resposta"}}
           ]
         }
       ]
@@ -250,15 +286,15 @@
     {
       "version": "v0.1.7",
       "release_date": "2026-07-01",
-      "title": "SDKs Page, Todo Example App & Roadmap",
-      "summary": "New SDKs page in dashboard, complete Todo example app demonstrating SDK usage, and public roadmap.",
+      "title": {"en": "SDKs Page, Todo Example App & Roadmap", "pt-BR": "Página de SDKs, App de Exemplo Todo e Roadmap"},
+      "summary": {"en": "New SDKs page in dashboard, complete Todo example app demonstrating SDK usage, and public roadmap.", "pt-BR": "Nova página de SDKs no dashboard, app de exemplo Todo completo demonstrando uso dos SDKs, e roadmap público."},
       "sections": [
         {
           "type": "features",
           "items": [
-            {"description": "SDKs Page — installation snippets with copy-to-clipboard for all 6 official SDKs (TypeScript, Go, Python, Rust, Java, PHP)"},
-            {"description": "Todo Example App — complete React + Vite example demonstrating connect, auth, and full CRUD via the TypeScript SDK"},
-            {"description": "Public roadmap added to README with status indicators for milestones M1-M6"}
+            {"description": {"en": "SDKs Page — installation snippets with copy-to-clipboard for all 6 official SDKs (TypeScript, Go, Python, Rust, Java, PHP)", "pt-BR": "Página de SDKs — trechos de instalação com copiar-para-área-de-transferência para os 6 SDKs oficiais (TypeScript, Go, Python, Rust, Java, PHP)"}},
+            {"description": {"en": "Todo Example App — complete React + Vite example demonstrating connect, auth, and full CRUD via the TypeScript SDK", "pt-BR": "App de Exemplo Todo — exemplo completo React + Vite demonstrando conexão, auth e CRUD completo via SDK TypeScript"}},
+            {"description": {"en": "Public roadmap added to README with status indicators for milestones M1-M6", "pt-BR": "Roadmap público adicionado ao README com indicadores de status para os marcos M1-M6"}}
           ]
         }
       ]
@@ -266,33 +302,33 @@
     {
       "version": "v0.1.5",
       "release_date": "2026-06-29",
-      "title": "Audit Log, File Storage, Rate Limiting & i18n",
-      "summary": "Major feature release: audit logging, per-app S3 file storage, rate limiting, SDK clients, and full dashboard i18n.",
+      "title": {"en": "Audit Log, File Storage, Rate Limiting & i18n", "pt-BR": "Audit Log, Storage de Arquivos, Rate Limiting e i18n"},
+      "summary": {"en": "Major feature release: audit logging, per-app S3 file storage, rate limiting, SDK clients, and full dashboard i18n.", "pt-BR": "Release com grandes funcionalidades: audit log, storage de arquivos S3 por app, rate limiting, clientes SDK, e i18n completo do dashboard."},
       "sections": [
         {
           "type": "features",
           "items": [
-            {"description": "Audit Log — track every dashboard action with filters by action type and user. Stored in zeep_system.audit_log"},
-            {"description": "File Storage per App — connect S3-compatible buckets. Full REST API: upload (multipart), list, get, download (signed URL), delete"},
-            {"description": "Rate Limiting per App — per-IP sliding window rate limiting. Configurable requests per minute. Returns 429 when exceeded"},
-            {"description": "SDK Clients — 6 official SDKs with identical API: TypeScript, Go, Python, Rust, Java, PHP"},
-            {"description": "Full dashboard i18n — Portuguese (pt-BR) and English with language switcher saved per user"}
+            {"description": {"en": "Audit Log — track every dashboard action with filters by action type and user. Stored in zeep_system.audit_log", "pt-BR": "Audit Log — rastreia toda ação do dashboard com filtros por tipo de ação e usuário. Armazenado em zeep_system.audit_log"}},
+            {"description": {"en": "File Storage per App — connect S3-compatible buckets. Full REST API: upload (multipart), list, get, download (signed URL), delete", "pt-BR": "Storage de Arquivos por App — conecte buckets compatíveis com S3. API REST completa: upload (multipart), listar, obter, download (URL assinada), excluir"}},
+            {"description": {"en": "Rate Limiting per App — per-IP sliding window rate limiting. Configurable requests per minute. Returns 429 when exceeded", "pt-BR": "Rate Limiting por App — rate limiting de janela deslizante por IP. Requisições por minuto configuráveis. Retorna 429 quando excedido"}},
+            {"description": {"en": "SDK Clients — 6 official SDKs with identical API: TypeScript, Go, Python, Rust, Java, PHP", "pt-BR": "Clientes SDK — 6 SDKs oficiais com API idêntica: TypeScript, Go, Python, Rust, Java, PHP"}},
+            {"description": {"en": "Full dashboard i18n — Portuguese (pt-BR) and English with language switcher saved per user", "pt-BR": "i18n completo do dashboard — Português (pt-BR) e Inglês com seletor de idioma salvo por usuário"}}
           ]
         },
         {
           "type": "improvements",
           "items": [
-            {"description": "Dashboard tabs in app form (Database, Login Providers, Storage S3) routed via ?tab="},
-            {"description": "App owner info shown for superadmin"},
-            {"description": "User name field in onboarding, create user, and table display"},
-            {"description": "Sidebar shows name instead of email"},
-            {"description": "SVG favicon and English as default language"}
+            {"description": {"en": "Dashboard tabs in app form (Database, Login Providers, Storage S3) routed via ?tab=", "pt-BR": "Abas do dashboard no formulário de app (Banco de Dados, Provedores de Login, Storage S3) roteadas via ?tab="}},
+            {"description": {"en": "App owner info shown for superadmin", "pt-BR": "Informação do dono do app exibida para superadmin"}},
+            {"description": {"en": "User name field in onboarding, create user, and table display", "pt-BR": "Campo de nome de usuário no onboarding, criação de usuário e exibição em tabela"}},
+            {"description": {"en": "Sidebar shows name instead of email", "pt-BR": "Barra lateral mostra nome em vez de email"}},
+            {"description": {"en": "SVG favicon and English as default language", "pt-BR": "Favicon SVG e Inglês como idioma padrão"}}
           ]
         },
         {
           "type": "fixes",
           "items": [
-            {"description": "Login/logout redirect fixes"}
+            {"description": {"en": "Login/logout redirect fixes", "pt-BR": "Correções de redirecionamento de login/logout"}}
           ]
         }
       ]
@@ -300,24 +336,24 @@
     {
       "version": "v0.1.4",
       "release_date": "2026-06-28",
-      "title": "Navigation Fixes & CI/CD Polish",
-      "summary": "Login/logout flow improvements, root URL redirect, and CI/CD workflow improvements.",
+      "title": {"en": "Navigation Fixes & CI/CD Polish", "pt-BR": "Correções de Navegação e Polimento de CI/CD"},
+      "summary": {"en": "Login/logout flow improvements, root URL redirect, and CI/CD workflow improvements.", "pt-BR": "Melhorias no fluxo de login/logout, redirecionamento de URL raiz, e melhorias nos workflows de CI/CD."},
       "sections": [
         {
           "type": "fixes",
           "items": [
-            {"description": "Login redirect — page navigates to /apps immediately after successful login"},
-            {"description": "Logout redirect — page navigates to /login immediately after logout"},
-            {"description": "Root URL — http://localhost:8080 now redirects to /dashboard"},
-            {"description": "Onboarding password — minimum length aligned to 8 characters"}
+            {"description": {"en": "Login redirect — page navigates to /apps immediately after successful login", "pt-BR": "Redirecionamento de login — página navega para /apps imediatamente após login bem-sucedido"}},
+            {"description": {"en": "Logout redirect — page navigates to /login immediately after logout", "pt-BR": "Redirecionamento de logout — página navega para /login imediatamente após logout"}},
+            {"description": {"en": "Root URL — http://localhost:8080 now redirects to /dashboard", "pt-BR": "URL raiz — http://localhost:8080 agora redireciona para /dashboard"}},
+            {"description": {"en": "Onboarding password — minimum length aligned to 8 characters", "pt-BR": "Senha de onboarding — tamanho mínimo alinhado para 8 caracteres"}}
           ]
         },
         {
           "type": "features",
           "items": [
-            {"description": "Helm chart published via Docker workflow — no more separate chart release"},
-            {"description": "EasyPanel template for one-click deploy"},
-            {"description": "Deployment docs covering EasyPanel, Docker, Helm, and Docker Compose"}
+            {"description": {"en": "Helm chart published via Docker workflow — no more separate chart release", "pt-BR": "Chart Helm publicado via workflow Docker — sem mais release separado do chart"}},
+            {"description": {"en": "EasyPanel template for one-click deploy", "pt-BR": "Template EasyPanel para deploy em um clique"}},
+            {"description": {"en": "Deployment docs covering EasyPanel, Docker, Helm, and Docker Compose", "pt-BR": "Documentação de deployment cobrindo EasyPanel, Docker, Helm e Docker Compose"}}
           ]
         }
       ]
@@ -325,23 +361,23 @@
     {
       "version": "v0.1.2",
       "release_date": "2026-06-28",
-      "title": "EasyPanel Template & Helm Fixes",
-      "summary": "EasyPanel one-click deploy template, Helm chart fixes, and CI/CD automation.",
+      "title": {"en": "EasyPanel Template & Helm Fixes", "pt-BR": "Template EasyPanel e Correções de Helm"},
+      "summary": {"en": "EasyPanel one-click deploy template, Helm chart fixes, and CI/CD automation.", "pt-BR": "Template de deploy em um clique EasyPanel, correções no chart Helm, e automação de CI/CD."},
       "sections": [
         {
           "type": "features",
           "items": [
-            {"description": "EasyPanel template — one-click deploy via easypanel.json"},
-            {"description": "Deployment docs page — step-by-step guide for EasyPanel, Docker, Helm, Docker Compose"},
-            {"description": "Helm chart released — version synced with app release"}
+            {"description": {"en": "EasyPanel template — one-click deploy via easypanel.json", "pt-BR": "Template EasyPanel — deploy em um clique via easypanel.json"}},
+            {"description": {"en": "Deployment docs page — step-by-step guide for EasyPanel, Docker, Helm, Docker Compose", "pt-BR": "Página de documentação de deployment — guia passo a passo para EasyPanel, Docker, Helm, Docker Compose"}},
+            {"description": {"en": "Helm chart released — version synced with app release", "pt-BR": "Chart Helm lançado — versão sincronizada com o release do app"}}
           ]
         },
         {
           "type": "fixes",
           "items": [
-            {"description": "Onboarding password minimum length fixed from 12 to 8 characters"},
-            {"description": "Docker publish workflow now triggers only on v* tags, not on push to main"},
-            {"description": "Automatic GitHub Release creation when pushing a tag"}
+            {"description": {"en": "Onboarding password minimum length fixed from 12 to 8 characters", "pt-BR": "Tamanho mínimo de senha de onboarding corrigido de 12 para 8 caracteres"}},
+            {"description": {"en": "Docker publish workflow now triggers only on v* tags, not on push to main", "pt-BR": "Workflow de publicação Docker agora dispara só em tags v*, não em push para main"}},
+            {"description": {"en": "Automatic GitHub Release creation when pushing a tag", "pt-BR": "Criação automática de GitHub Release ao dar push em uma tag"}}
           ]
         }
       ]
@@ -349,41 +385,41 @@
     {
       "version": "v0.1.1",
       "release_date": "2026-06-28",
-      "title": "Auth Providers & Open Source Polish",
-      "summary": "Google OAuth for dashboard and per-app, user management, open-source documentation, and security fixes.",
+      "title": {"en": "Auth Providers & Open Source Polish", "pt-BR": "Provedores de Auth e Polimento Open Source"},
+      "summary": {"en": "Google OAuth for dashboard and per-app, user management, open-source documentation, and security fixes.", "pt-BR": "Google OAuth para dashboard e por app, gerenciamento de usuários, documentação open-source, e correções de segurança."},
       "sections": [
         {
           "type": "features",
           "items": [
-            {"description": "Dashboard Google OAuth — configure via UI with AES-256-GCM encrypted credentials"},
-            {"description": "Per-App Login Providers — each app can enable email and/or Google OAuth via dashboard"},
-            {"description": "GET /{app}/auth/providers endpoint for frontend to discover active providers"},
-            {"description": "Per-app Google OAuth with JWT return same as email login"},
-            {"description": "Change password — any user can change their own; superadmin can change any user's"},
-            {"description": "App User Management — list, search, deactivate/reactivate accounts, reset sessions"},
-            {"description": "Docusaurus documentation with auto-deploy via GitHub Pages"}
+            {"description": {"en": "Dashboard Google OAuth — configure via UI with AES-256-GCM encrypted credentials", "pt-BR": "Google OAuth do dashboard — configure via UI com credenciais criptografadas AES-256-GCM"}},
+            {"description": {"en": "Per-App Login Providers — each app can enable email and/or Google OAuth via dashboard", "pt-BR": "Provedores de Login por App — cada app pode habilitar email e/ou Google OAuth via dashboard"}},
+            {"description": {"en": "GET /{app}/auth/providers endpoint for frontend to discover active providers", "pt-BR": "Endpoint GET /{app}/auth/providers para o frontend descobrir provedores ativos"}},
+            {"description": {"en": "Per-app Google OAuth with JWT return same as email login", "pt-BR": "Google OAuth por app com retorno de JWT igual ao login por email"}},
+            {"description": {"en": "Change password — any user can change their own; superadmin can change any user's", "pt-BR": "Trocar senha — qualquer usuário pode trocar a própria; superadmin pode trocar a de qualquer usuário"}},
+            {"description": {"en": "App User Management — list, search, deactivate/reactivate accounts, reset sessions", "pt-BR": "Gerenciamento de Usuários do App — listar, buscar, desativar/reativar contas, resetar sessões"}},
+            {"description": {"en": "Docusaurus documentation with auto-deploy via GitHub Pages", "pt-BR": "Documentação Docusaurus com deploy automático via GitHub Pages"}}
           ]
         },
         {
           "type": "fixes",
           "items": [
-            {"description": "Login 500 fix — google_id NULL caused panic (COALESCE fix)"},
-            {"description": "FK violation fix on Data Browser create — owner_id removed from INSERT"},
-            {"description": "React Query cache not clearing when switching users"},
-            {"description": "App Users 500 — active/provider columns missing in existing apps"}
+            {"description": {"en": "Login 500 fix — google_id NULL caused panic (COALESCE fix)", "pt-BR": "Correção de erro 500 no login — google_id NULL causava panic (correção com COALESCE)"}},
+            {"description": {"en": "FK violation fix on Data Browser create — owner_id removed from INSERT", "pt-BR": "Correção de violação de FK na criação no Data Browser — owner_id removido do INSERT"}},
+            {"description": {"en": "React Query cache not clearing when switching users", "pt-BR": "Cache do React Query não limpava ao trocar de usuário"}},
+            {"description": {"en": "App Users 500 — active/provider columns missing in existing apps", "pt-BR": "Erro 500 em App Users — colunas active/provider faltando em apps existentes"}}
           ]
         },
         {
           "type": "security",
           "items": [
-            {"description": "AES-256-GCM encryption for OAuth secrets at rest"}
+            {"description": {"en": "AES-256-GCM encryption for OAuth secrets at rest", "pt-BR": "Criptografia AES-256-GCM para secrets OAuth em repouso"}}
           ]
         },
         {
           "type": "improvements",
           "items": [
-            {"description": "Open source polish: SVG architecture diagram, Playwright E2E tests, README badges, SECURITY.md, CODE_OF_CONDUCT.md, SUPPORT.md"},
-            {"description": "GitHub Discussions enabled"}
+            {"description": {"en": "Open source polish: SVG architecture diagram, Playwright E2E tests, README badges, SECURITY.md, CODE_OF_CONDUCT.md, SUPPORT.md", "pt-BR": "Polimento open source: diagrama de arquitetura SVG, testes E2E Playwright, badges no README, SECURITY.md, CODE_OF_CONDUCT.md, SUPPORT.md"}},
+            {"description": {"en": "GitHub Discussions enabled", "pt-BR": "GitHub Discussions habilitado"}}
           ]
         }
       ]
@@ -391,32 +427,32 @@
     {
       "version": "v0.1.0",
       "release_date": "2026-06-28",
-      "title": "Initial Release",
-      "summary": "First public release of Zeep Orbit — open-source, self-hosted BaaS platform that turns schema definitions into instant REST APIs.",
+      "title": {"en": "Initial Release", "pt-BR": "Release Inicial"},
+      "summary": {"en": "First public release of Zeep Orbit — open-source, self-hosted BaaS platform that turns schema definitions into instant REST APIs.", "pt-BR": "Primeiro release público do Zeep Orbit — plataforma BaaS open-source e self-hosted que transforma definições de schema em APIs REST instantâneas."},
       "sections": [
         {
           "type": "features",
           "items": [
-            {"description": "Web Dashboard — premium dark UI with app management, Data Browser, real-time logs, user management, and white-label branding (5 themes)"},
-            {"description": "Authentication — email/password per app with register, login, refresh, logout; Google OAuth for dashboard and per-app; Row-Level Security"},
-            {"description": "REST API — full CRUD per table with filtering, sorting, pagination; auto-generated OpenAPI/Swagger UI per app"},
-            {"description": "CLI — zeep serve, zeep apply, zeep list, zeep status"},
-            {"description": "Multi-stage Docker image (< 20MB, multi-arch: amd64 + arm64)"},
-            {"description": "Production-grade Helm chart (HPA, PDB, Ingress, ServiceMonitor, IRSA)"},
-            {"description": "Prometheus metrics and structured JSON logging via zap"},
-            {"description": "Rate limiting on public auth routes (10 req/min)"},
-            {"description": "Security headers, bcrypt cost 12 for password hashing, CSV formula injection protection"}
+            {"description": {"en": "Web Dashboard — premium dark UI with app management, Data Browser, real-time logs, user management, and white-label branding (5 themes)", "pt-BR": "Dashboard Web — UI dark premium com gerenciamento de apps, Data Browser, logs em tempo real, gerenciamento de usuários, e marca white-label (5 temas)"}},
+            {"description": {"en": "Authentication — email/password per app with register, login, refresh, logout; Google OAuth for dashboard and per-app; Row-Level Security", "pt-BR": "Autenticação — email/senha por app com registro, login, refresh, logout; Google OAuth para dashboard e por app; Row-Level Security"}},
+            {"description": {"en": "REST API — full CRUD per table with filtering, sorting, pagination; auto-generated OpenAPI/Swagger UI per app", "pt-BR": "API REST — CRUD completo por tabela com filtro, ordenação, paginação; OpenAPI/Swagger UI auto-gerado por app"}},
+            {"description": {"en": "CLI — zeep serve, zeep apply, zeep list, zeep status", "pt-BR": "CLI — zeep serve, zeep apply, zeep list, zeep status"}},
+            {"description": {"en": "Multi-stage Docker image (< 20MB, multi-arch: amd64 + arm64)", "pt-BR": "Imagem Docker multi-stage (< 20MB, multi-arch: amd64 + arm64)"}},
+            {"description": {"en": "Production-grade Helm chart (HPA, PDB, Ingress, ServiceMonitor, IRSA)", "pt-BR": "Chart Helm de qualidade produção (HPA, PDB, Ingress, ServiceMonitor, IRSA)"}},
+            {"description": {"en": "Prometheus metrics and structured JSON logging via zap", "pt-BR": "Métricas Prometheus e logging JSON estruturado via zap"}},
+            {"description": {"en": "Rate limiting on public auth routes (10 req/min)", "pt-BR": "Rate limiting nas rotas públicas de auth (10 req/min)"}},
+            {"description": {"en": "Security headers, bcrypt cost 12 for password hashing, CSV formula injection protection", "pt-BR": "Headers de segurança, bcrypt cost 12 para hash de senha, proteção contra injeção de fórmula CSV"}}
           ]
         },
         {
           "type": "fixes",
           "items": [
-            {"description": "Login 500 when google_id is NULL"},
-            {"description": "FK violation on Data Browser create (owner_id injection removed)"},
-            {"description": "Race condition on bootstrap endpoint (TOCTOU)"},
-            {"description": "DDL injection prevention on table/column names"},
-            {"description": "JWT secret exposure in API responses"},
-            {"description": "Cache not clearing on user login/logout"}
+            {"description": {"en": "Login 500 when google_id is NULL", "pt-BR": "Erro 500 no login quando google_id é NULL"}},
+            {"description": {"en": "FK violation on Data Browser create (owner_id injection removed)", "pt-BR": "Violação de FK na criação no Data Browser (injeção de owner_id removida)"}},
+            {"description": {"en": "Race condition on bootstrap endpoint (TOCTOU)", "pt-BR": "Race condition no endpoint de bootstrap (TOCTOU)"}},
+            {"description": {"en": "DDL injection prevention on table/column names", "pt-BR": "Prevenção de injeção de DDL em nomes de tabela/coluna"}},
+            {"description": {"en": "JWT secret exposure in API responses", "pt-BR": "Exposição de secret JWT nas respostas da API"}},
+            {"description": {"en": "Cache not clearing on user login/logout", "pt-BR": "Cache não limpava no login/logout de usuário"}}
           ]
         }
       ]

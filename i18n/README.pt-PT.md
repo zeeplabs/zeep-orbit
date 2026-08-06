@@ -69,12 +69,15 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/aminhaapp/tarefas
 | Funcionalidade         | Descrição                                                |
 | ----------------------- | -------------------------------------------------------- |
 | **Schema → REST**      | Defina tabelas no dashboard → API CRUD instantânea       |
+| **Relações e Índices** | Foreign keys (`references` + `on_delete`) e índices no schema builder, validados e ordenados automaticamente |
 | **Autenticação por Email** | Registo e login com email/palavra-passe por aplicação |
 | **Google OAuth**       | Início de sessão com Google — dashboard e por aplicação  |
-| **Row-Level Security** | Filtragem automática de dados por proprietário (`rls: owner`) |
+| **Row-Level Security** | Filtragem automática de dados por proprietário (`rls: owner`), com opção de "exigir RLS por omissão" em tabelas novas |
 | **App Tokens**         | Gestão de JWT para aplicações sem auth por email (criar, revogar, renovar) |
 | **Health por Aplicação** | `GET /{app}/health` para monitorização e readiness probes |
 | **Soft Delete**        | Toggle configurável de eliminação lógica (definições do dashboard) |
+| **Retenção e Purga**   | Job em background elimina definitivamente registos soft-deleted fora da janela de retenção (desligado por omissão, auditado) |
+| **Timeout de Query**   | `statement_timeout` global nas queries de dados das aplicações (por omissão 30s, `0` desliga) |
 | **Rate Limiting**      | Sliding window por aplicação e por IP (RPM configurável) |
 | **Armazenamento de Ficheiros** | Armazenamento S3-compatível por aplicação (DO Spaces, AWS, MinIO) |
 
@@ -87,14 +90,17 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/aminhaapp/tarefas
 | **Deploy num Clique**    | Cria o repositório a partir do template, faz deploy no Render automaticamente |
 | **Domínios Personalizados** | Configure um domínio próprio + DNS CNAME para cada frontend |
 | **Credenciais de Sincronização** | Deploy keys por aplicação para sincronizar local↔repo |
+| **Deploys Recentes**     | Lista em tempo real dos últimos deploys no Render das suas aplicações frontend |
 
 ### Plataforma
 
 | Funcionalidade          | Descrição                                                |
 | ------------------------ | -------------------------------------------------------- |
 | **Dashboard Web**       | Interface escura premium para gerir tudo                 |
-| **Data Browser**        | GUI para navegar, filtrar, editar, exportar CSV e eliminar registos |
-| **Gestão de Utilizadores** | Gerir administradores do dashboard e utilizadores de cada app |
+| **Data Browser**        | GUI para navegar, filtrar, editar, eliminar registos e exportar CSV (limite de linhas configurável) |
+| **Gestão de Utilizadores** | Gerir utilizadores do dashboard e utilizadores de cada app |
+| **Acesso por função**     | 4 funções de plataforma (superadmin/admin/auditor/member) com matriz de permissões para UI e backend |
+| **Funções por aplicação** | 3 funções por aplicação (admin/editor/viewer) com UI de gestão de membros; invariante ≥1 admin aplicado via transação |
 | **Audit Logs**          | Histórico de ações com filtros (quem fez o quê, quando, IP) |
 | **CORS**                | Suporte cross-origin para SPAs e apps móveis             |
 | **Documentação OpenAPI** | Swagger UI gerado automaticamente por aplicação          |
@@ -178,8 +184,9 @@ O dashboard web está embutido no binário e é acessível em `/dashboard`:
 
 - **Aplicações** — crie aplicações backend (base de dados + API) ou frontend (repositório GitHub + deploy)
 - **Data Browser** — navegue, filtre, ordene, edite em linha, elimine e exporte para CSV
-- **Utilizadores** — gestão de administradores do dashboard (funções superadmin/admin)
+- **Utilizadores** — gestão de utilizadores do dashboard (funções superadmin/admin/auditor/member)
 - **Utilizadores da Aplicação** — visualize utilizadores registados em cada aplicação, desative contas, reinicie sessões
+- **Membros** — gestão de membros por aplicação (funções admin/editor/viewer); o separador "Membros" na página de detalhes da aplicação permite ao admin adicionar, alterar função e remover membros; o invariante ≥1 admin impede remover o último admin
 - **Integrações** — configuração da GitHub App, templates de deploy, fornecedor de deploy Render
 - **Logs** — registo de pedidos em tempo real com detalhe de métricas
 - **Auditoria** — histórico de ações com utilizador, tipo de ação, recurso, IP e paginação
@@ -238,6 +245,10 @@ Opções: `required` (NOT NULL), `unique`, `default` (expressão SQL).
 
 Colunas geradas automaticamente: `id` (UUID), `created_at`, `updated_at`, `deleted_at` (anulável, usada quando o soft delete está ativo).
 
+### Relações e índices
+
+Uma tabela pode declarar foreign keys (`references`: tabela/coluna alvo + `on_delete`) e índices. O schema é validado antes de qualquer DDL ser executado (tabela/coluna inexistente, `on_delete` inválido, nomes de índice duplicados, dependências circulares de FK) e as tabelas são criadas por ordem de dependência. O provisionamento de índices é idempotente — nada é removido implicitamente — e eliminar uma tabela ainda referenciada pela foreign key de outra é recusado com um erro claro.
+
 ### App Tokens
 
 Para aplicações sem autenticação por email/palavra-passe, pode criar tokens de API com expiração configurável (7d, 30d, 365d, ou nunca). Os tokens usam JWT com `jti` único — revogáveis individualmente, com um endpoint de renovação que estende a expiração. A revogação é verificada a cada pedido através de uma cache em memória com invalidação imediata ao revogar.
@@ -256,7 +267,7 @@ As aplicações frontend permitem-lhe fazer deploy de sites e aplicações web s
 
 ### Fornecedor de Deploy
 
-- **Render** — configure a API key, o project ID e o domínio base. Cada aplicação frontend é publicada como um static site do Render, com configuração automática de domínio personalizado.
+- **Render** — configure a API key, o project ID, o environment ID e o domínio base. Cada aplicação frontend é publicada como um static site do Render, com configuração automática de domínio personalizado. O Render associa serviços a um *Environment*, não a um Project: o environment é resolvido automaticamente quando o project só tem um, e tem de ser indicado explicitamente caso contrário. O dashboard mostra também os deploys mais recentes das suas aplicações frontend.
 
 ### Integração com GitHub
 
@@ -276,7 +287,7 @@ O Zeep Orbit liga-se ao GitHub através de uma **GitHub App** — nunca OAuth ou
 
 Gere uma **private key** na página de definições da App (transfere um ficheiro `.pem`) e anote **App ID**, **App slug**, **Client ID** e **Client Secret**.
 
-**2. Configure no dashboard** — vá a **Integrações → GitHub** e cole o App ID, App slug, Client ID, Client Secret, e o conteúdo completo do ficheiro `.pem` da private key. O Webhook Secret pode ser qualquer valor (reservado para uso futuro — não validado hoje).
+**2. Configure no dashboard** — vá a **Integrações → Configuração** e cole o App ID, App slug, Client ID, Client Secret, e o conteúdo completo do ficheiro `.pem` da private key.
 
 **3. Instale** — clique em **Instalar**, que executa o fluxo nativo de instalação do GitHub. Escolha sempre **"Only select repositories"** e marque os repositórios que esta instância deve gerir — a API cria repositórios novos e gere deploy keys só dentro desse âmbito, nunca "All repositories".
 
@@ -467,29 +478,48 @@ Para adicionar uma nova entrada: edite `internal/dashboard/changelog.json`, adic
 
 ## 🗺️ Roadmap
 
+Detalhe completo (checklists por milestone, specs ligadas) vive em [`.specs/project/ROADMAP.md`](../.specs/project/ROADMAP.md) — esta tabela é um resumo, mantido sincronizado com ele.
+
 | Milestone | Estado | Funcionalidades |
 |---|---|---|
-| **M1 — MVP Core** | Concluído | Schema → REST, CLI, Docker Compose |
-| **M2 — Dashboard** | Concluído | CRUD de aplicações, Data Browser, Logs, Utilizadores, Auth, White-label |
-| **M3 — Governação** | Concluído | Audit Log, Soft Delete, Rate Limiting, App Tokens |
-| **M4 — Storage & Events** | Concluído | Armazenamento S3, configuração de storage por aplicação |
-| **M5 — Frontend Deploy** | Concluído | Integração com GitHub, Templates, Deploy no Render, Domínios personalizados |
-| **M6 — i18n** | Concluído | pt-BR / inglês, seletor de idioma |
-| **M7 — SDKs** | Concluído | Clientes TS, Go, Python, Rust, Java, PHP |
-| **M8 — IA e Automação** | Planeado | Criação de schema em linguagem natural, servidor MCP |
+| **M1 — MVP Core** | ✅ Concluído | Schema → REST, CLI, Docker Compose |
+| **M2 — Developer Experience** | ✅ Concluído | Dashboard, SDKs, relações e índices, migrações, filtragem/ordenação |
+| **M3 — Aplicações Frontend** | ✅ Concluído | Integração com GitHub, Templates, Deploy no Render, Domínios personalizados |
+| **M4 — Governação & Segurança** | 🔵 Em desenvolvimento | Audit Log, Soft Delete + retenção/purga, SSO, Rate Limiting, [RBAC por aplicação](../.specs/features/rbac-per-app/) (admin/editor/viewer), [papéis globais do dashboard](../.specs/features/dashboard-global-roles/) (superadmin/admin/auditor/member) · planeado: [2FA](../.specs/features/two-factor-auth/), fluxo de aprovação de alterações de schema |
+| **M5 — Storage & Events** | 🔵 Em desenvolvimento | Armazenamento S3 · planeado: webhooks, event bus |
+| **M6 — i18n** | ✅ Concluído | pt-BR / inglês, seletor de idioma |
+| **M7 — SDKs** | ✅ Concluído | Clientes TS, Go, Python, Rust, Java, PHP |
+| **M8 — Platform Services** | 🔵 Em desenvolvimento | planeado: [integração SMTP/email](../.specs/features/smtp-email-integration/) (convites, recuperação de senha), [integrações de observabilidade](../.specs/features/observability-integrations/) (OpenTelemetry, Datadog, New Relic) |
+| **M9 — Enterprise Licensing** | 🔵 Em desenvolvimento | planeado: [modelo de licenciamento dual](../.specs/features/enterprise-licensing/) (núcleo MIT + funcionalidades enterprise trancadas) |
+
+### Planeado — visível no dashboard, ainda não funcional
+
+Alguns destes itens já aparecem no dashboard como controlos desativados ou badge "Em breve", para tornar o roadmap visível onde ele vai aterrar. **Não têm backend hoje** e não fazem nada quando clicados:
+
+| Item | Onde aparece |
+|---|---|
+| Autenticação de dois fatores ([spec](../.specs/features/two-factor-auth/)) | Definições → Fornecedor de auth ("Exigir 2FA para todos os admins"), Utilizadores do dashboard (ação "Repor 2FA") |
+| Aprovação de alterações de schema | Definições → Base de dados ("Exigir aprovação de alterações de schema") |
+| Licenciamento enterprise ([spec](../.specs/features/enterprise-licensing/)) | Definições → Licença (pré-visualização só de UI, separador bloqueado) |
+| Code hosting: GitLab, Bitbucket | Integrações → Configuração (seletor de fornecedor) |
+| Fornecedores de deploy: Cloudflare Pages, DigitalOcean, AWS, Azure, Google Cloud | Integrações → Fornecedores de deploy (seletor de fornecedor) |
+| Fornecedores de auth do dashboard: Microsoft Entra ID, Sign in with Apple, GitHub | Definições → Fornecedor de auth |
+| Fornecedores de storage: Azure Blob Storage, Google Cloud Storage | Definições → Storage |
+| Criação de aplicação assistida por IA | Aplicações → "Criar com IA" |
 
 ### Adiado / Backlog
 
 - Início de sessão com Apple (por aplicação)
 - Gerador de código para o SDK de TypeScript (`@zeeptech/orbit-generate`)
+- Snippets oficiais de prompt para Claude Code / Cursor / Lovable
+- Servidor MCP para operações do zeep-orbit
 - Geração automática de GraphQL
 - Subscrições em tempo real (WebSockets)
 - Edge functions
-- Fluxo de aprovação de alterações de schema
+- Suporte multi-região
 - Marketplace de templates de aplicações
-- Webhooks e Event Bus
-- RBAC com permissões granulares
-- Integração SSO / SAML
+- RBAC com permissões granulares por ação (além dos níveis fixos admin/editor/viewer)
+- SSO Microsoft Entra ID
 
 ---
 

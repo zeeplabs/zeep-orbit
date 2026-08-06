@@ -28,9 +28,39 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			email        TEXT        UNIQUE NOT NULL,
 			password_hash TEXT       NOT NULL DEFAULT '',
 			google_id    TEXT        UNIQUE,
-			role         TEXT        NOT NULL CHECK (role IN ('admin','superadmin')),
+			role         TEXT        NOT NULL CHECK (role IN ('superadmin','admin','auditor','member')),
 			created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
+		// dashboard-global-roles T-01: 2→4 role tiers. Existing 'admin' users
+		// (under the OLD 2-value model) are reclassified as 'member' ('admin' is
+		// now a platform-management role distinct from the per-app "owner"
+		// pattern that 'member' replaces). 'superadmin' is untouched.
+		//
+		// This one-time demotion must run EXACTLY ONCE, not on every boot — once
+		// 'admin' becomes a valid, assignable role again (via CreateUser /
+		// UpdateUserRole), re-running the bare UPDATE on every ProvisionZeepSystem
+		// call would silently demote every admin created after the migration on
+		// the next restart/deploy. Guard: only run DROP/UPDATE/ADD while the OLD
+		// 2-value constraint (no 'auditor' in its definition) is still in effect;
+		// once the 4-value constraint is installed, this whole block is a no-op
+		// forever after, regardless of how many admins exist.
+		`DO $do$
+		 BEGIN
+		   IF EXISTS (
+		     SELECT 1 FROM pg_constraint c
+		     JOIN pg_class t ON t.oid = c.conrelid
+		     JOIN pg_namespace n ON n.oid = t.relnamespace
+		     WHERE n.nspname = 'zeep_system' AND t.relname = 'dashboard_users'
+		       AND c.conname = 'dashboard_users_role_check'
+		       AND pg_get_constraintdef(c.oid) NOT LIKE '%auditor%'
+		   ) THEN
+		     ALTER TABLE zeep_system.dashboard_users DROP CONSTRAINT dashboard_users_role_check;
+		     UPDATE zeep_system.dashboard_users SET role = 'member' WHERE role = 'admin';
+		     ALTER TABLE zeep_system.dashboard_users ADD CONSTRAINT dashboard_users_role_check
+		       CHECK (role IN ('superadmin','admin','auditor','member'));
+		   END IF;
+		 END
+		 $do$`,
 		`ALTER TABLE zeep_system.dashboard_users ADD COLUMN IF NOT EXISTS google_id TEXT`,
 		`ALTER TABLE zeep_system.dashboard_users ADD COLUMN IF NOT EXISTS name TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE zeep_system.dashboard_users ADD COLUMN IF NOT EXISTS language TEXT NOT NULL DEFAULT 'en'`,
@@ -63,11 +93,13 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			UNIQUE(app_id, name)
 		)`,
 		`ALTER TABLE zeep_system.app_tables ADD COLUMN IF NOT EXISTS indexes JSONB NOT NULL DEFAULT '[]'`,
-		`CREATE TABLE IF NOT EXISTS zeep_system.app_ownership (
-			user_id UUID NOT NULL REFERENCES zeep_system.dashboard_users(id) ON DELETE CASCADE,
-			app_id  UUID NOT NULL REFERENCES zeep_system.apps(id) ON DELETE CASCADE,
-			PRIMARY KEY (user_id, app_id)
-		)`,
+		// rbac-per-app T-08: drop the pre-rbac `app_ownership` table.
+		// Its co-owners were migrated to `app_members` as admin in T-02
+		// (idempotent ON CONFLICT DO NOTHING), and T-04 + T-05 enforcement
+		// is 100% on `ResolveAppRole` so the fallback is no longer needed.
+		// New apps add the owner to `app_members` directly in CreateApp —
+		// no path in the code touches `app_ownership` anymore.
+		`DROP TABLE IF EXISTS zeep_system.app_ownership`,
 		`CREATE TABLE IF NOT EXISTS zeep_system.brand_config (
 			id           SERIAL      PRIMARY KEY,
 			theme        TEXT        NOT NULL DEFAULT 'azure',
@@ -124,6 +156,10 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
 		`ALTER TABLE zeep_system.system_config ADD COLUMN IF NOT EXISTS storage_config JSONB NOT NULL DEFAULT '{}'`,
+		`ALTER TABLE zeep_system.system_config ADD COLUMN IF NOT EXISTS max_csv_export_rows INT NOT NULL DEFAULT 10000`,
+		`ALTER TABLE zeep_system.system_config ADD COLUMN IF NOT EXISTS statement_timeout_ms INT NOT NULL DEFAULT 30000`,
+		`ALTER TABLE zeep_system.system_config ADD COLUMN IF NOT EXISTS require_rls_default BOOLEAN NOT NULL DEFAULT false`,
+		`ALTER TABLE zeep_system.system_config ADD COLUMN IF NOT EXISTS retention_days INT NOT NULL DEFAULT 0`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_system_config_singleton
 		 ON zeep_system.system_config ((TRUE))`,
 		`INSERT INTO zeep_system.system_config (soft_delete_enabled)
@@ -167,6 +203,63 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 		)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_frontend_apps_slug
 		 ON zeep_system.frontend_apps (slug) WHERE archived_at IS NULL`,
+		// rbac-per-app T-01: unified per-app membership. One row per (user, app)
+		// with role admin/editor/viewer. This table is the single source of
+		// truth for "can this user act on this app?" — enforcement in T-04
+		// and T-05 routes every per-app auth check through `ResolveAppRole`,
+		// which reads from here. The pre-rbac `app_ownership` table (co-owners)
+		// was dropped in T-08; its data was migrated here in T-02.
+		//
+		// Schema notes:
+		//   - Exactly one of backend_app_id / frontend_app_id is set (CHECK).
+		//   - UNIQUE is partial per axis (WHERE backend_app_id IS NOT NULL /
+		//     WHERE frontend_app_id IS NOT NULL) so the same user can be admin
+		//     of a backend app and viewer of a frontend app without conflict.
+		//   - ON DELETE CASCADE on user_id cleans up membership when a
+		//     dashboard user is deleted (spec edge case).
+		//   - Created after both `apps` AND `frontend_apps` exist (the FK to
+		//     frontend_apps would fail otherwise — see the move in the
+		//     provisioner ordering).
+		`CREATE TABLE IF NOT EXISTS zeep_system.app_members (
+			id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+			backend_app_id  UUID        REFERENCES zeep_system.apps(id)          ON DELETE CASCADE,
+			frontend_app_id UUID        REFERENCES zeep_system.frontend_apps(id) ON DELETE CASCADE,
+			user_id         UUID        NOT NULL REFERENCES zeep_system.dashboard_users(id) ON DELETE CASCADE,
+			role            TEXT        NOT NULL CHECK (role IN ('admin', 'editor', 'viewer')),
+			created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+			CHECK ((backend_app_id IS NOT NULL AND frontend_app_id IS NULL)
+			    OR (backend_app_id IS NULL     AND frontend_app_id IS NOT NULL))
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_app_members_backend_unique
+		 ON zeep_system.app_members(backend_app_id, user_id) WHERE backend_app_id IS NOT NULL`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_app_members_frontend_unique
+		 ON zeep_system.app_members(frontend_app_id, user_id) WHERE frontend_app_id IS NOT NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_app_members_user
+		 ON zeep_system.app_members(user_id)`,
+		// rbac-per-app T-02: migrate existing ownership into app_members. The
+		// two pre-existing sources of "this user is responsible for this app"
+		// are collapsed into a single row with role='admin':
+		//   1. apps.owner_id (backend apps, the current single owner)
+		//   2. frontend_apps.created_by (frontend apps; resolved by email
+		//      against dashboard_users — unresolved values leave the app
+		//      without any membership, which is intentional: superadmin
+		//      retains access and can add the first admin manually)
+		//
+		// The third source (pre-rbac `app_ownership` co-owners) was migrated
+		// in the original T-02 but is no longer present after T-08 dropped
+		// the table; the migration statement that read from it has been
+		// removed.
+		//
+		// Both use ON CONFLICT DO NOTHING against the partial UNIQUE indexes
+		// from T-01, so re-running ProvisionZeepSystem is safe.
+		`INSERT INTO zeep_system.app_members (backend_app_id, user_id, role)
+		 SELECT apps.id, apps.owner_id, 'admin' FROM zeep_system.apps
+		 ON CONFLICT (backend_app_id, user_id) WHERE backend_app_id IS NOT NULL DO NOTHING`,
+		`INSERT INTO zeep_system.app_members (frontend_app_id, user_id, role)
+		 SELECT fa.id, du.id, 'admin'
+		 FROM zeep_system.frontend_apps fa
+		 JOIN zeep_system.dashboard_users du ON du.email = fa.created_by
+		 ON CONFLICT (frontend_app_id, user_id) WHERE frontend_app_id IS NOT NULL DO NOTHING`,
 		`CREATE TABLE IF NOT EXISTS zeep_system.frontend_app_sync_credentials (
 			id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			frontend_app_id        UUID NOT NULL UNIQUE REFERENCES zeep_system.frontend_apps(id),

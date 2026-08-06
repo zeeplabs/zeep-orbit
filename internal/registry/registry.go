@@ -47,7 +47,8 @@ type Column struct {
 
 // SystemConfig holds global platform settings.
 type SystemConfig struct {
-	SoftDeleteEnabled bool `json:"soft_delete_enabled"`
+	SoftDeleteEnabled  bool `json:"soft_delete_enabled"`
+	StatementTimeoutMs int  `json:"statement_timeout_ms"`
 }
 
 // New retorna um Registry vazio, pronto para uso.

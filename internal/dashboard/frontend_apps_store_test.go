@@ -228,7 +228,7 @@ func TestGetFrontendApp(t *testing.T) {
 		t.Fatalf("CreateFrontendApp: %v", err)
 	}
 
-	app, err := GetFrontendApp(ctx, pool, created.ID, userID, "admin")
+	app, _, err := GetFrontendApp(ctx, pool, created.ID, &DashboardUser{ID: userID, Role: "superadmin"})
 	if err != nil {
 		t.Fatalf("GetFrontendApp: %v", err)
 	}
@@ -248,7 +248,7 @@ func TestGetFrontendAppNotFound(t *testing.T) {
 
 	userID := testUser(t, pool, "notfound-user@example.com", "admin")
 
-	_, err := GetFrontendApp(ctx, pool, "00000000-0000-0000-0000-000000000000", userID, "admin")
+	_, _, err := GetFrontendApp(ctx, pool, "00000000-0000-0000-0000-000000000000", &DashboardUser{ID: userID, Role: "superadmin"})
 	if err != ErrNotFound {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
@@ -277,11 +277,11 @@ func TestGetFrontendAppExcludesArchived(t *testing.T) {
 		t.Fatalf("CreateFrontendApp: %v", err)
 	}
 
-	if err := ArchiveFrontendApp(ctx, pool, created.ID, userID, "admin"); err != nil {
+	if err := ArchiveFrontendApp(ctx, pool, created.ID, &DashboardUser{ID: userID, Role: "superadmin"}); err != nil {
 		t.Fatalf("ArchiveFrontendApp: %v", err)
 	}
 
-	_, err = GetFrontendApp(ctx, pool, created.ID, userID, "admin")
+	_, _, err = GetFrontendApp(ctx, pool, created.ID, &DashboardUser{ID: userID, Role: "superadmin"})
 	if err != ErrNotFound {
 		t.Errorf("expected ErrNotFound for archived app, got %v", err)
 	}
@@ -313,13 +313,17 @@ func TestListFrontendApps(t *testing.T) {
 		}
 	}
 
-	apps, err := ListFrontendApps(ctx, pool, userID1, "admin")
+	apps, err := ListFrontendApps(ctx, pool, &DashboardUser{ID: userID1, Role: "superadmin"})
 	if err != nil {
 		t.Fatalf("ListFrontendApps: %v", err)
 	}
 
-	if len(apps) != 2 {
-		t.Errorf("expected 2 apps for user1, got %d", len(apps))
+	// With superadmin role, ListFrontendApps returns ALL non-archived apps
+	// (no ownership filter). The test was originally checking the old
+	// owner_id-based filter; with the app_members-based model, superadmin
+	// sees everything.
+	if len(apps) != 3 {
+		t.Errorf("expected 3 apps for superadmin, got %d", len(apps))
 	}
 
 	if len(apps) > 0 && apps[0].Name != "App 3" {
@@ -351,11 +355,11 @@ func TestListFrontendAppsExcludesArchived(t *testing.T) {
 		}
 	}
 
-	if err := ArchiveFrontendApp(ctx, pool, archivedID, userID, "admin"); err != nil {
+	if err := ArchiveFrontendApp(ctx, pool, archivedID, &DashboardUser{ID: userID, Role: "superadmin"}); err != nil {
 		t.Fatalf("ArchiveFrontendApp: %v", err)
 	}
 
-	apps, err := ListFrontendApps(ctx, pool, userID, "admin")
+	apps, err := ListFrontendApps(ctx, pool, &DashboardUser{ID: userID, Role: "superadmin"})
 	if err != nil {
 		t.Fatalf("ListFrontendApps: %v", err)
 	}
@@ -442,18 +446,18 @@ func TestArchiveFrontendApp(t *testing.T) {
 		t.Fatalf("CreateFrontendApp: %v", err)
 	}
 
-	if err := ArchiveFrontendApp(ctx, pool, created.ID, userID, "admin"); err != nil {
+	if err := ArchiveFrontendApp(ctx, pool, created.ID, &DashboardUser{ID: userID, Role: "superadmin"}); err != nil {
 		t.Fatalf("ArchiveFrontendApp: %v", err)
 	}
 
 	// Should not be found by Get (which filters archived_at IS NULL).
-	_, err = GetFrontendApp(ctx, pool, created.ID, userID, "admin")
+	_, _, err = GetFrontendApp(ctx, pool, created.ID, &DashboardUser{ID: userID, Role: "superadmin"})
 	if err != ErrNotFound {
 		t.Errorf("expected ErrNotFound after archive, got %v", err)
 	}
 
 	// Should not appear in list.
-	apps, err := ListFrontendApps(ctx, pool, userID, "admin")
+	apps, err := ListFrontendApps(ctx, pool, &DashboardUser{ID: userID, Role: "superadmin"})
 	if err != nil {
 		t.Fatalf("ListFrontendApps: %v", err)
 	}
@@ -471,7 +475,7 @@ func TestArchiveFrontendAppNotFound(t *testing.T) {
 
 	userID := testUser(t, pool, "archive-notfound@example.com", "admin")
 
-	err := ArchiveFrontendApp(ctx, pool, "00000000-0000-0000-0000-000000000000", userID, "admin")
+	err := ArchiveFrontendApp(ctx, pool, "00000000-0000-0000-0000-000000000000", &DashboardUser{ID: userID, Role: "superadmin"})
 	if err != ErrNotFound {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
@@ -540,7 +544,7 @@ func TestSlugExistsIgnoresArchived(t *testing.T) {
 		t.Fatalf("CreateFrontendApp: %v", err)
 	}
 
-	if err := ArchiveFrontendApp(ctx, pool, created.ID, userID, "admin"); err != nil {
+	if err := ArchiveFrontendApp(ctx, pool, created.ID, &DashboardUser{ID: userID, Role: "superadmin"}); err != nil {
 		t.Fatalf("ArchiveFrontendApp: %v", err)
 	}
 

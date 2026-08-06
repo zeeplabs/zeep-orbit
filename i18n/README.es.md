@@ -69,12 +69,15 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/miapp/tareas
 | Funcionalidad          | Descripción                                              |
 | ---------------------- | -------------------------------------------------------- |
 | **Schema → REST**      | Define tablas en el dashboard → API CRUD instantánea     |
+| **Relaciones e Índices** | Foreign keys (`references` + `on_delete`) e índices en el schema builder, validados y ordenados automáticamente |
 | **Auth por Email**     | Registro e inicio de sesión con email/contraseña por app |
 | **Google OAuth**       | Inicio de sesión con Google — dashboard y por app        |
-| **Row-Level Security** | Filtra datos automáticamente por dueño (`rls: owner`)    |
+| **Row-Level Security** | Filtra datos automáticamente por dueño (`rls: owner`), con opción de "exigir RLS por defecto" en tablas nuevas |
 | **App Tokens**         | Gestión de JWT para apps sin auth por email (crear, revocar, renovar) |
 | **Health por App**     | `GET /{app}/health` para monitoreo y readiness probes    |
 | **Soft Delete**        | Toggle configurable de eliminación lógica (settings del dashboard) |
+| **Retención y Purga**  | Job en background elimina definitivamente filas soft-deleted fuera de la ventana de retención (apagado por defecto, auditado) |
+| **Timeout de Query**   | `statement_timeout` global en las queries de datos de las apps (por defecto 30s, `0` lo desactiva) |
 | **Rate Limiting**      | Sliding window por app y por IP (RPM configurable)       |
 | **Almacenamiento de archivos** | Almacenamiento S3-compatible por app (DO Spaces, AWS, MinIO) |
 
@@ -87,14 +90,17 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/miapp/tareas
 | **Deploy con un clic**   | Crea el repo desde la plantilla, despliega en Render automáticamente |
 | **Dominios personalizados** | Configura dominio propio + DNS CNAME para cada frontend |
 | **Credenciales de sincronización** | Deploy keys por app para sincronizar local↔repo   |
+| **Deploys recientes**    | Lista en vivo de los últimos deploys en Render de tus apps frontend |
 
 ### Plataforma
 
 | Funcionalidad           | Descripción                                              |
 | ----------------------- | -------------------------------------------------------- |
 | **Dashboard Web**       | UI oscura premium para gestionar todo                    |
-| **Data Browser**        | GUI para navegar, filtrar, editar, exportar CSV, eliminar filas |
-| **Gestión de usuarios** | Administra admins del dashboard y usuarios de cada app   |
+| **Data Browser**        | GUI para navegar, filtrar, editar, eliminar filas y exportar CSV (límite de filas configurable) |
+| **Gestión de usuarios** | Administra usuarios del dashboard y usuarios de cada app |
+| **Acceso por rol**      | 4 roles de plataforma (superadmin/admin/auditor/member) con matriz de permisos para UI y backend |
+| **Roles por app**        | 3 roles por app (admin/editor/viewer) con UI de gestión de miembros; invariante ≥1 admin aplicado via transacción |
 | **Audit Logs**          | Historial de acciones con filtros (quién, qué, cuándo, IP) |
 | **CORS**                | Soporte cross-origin para SPAs y apps móviles            |
 | **Documentación OpenAPI** | Swagger UI auto-generado por app                       |
@@ -178,8 +184,9 @@ El dashboard web está embebido en el binario y es accesible en `/dashboard`:
 
 - **Apps** — crea apps backend (base de datos + API) o apps frontend (repo de GitHub + deploy)
 - **Data Browser** — navega, filtra, ordena, edita en línea, elimina y exporta a CSV
-- **Usuarios** — administra admins del dashboard (roles superadmin/admin)
+- **Usuarios** — administra usuarios del dashboard (roles superadmin/admin/auditor/member)
 - **Usuarios de App** — visualiza usuarios registrados en cada app, desactiva cuentas, reinicia sesiones
+- **Miembros** — gestión de miembros por app (roles admin/editor/viewer); la pestaña "Miembros" en la página de detalles de la app permite al admin añadir, cambiar rol y eliminar miembros; el invariante ≥1 admin impide eliminar al último admin
 - **Integraciones** — configuración de GitHub App, plantillas de deploy, proveedor de deploy Render
 - **Logs** — log de requests en tiempo real con desglose de métricas
 - **Auditoría** — historial de acciones con usuario, tipo de acción, recurso, IP y paginación
@@ -238,6 +245,10 @@ Opciones: `required` (NOT NULL), `unique`, `default` (expresión SQL).
 
 Columnas auto-generadas: `id` (UUID), `created_at`, `updated_at`, `deleted_at` (nullable, usada cuando el soft delete está activo).
 
+### Relaciones e índices
+
+Una tabla puede declarar foreign keys (`references`: tabla/columna destino + `on_delete`) e índices. El schema se valida antes de ejecutar cualquier DDL (tabla/columna inexistente, `on_delete` inválido, nombres de índice duplicados, dependencias circulares de FK) y las tablas se crean en orden de dependencia. El aprovisionamiento de índices es idempotente — nada se elimina implícitamente — y borrar una tabla todavía referenciada por la foreign key de otra se rechaza con un error claro.
+
 ### App Tokens
 
 Para apps sin auth por email/contraseña, puedes crear tokens de API con expiración configurable (7d, 30d, 365d, o nunca). Los tokens usan JWT con `jti` único — revocables individualmente, con un endpoint de renovación que extiende la expiración. La revocación se verifica en cada request vía una caché en memoria con invalidación inmediata al revocar.
@@ -256,7 +267,7 @@ Las apps frontend te permiten desplegar sitios y apps web sin configuración:
 
 ### Proveedor de Deploy
 
-- **Render** — configura API key, project ID y dominio base. Cada app frontend se despliega como un static site de Render con configuración automática de dominio personalizado.
+- **Render** — configura API key, project ID, environment ID y dominio base. Cada app frontend se despliega como un static site de Render con configuración automática de dominio personalizado. Render asigna los servicios a un *Environment*, no a un Project: el environment se resuelve automáticamente cuando el project tiene solo uno, y debe indicarse explícitamente en caso contrario. El dashboard también muestra los deploys más recientes de tus apps frontend.
 
 ### Integración con GitHub
 
@@ -276,7 +287,7 @@ Zeep Orbit se conecta a GitHub mediante una **GitHub App** — nunca OAuth ni un
 
 Generá una **private key** en la página de configuración de la App (descarga un archivo `.pem`) y anotá **App ID**, **App slug**, **Client ID** y **Client Secret**.
 
-**2. Configurá en el dashboard** — andá a **Integraciones → GitHub** y pegá el App ID, App slug, Client ID, Client Secret, y el contenido completo del archivo `.pem` de la private key. El Webhook Secret puede ser cualquier valor (reservado para uso futuro — no se valida hoy).
+**2. Configurá en el dashboard** — andá a **Integraciones → Configuración** y pegá el App ID, App slug, Client ID, Client Secret, y el contenido completo del archivo `.pem` de la private key.
 
 **3. Instalá** — hacé clic en **Instalar**, que corre el flujo nativo de instalación de GitHub. Elegí siempre **"Only select repositories"** y marcá los repos que esta instancia debe gestionar — la API crea repos nuevos y gestiona deploy keys solo dentro de ese alcance, nunca "All repositories".
 
@@ -467,29 +478,48 @@ Para añadir una entrada nueva: edita `internal/dashboard/changelog.json`, añad
 
 ## 🗺️ Roadmap
 
+El detalle completo (checklists por milestone, specs vinculadas) vive en [`.specs/project/ROADMAP.md`](../.specs/project/ROADMAP.md) — esta tabla es un resumen, sincronizado con él.
+
 | Milestone | Estado | Funcionalidades |
 |---|---|---|
-| **M1 — MVP Core** | Hecho | Schema → REST, CLI, Docker Compose |
-| **M2 — Dashboard** | Hecho | CRUD de apps, Data Browser, Logs, Usuarios, Auth, White-label |
-| **M3 — Gobernanza** | Hecho | Audit Log, Soft Delete, Rate Limiting, App Tokens |
-| **M4 — Storage & Events** | Hecho | Almacenamiento S3, configuración de storage por app |
-| **M5 — Frontend Deploy** | Hecho | Integración con GitHub, Plantillas, Deploy en Render, Dominios personalizados |
-| **M6 — i18n** | Hecho | pt-BR / English, selector de idioma |
-| **M7 — SDKs** | Hecho | Clientes TS, Go, Python, Rust, Java, PHP |
-| **M8 — IA y Automatización** | Planeado | Creación de schema en lenguaje natural, servidor MCP |
+| **M1 — MVP Core** | ✅ Hecho | Schema → REST, CLI, Docker Compose |
+| **M2 — Developer Experience** | ✅ Hecho | Dashboard, SDKs, relaciones e índices, migraciones, filtrado/ordenamiento |
+| **M3 — Apps Frontend** | ✅ Hecho | Integración con GitHub, Plantillas, Deploy en Render, Dominios personalizados |
+| **M4 — Gobernanza & Seguridad** | 🔵 En desarrollo | Audit Log, Soft Delete + retención/purga, SSO, Rate Limiting, [RBAC por app](../.specs/features/rbac-per-app/) (admin/editor/viewer), [roles globales del dashboard](../.specs/features/dashboard-global-roles/) (superadmin/admin/auditor/member) · planeado: [2FA](../.specs/features/two-factor-auth/), flujo de aprobación de cambios de schema |
+| **M5 — Storage & Events** | 🔵 En desarrollo | Almacenamiento S3 · planeado: webhooks, event bus |
+| **M6 — i18n** | ✅ Hecho | pt-BR / English, selector de idioma |
+| **M7 — SDKs** | ✅ Hecho | Clientes TS, Go, Python, Rust, Java, PHP |
+| **M8 — Platform Services** | 🔵 En desarrollo | planeado: [integración SMTP/email](../.specs/features/smtp-email-integration/) (invitaciones, recuperación de contraseña), [integraciones de observabilidad](../.specs/features/observability-integrations/) (OpenTelemetry, Datadog, New Relic) |
+| **M9 — Enterprise Licensing** | 🔵 En desarrollo | planeado: [modelo de licenciamiento dual](../.specs/features/enterprise-licensing/) (núcleo MIT + funcionalidades enterprise bloqueadas) |
+
+### Planeado — visible en el dashboard, todavía no funcional
+
+Algunos de estos ítems ya aparecen en el dashboard como controles deshabilitados o badge "Pronto", para dejar el roadmap visible donde va a aterrizar. **No tienen backend hoy** y no hacen nada al hacer clic:
+
+| Ítem | Dónde aparece |
+|---|---|
+| Autenticación de dos factores ([spec](../.specs/features/two-factor-auth/)) | Configuración → Proveedor de auth ("Exigir 2FA para todos los admins"), Usuarios del dashboard (acción "Resetear 2FA") |
+| Aprobación de cambios de schema | Configuración → Base de datos ("Exigir aprobación de cambios de schema") |
+| Licenciamiento enterprise ([spec](../.specs/features/enterprise-licensing/)) | Configuración → Licencia (preview solo de UI, pestaña bloqueada) |
+| Code hosting: GitLab, Bitbucket | Integraciones → Configuración (selector de proveedor) |
+| Proveedores de deploy: Cloudflare Pages, DigitalOcean, AWS, Azure, Google Cloud | Integraciones → Proveedores de deploy (selector de proveedor) |
+| Proveedores de auth del dashboard: Microsoft Entra ID, Sign in with Apple, GitHub | Configuración → Proveedor de auth |
+| Proveedores de storage: Azure Blob Storage, Google Cloud Storage | Configuración → Storage |
+| Creación de app asistida por IA | Apps → "Crear con IA" |
 
 ### Diferido / Backlog
 
 - Inicio de sesión con Apple (por app)
 - Generador de código para el SDK de TypeScript (`@zeeptech/orbit-generate`)
+- Snippets oficiales de prompt para Claude Code / Cursor / Lovable
+- Servidor MCP para operaciones de zeep-orbit
 - Auto-generación de GraphQL
 - Subscripciones en tiempo real (WebSockets)
 - Edge functions
-- Flujo de aprobación de cambios de schema
+- Soporte multi-región
 - Marketplace de plantillas de apps
-- Webhooks y Event Bus
-- RBAC con permisos granulares
-- Integración SSO / SAML
+- RBAC con permisos granulares por acción (más allá de los niveles fijos admin/editor/viewer)
+- SSO Microsoft Entra ID
 
 ---
 

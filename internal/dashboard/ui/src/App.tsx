@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { lazy, Suspense } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Navigate, Routes, Route, useParams } from 'react-router-dom'
@@ -18,9 +18,14 @@ import SdkPage from './pages/SdkPage'
 import ChangelogPage from './pages/ChangelogPage'
 import AppUsersPage from './pages/AppUsersPage'
 import DataBrowserPage from './pages/DataBrowserPage'
+import AccessDenied from './pages/AccessDenied'
+import { RequireRole } from './components/patterns/RequireRole'
 import { Toaster } from 'sonner'
-import { useBootstrapStatus, usePublicConfig } from './lib/api'
-import { THEMES, applyTheme } from './lib/themes'
+import { useBootstrapStatus } from './lib/api'
+
+const ComponentsSandbox = import.meta.env.DEV
+  ? lazy(() => import('./pages/dev/ComponentsSandbox'))
+  : null
 
 function LoadingScreen() {
   const { t } = useTranslation()
@@ -31,13 +36,13 @@ function LoadingScreen() {
         alignItems: 'center',
         justifyContent: 'center',
         height: '100vh',
-        background: 'var(--bg)',
+        background: 'var(--bg-page)',
       }}
     >
       <div
         style={{
-          color: 'rgba(255,255,255,0.4)',
-          fontFamily: 'Plus Jakarta Sans, sans-serif',
+          color: 'var(--text-tertiary)',
+          fontFamily: 'var(--font-ui)',
         }}
       >
         {t("app.loading")}
@@ -54,14 +59,6 @@ function RedirectToAppDetails() {
 function App() {
   const qc = useQueryClient()
 
-  const { data: config, isLoading: configLoading } = usePublicConfig()
-
-  useEffect(() => {
-    if (!config) return
-    const theme = THEMES[config.theme] || THEMES.azure
-    applyTheme(theme)
-  }, [config])
-
   const { data: status, isLoading: statusLoading } = useBootstrapStatus()
 
   const { data: user, isLoading: userLoading } = useQuery({
@@ -75,7 +72,7 @@ function App() {
     enabled: status?.bootstrapped === true,
   })
 
-  if (statusLoading || configLoading || (status?.bootstrapped && userLoading)) {
+  if (statusLoading || (status?.bootstrapped && userLoading)) {
     return <LoadingScreen />
   }
 
@@ -90,6 +87,16 @@ function App() {
   return (
     <>
       <Routes>
+        {ComponentsSandbox && (
+          <Route
+            path="/dev/components"
+            element={
+              <Suspense fallback={null}>
+                <ComponentsSandbox />
+              </Suspense>
+            }
+          />
+        )}
         <Route path="/login" element={user ? <Navigate to="/apps" replace /> : <LoginPage />} />
         <Route path="/google-setup" element={
           !user ? <Navigate to="/login" replace /> :
@@ -105,25 +112,37 @@ function App() {
           <Route path="/apps/:id" element={<AppDetailsPage />} />
           <Route path="/apps/:id/edit" element={<RedirectToAppDetails />} />
           <Route path="/apps/:id/users" element={<AppUsersPage />} />
-          <Route path="/configuracoes" element={<BrandSettingsPage />} />
+          <Route
+            path="/configuracoes"
+            element={<RequireRole allow={['superadmin', 'admin']}><BrandSettingsPage /></RequireRole>}
+          />
           <Route path="/data-browser" element={<DataBrowserPage />} />
-          <Route path="/usuarios" element={<UsersPage />} />
+          <Route
+            path="/usuarios"
+            element={<RequireRole allow={['superadmin', 'admin']}><UsersPage /></RequireRole>}
+          />
           <Route path="/logs" element={<LogsPage />} />
-          <Route path="/auditoria" element={<AuditLogPage />} />
-          <Route path="/integracoes/github" element={<GitHubIntegrationPage />} />
+          <Route
+            path="/auditoria"
+            element={<RequireRole allow={['superadmin', 'auditor']}><AuditLogPage /></RequireRole>}
+          />
+          <Route
+            path="/integracoes/github"
+            element={<RequireRole allow={['superadmin']}><GitHubIntegrationPage /></RequireRole>}
+          />
           <Route path="/sdks" element={<SdkPage />} />
           <Route path="/changelog" element={<ChangelogPage />} />
+          <Route path="/403" element={<AccessDenied />} />
         </Route>
         <Route path="*" element={<Navigate to="/apps" replace />} />
       </Routes>
       <Toaster
         position="bottom-right"
-        theme="dark"
         toastOptions={{
           style: {
-            background: '#1A1A24',
-            border: '1px solid rgba(255,255,255,0.10)',
-            color: '#F8FAFC',
+            background: 'var(--surface-raised)',
+            border: '1px solid var(--border)',
+            color: 'var(--text-primary)',
           },
         }}
       />

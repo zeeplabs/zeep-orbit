@@ -13,6 +13,11 @@ import (
 // ErrNotFound is returned when a record is not found.
 var ErrNotFound = errors.New("not found")
 
+// ErrForbidden is returned when the caller has no permission to perform the
+// action. The record may exist; the store layer is telling the caller "you
+// can't touch this." Handlers map this to HTTP 403.
+var ErrForbidden = errors.New("forbidden")
+
 // DashboardUser represents a row in zeep_system.dashboard_users.
 type DashboardUser struct {
 	ID           string    `json:"id"`
@@ -23,6 +28,10 @@ type DashboardUser struct {
 	Role         string    `json:"role"`
 	Language     string    `json:"language,omitempty"`
 	CreatedAt    time.Time `json:"created_at"`
+	// SignIn is the derived sign-in method ("google" when the account is
+	// linked to a Google identity, "email" otherwise). Not a stored column;
+	// populated by list/read queries so the dashboard can show a SIGN-IN column.
+	SignIn string `json:"sign_in,omitempty"`
 }
 
 // GetUserByEmail fetches a dashboard user by email.
@@ -156,7 +165,7 @@ func BootstrapFirstSuperadmin(ctx context.Context, pool *db.Pool, email, name, p
 // ListUsers returns all dashboard users (password hash excluded from results).
 func ListUsers(ctx context.Context, pool *db.Pool) ([]*DashboardUser, error) {
 	rows, err := pool.Query(ctx,
-		`SELECT id, email, COALESCE(name, ''), role, COALESCE(language, 'en'), created_at
+		`SELECT id, email, COALESCE(name, ''), role, COALESCE(language, 'en'), created_at, COALESCE(google_id, '')
 		 FROM zeep_system.dashboard_users
 		 ORDER BY created_at DESC`,
 	)
@@ -168,12 +177,22 @@ func ListUsers(ctx context.Context, pool *db.Pool) ([]*DashboardUser, error) {
 	var users []*DashboardUser
 	for rows.Next() {
 		var u DashboardUser
-		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Language, &u.CreatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Language, &u.CreatedAt, &u.GoogleID); err != nil {
 			return nil, fmt.Errorf("dashboard: list users scan: %w", err)
 		}
+		u.SignIn = signInMethod(u.GoogleID)
 		users = append(users, &u)
 	}
 	return users, nil
+}
+
+// signInMethod derives the sign-in method shown in the dashboard from the
+// presence of a linked Google identity.
+func signInMethod(googleID string) string {
+	if googleID != "" {
+		return "google"
+	}
+	return "email"
 }
 
 // GetUser fetches a dashboard user by ID (without password hash).
@@ -235,6 +254,26 @@ func DeleteUser(ctx context.Context, pool *db.Pool, id string) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+// UpdateUserRole updates the role of an existing dashboard user. Returns
+// ErrNotFound if the user does not exist. The caller is responsible for
+// authorization checks (action gate, role-creation gate, ≥1-superadmin
+// invariant) — this function is a thin store layer.
+func UpdateUserRole(ctx context.Context, pool *db.Pool, id, role string) (*DashboardUser, error) {
+	var u DashboardUser
+	err := pool.QueryRow(ctx,
+		`UPDATE zeep_system.dashboard_users SET role = $1 WHERE id = $2
+		 RETURNING id, email, COALESCE(name, ''), role, COALESCE(language, 'en'), created_at`,
+		role, id,
+	).Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.Language, &u.CreatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("dashboard: update user role: %w", err)
+	}
+	return &u, nil
 }
 
 // DeleteExpiredSessions removes sessions past their expiry time.

@@ -1,15 +1,13 @@
-import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { motion } from "framer-motion";
-import { useTranslation } from "react-i18next";
-import { useSearchParams } from "react-router-dom";
-import { Save, Eye, EyeOff, Loader2, Link2, Trash2, Plus, Pencil, Rocket, ShieldAlert } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
+import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
+import { useSearchParams } from 'react-router-dom'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
+import { Icon } from '@/components/ui/icon'
 import {
   Dialog,
   DialogContent,
@@ -17,563 +15,608 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-
-const EASE = [0.32, 0.72, 0, 1] as const;
+} from '@/components/ui/dialog'
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { PageHeader, EmptyState, LoadingState, StatusPill, DataTable, ProviderTabs, AboutPanel } from '@/components/patterns'
+import type { Column } from '@/components/patterns'
+import { cn } from '@/lib/utils'
 
 interface GitHubStatus {
-  connected: boolean;
-  configured: boolean;
-  org_login: string;
+  connected: boolean
+  configured: boolean
+  org_login: string
 }
 
 interface GitHubTemplate {
-  id: string;
-  name: string;
-  description: string;
-  github_owner: string;
-  github_repo: string;
-  framework: string;
-  active: boolean;
-  created_by: string;
-  created_at: string;
-  render_service_type: string;
-  build_command: string;
-  publish_path: string;
-  start_command: string;
+  id: string
+  name: string
+  description: string
+  github_owner: string
+  github_repo: string
+  framework: string
+  active: boolean
+  created_by: string
+  created_at: string
+  render_service_type: string
+  build_command: string
+  publish_path: string
+  start_command: string
+}
+
+function PageFooter({ message, type }: { message: string | null; type: 'success' | 'error' }) {
+  if (!message) return null
+  return (
+    <div
+      className="mt-4 rounded-[10px] border px-3 py-2 text-[12.5px]"
+      style={{
+        background: type === 'success' ? 'var(--success-tint)' : 'var(--danger-tint)',
+        borderColor: type === 'success' ? 'var(--success)' : 'var(--danger)',
+        color: type === 'success' ? 'var(--success)' : 'var(--danger)',
+      }}
+    >
+      {message}
+    </div>
+  )
 }
 
 export default function GitHubIntegrationPage() {
-  const { t } = useTranslation();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const tab = searchParams.get("tab") || "config";
+  const { t } = useTranslation()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab = searchParams.get('tab') || 'config'
 
   const setTab = (value: string) => {
-    setSearchParams({ tab: value }, { replace: true });
-  };
+    setSearchParams({ tab: value }, { replace: true })
+  }
 
   const { data: me, isLoading: meLoading } = useQuery({
-    queryKey: ["me"],
+    queryKey: ['me'],
     queryFn: async () => {
-      const res = await fetch("/dashboard/api/me", { credentials: "include" });
-      if (!res.ok) return null;
-      return res.json() as Promise<{ id: string; email: string; name: string; role: string; language: string }>;
+      const res = await fetch('/dashboard/api/me', { credentials: 'include' })
+      if (!res.ok) return null
+      return res.json() as Promise<{ id: string; email: string; name: string; role: string; language: string }>
     },
     retry: false,
-  });
+  })
 
-  if (meLoading) return null;
+  if (meLoading) return null
 
-  if (me?.role !== "superadmin") {
+  if (me?.role !== 'superadmin') {
     return (
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: EASE }}
-        className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-12 text-center"
+      <div
+        className="flex flex-col items-center justify-center gap-3 rounded-[14px] border p-12 text-center"
+        style={{
+          background: 'var(--surface)',
+          borderColor: 'var(--border)',
+        }}
       >
-        <ShieldAlert size={32} className="text-[#64748B]" />
-        <h2 className="text-[16px] font-bold text-[#F8FAFC]">{t("github.forbiddenTitle", "Superadmin access required")}</h2>
-        <p className="max-w-md text-sm text-[#94A3B8]">{t("github.forbiddenBody", "GitHub integration, templates, and deploy provider settings can only be managed by a superadmin.")}</p>
-      </motion.div>
-    );
+        <div
+          className="flex h-14 w-14 items-center justify-center rounded-[14px]"
+          style={{ background: 'var(--hover-surface)' }}
+        >
+          <Icon name="shield" size={28} style={{ color: 'var(--text-tertiary)' }} />
+        </div>
+        <h2
+          className="text-base font-bold"
+          style={{ color: 'var(--text-primary)' }}
+        >
+          {t('github.forbiddenTitle')}
+        </h2>
+        <p
+          className="max-w-md text-sm"
+          style={{ color: 'var(--text-secondary)' }}
+        >
+          {t('github.forbiddenBody')}
+        </p>
+      </div>
+    )
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: EASE }}
-    >
-      <div className="mb-8">
-        <span
-          className="mb-3 inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em]"
-          style={{
-            borderColor: "rgba(var(--brand-primary-rgb), 0.2)",
-            backgroundColor: "rgba(var(--brand-primary-rgb), 0.12)",
-            color: "var(--brand-light)",
-          }}
-        >
-          <Link2 size={12} strokeWidth={1.5} />
-          {t("integrations.title")}
-        </span>
-        <h2 className="text-[22px] font-extrabold text-[#F8FAFC]">{t("github.title")}</h2>
-        <p className="mt-1 text-sm text-[#94A3B8]">{t("github.subtitle")}</p>
-      </div>
+    <>
+      <PageHeader title={t('github.title')} subtitle={t('github.subtitle')} />
 
       <Tabs value={tab} onValueChange={setTab} className="w-full">
-        <TabsList className="w-full justify-start gap-1 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-1.5 mb-6 h-auto overflow-x-auto">
-          <TabsTrigger value="config" className="rounded-xl data-[state=active]:bg-white/[0.08] data-[state=active]:shadow-none text-[13px] gap-1.5">
-            <Link2 size={14} /> {t("github.tabConfig")}
+        <TabsList className="mb-6 h-auto w-full justify-start gap-1 overflow-x-auto rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-1.5">
+          <TabsTrigger
+            value="config"
+            className="gap-1.5 rounded-[8px] text-[13px] text-[var(--text-secondary)] data-[state=active]:bg-[var(--hover-surface)] data-[state=active]:text-[var(--text-primary)] data-[state=active]:shadow-none"
+          >
+            <Icon name="link" size={14} />
+            {t('github.tabConfig')}
           </TabsTrigger>
-          <TabsTrigger value="templates" className="rounded-xl data-[state=active]:bg-white/[0.08] data-[state=active]:shadow-none text-[13px] gap-1.5">
-            <Save size={14} /> {t("github.tabTemplates")}
+          <TabsTrigger
+            value="templates"
+            className="gap-1.5 rounded-[8px] text-[13px] text-[var(--text-secondary)] data-[state=active]:bg-[var(--hover-surface)] data-[state=active]:text-[var(--text-primary)] data-[state=active]:shadow-none"
+          >
+            <Icon name="code" size={14} />
+            {t('github.tabTemplates')}
           </TabsTrigger>
-          <TabsTrigger value="deploy" className="rounded-xl data-[state=active]:bg-white/[0.08] data-[state=active]:shadow-none text-[13px] gap-1.5">
-            <Rocket size={14} /> {t("deploy.tabDeploy", "Deploy")}
+          <TabsTrigger
+            value="deploy"
+            className="gap-1.5 rounded-[8px] text-[13px] text-[var(--text-secondary)] data-[state=active]:bg-[var(--hover-surface)] data-[state=active]:text-[var(--text-primary)] data-[state=active]:shadow-none"
+          >
+            <Icon name="rocket_launch" size={14} />
+            {t('deploy.tabDeploy')}
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="config" className="mt-0">
           <GitHubConfigTab />
         </TabsContent>
-
         <TabsContent value="templates" className="mt-0">
           <GitHubTemplatesTab />
         </TabsContent>
-
         <TabsContent value="deploy" className="mt-0">
           <DeployTab />
         </TabsContent>
       </Tabs>
-    </motion.div>
-  );
+    </>
+  )
 }
 
 function GitHubConfigTab() {
-  const { t } = useTranslation();
-  const [status, setStatus] = useState<GitHubStatus | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [messageType, setMessageType] = useState<"success" | "error">("success");
+  const { t } = useTranslation()
+  const [status, setStatus] = useState<GitHubStatus | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+  const [messageType, setMessageType] = useState<'success' | 'error'>('success')
 
-  const [appId, setAppId] = useState("");
-  const [appSlug, setAppSlug] = useState("");
-  const [clientId, setClientId] = useState("");
-  const [clientSecret, setClientSecret] = useState("");
-  const [privateKey, setPrivateKey] = useState("");
-  const [webhookSecret, setWebhookSecret] = useState("");
-  const [showSecret, setShowSecret] = useState(false);
-  const [showPrivateKey, setShowPrivateKey] = useState(false);
+  const [appId, setAppId] = useState('')
+  const [appSlug, setAppSlug] = useState('')
+  const [clientId, setClientId] = useState('')
+  const [clientSecret, setClientSecret] = useState('')
+  const [privateKey, setPrivateKey] = useState('')
+  const [showSecret, setShowSecret] = useState(false)
+  const [showPrivateKey, setShowPrivateKey] = useState(false)
 
-  const [disconnecting, setDisconnecting] = useState(false);
-  const [showDisconnectDialog, setShowDisconnectDialog] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false)
+  const [showDisconnectDialog, setShowDisconnectDialog] = useState(false)
+  const [installing, setInstalling] = useState(false)
 
-  const [installing, setInstalling] = useState(false);
+  const [linkedTemplates, setLinkedTemplates] = useState<GitHubTemplate[]>([])
 
   useEffect(() => {
-    fetchStatus();
-  }, []);
+    fetchStatus()
+    fetch('/dashboard/api/github/templates', { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setLinkedTemplates(data))
+      .catch(() => {
+        // non-critical, section just renders empty
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const fetchStatus = async () => {
     try {
-      const res = await fetch("/dashboard/api/github/status", { credentials: "include" });
-      const data = await res.json();
-      setStatus(data);
+      const res = await fetch('/dashboard/api/github/status', { credentials: 'include' })
+      const data = await res.json()
+      setStatus(data)
       if (data.configured) {
-        fetchConfig();
+        fetchConfig()
       }
     } catch {
+      // non-critical
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   const fetchConfig = async () => {
     try {
-      const res = await fetch("/dashboard/api/github/config", { credentials: "include" });
-      const data = await res.json();
-      setAppId(data.app_id || "");
-      setAppSlug(data.app_slug || "");
-      setClientId(data.client_id || "");
+      const res = await fetch('/dashboard/api/github/config', { credentials: 'include' })
+      const data = await res.json()
+      setAppId(data.app_id || '')
+      setAppSlug(data.app_slug || '')
+      setClientId(data.client_id || '')
     } catch {
+      // non-critical
     }
-  };
+  }
 
   const handleSave = async () => {
-    setSaving(true);
-    setMessage(null);
+    setSaving(true)
+    setMessage(null)
     try {
-      const res = await fetch("/dashboard/api/github/config", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('/dashboard/api/github/config', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           app_id: appId,
           app_slug: appSlug,
           client_id: clientId,
           client_secret: clientSecret,
           private_key: privateKey,
-          webhook_secret: webhookSecret,
         }),
-      });
-      const data = await res.json();
+      })
+      const data = await res.json()
       if (!res.ok) {
-        setMessage(data.error || t("common.errorSaving"));
-        setMessageType("error");
-        return;
+        setMessage(data.error || t('common.errorSaving'))
+        setMessageType('error')
+        return
       }
-      setMessage(t("github.configSaved"));
-      setMessageType("success");
-      setClientSecret("");
-      setPrivateKey("");
-      setWebhookSecret("");
-      await fetchStatus();
+      setMessage(t('github.configSaved'))
+      setMessageType('success')
+      setClientSecret('')
+      setPrivateKey('')
+      await fetchStatus()
     } catch {
-      setMessage(t("common.errorSaving"));
-      setMessageType("error");
+      setMessage(t('common.errorSaving'))
+      setMessageType('error')
     } finally {
-      setSaving(false);
+      setSaving(false)
     }
-  };
-
-  const handleInstall = async () => {
-    setInstalling(true);
-    try {
-      const res = await fetch("/dashboard/api/github/install/start", { credentials: "include" });
-      const data = await res.json();
-      if (data.install_url) {
-        window.location.href = data.install_url;
-      }
-    } catch {
-      setInstalling(false);
-    }
-  };
-
-  const handleDisconnect = async () => {
-    setDisconnecting(true);
-    try {
-      const res = await fetch("/dashboard/api/github/config", {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (res.ok) {
-        setStatus({ connected: false, configured: false, org_login: "" });
-        setMessage(t("github.disconnected"));
-        setMessageType("success");
-      }
-    } catch {
-      setMessage(t("common.errorSaving"));
-      setMessageType("error");
-    } finally {
-      setDisconnecting(false);
-      setShowDisconnectDialog(false);
-    }
-  };
-
-  useEffect(() => {
-    const searchParams = new URLSearchParams(window.location.search);
-    if (searchParams.get("installed") === "true") {
-      fetchStatus();
-      setMessage(t("github.installed"));
-      setMessageType("success");
-      const url = new URL(window.location.href);
-      url.searchParams.delete("installed");
-      window.history.replaceState({}, "", url.toString());
-    }
-  }, []);
-
-  if (loading) {
-    return <p className="text-[13px] text-[#94A3B8]">{t("app.loading")}</p>;
   }
 
-  const inputClass =
-    "h-10 rounded-md border border-white/[0.10] bg-white/[0.06] text-[13px] text-[#F8FAFC] placeholder:text-[#64748B] outline-none brand-focus w-full";
+  const handleInstall = async () => {
+    setInstalling(true)
+    try {
+      const res = await fetch('/dashboard/api/github/install/start', { credentials: 'include' })
+      const data = await res.json()
+      if (data.install_url) {
+        window.location.href = data.install_url
+      }
+    } catch {
+      setInstalling(false)
+    }
+  }
+
+  const handleDisconnect = async () => {
+    setDisconnecting(true)
+    try {
+      const res = await fetch('/dashboard/api/github/config', {
+        method: 'DELETE',
+        credentials: 'include',
+      })
+      if (res.ok) {
+        setStatus({ connected: false, configured: false, org_login: '' })
+        setMessage(t('github.disconnected'))
+        setMessageType('success')
+      }
+    } catch {
+      setMessage(t('common.errorSaving'))
+      setMessageType('error')
+    } finally {
+      setDisconnecting(false)
+      setShowDisconnectDialog(false)
+    }
+  }
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('installed') === 'true') {
+      fetchStatus()
+      setMessage(t('github.installed'))
+      setMessageType('success')
+      const url = new URL(window.location.href)
+      url.searchParams.delete('installed')
+      window.history.replaceState({}, '', url.toString())
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  if (loading) return <LoadingState rows={4} />
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <span className="text-[15px] font-bold text-[#F8FAFC]">GitHub App</span>
-            <p className="text-[12px] text-[#94A3B8] mt-0.5">{t("github.configDesc")}</p>
-          </div>
-          {status?.configured && (
-            <div className="flex items-center gap-3">
-              <Badge
-                variant="outline"
-                className={`gap-1.5 text-[11px] font-medium ${
-                  status.connected
-                    ? "border-emerald-500/20 bg-emerald-500/[0.10] text-emerald-300"
-                    : "border-amber-500/20 bg-amber-500/[0.10] text-amber-300"
-                }`}
+    <div className="flex flex-wrap items-start gap-6">
+      <div className="flex min-w-[420px] flex-1 flex-col gap-6">
+      <div className="flex flex-col gap-3">
+        <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
+          {t('integrations.codeHostSectionTitle')}
+        </div>
+        <ProviderTabs
+          value="github"
+          items={[
+            { key: 'github', name: 'GitHub', icon: 'code' },
+            { key: 'gitlab', name: 'GitLab', icon: 'merge_type', disabled: true, badge: t('apps.soon') },
+            { key: 'bitbucket', name: 'Bitbucket', icon: 'account_tree', disabled: true, badge: t('apps.soon') },
+          ]}
+        />
+      </div>
+
+      <div
+        className="flex flex-col gap-6 rounded-[14px] border p-6"
+        style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
+      >
+        <div className="flex items-center justify-between">
+          {status?.configured ? (
+            <div className="flex items-center gap-2">
+              <span
+                className="size-2 rounded-full"
+                style={{ background: status.connected ? 'var(--success)' : 'var(--warning)' }}
+              />
+              <span
+                className="text-[13px] font-semibold"
+                style={{ color: status.connected ? 'var(--success)' : 'var(--warning)' }}
               >
-                <span
-                  className={`size-1.5 rounded-full ${
-                    status.connected ? "bg-emerald-400" : "bg-amber-400"
-                  }`}
-                />
-                {status.connected ? t("github.connected") : t("github.notConnected")}
-              </Badge>
-              {status.connected && status.org_login && (
-                <span className="text-[12px] text-[#64748B]">{status.org_login}</span>
-              )}
+                {status.connected
+                  ? `${t('github.connected')} · ${status.org_login}`
+                  : t('github.notConnected')}
+              </span>
             </div>
+          ) : (
+            <div>
+              <div className="text-[15px] font-bold" style={{ color: 'var(--text-primary)' }}>
+                GitHub App
+              </div>
+              <p className="mt-0.5 text-[12px]" style={{ color: 'var(--text-secondary)' }}>
+                {t('github.configDesc')}
+              </p>
+            </div>
+          )}
+          {status?.configured && (
+            <Button
+              onClick={() => setShowDisconnectDialog(true)}
+              disabled={disconnecting}
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+            >
+              <Icon name="link_off" size={14} />
+              {t('github.disconnect')}
+            </Button>
           )}
         </div>
 
-        <div className="flex flex-col gap-4 max-w-lg">
-          <div>
-            <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">
-              {t("github.appId")}
-            </label>
-            <Input
-              value={appId}
-              onChange={(e) => setAppId(e.target.value)}
-              placeholder="123456"
-              className={inputClass}
-            />
+        <div className="flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="gh-app-id" className="text-[12px] font-semibold">
+                {t('github.appId')}
+              </Label>
+              <Input id="gh-app-id" value={appId} onChange={(e) => setAppId(e.target.value)} placeholder="123456" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="gh-app-slug" className="text-[12px] font-semibold">
+                {t('github.appSlug')}
+              </Label>
+              <Input id="gh-app-slug" value={appSlug} onChange={(e) => setAppSlug(e.target.value)} placeholder="my-orbit-app" />
+            </div>
           </div>
-
-          <div>
-            <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">
-              {t("github.appSlug")}
-            </label>
-            <Input
-              value={appSlug}
-              onChange={(e) => setAppSlug(e.target.value)}
-              placeholder="my-orbit-app"
-              className={inputClass}
-            />
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="gh-client-id" className="text-[12px] font-semibold">
+              {t('github.clientId')}
+            </Label>
+            <Input id="gh-client-id" value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder="Iv23li..." />
           </div>
-
-          <div>
-            <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">
-              {t("github.clientId")}
-            </label>
-            <Input
-              value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
-              placeholder="Iv23li..."
-              className={inputClass}
-            />
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">
-              {t("github.clientSecret")}
-            </label>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="gh-client-secret" className="text-[12px] font-semibold">
+              {t('github.clientSecret')}
+            </Label>
             <div className="relative">
               <Input
-                type={showSecret ? "text" : "password"}
+                id="gh-client-secret"
+                type={showSecret ? 'text' : 'password'}
                 value={clientSecret}
                 onChange={(e) => setClientSecret(e.target.value)}
-                placeholder={status?.configured ? "•••••••• (empty = keep current)" : t("github.clientSecret")}
-                className={inputClass + " pr-10"}
+                placeholder={status?.configured ? '•••••••• (empty = keep current)' : t('github.clientSecret')}
+                className="pr-10"
               />
               <button
                 type="button"
-                title="Show/hide secret"
                 onClick={() => setShowSecret(!showSecret)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#F8FAFC] bg-none border-none cursor-pointer"
+                aria-label={showSecret ? t('login.hidePassword') : t('login.showPassword')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center justify-center"
+                style={{ color: 'var(--text-tertiary)' }}
               >
-                {showSecret ? <EyeOff size={16} /> : <Eye size={16} />}
+                <Icon name={showSecret ? 'visibility_off' : 'visibility'} size={16} />
               </button>
             </div>
           </div>
-
-          <div>
-            <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">
-              {t("github.privateKey")}
-            </label>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="gh-private-key" className="text-[12px] font-semibold">
+              {t('github.privateKey')}
+            </Label>
             <div className="relative">
               <textarea
+                id="gh-private-key"
                 value={privateKey}
                 onChange={(e) => setPrivateKey(e.target.value)}
-                placeholder={status?.configured ? "•••••••• (empty = keep current)" : t("github.privateKeyPlaceholder")}
+                placeholder={status?.configured ? '•••••••• (empty = keep current)' : t('github.privateKey')}
                 rows={4}
-                className={
-                  inputClass +
-                  " h-auto resize-none font-mono text-[12px] py-2 pr-10"
-                }
+                className="w-full resize-none rounded-[10px] border px-3 py-2 font-mono text-[12px] outline-none"
+                style={{
+                  background: 'var(--bg-page)',
+                  borderColor: 'var(--border-strong)',
+                  color: 'var(--text-primary)',
+                  fontFamily: 'var(--font-mono)',
+                }}
               />
               <button
                 type="button"
-                title="Show/hide private key"
                 onClick={() => setShowPrivateKey(!showPrivateKey)}
-                className="absolute right-3 top-3 text-[#64748B] hover:text-[#F8FAFC] bg-none border-none cursor-pointer"
+                aria-label={showPrivateKey ? t('login.hidePassword') : t('login.showPassword')}
+                className="absolute right-2.5 top-2.5 flex items-center justify-center"
+                style={{ color: 'var(--text-tertiary)' }}
               >
-                {showPrivateKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                <Icon name={showPrivateKey ? 'visibility_off' : 'visibility'} size={16} />
               </button>
             </div>
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">
-              {t("github.webhookSecret")}
-            </label>
-            <Input
-              type="password"
-              value={webhookSecret}
-              onChange={(e) => setWebhookSecret(e.target.value)}
-              placeholder={status?.configured ? "•••••••• (empty = keep current)" : t("github.webhookSecret")}
-              className={inputClass}
-            />
           </div>
         </div>
 
-        {message && (
-          <p className={`mt-4 text-[12px] ${messageType === "success" ? "text-green-400" : "text-red-400"}`}>
-            {message}
-          </p>
-        )}
+        <PageFooter message={message} type={messageType} />
 
-        <div className="flex items-center gap-3 mt-5">
-          <Button
-            onClick={handleSave}
-            disabled={saving}
-            className="gap-2 rounded-xl border-0 text-white font-semibold disabled:opacity-40"
-            style={{
-              background: "linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))",
-            }}
-          >
+        <div className="flex items-center gap-3">
+          <Button onClick={handleSave} disabled={saving} className="gap-2">
             {saving ? (
               <>
-                <Loader2 size={14} className="animate-spin" /> {t("brand.saving")}
+                <Icon name="progress_activity" size={14} className="animate-spin" /> {t('brand.saving')}
               </>
             ) : (
               <>
-                <Save size={14} /> {t("brand.save")}
+                <Icon name="check" size={14} /> {t('brand.save')}
               </>
             )}
           </Button>
 
           {status?.configured && (
-            <>
-              <Button
-                onClick={handleInstall}
-                disabled={installing || status.connected}
-                variant="outline"
-                className="gap-2 rounded-xl border-white/[0.10] bg-white/[0.06] text-[#94A3B8] hover:bg-white/[0.10] hover:text-[#F8FAFC] font-medium"
-              >
-                {installing ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <Link2 size={14} />
-                )}
-                {status.connected ? t("github.installed") : t("github.install")}
-              </Button>
-
-              <Button
-                onClick={() => setShowDisconnectDialog(true)}
-                disabled={disconnecting}
-                variant="outline"
-                className="gap-2 rounded-xl border-red-500/20 bg-red-500/[0.06] text-red-400 hover:bg-red-500/10 hover:text-red-400 font-medium"
-              >
-                <Trash2 size={14} />
-                {t("github.disconnect")}
-              </Button>
-            </>
+            <Button
+              onClick={handleInstall}
+              disabled={installing || status.connected}
+              variant="outline"
+              className="gap-2"
+            >
+              {installing ? (
+                <Icon name="progress_activity" size={14} className="animate-spin" />
+              ) : (
+                <Icon name="link" size={14} />
+              )}
+              {status.connected ? t('github.installed') : t('github.install')}
+            </Button>
           )}
         </div>
       </div>
 
       <Dialog open={showDisconnectDialog} onOpenChange={setShowDisconnectDialog}>
-        <DialogContent
-          className="max-w-[420px] border border-white/[0.10] bg-[#0D0D14]/60 backdrop-blur-xl rounded-2xl p-0 gap-0 [&>button]:text-[#94A3B8] [&>button]:hover:text-[#F8FAFC] [&>button]:hover:bg-white/[0.08]"
-          style={{ boxShadow: "0 0 40px rgba(var(--brand-primary-rgb), 0.10)" }}
-        >
-          <div className="bg-white/[0.04] shadow-[inset_0_1px_1px_rgba(255,255,255,0.10)] rounded-[calc(1rem-2px)] px-7 pb-6 pt-7">
-            <DialogHeader className="mb-0">
-              <div className="w-11 h-11 rounded-xl bg-red-500/[0.12] border border-red-500/[0.20] flex items-center justify-center mb-[18px]">
-                <Trash2 size={18} strokeWidth={1.5} className="text-red-500" />
-              </div>
-              <DialogTitle className="text-base font-bold text-[#F8FAFC] mb-2">
-                {t("github.disconnectTitle")}
-              </DialogTitle>
-              <DialogDescription className="text-[13px] text-[#94A3B8] leading-relaxed mb-6">
-                {t("github.disconnectDesc")}
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter className="flex flex-row gap-2.5 sm:flex-row sm:justify-start sm:space-x-0">
-              <Button
-                variant="outline"
-                onClick={() => setShowDisconnectDialog(false)}
-                className="flex-1 rounded-xl border-white/[0.10] bg-white/[0.06] text-[#94A3B8] hover:bg-white/[0.10] hover:text-[#F8FAFC] font-medium"
-              >
-                {t("github.disconnectCancel")}
-              </Button>
-              <Button
-                onClick={handleDisconnect}
-                disabled={disconnecting}
-                className="flex-1 rounded-xl bg-red-500 hover:bg-red-600 text-white font-semibold border-0 disabled:bg-red-500/40"
-              >
-                {disconnecting ? t("github.disconnecting") : t("github.disconnectConfirm")}
-              </Button>
-            </DialogFooter>
-          </div>
+        <DialogContent className="max-w-[420px]">
+          <DialogHeader>
+            <div
+              className="mb-[18px] flex h-11 w-11 items-center justify-center rounded-[10px] border"
+              style={{ background: 'var(--danger-tint)', borderColor: 'var(--danger)' }}
+            >
+              <Icon name="link_off" size={18} style={{ color: 'var(--danger)' }} />
+            </div>
+            <DialogTitle>{t('github.disconnectTitle')}</DialogTitle>
+            <DialogDescription>{t('github.disconnectDesc')}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDisconnectDialog(false)}>
+              {t('github.disconnectCancel')}
+            </Button>
+            <Button
+              onClick={handleDisconnect}
+              disabled={disconnecting}
+              style={{ background: 'var(--danger)', color: '#fff' }}
+            >
+              {disconnecting ? t('github.disconnecting') : t('github.disconnectConfirm')}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {linkedTemplates.length > 0 && (
+        <div
+          className="flex flex-col gap-1 rounded-[14px] border p-2"
+          style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
+        >
+          <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
+            {t('integrations.linkedTemplatesTitle')}
+          </div>
+          {linkedTemplates.map((tpl) => (
+            <div key={tpl.id} className="flex items-center gap-3 rounded-[10px] px-3 py-2.5" style={{ color: 'var(--text-primary)' }}>
+              <Icon name="frame_source" size={16} style={{ color: 'var(--text-tertiary)' }} />
+              <span className="flex-1 truncate text-[13px] font-medium">{tpl.name}</span>
+              <span className="truncate font-mono text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
+                {tpl.github_owner}/{tpl.github_repo}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      </div>
+      <AboutPanel
+        title={t('integrations.aboutCodeHostingTitle')}
+        lines={[
+          t('integrations.aboutCodeHostingLine1'),
+          t('integrations.aboutCodeHostingLine2'),
+          t('integrations.aboutCodeHostingLine3'),
+        ]}
+      />
     </div>
-  );
+  )
 }
 
 function GitHubTemplatesTab() {
-  const { t } = useTranslation();
-  const [templates, setTemplates] = useState<GitHubTemplate[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [showModal, setShowModal] = useState(false);
-  const [editingTemplate, setEditingTemplate] = useState<GitHubTemplate | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
+  const { t } = useTranslation()
+  const [templates, setTemplates] = useState<GitHubTemplate[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [showModal, setShowModal] = useState(false)
+  const [editingTemplate, setEditingTemplate] = useState<GitHubTemplate | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
 
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [githubOwner, setGithubOwner] = useState("");
-  const [githubRepo, setGithubRepo] = useState("");
-  const [framework, setFramework] = useState("");
-  const [renderServiceType, setRenderServiceType] = useState("");
-  const [buildCommand, setBuildCommand] = useState("");
-  const [publishPath, setPublishPath] = useState("");
-  const [startCommand, setStartCommand] = useState("");
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [githubOwner, setGithubOwner] = useState('')
+  const [githubRepo, setGithubRepo] = useState('')
+  const [framework, setFramework] = useState('')
+  const [renderServiceType, setRenderServiceType] = useState('')
+  const [buildCommand, setBuildCommand] = useState('')
+  const [publishPath, setPublishPath] = useState('')
+  const [startCommand, setStartCommand] = useState('')
 
   useEffect(() => {
-    fetchTemplates();
-  }, []);
+    fetchTemplates()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const fetchTemplates = async () => {
-    setLoading(true);
-    setError(null);
+    setLoading(true)
+    setError(null)
     try {
-      const res = await fetch("/dashboard/api/github/templates", { credentials: "include" });
+      const res = await fetch('/dashboard/api/github/templates', { credentials: 'include' })
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || t("common.connectionError"));
+        const data = await res.json()
+        throw new Error(data.error || t('common.connectionError'))
       }
-      const data = await res.json();
-      setTemplates(data);
+      const data = await res.json()
+      setTemplates(data)
     } catch (err) {
-      setError((err as Error).message);
+      setError((err as Error).message)
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   const openCreateModal = () => {
-    setEditingTemplate(null);
-    setName("");
-    setDescription("");
-    setGithubOwner("");
-    setGithubRepo("");
-    setFramework("");
-    setRenderServiceType("");
-    setBuildCommand("");
-    setPublishPath("");
-    setStartCommand("");
-    setFormError(null);
-    setShowModal(true);
-  };
+    setEditingTemplate(null)
+    setName('')
+    setDescription('')
+    setGithubOwner('')
+    setGithubRepo('')
+    setFramework('')
+    setRenderServiceType('')
+    setBuildCommand('')
+    setPublishPath('')
+    setStartCommand('')
+    setFormError(null)
+    setShowModal(true)
+  }
 
   const openEditModal = (tpl: GitHubTemplate) => {
-    setEditingTemplate(tpl);
-    setName(tpl.name);
-    setDescription(tpl.description);
-    setGithubOwner(tpl.github_owner);
-    setGithubRepo(tpl.github_repo);
-    setFramework(tpl.framework);
-    setRenderServiceType(tpl.render_service_type || "");
-    setBuildCommand(tpl.build_command || "");
-    setPublishPath(tpl.publish_path || "");
-    setStartCommand(tpl.start_command || "");
-    setFormError(null);
-    setShowModal(true);
-  };
+    setEditingTemplate(tpl)
+    setName(tpl.name)
+    setDescription(tpl.description)
+    setGithubOwner(tpl.github_owner)
+    setGithubRepo(tpl.github_repo)
+    setFramework(tpl.framework)
+    setRenderServiceType(tpl.render_service_type || '')
+    setBuildCommand(tpl.build_command || '')
+    setPublishPath(tpl.publish_path || '')
+    setStartCommand(tpl.start_command || '')
+    setFormError(null)
+    setShowModal(true)
+  }
 
   const handleSubmit = async () => {
-    setSaving(true);
-    setFormError(null);
+    setSaving(true)
+    setFormError(null)
     try {
       const body = {
         name,
@@ -585,466 +628,549 @@ function GitHubTemplatesTab() {
         build_command: buildCommand,
         publish_path: publishPath,
         start_command: startCommand,
-      };
-
+      }
       const url = editingTemplate
         ? `/dashboard/api/github/templates/${editingTemplate.id}`
-        : "/dashboard/api/github/templates";
-      const method = editingTemplate ? "PUT" : "POST";
-
+        : '/dashboard/api/github/templates'
+      const method = editingTemplate ? 'PUT' : 'POST'
       const res = await fetch(url, {
         method,
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-      });
-
+      })
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || t("common.errorSaving"));
+        const data = await res.json()
+        throw new Error(data.error || t('common.errorSaving'))
       }
-
-      setShowModal(false);
-      await fetchTemplates();
+      setShowModal(false)
+      await fetchTemplates()
     } catch (err) {
-      setFormError((err as Error).message);
+      setFormError((err as Error).message)
     } finally {
-      setSaving(false);
+      setSaving(false)
     }
-  };
+  }
 
   const handleToggleActive = async (tpl: GitHubTemplate) => {
     try {
-      const res = await fetch(`/dashboard/api/github/templates/${tpl.id}/active`, {
-        method: "PUT",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
+      await fetch(`/dashboard/api/github/templates/${tpl.id}/active`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ active: !tpl.active }),
-      });
-      if (res.ok) {
-        setTemplates((prev) =>
-          prev.map((t) => (t.id === tpl.id ? { ...t, active: !t.active } : t))
-        );
-      }
-    } catch {}
-  };
+      })
+      setTemplates((prev) =>
+        prev.map((x) => (x.id === tpl.id ? { ...x, active: !x.active } : x)),
+      )
+    } catch {
+      // non-critical
+    }
+  }
 
   const handleDelete = async (tpl: GitHubTemplate) => {
     try {
-      const res = await fetch(`/dashboard/api/github/templates/${tpl.id}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (res.ok) {
-        setTemplates((prev) => prev.filter((t) => t.id !== tpl.id));
-      }
-    } catch {}
-  };
+      await fetch(`/dashboard/api/github/templates/${tpl.id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      })
+      setTemplates((prev) => prev.filter((x) => x.id !== tpl.id))
+    } catch {
+      // non-critical
+    }
+  }
 
-  const inputClass =
-    "h-10 rounded-md border border-white/[0.10] bg-white/[0.06] text-[13px] text-[#F8FAFC] placeholder:text-[#64748B] outline-none brand-focus w-full";
+  const columns: Column<GitHubTemplate>[] = [
+    {
+      key: 'name',
+      header: t('github.templateName'),
+      render: (tpl) => (
+        <div>
+          <div className="text-[13px] font-bold">{tpl.name}</div>
+          {tpl.description && (
+            <div
+              className="mt-0.5 line-clamp-1 text-[11.5px]"
+              style={{ color: 'var(--text-tertiary)' }}
+            >
+              {tpl.description}
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'framework',
+      header: t('github.templateFramework'),
+      render: (tpl) =>
+        tpl.framework ? (
+          <span
+            className="rounded px-2 py-0.5 text-[11.5px]"
+            style={{ background: 'var(--bg-sunken)', color: 'var(--text-secondary)' }}
+          >
+            {tpl.framework}
+          </span>
+        ) : null,
+    },
+    {
+      key: 'repo',
+      header: t('integrations.title') === 'Integrations' ? 'Repository' : t('github.templateRepo'),
+      render: (tpl) => (
+        <span
+          className="font-mono text-[12px]"
+          style={{ color: 'var(--text-tertiary)' }}
+        >
+          {tpl.github_owner}/{tpl.github_repo}
+        </span>
+      ),
+    },
+    {
+      key: 'active',
+      header: t('github.active'),
+      render: (tpl) => (
+        <div className="flex items-center gap-2">
+          <Switch checked={tpl.active} onCheckedChange={() => handleToggleActive(tpl)} />
+          <span className="text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
+            {tpl.active ? t('github.active') : t('github.inactive')}
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: 'actions',
+      header: t('frontendApps.actions'),
+      align: 'right',
+      render: (tpl) => (
+        <div className="flex items-center justify-end gap-1">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => openEditModal(tpl)}
+            title={t('github.editTemplate')}
+            className="size-7 rounded-[8px]"
+            style={{ color: 'var(--text-tertiary)' }}
+          >
+            <Icon name="edit" size={12} />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => handleDelete(tpl)}
+            title={t('github.deleteTemplate')}
+            className="size-7 rounded-[8px]"
+            style={{ color: 'var(--danger)' }}
+          >
+            <Icon name="delete" size={12} />
+          </Button>
+        </div>
+      ),
+    },
+  ]
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <div>
-          <p className="text-[12px] text-[#94A3B8]">{t("github.templatesDesc")}</p>
-        </div>
-        <Button
-          onClick={openCreateModal}
-          className="gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white border-0 hover:opacity-90"
-          style={{
-            background: "linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))",
-          }}
-        >
-          {t("github.addTemplate")}
-          <span className="flex size-6 items-center justify-center rounded-full bg-white/[0.12]">
-            <Plus size={12} strokeWidth={2} />
+        <p className="text-[12px]" style={{ color: 'var(--text-secondary)' }}>
+          {t('github.templatesDesc')}
+        </p>
+        <Button onClick={openCreateModal} className="gap-2">
+          {t('github.addTemplate')}
+          <span
+            className="flex size-6 items-center justify-center rounded-full"
+            style={{ background: 'var(--hover-surface)' }}
+          >
+            <Icon name="add" size={12} />
           </span>
         </Button>
       </div>
 
-      {loading && (
-        <div className="flex items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.02] px-6 py-12">
-          <p className="text-[13px] text-[#94A3B8]">{t("app.loading")}</p>
-        </div>
-      )}
-
-      {!loading && error && (
-        <div className="rounded-2xl border border-red-500/[0.18] bg-red-500/[0.06] px-6 py-5 text-sm text-red-400">
-          {error}
-        </div>
-      )}
-
-      {!loading && !error && templates.length === 0 && (
-        <div className="flex items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.02] px-6 py-12">
-          <div className="text-center">
-            <Save size={32} strokeWidth={1} className="mx-auto mb-3 text-[#64748B]" />
-            <p className="text-sm text-[#94A3B8]">{t("github.noTemplates")}</p>
-          </div>
-        </div>
-      )}
-
-      {!loading && !error && templates.length > 0 && (
-        <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02]">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-white/[0.06]">
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">
-                  Template
-                </th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">
-                  Framework
-                </th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">
-                  Repository
-                </th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">
-                  Status
-                </th>
-                <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {templates.map((tpl, i) => (
-                <motion.tr
-                  key={tpl.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: i * 0.04 }}
-                  className="group border-b border-white/[0.04] last:border-0 hover:bg-white/[0.03]"
-                >
-                  <td className="px-4 py-3.5">
-                    <div className="flex flex-col">
-                      <span className="text-[13px] font-medium text-[#F8FAFC]">{tpl.name}</span>
-                      {tpl.description && (
-                        <span className="text-[11px] text-[#64748B] mt-0.5 line-clamp-1">
-                          {tpl.description}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3.5">
-                    {tpl.framework && (
-                      <Badge
-                        variant="outline"
-                        className="text-[11px] border-white/[0.08] bg-white/[0.04] text-[#94A3B8] font-normal"
-                      >
-                        {tpl.framework}
-                      </Badge>
-                    )}
-                  </td>
-                  <td className="px-4 py-3.5">
-                    <span className="text-[12px] text-[#64748B] font-mono">
-                      {tpl.github_owner}/{tpl.github_repo}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3.5">
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        checked={tpl.active}
-                        onCheckedChange={() => handleToggleActive(tpl)}
-                      />
-                      <span className="text-[11px] text-[#64748B]">
-                        {tpl.active ? t("github.active") : t("github.inactive")}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3.5 text-right">
-                    <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => openEditModal(tpl)}
-                        title={t("github.editTemplate")}
-                        className="size-7 rounded-lg border-white/[0.10] bg-white/[0.04] text-[#94A3B8] hover:bg-white/[0.08] hover:text-[#F8FAFC]"
-                      >
-                        <Pencil size={12} strokeWidth={1.5} />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => handleDelete(tpl)}
-                        title={t("github.deleteTemplate")}
-                        className="size-7 rounded-lg border-red-500/20 bg-red-500/[0.06] text-red-400 hover:bg-red-500/10 hover:text-red-400"
-                      >
-                        <Trash2 size={12} strokeWidth={1.5} />
-                      </Button>
-                    </div>
-                  </td>
-                </motion.tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable<GitHubTemplate>
+        columns={columns}
+        rows={templates}
+        getRowId={(tpl) => tpl.id}
+        loading={loading}
+        error={!!error}
+        empty={{ title: t('github.noTemplates'), icon: 'code' }}
+      />
 
       <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent
-          className="max-w-[480px] border border-white/[0.10] bg-[#0D0D14]/60 backdrop-blur-xl rounded-2xl p-0 gap-0 [&>button]:text-[#94A3B8] [&>button]:hover:text-[#F8FAFC] [&>button]:hover:bg-white/[0.08]"
-          style={{ boxShadow: "0 0 40px rgba(var(--brand-primary-rgb), 0.10)" }}
-        >
-          <div className="bg-white/[0.04] shadow-[inset_0_1px_1px_rgba(255,255,255,0.10)] rounded-[calc(1rem-2px)] px-7 pb-6 pt-7">
-            <DialogHeader className="mb-0">
-              <div className="w-11 h-11 rounded-xl bg-white/[0.08] border border-white/[0.10] flex items-center justify-center mb-[18px]">
-                <Save size={18} strokeWidth={1.5} className="text-[#94A3B8]" />
-              </div>
-              <DialogTitle className="text-base font-bold text-[#F8FAFC] mb-2">
-                {editingTemplate ? t("github.editTemplate") : t("github.addTemplate")}
-              </DialogTitle>
-              <DialogDescription className="text-[13px] text-[#94A3B8] leading-relaxed mb-6">
-                {t("github.templateFormDesc")}
-              </DialogDescription>
-            </DialogHeader>
+        <DialogContent className="max-w-[480px]">
+          <DialogHeader>
+            <div
+              className="mb-[18px] flex h-11 w-11 items-center justify-center rounded-[10px] border"
+              style={{ background: 'var(--hover-surface)', borderColor: 'var(--border)' }}
+            >
+              <Icon name="code" size={18} style={{ color: 'var(--text-tertiary)' }} />
+            </div>
+            <DialogTitle>
+              {editingTemplate ? t('github.editTemplate') : t('github.addTemplate')}
+            </DialogTitle>
+            <DialogDescription>{t('github.templateFormDesc')}</DialogDescription>
+          </DialogHeader>
 
-            <div className="flex flex-col gap-4">
-              <div>
-                <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">
-                  {t("github.templateName")}
-                </label>
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-[12px] font-semibold">{t('github.templateName')}</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Vite React" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-[12px] font-semibold">{t('github.templateDescription')}</Label>
+              <Input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder={t('github.templateDescriptionPlaceholder')}
+              />
+            </div>
+            <div className="flex gap-3">
+              <div className="flex-1 flex flex-col gap-1.5">
+                <Label className="text-[12px] font-semibold">{t('github.templateOwner')}</Label>
                 <Input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Vite React"
-                  className={inputClass}
+                  value={githubOwner}
+                  onChange={(e) => setGithubOwner(e.target.value)}
+                  placeholder="zeeplabs"
                 />
               </div>
-
-              <div>
-                <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">
-                  {t("github.templateDescription")}
-                </label>
+              <div className="flex-[2] flex flex-col gap-1.5">
+                <Label className="text-[12px] font-semibold">{t('github.templateRepo')}</Label>
                 <Input
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder={t("github.templateDescriptionPlaceholder")}
-                  className={inputClass}
+                  value={githubRepo}
+                  onChange={(e) => setGithubRepo(e.target.value)}
+                  placeholder="orbit-template-vite-react"
                 />
-              </div>
-
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">
-                    {t("github.templateOwner")}
-                  </label>
-                  <Input
-                    value={githubOwner}
-                    onChange={(e) => setGithubOwner(e.target.value)}
-                    placeholder="zeeplabs"
-                    className={inputClass}
-                  />
-                </div>
-                <div className="flex-[2]">
-                  <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">
-                    {t("github.templateRepo")}
-                  </label>
-                  <Input
-                    value={githubRepo}
-                    onChange={(e) => setGithubRepo(e.target.value)}
-                    placeholder="orbit-template-vite-react"
-                    className={inputClass}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">
-                  {t("github.templateFramework")}
-                </label>
-                <Input
-                  value={framework}
-                  onChange={(e) => setFramework(e.target.value)}
-                  placeholder="Vite + React"
-                  className={inputClass}
-                />
-              </div>
-
-              <div className="border-t border-white/[0.06] pt-4 mt-2">
-                <p className="mb-3 text-[11px] font-medium text-[#64748B] uppercase tracking-wider">{t("github.deployConfig", "Deploy Configuration (Render)")}</p>
-                <div className="flex flex-col gap-3">
-                  <div>
-                    <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8]">Service Type</label>
-                    <select
-                      value={renderServiceType}
-                      onChange={(e) => setRenderServiceType(e.target.value)}
-                      className="w-full h-9 rounded-lg border border-white/[0.10] bg-white/[0.06] px-3 text-[13px] text-[#F8FAFC] outline-none"
-                    >
-                      <option value="">{t("github.deployNone", "No deploy config")}</option>
-                      <option value="static_site">Static Site</option>
-                      <option value="web_service">Web Service</option>
-                    </select>
-                  </div>
-
-                  {renderServiceType && (
-                    <>
-                      <div>
-                        <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8]">Build Command</label>
-                        <Input value={buildCommand} onChange={(e) => setBuildCommand(e.target.value)}
-                          placeholder="npm run build" className={inputClass} />
-                      </div>
-                      {renderServiceType === "static_site" && (
-                        <div>
-                          <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8]">Publish Path</label>
-                          <Input value={publishPath} onChange={(e) => setPublishPath(e.target.value)}
-                            placeholder="dist" className={inputClass} />
-                        </div>
-                      )}
-                      {renderServiceType === "web_service" && (
-                        <div>
-                          <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8]">Start Command</label>
-                          <Input value={startCommand} onChange={(e) => setStartCommand(e.target.value)}
-                            placeholder="npm start" className={inputClass} />
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
               </div>
             </div>
-
-            {formError && (
-              <p className="mt-4 text-[12px] text-red-400">{formError}</p>
-            )}
-
-            <DialogFooter className="mt-6 flex flex-row gap-2.5 sm:flex-row sm:justify-start sm:space-x-0">
-              <Button
-                variant="outline"
-                onClick={() => setShowModal(false)}
-                disabled={saving}
-                className="flex-1 rounded-xl border-white/[0.10] bg-white/[0.06] text-[#94A3B8] hover:bg-white/[0.10] hover:text-[#F8FAFC] font-medium"
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-[12px] font-semibold">{t('github.templateFramework')}</Label>
+              <Input
+                value={framework}
+                onChange={(e) => setFramework(e.target.value)}
+                placeholder="Vite + React"
+              />
+            </div>
+            <div
+              className="mt-2 flex flex-col gap-3 border-t pt-4"
+              style={{ borderColor: 'var(--border)' }}
+            >
+              <p
+                className="text-[11px] font-semibold uppercase tracking-wider"
+                style={{ color: 'var(--text-tertiary)' }}
               >
-                {t("github.cancel")}
-              </Button>
-              <Button
-                onClick={handleSubmit}
-                disabled={saving}
-                className="flex-1 rounded-xl border-0 text-white font-semibold disabled:opacity-40"
-                style={{
-                  background: "linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))",
-                }}
-              >
-                {saving ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : editingTemplate ? (
-                  t("github.updateTemplate")
-                ) : (
-                  t("github.createTemplate")
+                {t('github.deployConfig')}
+              </p>
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-[12px] font-semibold">{t('github.serviceType')}</Label>
+                  <Select value={renderServiceType || 'none'} onValueChange={(v) => setRenderServiceType(v === 'none' ? '' : v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('github.deployNone')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">{t('github.deployNone')}</SelectItem>
+                      <SelectItem value="static_site">{t('github.deployStaticSite')}</SelectItem>
+                      <SelectItem value="web_service">{t('github.deployWebService')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {renderServiceType && (
+                  <>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-[12px] font-semibold">{t('github.buildCommand')}</Label>
+                      <Input
+                        value={buildCommand}
+                        onChange={(e) => setBuildCommand(e.target.value)}
+                        placeholder="npm run build"
+                      />
+                    </div>
+                    {renderServiceType === 'static_site' && (
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-[12px] font-semibold">{t('github.publishPath')}</Label>
+                        <Input
+                          value={publishPath}
+                          onChange={(e) => setPublishPath(e.target.value)}
+                          placeholder="dist"
+                        />
+                      </div>
+                    )}
+                    {renderServiceType === 'web_service' && (
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-[12px] font-semibold">{t('github.startCommand')}</Label>
+                        <Input
+                          value={startCommand}
+                          onChange={(e) => setStartCommand(e.target.value)}
+                          placeholder="npm start"
+                        />
+                      </div>
+                    )}
+                  </>
                 )}
-              </Button>
-            </DialogFooter>
+              </div>
+            </div>
           </div>
+
+          <PageFooter message={formError} type="error" />
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowModal(false)} disabled={saving}>
+              {t('github.cancel')}
+            </Button>
+            <Button onClick={handleSubmit} disabled={saving}>
+              {saving ? (
+                <Icon name="progress_activity" size={14} className="mr-1.5 animate-spin" />
+              ) : editingTemplate ? (
+                t('github.updateTemplate')
+              ) : (
+                t('github.createTemplate')
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
-  );
+  )
 }
 
 function DeployTab() {
-  const { t } = useTranslation();
-  const [apiKey, setApiKey] = useState("");
-  const [renderProjectId, setRenderProjectId] = useState("");
-  const [renderEnvironmentId, setRenderEnvironmentId] = useState("");
-  const [baseDomain, setBaseDomain] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [status, setStatus] = useState<{ connected: boolean; provider: string; render_project_id?: string; render_environment_id?: string; base_domain?: string } | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-  const [messageType, setMessageType] = useState<"success" | "error">("success");
+  const { t } = useTranslation()
+  const [apiKey, setApiKey] = useState('')
+  const [renderProjectId, setRenderProjectId] = useState('')
+  const [renderEnvironmentId, setRenderEnvironmentId] = useState('')
+  const [baseDomain, setBaseDomain] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [status, setStatus] = useState<{
+    connected: boolean
+    provider: string
+    render_project_id?: string
+    render_environment_id?: string
+    base_domain?: string
+  } | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
+  const [messageType, setMessageType] = useState<'success' | 'error'>('success')
 
-  useEffect(() => { fetchStatus(); }, []);
+  const [recentDeploys, setRecentDeploys] = useState<{ appName: string; status: string; time: string }[]>([])
+
+  useEffect(() => {
+    fetchStatus()
+    fetchRecentDeploys()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const fetchStatus = async () => {
     try {
-      const res = await fetch("/dashboard/api/deploy-provider/status", { credentials: "include" });
+      const res = await fetch('/dashboard/api/deploy-provider/status', { credentials: 'include' })
       if (res.ok) {
-        const data = await res.json();
-        setStatus(data);
-        if (data.render_project_id) setRenderProjectId(data.render_project_id);
-        if (data.render_environment_id) setRenderEnvironmentId(data.render_environment_id);
-        if (data.base_domain) setBaseDomain(data.base_domain);
+        const data = await res.json()
+        setStatus(data)
+        if (data.render_project_id) setRenderProjectId(data.render_project_id)
+        if (data.render_environment_id) setRenderEnvironmentId(data.render_environment_id)
+        if (data.base_domain) setBaseDomain(data.base_domain)
       }
-    } catch {}
-  };
+    } catch {
+      // non-critical
+    }
+  }
+
+  const fetchRecentDeploys = async () => {
+    try {
+      const res = await fetch('/dashboard/api/deploy-provider/recent-deploys', { credentials: 'include' })
+      if (res.ok) {
+        const data = await res.json()
+        setRecentDeploys(data.deploys || [])
+      }
+    } catch {
+      toast.error(t('integrations.recentDeploysError'))
+    }
+  }
 
   const handleSave = async () => {
-    setSaving(true);
-    setMessage(null);
+    setSaving(true)
+    setMessage(null)
     try {
-      const res = await fetch("/dashboard/api/deploy-provider/config", {
-        method: "PUT", credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ api_key: apiKey, render_project_id: renderProjectId, render_environment_id: renderEnvironmentId, base_domain: baseDomain }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setMessage(data.error || "Failed"); setMessageType("error"); return; }
-      setMessage(status?.connected ? "Settings updated" : "Provider connected successfully");
-      setMessageType("success");
-      setApiKey("");
-      await fetchStatus();
-    } catch { setMessage("Connection error"); setMessageType("error"); }
-    finally { setSaving(false); }
-  };
-
-  const inputClass = "h-9 rounded-lg border border-white/[0.10] bg-white/[0.06] px-3 text-[13px] text-[#F8FAFC] placeholder:text-[#64748B] outline-none focus:border-[rgba(var(--brand-primary-rgb),0.35)] transition-colors w-full";
+      const res = await fetch('/dashboard/api/deploy-provider/config', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          api_key: apiKey,
+          render_project_id: renderProjectId,
+          render_environment_id: renderEnvironmentId,
+          base_domain: baseDomain,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setMessage(data.error || t('common.errorSaving'))
+        setMessageType('error')
+        return
+      }
+      setMessage(status?.connected ? t('deploy.update') : t('github.configSaved'))
+      setMessageType('success')
+      setApiKey('')
+      await fetchStatus()
+    } catch {
+      setMessage(t('common.connectionError'))
+      setMessageType('error')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
-    <div>
-      <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-6">
-        <div className="flex items-center gap-4 mb-6">
-          <div className={`flex size-10 shrink-0 items-center justify-center rounded-xl border ${status?.connected ? "border-[#22C55E]/20 bg-[#22C55E]/10" : "border-white/[0.08] bg-white/[0.06]"}`}>
-            <Rocket size={18} className={status?.connected ? "text-[#22C55E]" : "text-[#64748B]"} />
+    <div className="flex flex-wrap items-start gap-6">
+      <div className="flex min-w-[420px] flex-1 flex-col gap-6">
+      <div className="flex flex-col gap-3">
+        <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
+          {t('integrations.deployProviderSectionTitle')}
+        </div>
+        <ProviderTabs
+          value="render"
+          items={[
+            { key: 'render', name: 'Render', icon: 'rocket_launch' },
+            { key: 'cloudflare', name: 'Cloudflare Pages', icon: 'cloud', disabled: true, badge: t('apps.soon') },
+            { key: 'digitalocean', name: 'DigitalOcean', icon: 'water_drop', disabled: true, badge: t('apps.soon') },
+            { key: 'aws', name: 'AWS', icon: 'cloud_queue', disabled: true, badge: t('apps.soon') },
+            { key: 'azure', name: 'Azure', icon: 'web_stories', disabled: true, badge: t('apps.soon') },
+            { key: 'gcp', name: 'Google Cloud', icon: 'cloud_circle', disabled: true, badge: t('apps.soon') },
+          ]}
+        />
+      </div>
+
+      <div
+        className="flex flex-col gap-6 rounded-[14px] border p-6"
+        style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
+      >
+        <div className="mb-0 flex items-center gap-4">
+          <div
+            className="flex size-10 shrink-0 items-center justify-center rounded-[10px] border"
+            style={{
+              background: status?.connected ? 'var(--success-tint)' : 'var(--bg-sunken)',
+              borderColor: status?.connected ? 'var(--success)' : 'var(--border)',
+            }}
+          >
+            <Icon
+              name="rocket_launch"
+              size={18}
+              style={{ color: status?.connected ? 'var(--success)' : 'var(--text-tertiary)' }}
+            />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-[#F8FAFC]">{t("deploy.title", "Deploy Provider")}</h3>
-            <p className="text-xs text-[#64748B]">
-              {status?.connected
-                ? t("deploy.connected", "Connected to Render — services will be created automatically on frontend app creation")
-                : t("deploy.notConnected", "Not connected — connect your Render account to enable automatic deploys")}
+            <h3 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+              {t('deploy.title')}
+            </h3>
+            <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+              {status?.connected ? t('deploy.connected') : t('deploy.notConnected')}
             </p>
           </div>
           {status?.connected && (
-            <span className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-[#22C55E] bg-[#22C55E]/10 px-2 py-1 rounded-full">
-              <span className="size-1.5 rounded-full bg-[#22C55E]" /> {t("deploy.active", "Active")}
-            </span>
+            <div className="ml-auto">
+              <StatusPill label={t('deploy.active')} tone="success" />
+            </div>
           )}
         </div>
-        <div className="space-y-4">
-          <div>
-            <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">{t("deploy.apiKey", "Render API Key")}</label>
-            <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
-              placeholder="rnd_..." className={inputClass}
-              onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
-            <p className="mt-1 text-[11px] text-[#64748B]">{t("deploy.apiKeyHint", "Create an API key in your Render dashboard at Account Settings → API Keys")}</p>
+
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-[12px] font-semibold">{t('deploy.apiKey')}</Label>
+            <Input
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="rnd_..."
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSave()
+              }}
+            />
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
+              {t('deploy.apiKeyHint')}
+            </p>
           </div>
-          <div>
-            <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">{t("deploy.projectId", "Render Project ID (optional)")}</label>
-            <input type="text" value={renderProjectId} onChange={(e) => setRenderProjectId(e.target.value)}
-              placeholder="prj-..." className={inputClass} />
-            <p className="mt-1 text-[11px] text-[#64748B]">{t("deploy.projectIdHint", "All services created via Zeep Orbit will be grouped under this project. Leave empty to use the default workspace.")}</p>
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-[12px] font-semibold">{t('deploy.projectId')}</Label>
+            <Input
+              value={renderProjectId}
+              onChange={(e) => setRenderProjectId(e.target.value)}
+              placeholder="prj-..."
+            />
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
+              {t('deploy.projectIdHint')}
+            </p>
           </div>
-          <div>
-            <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">{t("deploy.environmentId", "Render Environment ID (optional)")}</label>
-            <input type="text" value={renderEnvironmentId} onChange={(e) => setRenderEnvironmentId(e.target.value)}
-              placeholder="evm-..." className={inputClass} />
-            <p className="mt-1 text-[11px] text-[#64748B]">{t("deploy.environmentIdHint", "Required if the Project above has more than one Environment — otherwise deploys fail since Render can't tell which one to use. Leave empty if the project has exactly one Environment; it's resolved automatically.")}</p>
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-[12px] font-semibold">{t('deploy.environmentId')}</Label>
+            <Input
+              value={renderEnvironmentId}
+              onChange={(e) => setRenderEnvironmentId(e.target.value)}
+              placeholder="evm-..."
+            />
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
+              {t('deploy.environmentIdHint')}
+            </p>
           </div>
-          <div>
-            <label className="mb-1.5 block text-[12px] font-medium text-[#94A3B8] uppercase tracking-wider">{t("deploy.baseDomain", "Base Domain (optional)")}</label>
-            <input type="text" value={baseDomain} onChange={(e) => setBaseDomain(e.target.value)}
-              placeholder="meusite.com" className={inputClass} />
-            <p className="mt-1 text-[11px] text-[#64748B]">{t("deploy.baseDomainHint", "Users can pick a subdomain and the full domain will be configured on Render. Leave empty to use Render's default URL.")}</p>
-            <p className="mt-1 text-[11px] text-[#64748B]">{t("deploy.dnsHint", "Each subdomain needs a CNAME pointing to the app's Render URL. The exact record is shown in the domain modal when configuring.")}</p>
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-[12px] font-semibold">{t('deploy.baseDomain')}</Label>
+            <Input
+              value={baseDomain}
+              onChange={(e) => setBaseDomain(e.target.value)}
+              placeholder="meusite.com"
+            />
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
+              {t('deploy.baseDomainHint')}
+            </p>
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
+              {t('deploy.dnsHint')}
+            </p>
           </div>
-          {message && <p className={`text-[12px] ${messageType === "error" ? "text-[#EF4444]" : "text-[#22C55E]"}`}>{message}</p>}
-          <Button onClick={handleSave} disabled={saving || (!status?.connected && !apiKey.trim())}
-            className="gap-2 rounded-xl border-0 text-white font-semibold disabled:opacity-40"
-            style={{ background: "linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))" }}>
-            {saving ? <><Loader2 size={14} className="animate-spin" /> {t("brand.saving")}</>
-              : <><Save size={14} /> {status?.connected ? t("deploy.save", "Save") : t("deploy.connect", "Connect Render")}</>}
+
+          <PageFooter message={message} type={messageType} />
+
+          <Button
+            onClick={handleSave}
+            disabled={saving || (!status?.connected && !apiKey.trim())}
+            className="gap-2 self-start"
+          >
+            {saving ? (
+              <>
+                <Icon name="progress_activity" size={14} className="animate-spin" /> {t('brand.saving')}
+              </>
+            ) : (
+              <>
+                <Icon name="check" size={14} />{' '}
+                {status?.connected ? t('deploy.save') : t('deploy.connect')}
+              </>
+            )}
           </Button>
         </div>
       </div>
+
+      <div
+        className="flex flex-col gap-1 rounded-[14px] border p-2"
+        style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
+      >
+        <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
+          {t('integrations.recentDeploysTitle')}
+        </div>
+        {recentDeploys.length === 0 ? (
+          <p className="px-3 py-2 text-[13px]" style={{ color: 'var(--text-tertiary)' }}>
+            {t('integrations.recentDeploysEmpty')}
+          </p>
+        ) : (
+          recentDeploys.map((d, i) => (
+            <div key={i} className="flex items-center gap-3 rounded-[10px] px-3 py-2.5">
+              <Icon name="rocket_launch" size={16} style={{ color: 'var(--text-tertiary)' }} />
+              <span className="flex-1 truncate text-[13px] font-medium" style={{ color: 'var(--text-primary)' }}>
+                {d.appName}
+              </span>
+              <StatusPill label={d.status} tone={d.status === 'Live' ? 'success' : 'danger'} />
+              <span className="w-16 shrink-0 text-right text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
+                {d.time}
+              </span>
+            </div>
+          ))
+        )}
+      </div>
+      </div>
+      <AboutPanel
+        title={t('integrations.aboutDeployProvidersTitle')}
+        lines={[t('integrations.aboutDeployProvidersLine1')]}
+      />
     </div>
-  );
+  )
 }

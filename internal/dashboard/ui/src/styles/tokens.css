@@ -1,0 +1,169 @@
+/* Zeep Orbit — Design tokens (redesign)
+ *
+ * Palette final do handoff (`handoff/README.md`, linhas 50-66).
+ * Dois temas, aplicados via classe `theme-dark` / `theme-light` no root (ver lib/theme.ts).
+ *
+ * Estrutura:
+ *  - Tokens canônicos (handoff): --surface, --border, --text-*, --primary, --accent, etc.
+ *  - Aliases legados (--bg, --brand-*, shadcn --card/--muted/...): ponte para as ~18 telas
+ *    ainda não migradas continuarem funcionando. Aliases morrem na Fase 3, quando a última
+ *    tela migrar (mesma janela da remoção de lucide-react).
+ */
+
+.theme-dark {
+  /* Backgrounds */
+  --bg-page: #0A0E1A;
+  --surface: #111726;
+  --surface-raised: #161D2E;
+  --sunken: #0D1220;
+  --hover-surface: rgba(255, 255, 255, 0.06);
+
+  /* Borders */
+  --border: #212A3D;
+  --border-strong: #2C3650;
+
+  /* Text */
+  --text-primary: #F2F4FA;
+  --text-secondary: #9BA4BE;
+  --text-tertiary: #6B7590;
+
+  /* Primary (brand/action) */
+  --primary: #5B6EF5;
+  --primary-hover: #4756DE;
+  --primary-tint: #1A2043;
+  --primary-rgb: 91, 110, 245;
+
+  /* Accent */
+  --accent: #FF6B4A;
+  --accent-hover: #E85A3B;
+  --accent-tint: #3A2118;
+  --accent-rgb: 255, 107, 74;
+
+  /* Status */
+  --success: #34D399;
+  --success-tint: #0F2B22;
+  --warning: #FBBF24;
+  --warning-tint: #332708;
+  --danger: #F87171;
+  --danger-tint: #391818;
+
+  /* Elevation */
+  --overlay: rgba(6, 9, 16, 0.7);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 28px rgba(0, 0, 0, 0.45);
+
+  color-scheme: dark;
+}
+
+.theme-light {
+  /* Backgrounds */
+  --bg-page: #F5F6FA;
+  --surface: #FFFFFF;
+  --surface-raised: #FFFFFF;
+  --sunken: #EEF0F6;
+  --hover-surface: rgba(19, 23, 42, 0.05);
+
+  /* Borders */
+  --border: #E3E6F0;
+  --border-strong: #CDD2E4;
+
+  /* Text */
+  --text-primary: #13172A;
+  --text-secondary: #555F7C;
+  --text-tertiary: #8A92AC;
+
+  /* Primary */
+  --primary: #4753E0;
+  --primary-hover: #3A44C4;
+  --primary-tint: #ECEDFF;
+  --primary-rgb: 71, 83, 224;
+
+  /* Accent */
+  --accent: #F0532F;
+  --accent-hover: #D6431F;
+  --accent-tint: #FEEAE3;
+  --accent-rgb: 240, 83, 47;
+
+  /* Status */
+  --success: #16A34A;
+  --success-tint: #E7F7ED;
+  --warning: #D97706;
+  --warning-tint: #FDF3E2;
+  --danger: #DC2626;
+  --danger-tint: #FCE9E9;
+
+  /* Elevation */
+  --overlay: rgba(20, 24, 40, 0.45);
+  --shadow-sm: 0 1px 2px rgba(20, 24, 45, 0.06);
+  --shadow-md: 0 8px 28px rgba(20, 24, 45, 0.10);
+
+  color-scheme: light;
+}
+
+/* ------------------------------------------------------------------ *
+ * Bridge: aliases legados -> tokens canônicos.
+ * Válido nos dois temas. Remover na Fase 3 (T3.1/T3.2) junto com o
+ * último uso de brand-* / shadcn-vars nas telas migradas.
+ * ------------------------------------------------------------------ */
+.theme-dark,
+.theme-light {
+  /* Fontes — variable families self-hosted via @fontsource-variable (T0.2) */
+  --font-ui: 'Manrope Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-display: 'Space Grotesk Variable', 'Manrope Variable', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Aliases de base */
+  --bg: var(--bg-page);
+  --text: var(--text-primary);
+  --text-muted: var(--text-secondary);
+
+  /* Brand legado (usado por brand-focus / brand-border-hover / brand-accent-bar) */
+  --brand-primary: var(--primary);
+  --brand-secondary: var(--accent);
+  --brand-tertiary: var(--accent);
+  --brand-primary-rgb: var(--primary-rgb);
+  --brand-secondary-rgb: var(--accent-rgb);
+  --brand-light: var(--primary-tint);
+
+  /* shadcn vars legadas -> tokens novos */
+  --background: var(--bg-page);
+  --foreground: var(--text-primary);
+  --card: var(--surface);
+  --card-foreground: var(--text-primary);
+  --popover: var(--surface-raised);
+  --popover-foreground: var(--text-primary);
+  --primary-foreground: #FFFFFF;
+  --secondary: var(--hover-surface);
+  --secondary-foreground: var(--text-primary);
+  --muted: var(--hover-surface);
+  --muted-foreground: var(--text-tertiary);
+  --accent-foreground: var(--text-primary);
+  --destructive: var(--danger);
+  --destructive-foreground: #FFFFFF;
+  --input: var(--border);
+  --ring: var(--primary);
+
+  /* Tailwind v4 @theme color utilities seguem os tokens novos */
+  --color-primary: var(--primary);
+  --color-ring: var(--primary);
+  --color-border: var(--border);
+  --color-input: var(--border);
+  --color-background: var(--bg-page);
+  --color-foreground: var(--text-primary);
+  --color-card: var(--surface);
+  --color-popover: var(--surface-raised);
+  --color-muted: var(--hover-surface);
+  --color-muted-foreground: var(--text-tertiary);
+  --color-secondary: var(--hover-surface);
+  --color-destructive: var(--danger);
+  --color-bg: var(--bg-page);
+  --color-text: var(--text-primary);
+  --color-text-muted: var(--text-secondary);
+  /* shadcn utility `bg-accent`/`text-accent-foreground` = superfície de hover sutil
+   * (NÃO o laranja do handoff, que vive em `--accent` bare). Nomes distintos. */
+  --color-accent: var(--hover-surface);
+  --color-accent-foreground: var(--text-primary);
+  --color-accent-light: var(--primary-tint);
+  --color-accent-purple: var(--accent);
+  --color-accent-pink: var(--accent);
+}

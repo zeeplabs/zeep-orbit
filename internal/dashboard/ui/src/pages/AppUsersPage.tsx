@@ -1,161 +1,320 @@
-import { useState } from "react";
-import { useParams, Link } from "react-router-dom";
-import { useTranslation } from "react-i18next";
-import { motion, AnimatePresence } from "framer-motion";
-import { Users, Search, X, ShieldOff, RefreshCw, CheckCircle, ArrowLeft, Loader2, RotateCw } from "lucide-react";
+import { useEffect, useState } from 'react'
+import { useParams, Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import {
+  useApp,
   useAppUsers,
   useDeactivateAppUser,
   useActivateAppUser,
   useResetAppUserSessions,
-} from "../lib/api";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+} from '../lib/api'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Icon } from '@/components/ui/icon'
+import { PageHeader, EmptyState, DataTable, StatusPill } from '@/components/patterns'
+import type { Column } from '@/components/patterns'
+import { cn } from '@/lib/utils'
 
-const ease = [0.32, 0.72, 0, 1] as const;
+interface AppUser {
+  id: string
+  name: string | null
+  email: string
+  phone: string | null
+  provider: string
+  active: boolean
+  last_sign_in_at: string | null
+  created_at: string
+  avatar_url: string | null
+}
 
-const fadeUp = {
-  initial: { opacity: 0, y: 16 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.6, ease },
-};
+interface ProviderCount {
+  provider: string
+  count: number
+}
 
-function SkeletonRow() {
+function formatDate(iso: string, lang: string) {
+  return new Date(iso).toLocaleDateString(lang, {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
+function formatRelativeTime(iso: string | null, t: (k: string, opts?: Record<string, unknown>) => string): string {
+  if (!iso) return '—'
+  const diffMs = Date.now() - new Date(iso).getTime()
+  const minutes = Math.floor(diffMs / 60000)
+  if (minutes < 1) return t('appUsers.justNow')
+  if (minutes < 60) return t('appUsers.minutesAgo', { count: minutes })
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return t('appUsers.hoursAgo', { count: hours })
+  const days = Math.floor(hours / 24)
+  return t('appUsers.daysAgo', { count: days })
+}
+
+const providerIcon = (p: string) => (p === 'google' ? 'verified_user' : 'mail')
+
+function ProviderCell({ provider }: { provider: string }) {
+  const isGoogle = provider === 'google'
   return (
-    <div className="flex items-center gap-4 border-b border-white/[0.06] px-4 py-4">
-      <div className="h-4 w-56 rounded bg-white/[0.07]" />
-      <div className="h-4 w-16 rounded bg-white/[0.05]" />
-      <div className="h-4 w-20 rounded bg-white/[0.05]" />
-      <div className="ml-auto h-4 w-24 rounded bg-white/[0.05]" />
+    <div
+      className="inline-flex items-center gap-1.5 text-[12px]"
+      style={{ color: 'var(--text-secondary)' }}
+    >
+      {isGoogle ? (
+        <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true">
+          <path fill="#4285F4" d="M15.68 8.18c0-.58-.05-1.14-.15-1.68H8v3.18h4.3a3.68 3.68 0 0 1-1.6 2.42v2h2.6c1.52-1.4 2.38-3.46 2.38-5.92z" />
+          <path fill="#34A853" d="M8 16c2.16 0 3.97-.72 5.3-1.9l-2.6-2c-.72.48-1.64.77-2.7.77-2.08 0-3.84-1.4-4.47-3.3H.85v2.07A8 8 0 0 0 8 16z" />
+          <path fill="#FBBC05" d="M3.53 9.57A4.8 4.8 0 0 1 3.28 8c0-.55.1-1.08.25-1.57V4.36H.85A8 8 0 0 0 0 8c0 1.29.31 2.5.85 3.64l2.68-2.07z" />
+          <path fill="#EA4335" d="M8 3.18c1.18 0 2.23.4 3.06 1.2l2.3-2.3C11.96.9 10.15.14 8 .14A8 8 0 0 0 .85 4.36l2.68 2.07C4.16 4.53 5.92 3.18 8 3.18z" />
+        </svg>
+      ) : (
+        <Icon name="mail" size={14} style={{ color: 'var(--text-tertiary)' }} />
+      )}
+      {provider === 'google' ? 'Google' : 'Email'}
     </div>
-  );
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-function formatDateTime(iso: string | null) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("pt-BR");
+  )
 }
 
 export default function AppUsersPage() {
-  const { t } = useTranslation();
-  const { id } = useParams<{ id: string }>();
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [page, setPage] = useState(0);
-  const pageSize = 50;
+  const { t, i18n } = useTranslation()
+  const { id } = useParams<{ id: string }>()
+  const { data: app } = useApp(id || '')
+  const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [page, setPage] = useState(0)
+  const pageSize = 50
 
-  const { data, isLoading, isFetching, error, refetch } = useAppUsers(id || "", debouncedSearch || undefined, pageSize, page * pageSize);
-  const deactivate = useDeactivateAppUser();
-  const activate = useActivateAppUser();
-  const resetSessions = useResetAppUserSessions();
+  const { data, isLoading, isFetching, error, refetch } = useAppUsers(
+    id || '',
+    debouncedSearch || undefined,
+    pageSize,
+    page * pageSize,
+  )
+  const deactivate = useDeactivateAppUser()
+  const activate = useActivateAppUser()
+  const resetSessions = useResetAppUserSessions()
 
-  const handleSearch = () => {
-    setDebouncedSearch(search);
-    setPage(0);
-  };
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search)
+      setPage(0)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [search])
 
   const clearSearch = () => {
-    setSearch("");
-    setDebouncedSearch("");
-    setPage(0);
-  };
+    setSearch('')
+    setDebouncedSearch('')
+    setPage(0)
+  }
 
-  const users = data?.data || [];
-  const total = data?.total || 0;
-  const providerCounts = data?.providerCounts || [];
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const currentPage = page + 1;
+  const users: AppUser[] = (data?.data as AppUser[] | undefined) || []
+  const total = data?.total || 0
+  const providerCounts: ProviderCount[] = (data?.providerCounts as ProviderCount[] | undefined) || []
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const currentPage = page + 1
+
+  const columns: Column<AppUser>[] = [
+    {
+      key: 'name',
+      header: t('appUsers.table.name'),
+      render: (u) => (
+        <div className="flex items-center gap-2.5">
+          {u.avatar_url ? (
+            <img src={u.avatar_url} alt="" className="size-7 rounded-full object-cover" />
+          ) : (
+            <div
+              className="flex size-7 items-center justify-center rounded-full text-[11px] font-bold"
+              style={{
+                background: 'linear-gradient(135deg, var(--primary), var(--accent))',
+                color: '#fff',
+              }}
+            >
+              {(u.name || u.email).charAt(0).toUpperCase()}
+            </div>
+          )}
+          <div className="min-w-0">
+            <div className="truncate text-[13px] font-bold">{u.name || '—'}</div>
+            <div className="truncate text-[11.5px]" style={{ color: 'var(--text-tertiary)' }}>
+              {u.email}
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'phone',
+      header: t('appUsers.table.phone'),
+      render: (u) => (
+        <span className="text-[13px]" style={{ color: 'var(--text-secondary)' }}>
+          {u.phone || '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'provider',
+      header: t('appUsers.table.provider'),
+      render: (u) => <ProviderCell provider={u.provider} />,
+    },
+    {
+      key: 'status',
+      header: t('appUsers.table.status'),
+      render: (u) => (
+        <StatusPill
+          label={u.active ? t('appUsers.active') : t('appUsers.inactive')}
+          tone={u.active ? 'success' : 'neutral'}
+          dot={false}
+        />
+      ),
+    },
+    {
+      key: 'lastAccess',
+      header: t('appUsers.table.lastAccess'),
+      render: (u) => (
+        <span className="text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
+          {formatRelativeTime(u.last_sign_in_at, t)}
+        </span>
+      ),
+    },
+    {
+      key: 'createdAt',
+      header: t('appUsers.table.createdAt'),
+      render: (u) => (
+        <span className="text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
+          {formatDate(u.created_at, i18n.language)}
+        </span>
+      ),
+    },
+    {
+      key: 'actions',
+      header: t('appUsers.table.actions'),
+      className: 'text-right',
+      render: (u) => {
+        const isDeactivating = deactivate.isPending && deactivate.variables?.userId === u.id
+        const isActivating = activate.isPending && activate.variables?.userId === u.id
+        const isResetting = resetSessions.isPending && resetSessions.variables?.userId === u.id
+        return (
+          <div className="flex items-center justify-end gap-1">
+            {u.active && (
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => deactivate.mutate({ appId: id!, userId: u.id })}
+                disabled={deactivate.isPending}
+                title={t('appUsers.deactivateTitle')}
+                className="size-7 rounded-[8px]"
+                style={{
+                  borderColor: 'var(--border)',
+                  color: 'var(--text-tertiary)',
+                }}
+              >
+                {isDeactivating ? (
+                  <Icon name="progress_activity" size={12} className="animate-spin" />
+                ) : (
+                  <Icon name="block" size={12} />
+                )}
+              </Button>
+            )}
+            {!u.active && (
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => activate.mutate({ appId: id!, userId: u.id })}
+                title={t('appUsers.activateTitle')}
+                className="size-7 rounded-[8px]"
+                style={{
+                  borderColor: 'var(--success)',
+                  color: 'var(--success)',
+                }}
+              >
+                {isActivating ? (
+                  <Icon name="progress_activity" size={12} className="animate-spin" />
+                ) : (
+                  <Icon name="check_circle" size={12} />
+                )}
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => resetSessions.mutate({ appId: id!, userId: u.id })}
+              disabled={resetSessions.isPending}
+              title={t('appUsers.resetTitle')}
+              className="size-7 rounded-[8px]"
+              style={{
+                borderColor: 'var(--border)',
+                color: 'var(--text-tertiary)',
+              }}
+            >
+              {isResetting ? (
+                <Icon name="progress_activity" size={12} className="animate-spin" />
+              ) : (
+                <Icon name="refresh" size={12} />
+              )}
+            </Button>
+          </div>
+        )
+      },
+    },
+  ]
 
   return (
-    <motion.div {...fadeUp}>
-      {/* Header */}
-      <div className="mb-6">
-        <div className="mb-4 flex items-center justify-between gap-4">
-          <Link
-            to="/apps"
-            className="inline-flex items-center gap-1.5 text-[12px] text-[#94A3B8] hover:text-[#F8FAFC] no-underline transition-colors"
-          >
-            <ArrowLeft size={14} />
-            Voltar para Apps
-          </Link>
-          <span
-            className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em]"
-            style={{
-              borderColor: 'rgba(var(--brand-primary-rgb), 0.2)',
-              backgroundColor: 'rgba(var(--brand-primary-rgb), 0.12)',
-              color: 'var(--brand-light)',
-            }}
-          >
-            <Users size={12} strokeWidth={1.5} />
-            Usuários do App
-          </span>
-        </div>
-        <h2 className="mb-1.5 text-[28px] font-extrabold leading-tight">
-          Usuários
-        </h2>
-        <p className="text-sm text-[#94A3B8]">
-          Gerencie os usuários registrados neste app
-        </p>
-      </div>
+    <>
+      <Link
+        to={`/apps/${id}`}
+        className="mb-5 inline-flex items-center gap-1.5 text-[13px] font-semibold no-underline transition-colors"
+        style={{ color: 'var(--text-secondary)' }}
+      >
+        <Icon name="arrow_back" size={17} />
+        {t('appUsers.back')}
+      </Link>
+
+      <PageHeader title={t('appUsers.title')} subtitle={t('appUsers.subtitle', { app: app?.name || id })} />
 
       {/* Toolbar: provider counts + search + refresh */}
-      <div className="mb-6 flex flex-wrap items-center gap-3">
+      <div className="mb-5 flex flex-wrap items-center gap-3">
         {providerCounts.length > 0 && (
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex flex-wrap items-center gap-2">
             {providerCounts.map((pc) => (
               <div
                 key={pc.provider}
-                className="flex items-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3.5 py-2"
+                className="flex items-center gap-2 rounded-full px-3 py-1.5"
+                style={{ background: 'var(--bg-sunken)' }}
               >
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-[#94A3B8]">
-                  {pc.provider}
+                <Icon
+                  name={providerIcon(pc.provider)}
+                  size={14}
+                  style={{ color: 'var(--text-tertiary)' }}
+                />
+                <span className="text-[12px] font-bold" style={{ color: 'var(--text-secondary)' }}>
+                  {pc.provider} · {pc.count}
                 </span>
-                <span className="text-[15px] font-bold text-[#F8FAFC]">{pc.count}</span>
               </div>
             ))}
           </div>
         )}
 
-        <div className="flex flex-1 items-center gap-2 min-w-[240px]">
-          <div className="relative flex-1 max-w-sm">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#64748B]" />
-            <Input
-              type="text"
-              placeholder={t("appUsers.search")}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
-              className="h-10 rounded-md border-white/[0.10] bg-white/[0.06] text-[13px] text-[#F8FAFC] placeholder:text-[#64748B] pl-9 pr-9"
-            />
-            {search && (
-              <button
-                title="Clear search"
-                onClick={clearSearch}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#F8FAFC] bg-none border-none cursor-pointer"
-              >
-                <X size={14} />
-              </button>
-            )}
-          </div>
-          <Button
-            size="sm"
-            onClick={handleSearch}
-            className="h-10 rounded-xl border-0 text-white font-semibold shrink-0"
-            style={{
-              background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))',
-            }}
-          >
-            Buscar
-          </Button>
+        <div className="relative ml-auto w-[260px]">
+          <Input
+            type="text"
+            placeholder={t('appUsers.search')}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-9 rounded-[10px] border pr-8 text-[12.5px]"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={clearSearch}
+              title={t('appUsers.clearSearch')}
+              aria-label={t('appUsers.clearSearch')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center justify-center"
+              style={{ color: 'var(--text-tertiary)' }}
+            >
+              <Icon name="close" size={15} />
+            </button>
+          )}
         </div>
 
         <Button
@@ -163,287 +322,45 @@ export default function AppUsersPage() {
           size="icon"
           onClick={() => refetch()}
           disabled={isFetching}
-          title={t("appUsers.refresh")}
-          className="size-10 shrink-0 rounded-xl border-white/[0.10] bg-white/[0.04] text-[#94A3B8] hover:bg-white/[0.08] hover:text-[#F8FAFC]"
+          title={t('appUsers.refresh')}
+          className="size-9 shrink-0 rounded-[8px]"
         >
-          <RotateCw size={15} className={isFetching ? "animate-spin" : ""} />
+          <Icon
+            name="refresh"
+            size={15}
+            className={cn(isFetching ? 'animate-spin' : undefined)}
+          />
         </Button>
       </div>
 
-      {/* Table */}
-      <AnimatePresence mode="wait">
-        {isLoading && (
-          <motion.div
-            key="loading"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02]"
-          >
-            <SkeletonRow />
-            <SkeletonRow />
-            <SkeletonRow />
-          </motion.div>
-        )}
-
-        {!isLoading && error && (
-          <motion.div
-            key="error"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="rounded-2xl border border-red-500/[0.18] bg-red-500/[0.06] px-6 py-5 text-sm text-red-400"
-          >
-            Erro ao carregar usuários: {(error as Error).message}
-          </motion.div>
-        )}
-
-        {!isLoading && !error && users.length === 0 && (
-          <motion.div
-            key="empty"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.02] px-6 py-12"
-          >
-            <div className="text-center">
-              <Users size={32} strokeWidth={1} className="mx-auto mb-3 text-[#64748B]" />
-              <p className="text-sm text-[#94A3B8]">
-                {debouncedSearch ? t("appUsers.emptySearch") : t("appUsers.empty")}
-              </p>
-            </div>
-          </motion.div>
-        )}
-
-        {!isLoading && !error && users.length > 0 && (
-          <>
-            {/* Desktop table */}
-            <motion.div
-              key="table"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, ease }}
-              className="max-md:hidden overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02]"
-            >
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-white/[0.06]">
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">Nome</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">Email</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">Telefone</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">Provider</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">Status</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">Último acesso</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">Criado em</th>
-                    <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[#64748B]">Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map((u, i) => {
-                    const isDeactivating = deactivate.isPending && deactivate.variables?.userId === u.id;
-                    const isActivating = activate.isPending && activate.variables?.userId === u.id;
-                    const isResetting = resetSessions.isPending && resetSessions.variables?.userId === u.id;
-                    return (
-                      <motion.tr
-                        key={u.id}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ delay: i * 0.03 }}
-                        className="group border-b border-white/[0.04] last:border-0 hover:bg-white/[0.03]"
-                      >
-                        <td className="px-4 py-3.5">
-                          <div className="flex items-center gap-2">
-                            {u.avatar_url ? (
-                              <img src={u.avatar_url} alt="" className="size-6 rounded-full object-cover" />
-                            ) : null}
-                            <span className="text-[13px] font-medium text-[#F8FAFC]">{u.name || "—"}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <span className="text-[13px] text-[#94A3B8]">{u.email}</span>
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <span className="text-[13px] text-[#94A3B8]">{u.phone || "—"}</span>
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <Badge variant="outline" className="text-[11px] border-white/[0.10] bg-white/[0.04] text-[#94A3B8]">
-                            {u.provider}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3.5">
-                          {u.active ? (
-                            <Badge variant="outline" className="text-[11px] border-green-500/20 bg-green-500/[0.08] text-green-400">
-                              {t("appUsers.active")}
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-[11px] border-red-500/20 bg-red-500/[0.08] text-red-400">
-                              {t("appUsers.inactive")}
-                            </Badge>
-                          )}
-                        </td>
-                        <td className="px-4 py-3.5 text-[12px] text-[#64748B]">
-                          {formatDateTime(u.last_sign_in_at)}
-                        </td>
-                        <td className="px-4 py-3.5 text-[12px] text-[#64748B]">
-                          {formatDate(u.created_at)}
-                        </td>
-                        <td className="px-4 py-3.5 text-right">
-                          <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            {u.active ? (
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                onClick={() => deactivate.mutate({ appId: id!, userId: u.id })}
-                                disabled={deactivate.isPending}
-                                title={t("appUsers.deactivateTitle")}
-                                className="size-7 rounded-lg border-amber-500/20 bg-amber-500/[0.08] text-amber-400 hover:bg-amber-500/[0.14] transition-colors"
-                              >
-                                <ShieldOff size={12} strokeWidth={1.5} />
-                              </Button>
-                            ) : null}
-                            {!u.active && (
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                onClick={() => activate.mutate({ appId: id!, userId: u.id })}
-                                title={t("appUsers.activateTitle")}
-                                className="size-7 rounded-lg border-green-500/20 bg-green-500/[0.06] text-green-400 hover:bg-green-500/10 hover:text-green-400"
-                              >
-                                {isActivating ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={12} />}
-                              </Button>
-                            )}
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              onClick={() => resetSessions.mutate({ appId: id!, userId: u.id })}
-                              disabled={resetSessions.isPending}
-                              title={t("appUsers.resetTitle")}
-                              className="size-7 rounded-lg border-white/[0.10] bg-white/[0.04] text-[#94A3B8] hover:bg-white/[0.08] hover:text-[#F8FAFC]"
-                            >
-                              {isResetting ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-                            </Button>
-                          </div>
-                        </td>
-                      </motion.tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </motion.div>
-
-            {/* Mobile cards */}
-            <motion.div
-              key="mobile-cards"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="md:hidden flex flex-col gap-3"
-            >
-              {users.map((u, i) => {
-                const isDeactivating = deactivate.isPending && deactivate.variables?.userId === u.id;
-                const isActivating = activate.isPending && activate.variables?.userId === u.id;
-                const isResetting = resetSessions.isPending && resetSessions.variables?.userId === u.id;
-                return (
-                  <motion.div
-                    key={u.id}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.03 }}
-                    className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-4"
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          {u.avatar_url ? (
-                            <img src={u.avatar_url} alt="" className="size-6 rounded-full object-cover" />
-                          ) : null}
-                          <p className="text-[13px] font-medium text-[#F8FAFC]">{u.name || u.email}</p>
-                        </div>
-                        <p className="text-[11px] text-[#64748B] mt-0.5">
-                          {u.email}{u.phone ? ` · ${u.phone}` : ""}
-                        </p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Badge variant="outline" className="text-[10px] border-white/[0.10] bg-white/[0.04] text-[#94A3B8]">
-                            {u.provider}
-                          </Badge>
-                          {u.active ? (
-                            <Badge variant="outline" className="text-[10px] border-green-500/20 bg-green-500/[0.08] text-green-400">Ativo</Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-[10px] border-red-500/20 bg-red-500/[0.08] text-red-400">Inativo</Badge>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <p className="text-[11px] text-[#64748B] mb-3">
-                      Criado: {formatDate(u.created_at)} · Último acesso: {formatDateTime(u.last_sign_in_at)}
-                    </p>
-                    <div className="flex gap-2">
-                      {u.active ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => deactivate.mutate({ appId: id!, userId: u.id })}
-                          disabled={deactivate.isPending}
-                          className="flex-1 rounded-xl border-orange-500/20 bg-orange-500/[0.06] text-orange-400 text-[11px]"
-                        >
-                          {isDeactivating ? <Loader2 size={12} className="animate-spin mr-1" /> : <ShieldOff size={12} className="mr-1" />}
-                          Desativar
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => activate.mutate({ appId: id!, userId: u.id })}
-                          disabled={activate.isPending}
-                          className="flex-1 rounded-xl border-green-500/20 bg-green-500/[0.06] text-green-400 text-[11px]"
-                        >
-                          {isActivating ? <Loader2 size={12} className="animate-spin mr-1" /> : <CheckCircle size={12} className="mr-1" />}
-                          Reativar
-                        </Button>
-                      )}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => resetSessions.mutate({ appId: id!, userId: u.id })}
-                        disabled={resetSessions.isPending}
-                        className="flex-1 rounded-xl border-white/[0.10] bg-white/[0.04] text-[#94A3B8] text-[11px]"
-                      >
-                        {isResetting ? <Loader2 size={12} className="animate-spin mr-1" /> : <RefreshCw size={12} className="mr-1" />}
-                        Reset Sessões
-                      </Button>
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </motion.div>
-
-            {/* Pagination */}
-            {total > pageSize && (
-              <div className="flex items-center justify-between px-4 py-3 border-t border-white/[0.06] text-[12px] text-[#64748B]">
-                <span>{page * pageSize + 1}–{Math.min((page + 1) * pageSize, total)} de {total}</span>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={page === 0}
-                    onClick={() => setPage(Math.max(0, page - 1))}
-                    className="text-[12px]"
-                  >
-                    Anterior
-                  </Button>
-                  <span>{currentPage}/{totalPages}</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={(page + 1) * pageSize >= total}
-                    onClick={() => setPage(page + 1)}
-                    className="text-[12px]"
-                  >
-                    Próximo
-                  </Button>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </AnimatePresence>
-    </motion.div>
-  );
+      <DataTable<AppUser>
+        columns={columns}
+        rows={users}
+        getRowId={(u) => u.id}
+        loading={isLoading}
+        error={!!error}
+        empty={
+          debouncedSearch
+            ? { title: t('appUsers.emptySearch'), icon: 'search_off' }
+            : { title: t('appUsers.empty'), icon: 'group' }
+        }
+        pagination={
+          total > 0
+            ? {
+                page: currentPage,
+                pageCount: totalPages,
+                onPageChange: (p) => setPage(p - 1),
+                prevLabel: t('appUsers.pagination.prev'),
+                nextLabel: t('appUsers.pagination.next'),
+                label: t('appUsers.pagination.range', {
+                  start: page * pageSize + 1,
+                  end: Math.min((page + 1) * pageSize, total),
+                  total,
+                }),
+              }
+            : undefined
+        }
+      />
+    </>
+  )
 }

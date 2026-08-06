@@ -350,3 +350,9 @@ Fase 7: Retry e delete                                       ▼
 - `MCP: context7` — em T-05 (payload exato de `POST /v1/services` do Render) e T-06 (endpoint de validação de credencial mais barato)
 - `code-review` skill — checkpoint ao final das Fases 3, 6 e 9
 - `verify` skill — após T-14 (suite de integração) e após T-15 (UI final)
+
+---
+
+## Extensão relacionada (2026-08-05)
+
+Visibilidade de deploy (histórico "Recent Deploys" na tab Deploy providers, via `GET /services/{id}/deploys` do Render) foi adicionada em `.specs/features/integrations-handoff-parity/`, não aqui — esta spec permanece só conectar provider + criar/deletar service. Não reabrir escopo desta spec pra isso.

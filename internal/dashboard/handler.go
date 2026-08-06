@@ -98,6 +98,19 @@ func validateAppInput(name string) error {
 	return nil
 }
 
+// resolveTableRLS applies the global "require RLS by default" setting: when a
+// create request omits the access level and the setting is on AND the app has
+// email auth (required for owner-scoped RLS), the table defaults to Restricted
+// ("enabled"). An explicit access level from the client is always respected,
+// and without email auth an omitted level stays Public (empty) — forcing
+// Restricted there would fail provisioning (owner_id FK needs _auth_users).
+func resolveTableRLS(requested string, requireRLSDefault, authEmailEnabled bool) string {
+	if requested == "" && requireRLSDefault && authEmailEnabled {
+		return "enabled"
+	}
+	return requested
+}
+
 // validateTableInput checks a single table before it reaches the provisioner
 // DDL: safe identifiers, known column types, no duplicate name against the
 // app's other tables (otherTables — exclude the table being updated, if any),
@@ -400,15 +413,19 @@ func (h *Handler) UpdateSystemConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)
-	var body struct {
-		SoftDeleteEnabled bool                 `json:"soft_delete_enabled"`
-		StorageConfig     *GlobalStorageConfig `json:"storage_config,omitempty"`
-	}
-	if !h.decodeJSONBody(w, r, &body) {
+	var patch systemConfigPatch
+	if !h.decodeJSONBody(w, r, &patch) {
 		return
 	}
 
-	cfg, err := UpsertSystemConfig(r.Context(), h.pool, body.SoftDeleteEnabled, body.StorageConfig)
+	current, err := GetSystemConfig(r.Context(), h.pool)
+	if err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "failed to load system config", err)
+		return
+	}
+	merged := mergeSystemConfig(*current, patch)
+
+	cfg, err := UpsertSystemConfig(r.Context(), h.pool, &merged)
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "failed to update system config", err)
 		return
@@ -418,7 +435,10 @@ func (h *Handler) UpdateSystemConfig(w http.ResponseWriter, r *http.Request) {
 		cfg.StorageConfig.SecretAccessKey = ""
 	}
 
-	h.reg.SetSystemConfig(registry.SystemConfig{SoftDeleteEnabled: cfg.SoftDeleteEnabled})
+	h.reg.SetSystemConfig(registry.SystemConfig{
+		SoftDeleteEnabled:  cfg.SoftDeleteEnabled,
+		StatementTimeoutMs: cfg.StatementTimeoutMs,
+	})
 
 	writeJSON(w, http.StatusOK, cfg)
 	h.audit(r.Context(), user.ID, user.Email, "config.system.update", "config", "system", "", nil, r.RemoteAddr)
@@ -687,7 +707,11 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
-	if user.Role != "superadmin" {
+	// dashboard-global-roles T-02: action gate replaces the old `role ==
+	// "superadmin"` inline check. admin can also manage users; the per-role
+	// target restriction (only superadmin can create superadmin) is enforced
+	// separately below by CanCreateUserWithRole.
+	if !HasPlatformPermission(user.Role, ActionManageUsers) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}
@@ -714,8 +738,19 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid email address"})
 		return
 	}
-	if body.Role != "admin" && body.Role != "superadmin" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "role must be 'admin' or 'superadmin'"})
+	// dashboard-global-roles T-01: 4 valid role values now. Anything else is 400.
+	switch body.Role {
+	case "superadmin", "admin", "auditor", "member":
+		// valid
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "role must be one of: superadmin, admin, auditor, member"})
+		return
+	}
+	// dashboard-global-roles T-03: only a superadmin can create another superadmin.
+	// Other restrictions on the target role live in HasPlatformPermission; this
+	// is the only function that decides "can actor X create role=Y?".
+	if !CanCreateUserWithRole(user.Role, body.Role) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only a superadmin can create a superadmin"})
 		return
 	}
 	if len(body.Password) < 8 {
@@ -762,6 +797,29 @@ func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// dashboard-global-roles T-05: ≥1 superadmin invariant. Before deleting,
+	// look up the target's role — if it's a superadmin, verify at least one
+	// other superadmin exists. Same helper as UpdateUserRole.
+	target, err := GetUser(r.Context(), h.pool, targetID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
+			return
+		}
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+	if target.Role == "superadmin" {
+		if err := assertAtLeastOneSuperadminRemains(r.Context(), h.pool, targetID); err != nil {
+			if errors.Is(err, errLastSuperadmin) {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "platform must have at least one superadmin"})
+				return
+			}
+			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+			return
+		}
+	}
+
 	if err := DeleteUser(r.Context(), h.pool, targetID); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -783,7 +841,7 @@ func (h *Handler) ListApps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	apps, err := ListApps(r.Context(), h.pool, user.ID, user.Role)
+	apps, err := ListApps(r.Context(), h.pool, user)
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
@@ -885,7 +943,7 @@ func (h *Handler) GetApp(w http.ResponseWriter, r *http.Request) {
 
 	appID := chi.URLParam(r, "id")
 
-	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	app, _, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -895,6 +953,7 @@ func (h *Handler) GetApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	app.JWTSecret = ""
 	writeJSON(w, http.StatusOK, app)
 }
 
@@ -919,7 +978,24 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app, err := UpdateApp(r.Context(), h.pool, appID, user.ID, user.Role, body.AuthEmailEnabled)
+	// App config (auth_providers / storage_config / rate_limit_config) is
+	// management-level — only admin can change it. Editor has CanWrite but
+	// not CanManage, so they're blocked here even though they can edit tables.
+	_, role, err := GetApp(r.Context(), h.pool, appID, user)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+	if !role.CanManage() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+
+	app, err := UpdateApp(r.Context(), h.pool, appID, user, body.AuthEmailEnabled)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -986,7 +1062,7 @@ func (h *Handler) DeleteApp(w http.ResponseWriter, r *http.Request) {
 
 	appID := chi.URLParam(r, "id")
 
-	existing, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	existing, role, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -995,8 +1071,19 @@ func (h *Handler) DeleteApp(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
+	// Deleting an app is admin-only. Check here (same as UpdateApp) instead
+	// of relying solely on the store: DeleteApp returns ErrForbidden, which
+	// has to be mapped explicitly or it falls through to a 500.
+	if !role.CanManage() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
 
-	if err := DeleteApp(r.Context(), h.pool, appID, user.ID, user.Role); err != nil {
+	if err := DeleteApp(r.Context(), h.pool, appID, user); err != nil {
+		if errors.Is(err, ErrForbidden) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+			return
+		}
 		if errors.Is(err, ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 			return
@@ -1022,7 +1109,7 @@ func (h *Handler) CreateAppTable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appID := chi.URLParam(r, "id")
-	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	app, role, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -1031,12 +1118,23 @@ func (h *Handler) CreateAppTable(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
+	if !role.CanWrite() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
 	var body tableRequestBody
 	if !h.decodeJSONBody(w, r, &body) {
 		return
 	}
+
+	sysCfg, err := GetSystemConfig(r.Context(), h.pool)
+	if err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "failed to load system config", err)
+		return
+	}
+	body.RLS = resolveTableRLS(body.RLS, sysCfg.RequireRLSDefault, app.AuthEmailEnabled)
 
 	table := AppTableRow{Name: body.Name, RLS: body.RLS, Columns: body.Columns, Indexes: body.Indexes}
 	if err := validateTableInput(table, app.AuthEmailEnabled, app.Tables); err != nil {
@@ -1066,7 +1164,7 @@ func (h *Handler) CreateAppTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	updated, _, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
@@ -1088,13 +1186,17 @@ func (h *Handler) UpdateAppTable(w http.ResponseWriter, r *http.Request) {
 
 	appID := chi.URLParam(r, "id")
 	tableID := chi.URLParam(r, "tableId")
-	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	app, role, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 			return
 		}
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+	if !role.CanWrite() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}
 
@@ -1150,7 +1252,7 @@ func (h *Handler) UpdateAppTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	updated, _, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
@@ -1173,13 +1275,17 @@ func (h *Handler) DeleteAppTable(w http.ResponseWriter, r *http.Request) {
 
 	appID := chi.URLParam(r, "id")
 	tableID := chi.URLParam(r, "tableId")
-	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	app, role, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 			return
 		}
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+	if !role.CanWrite() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}
 
@@ -1198,7 +1304,7 @@ func (h *Handler) DeleteAppTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	updated, _, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
@@ -1489,7 +1595,7 @@ func (h *Handler) ListLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
+	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user)
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
@@ -1521,7 +1627,7 @@ func (h *Handler) LogsMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
+	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user)
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
@@ -1540,6 +1646,7 @@ type DataBrowserTableColumn struct {
 type DataBrowserTable struct {
 	Name    string                   `json:"name"`
 	Columns []DataBrowserTableColumn `json:"columns"`
+	Count   int                      `json:"count"`
 }
 
 // DataBrowserApp represents an app in the data browser tree.
@@ -1556,7 +1663,7 @@ func (h *Handler) ListDataBrowserApps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
+	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user)
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
@@ -1580,7 +1687,14 @@ func (h *Handler) ListDataBrowserApps(w http.ResponseWriter, r *http.Request) {
 			if t.RLS == "owner" {
 				cols = append(cols, DataBrowserTableColumn{Name: "owner_id", Type: "uuid"})
 			}
-			tables = append(tables, DataBrowserTable{Name: t.Name, Columns: cols})
+
+			var count int
+			if q, err := query.BuildList(app.SchemaName, t.Name, t, nil, "", h.reg.SystemConfig().SoftDeleteEnabled); err == nil {
+				filterArgs := q.Args[:len(q.Args)-2]
+				_ = h.pool.QueryRow(r.Context(), q.CountSQL, filterArgs...).Scan(&count)
+			}
+
+			tables = append(tables, DataBrowserTable{Name: t.Name, Columns: cols, Count: count})
 		}
 		resp = append(resp, DataBrowserApp{Name: app.Config.Name, Tables: tables})
 	}
@@ -1606,7 +1720,7 @@ func (h *Handler) DataBrowserQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
+	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user)
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
@@ -1700,7 +1814,7 @@ func (h *Handler) DataBrowserExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
+	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user)
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
@@ -1722,7 +1836,10 @@ func (h *Handler) DataBrowserExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	const exportLimit = 10000
+	exportLimit := 10000
+	if sysCfg, cfgErr := GetSystemConfig(r.Context(), h.pool); cfgErr == nil && sysCfg.MaxCSVExportRows > 0 {
+		exportLimit = sysCfg.MaxCSVExportRows
+	}
 	params := make(map[string]string)
 	params["limit"] = strconv.Itoa(exportLimit)
 	params["offset"] = "0"
@@ -1838,12 +1955,12 @@ func (h *Handler) DataBrowserCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ownership, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
-	if err != nil {
+	role, err := ResolveAppRoleByName(r.Context(), h.pool, user, req.App)
+	if err != nil && !errors.Is(err, ErrNotFound) {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
-	if ownership != nil && !ownership[req.App] {
+	if !role.CanWrite() {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}
@@ -1900,12 +2017,12 @@ func (h *Handler) DataBrowserUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ownership, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
-	if err != nil {
+	role, err := ResolveAppRoleByName(r.Context(), h.pool, user, req.App)
+	if err != nil && !errors.Is(err, ErrNotFound) {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
-	if ownership != nil && !ownership[req.App] {
+	if !role.CanWrite() {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}
@@ -1960,12 +2077,12 @@ func (h *Handler) DataBrowserDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ownership, err := ListOwnedAppNames(r.Context(), h.pool, user.ID, user.Role)
-	if err != nil {
+	role, err := ResolveAppRoleByName(r.Context(), h.pool, user, appName)
+	if err != nil && !errors.Is(err, ErrNotFound) {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
-	if ownership != nil && !ownership[appName] {
+	if !role.CanWrite() {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}
@@ -2012,7 +2129,7 @@ func (h *Handler) ListAppUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appID := chi.URLParam(r, "id")
-	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	app, _, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "app not found"})
@@ -2066,9 +2183,13 @@ func (h *Handler) DeactivateAppUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appID := chi.URLParam(r, "id")
-	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	app, role, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "app not found"})
+		return
+	}
+	if !role.CanManage() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}
 
@@ -2097,9 +2218,13 @@ func (h *Handler) ActivateAppUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appID := chi.URLParam(r, "id")
-	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	app, role, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "app not found"})
+		return
+	}
+	if !role.CanManage() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}
 
@@ -2128,9 +2253,13 @@ func (h *Handler) ResetAppUserSessions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appID := chi.URLParam(r, "id")
-	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	app, role, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "app not found"})
+		return
+	}
+	if !role.CanManage() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}
 
@@ -2171,10 +2300,11 @@ func (h *Handler) ListAuditLog(w http.ResponseWriter, r *http.Request) {
 	}
 
 	entries, total, err := ListAuditLog(r.Context(), h.pool, AuditLogFilter{
-		Action: r.URL.Query().Get("action"),
-		UserID: r.URL.Query().Get("user"),
-		Limit:  limit,
-		Offset: offset,
+		Action:    r.URL.Query().Get("action"),
+		Category:  r.URL.Query().Get("category"),
+		UserEmail: r.URL.Query().Get("user_email"),
+		Limit:     limit,
+		Offset:    offset,
 	})
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
@@ -2219,7 +2349,7 @@ func (h *Handler) ListAppTokens(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appID := chi.URLParam(r, "id")
-	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	app, _, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
@@ -2245,9 +2375,13 @@ func (h *Handler) CreateAppToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appID := chi.URLParam(r, "id")
-	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	app, role, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	if !role.CanManage() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}
 	if app.AuthEmailEnabled {
@@ -2315,9 +2449,13 @@ func (h *Handler) RevokeAppToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appID := chi.URLParam(r, "id")
-	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	app, role, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	if !role.CanManage() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}
 	if app.AuthEmailEnabled {
@@ -2344,8 +2482,11 @@ func (h *Handler) RegenerateAppSecret(w http.ResponseWriter, r *http.Request) {
 
 	appID := chi.URLParam(r, "id")
 
-	if _, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role); err != nil {
+	if _, role, err := GetApp(r.Context(), h.pool, appID, user); err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	} else if !role.CanManage() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}
 
@@ -2372,7 +2513,7 @@ func (h *Handler) RegenerateAppSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	appRow, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	appRow, _, err := GetApp(r.Context(), h.pool, appID, user)
 	if err == nil {
 		h.reg.Register(appRowToRegistryApp(appRow))
 	}
@@ -2389,9 +2530,13 @@ func (h *Handler) GetAppSecret(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appID := chi.URLParam(r, "id")
-	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	app, role, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	if !role.CanManage() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}
 

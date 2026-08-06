@@ -36,18 +36,31 @@ Features:
 
 ---
 
-## M3 — Governance & Security 🔵 in development
+## M3 — Frontend Apps ✅ complete
 
-- [x] Audit log (who did what, when, on which app)
-- [x] Soft delete
-- [ ] Role-based access per app (admin, editor, viewer) — RBAC
-- [x] Corporate SSO integration — Google OAuth done; Microsoft Entra ID pending
-- [x] Rate limiting per app
-- [ ] Schema change approval workflow
+- [x] Frontend app entity (pick a template, get a live site) — spec: `.specs/features/frontend-app-entity/`
+- [x] GitHub integration (connect repo, push-to-deploy) — spec: `.specs/features/github-integration/`
+- [x] Shared GitHub App for one-click repo connection — spec: `.specs/features/github-shared-app/`
+- [x] Deploy provider integration (Render) — spec: `.specs/features/deploy-provider-integration/`
+- [x] Custom domains
+- [x] Local repo sync — spec: `.specs/features/sync-local-repo/`
 
 ---
 
-## M4 — Storage & Events 🔵 in development
+## M4 — Governance & Security 🔵 in development
+
+- [x] Audit log (who did what, when, on which app)
+- [x] Soft delete
+- [ ] Role-based access per app (admin, editor, viewer) — RBAC — spec: `.specs/features/rbac-per-app/`
+- [ ] Global dashboard roles (superadmin, admin, auditor, member) — spec: `.specs/features/dashboard-global-roles/` (depends on `rbac-per-app`'s `ResolveAppRole` for admin/auditor cross-app read access)
+- [x] Corporate SSO integration — Google OAuth done; Microsoft Entra ID pending
+- [x] Rate limiting per app
+- [ ] Schema change approval workflow
+- [ ] Two-factor authentication (TOTP + backup codes), dashboard and per-app — spec: `.specs/features/two-factor-auth/`
+
+---
+
+## M5 — Storage & Events 🔵 in development
 
 - [x] File storage per app (S3/MinIO compatible)
 - [x] Signed upload/download URLs
@@ -56,7 +69,7 @@ Features:
 
 ---
 
-## M5 — i18n ✅ complete
+## M6 — i18n ✅ complete
 
 - [x] pt-BR + en for the entire dashboard UI
 - [x] Language switcher in sidebar/user menu
@@ -64,7 +77,7 @@ Features:
 
 ---
 
-## M6 — SDKs ✅ complete
+## M7 — SDKs ✅ complete
 
 - [x] TypeScript client
 - [x] Go client
@@ -72,6 +85,21 @@ Features:
 - [x] Rust client
 - [x] Java client
 - [x] PHP client
+
+---
+
+## M8 — Platform Services 🔵 in development
+
+- [ ] SMTP/email integration (SMTP, SendGrid, SES, Resend) — user invites, self-service password reset — spec: `.specs/features/smtp-email-integration/`
+- [ ] Observability integrations per app (OpenTelemetry core; Datadog, New Relic enterprise-gated) — spec: `.specs/features/observability-integrations/`
+
+---
+
+## M9 — Enterprise Licensing 🔵 in development
+
+- [ ] Dual-license model (MIT core + gated enterprise features, GrowthBook-style) — spec: `.specs/features/enterprise-licensing/`
+- [ ] License server contract (issuance, Stripe one-time payment, revocation) — implementation lives in a separate Zeep Labs repo, contract only here
+- [ ] First concrete enterprise-gated features: Datadog/New Relic observability exporters (see M8)
 
 ---
 

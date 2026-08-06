@@ -1,0 +1,34 @@
+/* Minimal Prism.js token theme mapped onto our design tokens — used only by
+ * the SDK code snippets (src/pages/SdkPage.tsx). Not a stock Prism theme:
+ * hand-picked token classes to match the handoff's highlighting exactly. */
+
+.token.keyword,
+.token.builtin,
+.token.operator,
+.token.decorator {
+  color: var(--primary);
+}
+
+.token.string,
+.token.char {
+  color: var(--accent);
+}
+
+.token.function,
+.token.class-name {
+  color: var(--text-primary);
+}
+
+.token.comment {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.token.number,
+.token.boolean {
+  color: var(--warning);
+}
+
+.token.punctuation {
+  color: var(--text-secondary);
+}

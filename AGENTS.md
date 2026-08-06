@@ -57,7 +57,7 @@ Follow `RELEASE.md` exactly, in order. Do not skip steps or reorder them. In sho
 1. Cut `release-vX.Y.Z` from `develop`.
 2. Bump version in **both** `charts/zeep-orbit/Chart.yaml` (`version` + `appVersion`) and `internal/dashboard/ui/package.json`.
 3. Move `[Unreleased]` entries in `CHANGELOG.md` into a new dated version section.
-4. Add an entry to `internal/dashboard/changelog.json` (renders on the dashboard's `/changelog` page).
+4. Add an entry to `internal/dashboard/changelog.json` (renders on the dashboard's `/changelog` page). Every `title`/`summary`/`description` field is bilingual — `{"en": "...", "pt-BR": "..."}` — not an i18n key; the frontend (`ChangelogPage.tsx`) picks the field matching `i18n.language` at render time, falling back to `en`. Never add an entry with only one language.
 5. Write `.github/release-notes-vX.Y.Z.md` — this becomes the actual GitHub Release body (`docker-publish.yml` reads it via `body_path`); if it's missing, CI silently falls back to GitHub's generic auto-generated notes.
 6. Open a PR `release-vX.Y.Z` → `main`. Wait for CI green + review, then merge via "Rebase and merge."
 7. Tag `vX.Y.Z` on `main`, push the tag — CI (`docker-publish.yml`) builds the image, publishes GHCR + GitHub Release + Helm chart package; `docs.yml` publishes the Helm chart repo from the `Chart.yaml` bump (triggered when the PR lands on `main`, not by the tag).

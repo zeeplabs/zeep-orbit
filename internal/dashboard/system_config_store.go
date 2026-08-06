@@ -17,16 +17,55 @@ type GlobalStorageConfig struct {
 }
 
 type SystemConfig struct {
-	SoftDeleteEnabled bool                 `json:"soft_delete_enabled"`
-	StorageConfig     *GlobalStorageConfig `json:"storage_config,omitempty"`
+	SoftDeleteEnabled  bool                 `json:"soft_delete_enabled"`
+	StorageConfig      *GlobalStorageConfig `json:"storage_config,omitempty"`
+	MaxCSVExportRows   int                  `json:"max_csv_export_rows"`
+	StatementTimeoutMs int                  `json:"statement_timeout_ms"`
+	RequireRLSDefault  bool                 `json:"require_rls_default"`
+	RetentionDays      int                  `json:"retention_days"`
+}
+
+// systemConfigPatch is a partial update: a nil field means "leave unchanged".
+type systemConfigPatch struct {
+	SoftDeleteEnabled  *bool                `json:"soft_delete_enabled,omitempty"`
+	StorageConfig      *GlobalStorageConfig `json:"storage_config,omitempty"`
+	MaxCSVExportRows   *int                 `json:"max_csv_export_rows,omitempty"`
+	StatementTimeoutMs *int                 `json:"statement_timeout_ms,omitempty"`
+	RequireRLSDefault  *bool                `json:"require_rls_default,omitempty"`
+	RetentionDays      *int                 `json:"retention_days,omitempty"`
+}
+
+// mergeSystemConfig overlays only the fields present in the patch onto the
+// current config (merge-on-absent — see mergeProviderConfig for the pattern).
+func mergeSystemConfig(cur SystemConfig, patch systemConfigPatch) SystemConfig {
+	if patch.SoftDeleteEnabled != nil {
+		cur.SoftDeleteEnabled = *patch.SoftDeleteEnabled
+	}
+	if patch.StorageConfig != nil {
+		cur.StorageConfig = patch.StorageConfig
+	}
+	if patch.MaxCSVExportRows != nil {
+		cur.MaxCSVExportRows = *patch.MaxCSVExportRows
+	}
+	if patch.StatementTimeoutMs != nil {
+		cur.StatementTimeoutMs = *patch.StatementTimeoutMs
+	}
+	if patch.RequireRLSDefault != nil {
+		cur.RequireRLSDefault = *patch.RequireRLSDefault
+	}
+	if patch.RetentionDays != nil {
+		cur.RetentionDays = *patch.RetentionDays
+	}
+	return cur
 }
 
 func GetSystemConfig(ctx context.Context, pool *db.Pool) (*SystemConfig, error) {
 	var cfg SystemConfig
 	var rawStorage []byte
 	err := pool.QueryRow(ctx,
-		`SELECT soft_delete_enabled, storage_config FROM zeep_system.system_config LIMIT 1`,
-	).Scan(&cfg.SoftDeleteEnabled, &rawStorage)
+		`SELECT soft_delete_enabled, storage_config, COALESCE(max_csv_export_rows, 10000), COALESCE(statement_timeout_ms, 30000), COALESCE(require_rls_default, false), COALESCE(retention_days, 0)
+		 FROM zeep_system.system_config LIMIT 1`,
+	).Scan(&cfg.SoftDeleteEnabled, &rawStorage, &cfg.MaxCSVExportRows, &cfg.StatementTimeoutMs, &cfg.RequireRLSDefault, &cfg.RetentionDays)
 	if err != nil {
 		return &SystemConfig{}, nil
 	}
@@ -39,23 +78,35 @@ func GetSystemConfig(ctx context.Context, pool *db.Pool) (*SystemConfig, error) 
 	return &cfg, nil
 }
 
-func UpsertSystemConfig(ctx context.Context, pool *db.Pool, softDeleteEnabled bool, storageConfig *GlobalStorageConfig) (*SystemConfig, error) {
+func UpsertSystemConfig(ctx context.Context, pool *db.Pool, cfg *SystemConfig) (*SystemConfig, error) {
 	var rawJSON string
-	if storageConfig != nil && storageConfig.Bucket != "" {
-		b, _ := json.Marshal(storageConfig)
+	if cfg.StorageConfig != nil && cfg.StorageConfig.Bucket != "" {
+		b, _ := json.Marshal(cfg.StorageConfig)
 		rawJSON = string(b)
 	}
 	if rawJSON == "" {
 		rawJSON = "{}"
 	}
+	maxCSV := cfg.MaxCSVExportRows
+	if maxCSV <= 0 {
+		maxCSV = 10000
+	}
+	stmtTimeout := cfg.StatementTimeoutMs
+	if stmtTimeout < 0 {
+		stmtTimeout = 0
+	}
 
 	_, err := pool.Exec(ctx,
-		`INSERT INTO zeep_system.system_config (soft_delete_enabled, storage_config)
-		 VALUES ($1, $2::jsonb)
+		`INSERT INTO zeep_system.system_config (soft_delete_enabled, storage_config, max_csv_export_rows, statement_timeout_ms, require_rls_default, retention_days)
+		 VALUES ($1, $2::jsonb, $3, $4, $5, $6)
 		 ON CONFLICT ((TRUE)) DO UPDATE
 		   SET soft_delete_enabled = $1,
-		       storage_config = $2::jsonb`,
-		softDeleteEnabled, rawJSON,
+		       storage_config = $2::jsonb,
+		       max_csv_export_rows = $3,
+		       statement_timeout_ms = $4,
+		       require_rls_default = $5,
+		       retention_days = $6`,
+		cfg.SoftDeleteEnabled, rawJSON, maxCSV, stmtTimeout, cfg.RequireRLSDefault, cfg.RetentionDays,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("upsert system config: %w", err)

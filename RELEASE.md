@@ -57,16 +57,26 @@ Move unreleased changes to a new version section at the top of `CHANGELOG.md`:
 
 Edit `internal/dashboard/changelog.json` and add the new release to the `entries` array (newest first). This is what renders on the dashboard's `/changelog` page — it's embedded into the Go binary at compile time (`//go:embed`), so it must be updated in the same commit as the code that ships, not as an afterthought.
 
+Every `title`/`summary`/section `items[].description` field is **bilingual** — `{"en": "...", "pt-BR": "..."}`, not a plain string and not an i18n key. `ChangelogPage.tsx`'s `localize()` helper picks the field matching `i18n.language` at render time, falling back to `en`. A plain string here silently renders as an empty title/summary in both languages (it happened once — don't repeat it).
+
 ```json
 {
-  "version": "0.4.1",
-  "date": "2026-07-30",
-  "type": "patch",
-  "title": "...",
-  "description": "...",
-  "highlights": ["...", "..."]
+  "version": "v0.4.1",
+  "release_date": "2026-07-30",
+  "title": {"en": "...", "pt-BR": "..."},
+  "summary": {"en": "...", "pt-BR": "..."},
+  "sections": [
+    {
+      "type": "features",
+      "items": [
+        {"description": {"en": "...", "pt-BR": "..."}}
+      ]
+    }
+  ]
 }
 ```
+
+`sections[].type` is one of `features` / `improvements` / `fixes` / `security` / `breaking` — each renders with its own color pill on the changelog page.
 
 ## 4. Write release notes
 

@@ -86,9 +86,39 @@ func cmdServe() *cobra.Command {
 			}
 
 			sysCfg, err := dashboard.GetSystemConfig(context.Background(), pool)
-			if err == nil {
-				reg.SetSystemConfig(registry.SystemConfig{SoftDeleteEnabled: sysCfg.SoftDeleteEnabled})
+			if err != nil {
+				// Fail-open would silently leave the registry at its zero-value
+				// SystemConfig (StatementTimeoutMs: 0 = no timeout enforced,
+				// SoftDeleteEnabled: false) without anyone noticing. Loud enough
+				// to page on, since it means query-timeout protection is off.
+				fmt.Fprintf(os.Stderr, "WARNING: failed to load system config at boot, statement_timeout and soft-delete enforcement are OFF until the next successful config read: %v\n", err)
+			} else {
+				reg.SetSystemConfig(registry.SystemConfig{
+					SoftDeleteEnabled:  sysCfg.SoftDeleteEnabled,
+					StatementTimeoutMs: sysCfg.StatementTimeoutMs,
+				})
 			}
+
+			go func() {
+				runPurge := func() {
+					cfg, err := dashboard.GetSystemConfig(context.Background(), pool)
+					if err != nil || cfg.RetentionDays <= 0 || !cfg.SoftDeleteEnabled {
+						return
+					}
+					if _, err := dashboard.PurgeExpiredSoftDeletes(context.Background(), pool, reg, cfg.RetentionDays); err != nil {
+						fmt.Fprintf(os.Stderr, "purge error: %v\n", err)
+					}
+				}
+				// Run once at boot — otherwise a replica that restarts more
+				// often than the 6h ticker period could go arbitrarily long
+				// without ever purging.
+				runPurge()
+				ticker := time.NewTicker(6 * time.Hour)
+				defer ticker.Stop()
+				for range ticker.C {
+					runPurge()
+				}
+			}()
 
 			fmt.Printf("zeep-orbit starting on :%d (%d apps loaded)\n", port, len(reg.Apps()))
 

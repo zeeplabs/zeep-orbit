@@ -3,6 +3,7 @@ package dashboard
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -18,8 +19,8 @@ type AppProviderConfig struct {
 }
 
 // GetAppAuthProviders returns the auth providers configuration for an app.
-func GetAppAuthProviders(ctx context.Context, pool *db.Pool, appID, userID, role string) (json.RawMessage, error) {
-	app, err := GetApp(ctx, pool, appID, userID, role)
+func GetAppAuthProviders(ctx context.Context, pool *db.Pool, appID string, user *DashboardUser) (json.RawMessage, error) {
+	app, _, err := GetApp(ctx, pool, appID, user)
 	if err != nil {
 		return nil, err
 	}
@@ -30,11 +31,15 @@ func GetAppAuthProviders(ctx context.Context, pool *db.Pool, appID, userID, role
 }
 
 // UpdateAppAuthProviders updates the auth_providers JSONB for an app.
-func UpdateAppAuthProviders(ctx context.Context, pool *db.Pool, appID, userID, role string, providers json.RawMessage) error {
-	if _, err := GetApp(ctx, pool, appID, userID, role); err != nil {
+// Requires CanManage() (admin only) — auth providers are app-level config.
+func UpdateAppAuthProviders(ctx context.Context, pool *db.Pool, appID string, user *DashboardUser, providers json.RawMessage) error {
+	_, role, err := GetApp(ctx, pool, appID, user)
+	if err != nil {
 		return err
 	}
-
+	if !role.CanManage() {
+		return ErrForbidden
+	}
 	return updateAppProvidersRaw(ctx, pool, appID, providers)
 }
 
@@ -63,7 +68,7 @@ func (h *Handler) ListAppProviders(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appID := chi.URLParam(r, "id")
-	providers, err := GetAppAuthProviders(r.Context(), h.pool, appID, user.ID, user.Role)
+	providers, err := GetAppAuthProviders(r.Context(), h.pool, appID, user)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "app not found"})
 		return
@@ -89,12 +94,16 @@ func (h *Handler) UpdateAppProviders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := UpdateAppAuthProviders(r.Context(), h.pool, appID, user.ID, user.Role, providers); err != nil {
+	if err := UpdateAppAuthProviders(r.Context(), h.pool, appID, user, providers); err != nil {
+		if errors.Is(err, ErrForbidden) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+			return
+		}
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update providers"})
 		return
 	}
 
-	app, err := GetApp(r.Context(), h.pool, appID, user.ID, user.Role)
+	app, _, err := GetApp(r.Context(), h.pool, appID, user)
 	if err == nil {
 		h.reg.Register(appRowToRegistryApp(app))
 	}

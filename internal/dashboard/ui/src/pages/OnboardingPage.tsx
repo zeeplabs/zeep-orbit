@@ -1,116 +1,107 @@
-import { useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import { useTranslation } from "react-i18next";
-import { useBootstrap } from "../lib/api";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
+import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { useBootstrap } from '../lib/api'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Icon } from '@/components/ui/icon'
+import { cn } from '@/lib/utils'
 
 export interface OnboardingPageProps {
-  onComplete: () => void;
+  onComplete: () => void
 }
 
-type Step = "welcome" | "create-superadmin" | "done";
+type Step = 'welcome' | 'create-superadmin' | 'done'
 
-const EASE = [0.32, 0.72, 0, 1] as const;
-const DURATION = 0.5;
+const STEPS: Step[] = ['welcome', 'create-superadmin', 'done']
 
-const stepVariants = {
-  enter: (direction: number) => ({
-    x: direction > 0 ? 60 : -60,
-    opacity: 0,
-  }),
-  center: {
-    x: 0,
-    opacity: 1,
-  },
-  exit: (direction: number) => ({
-    x: direction > 0 ? -60 : 60,
-    opacity: 0,
-  }),
-};
-
-const STEPS: Step[] = ["welcome", "create-superadmin", "done"];
-
-function StepDots({ current }: { current: Step }) {
-  const idx = STEPS.indexOf(current);
+/** Step indicator (handoff linhas 152-157): 3 círculos numerados, check quando done, primary quando current. */
+function StepIndicator({ current }: { current: Step }) {
+  const currentIdx = STEPS.indexOf(current)
   return (
-    <div className="flex gap-2 justify-center mb-8">
-      {STEPS.map((_, i) => (
-        <div
-          key={i}
-          className={cn(
-            "h-2 rounded-full transition-all",
-            i === idx
-              ? "w-5"
-              : i < idx
-                ? "w-2"
-                : "w-2 bg-white/15"
-          )}
-          style={{
-            backgroundColor: i === idx ? 'var(--brand-primary)' : i < idx ? 'rgba(var(--brand-primary-rgb), 0.4)' : undefined,
-            transitionDuration: `${DURATION}s`,
-            transitionTimingFunction: `cubic-bezier(${EASE.join(",")})`,
-          }}
-        />
-      ))}
+    <div className="mb-8 flex items-center justify-center gap-0">
+      {STEPS.map((s, i) => {
+        const isDone = i < currentIdx
+        const isCurrent = i === currentIdx
+        return (
+          <div key={s} className="flex items-center">
+            <div
+              className="flex h-7 w-7 items-center justify-center rounded-full text-[12px] font-bold"
+              style={{
+                background: isDone || isCurrent ? 'var(--primary)' : 'var(--bg-sunken)',
+                color: isDone || isCurrent ? '#fff' : 'var(--text-tertiary)',
+                border: isDone || isCurrent ? 'none' : '1px solid var(--border-strong)',
+              }}
+            >
+              {isDone ? <Icon name="check" size={14} /> : i + 1}
+            </div>
+            {i < STEPS.length - 1 && (
+              <div
+                className="h-0.5 w-10"
+                style={{ background: isDone ? 'var(--primary)' : 'var(--border)' }}
+              />
+            )}
+          </div>
+        )
+      })}
     </div>
-  );
+  )
 }
 
 function WelcomeStep({ onNext }: { onNext: () => void }) {
-  const { t } = useTranslation();
+  const { t } = useTranslation()
   return (
     <div className="text-center">
-      <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 text-[28px]"
-        style={{
-          background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))',
-        }}
+      <div
+        className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-[14px]"
+        style={{ background: 'var(--primary-tint)' }}
       >
-        ⚡
+        <Icon name="rocket_launch" size={28} style={{ color: 'var(--primary)' }} />
       </div>
-      <h1 className="text-[26px] font-bold mb-3 tracking-tight leading-tight text-[#F8FAFC]">
-        {t("onboarding.welcome")}
+      <h1
+        className="mb-2.5 text-[22px] font-bold"
+        style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}
+      >
+        {t('onboarding.welcome')}
       </h1>
-      <p className="text-[#94A3B8] text-sm leading-relaxed mb-10 max-w-[340px] mx-auto">
-        {t("onboarding.welcomeDesc")}
+      <p
+        className="mx-auto mb-7 max-w-[340px] text-[14px] leading-[1.6]"
+        style={{ color: 'var(--text-secondary)' }}
+      >
+        {t('onboarding.welcomeDesc')}
       </p>
       <Button
         onClick={onNext}
-        className="border-0 text-white font-semibold px-8 py-[13px] h-auto rounded-lg hover:opacity-90 transition-opacity"
-        style={{
-          background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))',
-        }}
+        className="h-auto w-full rounded-[10px] py-3 text-[14px] font-bold"
       >
-        {t("onboarding.start")}
+        {t('onboarding.start')}
       </Button>
     </div>
-  );
+  )
 }
 
 function CreateSuperadminStep({ onSuccess }: { onSuccess: () => void }) {
-  const { t } = useTranslation();
-  const [secret, setSecret] = useState("");
-  const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [validationError, setValidationError] = useState("");
+  const { t } = useTranslation()
+  const [secret, setSecret] = useState('')
+  const [email, setEmail] = useState('')
+  const [name, setName] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [validationError, setValidationError] = useState('')
 
-  const bootstrap = useBootstrap();
+  const bootstrap = useBootstrap()
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setValidationError("");
+    e.preventDefault()
+    setValidationError('')
 
     if (password.length < 8) {
-      setValidationError(t("onboarding.passwordMin"));
-      return;
+      setValidationError(t('onboarding.passwordMin'))
+      return
     }
     if (password !== confirmPassword) {
-      setValidationError(t("onboarding.passwordMismatch"));
-      return;
+      setValidationError(t('onboarding.passwordMismatch'))
+      return
     }
 
     bootstrap.mutate(
@@ -119,187 +110,188 @@ function CreateSuperadminStep({ onSuccess }: { onSuccess: () => void }) {
         onSuccess: () => onSuccess(),
         onError: (err) => setValidationError(err.message),
       },
-    );
-  };
+    )
+  }
 
   const error =
-    validationError || (bootstrap.isError ? bootstrap.error?.message : "");
+    validationError || (bootstrap.isError ? bootstrap.error?.message : '')
+
+  const inputClass = 'h-auto rounded-[9px] border px-3 py-2.5 text-[13px]'
 
   return (
     <div>
-      <h2 className="text-xl font-bold mb-1.5 tracking-tight text-[#F8FAFC]">
-        {t("onboarding.createAdmin")}
+      <h2
+        className="mb-1 text-[20px] font-bold"
+        style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}
+      >
+        {t('onboarding.createAdmin')}
       </h2>
-      <p className="text-[#94A3B8] text-[13px] mb-7 leading-relaxed">
-        {t("onboarding.adminDesc")}
+      <p
+        className="mb-6 text-[13px]"
+        style={{ color: 'var(--text-secondary)' }}
+      >
+        {t('onboarding.adminDesc')}
       </p>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-[18px]">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
         <div className="flex flex-col gap-1.5">
-          <Label className="text-[11px] font-semibold text-white/50 uppercase tracking-[0.06em]">
-            {t("onboarding.bootstrapSecret")}
+          <Label className="text-[12px] font-semibold" style={{ color: 'var(--text-secondary)' }}>
+            {t('onboarding.bootstrapSecret')}
           </Label>
           <Input
             type="password"
-            placeholder="••••••••••••"
+            placeholder={t('onboarding.bootstrapSecretPlaceholder')}
             value={secret}
             onChange={(e) => setSecret(e.target.value)}
             required
             autoComplete="off"
-            className="bg-white/[0.06] border-white/10 text-[#F8FAFC] placeholder:text-white/30 rounded-lg h-auto px-4 py-3 text-sm brand-focus"
+            className={cn(inputClass, 'bg-[var(--bg-page)]')}
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label className="text-[11px] font-semibold text-white/50 uppercase tracking-[0.06em]">
-            {t("onboarding.email")}
+          <Label className="text-[12px] font-semibold" style={{ color: 'var(--text-secondary)' }}>
+            {t('onboarding.name')}
+          </Label>
+          <Input
+            type="text"
+            placeholder="Ada Lovelace"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoComplete="name"
+            className={cn(inputClass, 'bg-[var(--bg-page)]')}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-[12px] font-semibold" style={{ color: 'var(--text-secondary)' }}>
+            {t('onboarding.email')}
           </Label>
           <Input
             type="email"
-            placeholder="admin@exemplo.com"
+            placeholder="ada@company.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
             autoComplete="email"
-            className="bg-white/[0.06] border-white/10 text-[#F8FAFC] placeholder:text-white/30 rounded-lg h-auto px-4 py-3 text-sm brand-focus"
+            className={cn(inputClass, 'bg-[var(--bg-page)]')}
           />
         </div>
-        <div className="flex flex-col gap-1.5">
-          <Label className="text-[11px] font-semibold text-white/50 uppercase tracking-[0.06em]">
-            {t("onboarding.name")}
-          </Label>
-          <Input
-            type="text"
-            placeholder={t("onboarding.name")}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            autoComplete="name"
-            className="bg-white/[0.06] border-white/10 text-[#F8FAFC] placeholder:text-white/30 rounded-lg h-auto px-4 py-3 text-sm brand-focus"
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label className="text-[11px] font-semibold text-white/50 uppercase tracking-[0.06em]">
-            {t("onboarding.password")}
-          </Label>
-          <Input
-            type="password"
-            placeholder={t("onboarding.passwordHint")}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            autoComplete="new-password"
-            className="bg-white/[0.06] border-white/10 text-[#F8FAFC] placeholder:text-white/30 rounded-lg h-auto px-4 py-3 text-sm brand-focus"
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label className="text-[11px] font-semibold text-white/50 uppercase tracking-[0.06em]">
-            {t("onboarding.confirmPassword")}
-          </Label>
-          <Input
-            type="password"
-            placeholder={t("onboarding.confirmPassword")}
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            required
-            autoComplete="new-password"
-            className="bg-white/[0.06] border-white/10 text-[#F8FAFC] placeholder:text-white/30 rounded-lg h-auto px-4 py-3 text-sm brand-focus"
-          />
+        <div className="grid grid-cols-2 gap-2.5">
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-[12px] font-semibold" style={{ color: 'var(--text-secondary)' }}>
+              {t('onboarding.password')}
+            </Label>
+            <Input
+              type="password"
+              placeholder={t('onboarding.passwordHint')}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              autoComplete="new-password"
+              className={cn(inputClass, 'bg-[var(--bg-page)]')}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-[12px] font-semibold" style={{ color: 'var(--text-secondary)' }}>
+              {t('onboarding.confirmPassword')}
+            </Label>
+            <Input
+              type="password"
+              placeholder={t('onboarding.confirmPassword')}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              autoComplete="new-password"
+              className={cn(inputClass, 'bg-[var(--bg-page)]')}
+            />
+          </div>
         </div>
         {error && (
-          <p className="text-red-400 text-[13px] m-0 bg-red-500/[0.08] border border-red-500/20 rounded-md px-3 py-2.5">
+          <div
+            className="rounded-md border px-3 py-2.5 text-[13px]"
+            style={{
+              background: 'var(--danger-tint)',
+              borderColor: 'var(--danger)',
+              color: 'var(--danger)',
+            }}
+          >
             {error}
-          </p>
+          </div>
         )}
         <Button
           type="submit"
           disabled={bootstrap.isPending}
-          className="border-0 text-white font-semibold px-6 py-[13px] h-auto rounded-lg mt-1 hover:opacity-90 transition-opacity disabled:opacity-65"
-          style={{
-            background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))',
-          }}
+          className="mt-1.5 h-auto w-full rounded-[10px] py-3 text-[14px] font-bold"
         >
-          {bootstrap.isPending ? t("onboarding.submitting") : t("onboarding.submit")}
+          {bootstrap.isPending ? t('onboarding.submitting') : t('onboarding.submit')}
         </Button>
       </form>
     </div>
-  );
+  )
 }
 
 function DoneStep({ onComplete }: { onComplete: () => void }) {
-  const { t } = useTranslation();
+  const { t } = useTranslation()
   return (
     <div className="text-center">
-      <div className="w-16 h-16 rounded-full bg-green-500/15 border border-green-500/30 flex items-center justify-center mx-auto mb-6 text-[28px]">
-        ✓
+      <div
+        className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full"
+        style={{ background: 'var(--success-tint)' }}
+      >
+        <Icon name="check" size={28} style={{ color: 'var(--success)' }} />
       </div>
-      <h2 className="text-[22px] font-bold mb-2.5 tracking-tight text-white">
-        {t("onboarding.done")}
-      </h2>
-      <p className="text-[#94A3B8] text-sm leading-relaxed mb-9">
-        {t("onboarding.doneDesc")}
+      <h1
+        className="mb-2.5 text-[22px] font-bold"
+        style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}
+      >
+        {t('onboarding.done')}
+      </h1>
+      <p
+        className="mx-auto mb-7 max-w-[340px] text-[14px] leading-[1.6]"
+        style={{ color: 'var(--text-secondary)' }}
+      >
+        {t('onboarding.doneDesc')}
       </p>
       <Button
         onClick={onComplete}
-        className="border-0 text-white font-semibold px-8 py-[13px] h-auto rounded-lg hover:opacity-90 transition-opacity"
-        style={{
-          background: 'linear-gradient(to bottom right, var(--brand-primary), var(--brand-secondary))',
-        }}
+        className="h-auto w-full rounded-[10px] py-3 text-[14px] font-bold"
       >
-        {t("onboarding.goLogin")}
+        {t('onboarding.goLogin')}
       </Button>
     </div>
-  );
+  )
 }
 
+/**
+ * Tela de Onboarding (3-step superadmin creation, segundo de T2.10).
+ * Handoff §F3-10: 3 steps com step indicator numerado (primary bg, check quando done),
+ * card bg-surface com border + shadow-md, max-width 460px, padding 40px.
+ * Drop framer-motion (AnimatePresence + stepVariants) — renderização condicional é suficiente.
+ */
 export default function OnboardingPage({ onComplete }: OnboardingPageProps) {
-  const [step, setStep] = useState<Step>("welcome");
-  const [direction, setDirection] = useState(1);
+  const [step, setStep] = useState<Step>('welcome')
 
-  const goTo = (next: Step) => {
-    const currentIdx = STEPS.indexOf(step);
-    const nextIdx = STEPS.indexOf(next);
-    setDirection(nextIdx > currentIdx ? 1 : -1);
-    setStep(next);
-  };
+  const goTo = (next: Step) => setStep(next)
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center p-4"
-      style={{
-        background:
-          "radial-gradient(ellipse 60% 50% at 20% 60%, rgba(var(--brand-primary-rgb),0.12) 0%, transparent 60%), radial-gradient(ellipse 50% 40% at 80% 20%, rgba(var(--brand-secondary-rgb),0.12) 0%, transparent 60%), #0A0A0F",
-      }}
+      className="flex min-h-screen items-center justify-center p-10"
+      style={{ background: 'var(--bg-page)' }}
     >
-      {/* Outer bezel */}
-      <div className="w-[min(480px,calc(100vw-2rem))] rounded-[20px] border border-white/[0.08] p-0.5 bg-white/[0.03]">
-        {/* Inner bezel — glass content */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: DURATION, ease: EASE }}
-          className="rounded-[18px] border border-white/[0.06] bg-white/[0.04] px-10 pt-10 pb-11 overflow-hidden"
-        >
-          <StepDots current={step} />
+      <div
+        className="w-full max-w-[460px] rounded-2xl border p-10"
+        style={{
+          background: 'var(--surface)',
+          borderColor: 'var(--border)',
+          boxShadow: 'var(--shadow-md)',
+        }}
+      >
+        <StepIndicator current={step} />
 
-          <AnimatePresence mode="wait" custom={direction}>
-            <motion.div
-              key={step}
-              custom={direction}
-              variants={stepVariants}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              transition={{ duration: DURATION, ease: EASE }}
-            >
-              {step === "welcome" && (
-                <WelcomeStep onNext={() => goTo("create-superadmin")} />
-              )}
-              {step === "create-superadmin" && (
-                <CreateSuperadminStep onSuccess={() => goTo("done")} />
-              )}
-              {step === "done" && <DoneStep onComplete={onComplete} />}
-            </motion.div>
-          </AnimatePresence>
-        </motion.div>
+        {step === 'welcome' && <WelcomeStep onNext={() => goTo('create-superadmin')} />}
+        {step === 'create-superadmin' && (
+          <CreateSuperadminStep onSuccess={() => goTo('done')} />
+        )}
+        {step === 'done' && <DoneStep onComplete={onComplete} />}
       </div>
     </div>
-  );
+  )
 }

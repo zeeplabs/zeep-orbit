@@ -2,10 +2,12 @@ package db_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
 
@@ -46,5 +48,20 @@ func TestNewBadHost(t *testing.T) {
 	_, err := db.New(ctx, dsn)
 	if err == nil {
 		t.Fatal("New() with unreachable host should return an error, got nil")
+	}
+}
+
+func TestIsStatementTimeout(t *testing.T) {
+	if !db.IsStatementTimeout(&pgconn.PgError{Code: "57014"}) {
+		t.Fatal("57014 (query_canceled) should be detected as a statement timeout")
+	}
+	if db.IsStatementTimeout(&pgconn.PgError{Code: "23505"}) {
+		t.Fatal("unique_violation must not be treated as a statement timeout")
+	}
+	if db.IsStatementTimeout(errors.New("some other error")) {
+		t.Fatal("a non-pg error must not be treated as a statement timeout")
+	}
+	if db.IsStatementTimeout(nil) {
+		t.Fatal("nil must not be treated as a statement timeout")
 	}
 }
