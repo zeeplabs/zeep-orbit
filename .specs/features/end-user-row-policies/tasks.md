@@ -182,8 +182,8 @@ T17
 - Skill: NONE
 
 **Done when**:
-- [ ] Creating a brand-new app (new schema) results in `zeep_app_enduser` able to `SELECT`/`INSERT`/`UPDATE`/`DELETE` on a table created afterward in that schema, with no RLS enabled yet (identical behavior to today for that role, since no policy exists)
-- [ ] An existing app's existing tables also grant access to `zeep_app_enduser` after the migration pass (no app silently excluded)
+- [x] Creating a brand-new app (new schema) results in `zeep_app_enduser` able to `SELECT`/`INSERT`/`UPDATE`/`DELETE` on a table created afterward in that schema, with no RLS enabled yet (identical behavior to today for that role, since no policy exists)
+- [x] An existing app's existing tables also grant access to `zeep_app_enduser` after the migration pass (no app silently excluded)
 
 **Tests**: integration
 **Gate**: full
