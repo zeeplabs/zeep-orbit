@@ -199,7 +199,7 @@ Toda ambiguidade está resolvida ou registrada aqui — nada fica silenciosament
 | ROWPOL-17 | P1: UI dashboard | Tasks | Implementing |
 | ROWPOL-18 | P1: UI dashboard | Tasks | Implementing |
 | ROWPOL-19 | P1: UI dashboard | Tasks | Implementing |
-| ROWPOL-20 | P1: UI dashboard | Design | Pending |
+| ROWPOL-20 | P1: UI dashboard | Tasks | Implementing |
 | ROWPOL-21 | P2: FK explícito para `_auth_users` | Design | Pending |
 | ROWPOL-22 | P2: FK explícito para `_auth_users` | Design | Pending |
 | ROWPOL-23 | P2: FK explícito para `_auth_users` | Design | Pending |

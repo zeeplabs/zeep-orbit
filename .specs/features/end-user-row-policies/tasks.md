@@ -455,10 +455,12 @@ T17
 - Skill: NONE
 
 **Done when**:
-- [ ] Every string introduced in T13/T14 uses `t()`, none hardcoded
-- [ ] Both `en.json` and `pt-BR.json` have the new keys, no key present in one but missing in the other
-- [ ] `python3 -c "import json; json.load(open('en.json'))"` and same for `pt-BR.json` both succeed
-- [ ] `npx tsc -b && npm run build` passes
+- [x] Every string introduced in T13/T14 uses `t()`, none hardcoded
+- [x] Both `en.json` and `pt-BR.json` have the new keys, no key present in one but missing in the other
+- [x] `python3 -c "import json; json.load(open('en.json'))"` and same for `pt-BR.json` both succeed
+- [x] `npx tsc -b && npm run build` passes
+
+**Deviation**: AGENTS.md §5 requires every new UI string to land in both locale files "in the same change" that introduces it — T13 and T14's own commits already added every key they used to both `en.json`/`pt-BR.json` (verified above: all 62 `t()` keys across `TablePolicies.tsx`/`TableCard.tsx` exist in both files, no hardcoded string found). This task's own diff is therefore just the audit + status update recorded here; no source/locale changes were pending by the time T15 started.
 
 **Tests**: none
 **Gate**: build
