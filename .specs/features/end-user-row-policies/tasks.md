@@ -480,7 +480,7 @@ T17
 - Skill: NONE
 
 **Done when**:
-- [ ] Entry added under `## [Unreleased]` in the same change, following the repo's existing entry format
+- [x] Entry added under `## [Unreleased]` in the same change, following the repo's existing entry format
 
 **Tests**: none
 **Gate**: build
