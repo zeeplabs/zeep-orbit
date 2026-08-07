@@ -145,6 +145,7 @@ func JWTMiddleware(reg *registry.Registry, pool *db.Pool) func(http.Handler) htt
 					ID:    authClaims.Subject,
 					Email: authClaims.Email,
 					App:   authClaims.App,
+					Role:  authClaims.Role,
 				})
 			}
 			ctx = context.WithValue(ctx, appContextKey, app)

@@ -226,9 +226,9 @@ T17
 - Skill: NONE
 
 **Done when**:
-- [ ] All four handlers use `WithRLSContext` instead of `WithTimeout` — no call site left on the old method
-- [ ] Existing owner-RLS tests (`rls: owner` tables) still pass unchanged — proves the swap didn't regress the current filter mechanism
-- [ ] A table with no policy at all still returns/writes rows exactly as before this feature (backward-compat goal from spec)
+- [x] All four handlers use `WithRLSContext` instead of `WithTimeout` — no call site left on the old method
+- [x] Existing owner-RLS tests (`rls: owner` tables) still pass unchanged — proves the swap didn't regress the current filter mechanism
+- [x] A table with no policy at all still returns/writes rows exactly as before this feature (backward-compat goal from spec)
 
 **Tests**: integration
 **Gate**: full

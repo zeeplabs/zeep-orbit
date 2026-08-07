@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/zeeplabs/zeep-orbit/internal/config"
+	"github.com/zeeplabs/zeep-orbit/internal/dashboard"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 	"github.com/zeeplabs/zeep-orbit/internal/registry"
 )
@@ -45,16 +46,32 @@ func TestMain(m *testing.M) {
 	}
 	defer testPool.Close()
 
+	// Bootstraps zeep_app_enduser (role + membership) — WithRLSContext
+	// (end-user-row-policies T5/T6) needs it to SET LOCAL ROLE. Fixture
+	// tables below are created with raw SQL (not through
+	// provisioner.Apply), so they still need their own explicit GRANT —
+	// ProvisionZeepSystem only bootstraps the role itself.
+	if err := dashboard.ProvisionZeepSystem(ctx, testPool); err != nil {
+		panic("TestMain: ProvisionZeepSystem falhou: " + err.Error())
+	}
+
 	setup := []string{
 		"DROP SCHEMA IF EXISTS " + testSchema + " CASCADE",
 		"CREATE SCHEMA " + testSchema,
 		`CREATE TABLE ` + testSchema + `.` + testTable + ` (
-			id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			name       TEXT NOT NULL,
-			value      TEXT,
-			created_at TIMESTAMPTZ DEFAULT now(),
-			updated_at TIMESTAMPTZ DEFAULT now()
+			id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			name        TEXT NOT NULL,
+			value       TEXT,
+			-- executed_as has no application meaning: it exists only so
+			-- TestHandlerRunsAsEnduserRole (end-user-row-policies T6) can
+			-- prove, from outside the process, which Postgres role actually
+			-- executed the INSERT the HTTP handler issued.
+			executed_as TEXT NOT NULL DEFAULT current_user,
+			created_at  TIMESTAMPTZ DEFAULT now(),
+			updated_at  TIMESTAMPTZ DEFAULT now()
 		)`,
+		`GRANT USAGE ON SCHEMA ` + testSchema + ` TO zeep_app_enduser`,
+		`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ` + testSchema + ` TO zeep_app_enduser`,
 	}
 	for _, sql := range setup {
 		if _, err := testPool.Exec(ctx, sql); err != nil {
@@ -84,6 +101,8 @@ func TestMain(m *testing.M) {
 			created_at TIMESTAMPTZ DEFAULT now(),
 			updated_at TIMESTAMPTZ DEFAULT now()
 		)`,
+		`GRANT USAGE ON SCHEMA ` + rlsSchema + ` TO zeep_app_enduser`,
+		`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ` + rlsSchema + ` TO zeep_app_enduser`,
 	}
 	for _, sql := range rlsSetup {
 		if _, err := testPool.Exec(ctx, sql); err != nil {
@@ -307,6 +326,39 @@ func TestHandlerCRUD(t *testing.T) {
 			t.Fatalf("esperado 404, obtido %d: %s", rec.Code, rec.Body.String())
 		}
 	})
+}
+
+// ----------------------------------------------------------------------------
+
+// TestHandlerRunsAsEnduserRole covers ROWPOL-14/15: an end-user request
+// through HandleCreate must execute its INSERT as db.EnduserRole
+// (zeep_app_enduser), not the pool's connecting/owner role — proving the
+// WithTimeout → WithRLSContext swap actually changed which Postgres role
+// runs the query, not just that the old tests still pass. executed_as is a
+// column whose DEFAULT is current_user, captured server-side at INSERT time
+// (see TestMain's table DDL) — a value this test process cannot fake.
+func TestHandlerRunsAsEnduserRole(t *testing.T) {
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{"name": "role-probe"}
+	req := httptest.NewRequest(http.MethodPost, "/"+testTable, jsonBody(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("esperado 201, obtido %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var row map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&row); err != nil {
+		t.Fatalf("decode falhou: %v", err)
+	}
+	if row["executed_as"] != "zeep_app_enduser" {
+		t.Fatalf("expected the INSERT to run as zeep_app_enduser, got executed_as=%v", row["executed_as"])
+	}
 }
 
 // ----------------------------------------------------------------------------
