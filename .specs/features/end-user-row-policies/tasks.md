@@ -327,10 +327,16 @@ T17
 - Skill: NONE
 
 **Done when**:
-- [ ] `AppRoleAdmin`/`superadmin` can create/list/delete policies; `AppRoleEditor`/`AppRoleViewer`/non-member get 403
-- [ ] Invalid clause payload returns 400 with the `policy.Builder` error message (English, per `AGENTS.md` §4)
-- [ ] Duplicate policy returns 409
-- [ ] Every successful create/delete writes one `audit_log` row with the acting user, app, table, action
+- [x] `AppRoleAdmin`/`superadmin` can create/list/delete policies; `AppRoleEditor`/`AppRoleViewer`/non-member get 403
+- [x] Invalid clause payload returns 400 with the `policy.Builder` error message (English, per `AGENTS.md` §4)
+- [x] Duplicate policy returns 409
+- [x] Every successful create/delete writes one `audit_log` row with the acting user, app, table, action
+
+**Deviations**:
+- Route uses the table's **name** (`{table}`), not `tableId`, per the spec's own path shape (`.../tables/{table}/policies`) — a separate lookup (`findAppTableByName`) resolves the table's real column list from the already-loaded `AppRow` before calling `CreateTablePolicy`.
+- `AppRoleViewer`/non-member: a non-member with **no** `app_members` row at all gets 404, not 403 — `GetApp` returns `ErrNotFound` before the `CanManage()` check ever runs when `ResolveAppRole` yields no effective role. This is existing, pre-established behavior identical to `CreateAppTable`/`UpdateAppTable`/`DeleteAppTable`, not something new introduced here. An actual member below `CanManage` (editor/viewer) does get 403, as required.
+- Added `provisioner.ValidationError` (mirrors the existing `provisioner.TypeChangeError` pattern) so the handler can safely distinguish "policy.Builder rejected this input" (400, message is safe to expose) from any other error (500, generic message) via `errors.As`, instead of string-prefix matching — a small, backward-compatible amendment to T7's `BuildPolicySQL` (same error text, now wrapped).
+- List is also gated by `CanManage()` (not just read access) — per this task's own Done-when bullet grouping list with create/delete.
 
 **Tests**: integration
 **Gate**: full

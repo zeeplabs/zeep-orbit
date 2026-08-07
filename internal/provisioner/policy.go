@@ -88,12 +88,24 @@ type PolicyDef struct {
 	Clauses []PolicyClause
 }
 
+// ValidationError marks a rejection produced by BuildPolicySQL's own
+// input validation (bad column/operator/claim/logic, etc.) as opposed to any
+// other kind of failure. It exists so a caller (typically an HTTP handler)
+// can safely surface Error() to the end user — it only ever describes which
+// clause/field failed and never leaks internal detail — while still mapping
+// any other error type to a generic 500 message, per AGENTS.md §4 (mirrors
+// the existing provisioner.TypeChangeError pattern).
+type ValidationError struct{ msg string }
+
+func (e *ValidationError) Error() string { return e.msg }
+
 // BuildPolicySQL validates def against tableColumns and translates it into a
 // complete `CREATE POLICY ... TO zeep_app_enduser USING (...) [WITH CHECK
 // (...)]` statement. It never executes DDL itself and never concatenates raw
 // user input into the returned SQL without going through quoteLiteral or the
 // fixed identRe/operator/claim allowlists — every rejection happens before
-// any SQL is assembled (spec ROWPOL-07/08/09).
+// any SQL is assembled (spec ROWPOL-07/08/09), and is returned as a
+// *ValidationError.
 //
 // The native policy always targets TO db.EnduserRole (the single, fixed
 // Postgres role every end-user request runs as via db.Pool.WithRLSContext —
@@ -106,6 +118,14 @@ type PolicyDef struct {
 // policy, though still subject to whatever other policies exist for other
 // roles on the same table/action).
 func BuildPolicySQL(schema, table string, def PolicyDef, tableColumns []config.ColumnConfig) (string, error) {
+	sql, err := buildPolicySQL(schema, table, def, tableColumns)
+	if err != nil {
+		return "", &ValidationError{msg: err.Error()}
+	}
+	return sql, nil
+}
+
+func buildPolicySQL(schema, table string, def PolicyDef, tableColumns []config.ColumnConfig) (string, error) {
 	if !identRe.MatchString(def.Name) {
 		return "", fmt.Errorf("policy: invalid policy name %q", def.Name)
 	}
