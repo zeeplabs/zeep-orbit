@@ -195,10 +195,10 @@ Toda ambiguidade está resolvida ou registrada aqui — nada fica silenciosament
 | ROWPOL-13 | P1: Bypass interno | Tasks | Verified |
 | ROWPOL-14 | P1: Bypass interno | Tasks | Verified |
 | ROWPOL-15 | P1: Bypass interno | Tasks | Verified |
-| ROWPOL-16 | P1: UI dashboard | Design | Pending |
+| ROWPOL-16 | P1: UI dashboard | Tasks | Implementing |
 | ROWPOL-17 | P1: UI dashboard | Design | Pending |
 | ROWPOL-18 | P1: UI dashboard | Design | Pending |
-| ROWPOL-19 | P1: UI dashboard | Design | Pending |
+| ROWPOL-19 | P1: UI dashboard | Tasks | Implementing |
 | ROWPOL-20 | P1: UI dashboard | Design | Pending |
 | ROWPOL-21 | P2: FK explícito para `_auth_users` | Design | Pending |
 | ROWPOL-22 | P2: FK explícito para `_auth_users` | Design | Pending |

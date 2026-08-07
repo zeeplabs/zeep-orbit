@@ -381,9 +381,9 @@ T17
 - Skill: NONE
 
 **Done when**:
-- [ ] Hooks call the correct endpoints with correct payload shapes matching T10's contract
-- [ ] `onError` present on the mutation hooks, calling `toast.error(error.message)` (per `AGENTS.md` §5 — a mutation hook without `onError` is incomplete)
-- [ ] `npx tsc -b` passes with no type errors
+- [x] Hooks call the correct endpoints with correct payload shapes matching T10's contract
+- [x] `onError` present on the mutation hooks, calling `toast.error(error.message)` (per `AGENTS.md` §5 — a mutation hook without `onError` is incomplete)
+- [x] `npx tsc -b` passes with no type errors
 
 **Tests**: none
 **Gate**: build

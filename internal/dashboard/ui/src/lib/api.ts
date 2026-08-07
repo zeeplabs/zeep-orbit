@@ -202,6 +202,83 @@ export function useDeleteAppTable(appId: string): UseMutationResult<void, Error,
 }
 
 
+export interface PolicyClause {
+  column: string
+  operator: string
+  value_source?: string
+  value?: string
+  logic?: string
+}
+
+export interface PolicyDef {
+  name: string
+  action: string
+  roles: string[]
+  clauses: PolicyClause[]
+}
+
+export interface TablePolicyRow {
+  id: string
+  table_name: string
+  action: string
+  roles: string[]
+  clauses: PolicyClause[]
+  pg_policy_name: string
+  created_at: string
+  created_by: string
+}
+
+export function useTablePolicies(appId: string, table: string): UseQueryResult<TablePolicyRow[]> {
+  return useQuery({
+    queryKey: ['table-policies', appId, table],
+    queryFn: () =>
+      apiFetch<TablePolicyRow[]>(`/dashboard/api/apps/${appId}/tables/${table}/policies`),
+    enabled: Boolean(appId) && Boolean(table),
+  })
+}
+
+export function useCreateTablePolicy(
+  appId: string,
+  table: string,
+): UseMutationResult<TablePolicyRow, Error, PolicyDef> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (def: PolicyDef) =>
+      apiFetch<TablePolicyRow>(`/dashboard/api/apps/${appId}/tables/${table}/policies`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(def),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['table-policies', appId, table] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+export function useDeleteTablePolicy(
+  appId: string,
+  table: string,
+): UseMutationResult<{ message: string }, Error, string> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (policyId: string) =>
+      apiFetch<{ message: string }>(
+        `/dashboard/api/apps/${appId}/tables/${table}/policies/${policyId}`,
+        { method: 'DELETE' },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['table-policies', appId, table] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+
 export interface UserDef {
   id: string
   email: string
