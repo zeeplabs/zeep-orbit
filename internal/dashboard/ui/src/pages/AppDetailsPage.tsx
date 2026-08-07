@@ -203,6 +203,7 @@ function DatabaseTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data
         {app.tables.map((tbl) => (
           <TableCard
             key={tbl.id}
+            appId={app.id}
             table={tbl}
             otherTables={app.tables.filter((other) => other.id && other.id !== tbl.id)}
             authEmailEnabled={app.auth_email_enabled}
@@ -221,6 +222,7 @@ function DatabaseTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data
         {draftTable && (
           <TableCard
             key="draft"
+            appId={app.id}
             table={draftTable}
             otherTables={app.tables.filter((other) => other.id)}
             authEmailEnabled={app.auth_email_enabled}

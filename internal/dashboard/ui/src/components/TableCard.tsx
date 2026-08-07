@@ -20,6 +20,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import TablePoliciesTab from "@/components/TablePolicies";
 
 const COLUMN_TYPES = [
   "text",
@@ -93,6 +95,7 @@ const emptyIndex = (): IndexDef => ({
 });
 
 interface TableCardProps {
+  appId: string;
   table: TableDef;
   otherTables: TableDef[];
   authEmailEnabled: boolean;
@@ -110,6 +113,7 @@ interface TableCardProps {
 }
 
 export default function TableCard({
+  appId,
   table,
   otherTables,
   authEmailEnabled,
@@ -302,6 +306,143 @@ export default function TableCard({
         </p>
       )}
 
+      {isDraft ? (
+        <SchemaEditor
+          t={t}
+          rls={rls}
+          columns={columns}
+          indexes={indexes}
+          otherTables={otherTables}
+          isDraft={isDraft}
+          table={table}
+          deleting={deleting}
+          saving={saving}
+          error={error}
+          showRelationshipsInfo={showRelationshipsInfo}
+          setShowRelationshipsInfo={setShowRelationshipsInfo}
+          showIndexInfo={showIndexInfo}
+          setShowIndexInfo={setShowIndexInfo}
+          addColumn={addColumn}
+          removeColumn={removeColumn}
+          updateColumn={updateColumn}
+          referenceTargetColumns={referenceTargetColumns}
+          addIndex={addIndex}
+          removeIndex={removeIndex}
+          updateIndex={updateIndex}
+          toggleIndexColumn={toggleIndexColumn}
+          remove={remove}
+          cancel={cancel}
+          save={save}
+        />
+      ) : (
+        <Tabs defaultValue="schema" className="w-full">
+          <TabsList className="mx-4 mb-2 inline-flex h-auto w-auto justify-start gap-0.5 rounded-[10px] bg-[var(--sunken)] p-[3px]">
+            <TabsTrigger
+              value="schema"
+              className="rounded-[7px] px-3 py-1.5 text-[12.5px] font-semibold text-[var(--text-secondary)] data-[state=active]:bg-[var(--surface)] data-[state=active]:text-[var(--text-primary)] data-[state=active]:shadow-sm"
+            >
+              {t("tableCard.schemaTab")}
+            </TabsTrigger>
+            <TabsTrigger
+              value="policies"
+              className="rounded-[7px] px-3 py-1.5 text-[12.5px] font-semibold text-[var(--text-secondary)] data-[state=active]:bg-[var(--surface)] data-[state=active]:text-[var(--text-primary)] data-[state=active]:shadow-sm"
+            >
+              {t("tablePolicies.tab")}
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="schema" className="mt-0">
+            <SchemaEditor
+              t={t}
+              rls={rls}
+              columns={columns}
+              indexes={indexes}
+              otherTables={otherTables}
+              isDraft={isDraft}
+              table={table}
+              deleting={deleting}
+              saving={saving}
+              error={error}
+              showRelationshipsInfo={showRelationshipsInfo}
+              setShowRelationshipsInfo={setShowRelationshipsInfo}
+              showIndexInfo={showIndexInfo}
+              setShowIndexInfo={setShowIndexInfo}
+              addColumn={addColumn}
+              removeColumn={removeColumn}
+              updateColumn={updateColumn}
+              referenceTargetColumns={referenceTargetColumns}
+              addIndex={addIndex}
+              removeIndex={removeIndex}
+              updateIndex={updateIndex}
+              toggleIndexColumn={toggleIndexColumn}
+              remove={remove}
+              cancel={cancel}
+              save={save}
+            />
+          </TabsContent>
+          <TabsContent value="policies" className="mt-0 px-4 pb-4">
+            <TablePoliciesTab appId={appId} tableName={table.name} />
+          </TabsContent>
+        </Tabs>
+      )}
+    </div>
+  );
+}
+
+function SchemaEditor({
+  t,
+  rls,
+  columns,
+  indexes,
+  otherTables,
+  isDraft,
+  table,
+  deleting,
+  saving,
+  error,
+  showRelationshipsInfo,
+  setShowRelationshipsInfo,
+  showIndexInfo,
+  setShowIndexInfo,
+  addColumn,
+  removeColumn,
+  updateColumn,
+  referenceTargetColumns,
+  addIndex,
+  removeIndex,
+  updateIndex,
+  toggleIndexColumn,
+  remove,
+  cancel,
+  save,
+}: {
+  t: (key: string, opts?: Record<string, unknown>) => string;
+  rls: string;
+  columns: ColumnDef[];
+  indexes: IndexDef[];
+  otherTables: TableDef[];
+  isDraft: boolean;
+  table: TableDef;
+  deleting: boolean;
+  saving: boolean;
+  error: string | null;
+  showRelationshipsInfo: boolean;
+  setShowRelationshipsInfo: (v: boolean) => void;
+  showIndexInfo: boolean;
+  setShowIndexInfo: (v: boolean) => void;
+  addColumn: () => void;
+  removeColumn: (ci: number) => void;
+  updateColumn: (ci: number, patch: Partial<ColumnDef>) => void;
+  referenceTargetColumns: (tableName: string) => string[];
+  addIndex: () => void;
+  removeIndex: (ii: number) => void;
+  updateIndex: (ii: number, patch: Partial<IndexDef>) => void;
+  toggleIndexColumn: (ii: number, colName: string) => void;
+  remove: () => void;
+  cancel: () => void;
+  save: () => void;
+}) {
+  return (
+    <>
       <div className="px-4 pb-4">
         <div className="flex items-center justify-between gap-2 mb-2">
           <p className="text-[11px] text-[var(--text-secondary)]">
@@ -739,6 +880,6 @@ export default function TableCard({
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }

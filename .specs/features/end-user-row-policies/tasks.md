@@ -403,9 +403,11 @@ T17
 - Skill: NONE
 
 **Done when**:
-- [ ] Tab renders the list of policies for the currently selected table, fetched via `useTablePolicies`
-- [ ] Delete action removes a policy and refreshes the list without a full page reload
-- [ ] `npx tsc -b && npm run build` passes
+- [x] Tab renders the list of policies for the currently selected table, fetched via `useTablePolicies`
+- [x] Delete action removes a policy and refreshes the list without a full page reload
+- [x] `npx tsc -b && npm run build` passes
+
+**Deviation**: the tab lives inside `TableCard.tsx` (per-table edit view), not a separate route/page — the design's "página de detalhe da tabela" is `TableCard`'s expanded/editing state, there is no standalone table-detail page in this codebase. Added an `appId` prop to `TableCardProps` (not listed in T12's `Where`) since the policy hooks need it and `TableCard` previously had no app context — a required, minimal wiring change, not scope creep. The tab is only shown for a persisted table (`!isDraft`); a draft table has no `name`/`id` yet for the policy endpoints to address.
 
 **Tests**: none
 **Gate**: build
