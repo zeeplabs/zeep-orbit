@@ -40,7 +40,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 /**
- * Sandbox de componentes (T05.11) — renderiza primitivos + padrões isolados nos
+ * Sandbox de componentes — renderiza primitivos + padrões isolados nos
  * dois temas, pra revisar a biblioteca antes de aplicar em tela real.
  * Rota gated em DEV (ver App.tsx). Não vai a produção.
  */

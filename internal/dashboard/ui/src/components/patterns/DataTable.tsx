@@ -22,11 +22,8 @@ export interface DataTableProps<T> {
   getRowId: (row: T) => string
   loading?: boolean
   error?: boolean
-  /** Config do estado vazio. */
   empty?: { title: string; description?: ReactNode; icon?: string; action?: { label: string; onClick: () => void } }
-  /** Config do estado de erro. */
   errorState?: { title: string; description?: ReactNode; action?: { label: string; onClick: () => void } }
-  /** Ordenação controlada. */
   sort?: { key: string; dir: SortDir }
   onSort?: (key: string) => void
   /** Ações por linha (ícones à direita). */
@@ -40,7 +37,6 @@ export interface DataTableProps<T> {
   renderExpanded?: (row: T) => ReactNode
   expandedRowId?: string | null
   onToggleExpand?: (id: string) => void
-  /** Paginação controlada. */
   pagination?: {
     page: number
     pageCount: number

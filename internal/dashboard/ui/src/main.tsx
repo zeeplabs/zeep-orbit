@@ -2,9 +2,9 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter } from 'react-router-dom'
-// Self-hosted web fonts (T0.2/T0.3 dashboard-redesign). Variable axes cover the
-// same weight/opsz/FILL/GRAD ranges the Google Fonts CDN used to provide. Imports
-// must come before ./index.css so @font-face declarations are parsed first.
+// Self-hosted web fonts. Variable axes cover the same weight/opsz/FILL/GRAD
+// ranges the Google Fonts CDN used to provide. Imports must come before
+// ./index.css so @font-face declarations are parsed first.
 import '@fontsource-variable/manrope'
 import '@fontsource-variable/space-grotesk'
 import '@fontsource-variable/jetbrains-mono'

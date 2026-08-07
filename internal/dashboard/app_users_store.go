@@ -27,6 +27,7 @@ type AppUserSummary struct {
 	Phone        *string    `json:"phone"`
 	AvatarURL    *string    `json:"avatar_url"`
 	Provider     string     `json:"provider"`
+	Role         string     `json:"role"`
 	Active       bool       `json:"active"`
 	LastSignInAt *time.Time `json:"last_sign_in_at"`
 	CreatedAt    time.Time  `json:"created_at"`
@@ -64,7 +65,7 @@ func ListAppUsers(ctx context.Context, pool *db.Pool, schema, search string, lim
 	}
 	queryArgs = append(queryArgs, limit, offset)
 	rows, err := pool.Query(ctx,
-		fmt.Sprintf(`SELECT id, email, name, phone, avatar_url, provider, active, last_sign_in_at, created_at
+		fmt.Sprintf(`SELECT id, email, name, phone, avatar_url, provider, role, active, last_sign_in_at, created_at
 		 FROM %q."_auth_users"%s
 		 ORDER BY created_at DESC
 		 LIMIT $%d OFFSET $%d`, schema, where, paramOffset+1, paramOffset+2),
@@ -81,7 +82,7 @@ func ListAppUsers(ctx context.Context, pool *db.Pool, schema, search string, lim
 	var users []*AppUserSummary
 	for rows.Next() {
 		var u AppUserSummary
-		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Phone, &u.AvatarURL, &u.Provider, &u.Active, &u.LastSignInAt, &u.CreatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Phone, &u.AvatarURL, &u.Provider, &u.Role, &u.Active, &u.LastSignInAt, &u.CreatedAt); err != nil {
 			return nil, 0, fmt.Errorf("dashboard: scan app user: %w", err)
 		}
 		users = append(users, &u)
@@ -145,6 +146,26 @@ func ActivateAppUser(ctx context.Context, pool *db.Pool, schema, userID string) 
 			return ErrNotFound
 		}
 		return fmt.Errorf("dashboard: activate app user: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// UpdateAppUserRole sets a user's business role (used by end-user-row-policies
+// clause matching, e.g. current_setting('app.jwt_role')). Free string defined
+// by the app, validated by the caller against identRe before reaching here.
+func UpdateAppUserRole(ctx context.Context, pool *db.Pool, schema, userID, role string) error {
+	tag, err := pool.Exec(ctx,
+		fmt.Sprintf(`UPDATE %q."_auth_users" SET role = $1 WHERE id = $2`, schema),
+		role, userID,
+	)
+	if err != nil {
+		if isPgRelationNotFound(err) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("dashboard: update app user role: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound

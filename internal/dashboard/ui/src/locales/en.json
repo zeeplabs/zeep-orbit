@@ -242,6 +242,8 @@
   "appUsers.table.name": "Name",
   "appUsers.table.phone": "Phone",
   "appUsers.table.provider": "Provider",
+  "appUsers.table.role": "Role",
+  "appUsers.roleInputTitle": "Business role used by row policies (e.g. approver, member)",
   "appUsers.table.status": "Status",
   "appUsers.table.lastAccess": "Last access",
   "appUsers.table.createdAt": "Created",

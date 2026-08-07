@@ -15,7 +15,7 @@ type Step = 'welcome' | 'create-superadmin' | 'done'
 
 const STEPS: Step[] = ['welcome', 'create-superadmin', 'done']
 
-/** Step indicator (handoff linhas 152-157): 3 círculos numerados, check quando done, primary quando current. */
+/** Step indicator: 3 círculos numerados, check quando done, primary quando current. */
 function StepIndicator({ current }: { current: Step }) {
   const currentIdx = STEPS.indexOf(current)
   return (
@@ -260,12 +260,6 @@ function DoneStep({ onComplete }: { onComplete: () => void }) {
   )
 }
 
-/**
- * Tela de Onboarding (3-step superadmin creation, segundo de T2.10).
- * Handoff §F3-10: 3 steps com step indicator numerado (primary bg, check quando done),
- * card bg-surface com border + shadow-md, max-width 460px, padding 40px.
- * Drop framer-motion (AnimatePresence + stepVariants) — renderização condicional é suficiente.
- */
 export default function OnboardingPage({ onComplete }: OnboardingPageProps) {
   const [step, setStep] = useState<Step>('welcome')
 

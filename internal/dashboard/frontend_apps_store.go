@@ -105,7 +105,7 @@ func CreateFrontendApp(ctx context.Context, pool *db.Pool, input FrontendAppInpu
 
 // Returns the frontend app plus the user's role on it. ErrNotFound is returned
 // both when the app doesn't exist (including archived — archived apps are
-// invisible to everyone per spec T-05) and when the user has no access.
+// invisible to everyone) and when the user has no access.
 // "Doesn't exist for you" is the security-sensitive default.
 func GetFrontendApp(ctx context.Context, pool *db.Pool, id string, user *DashboardUser) (*FrontendApp, AppRole, error) {
 	role, err := ResolveAppRole(ctx, pool, user, AppRef{FrontendAppID: id})
@@ -143,7 +143,7 @@ func GetFrontendApp(ctx context.Context, pool *db.Pool, id string, user *Dashboa
 
 // superadmin or CanReadAnyApp (admin/auditor global) → all non-archived apps.
 // Members → only apps in app_members for this user. Archived apps are always
-// invisible (the spec for T-05).
+// invisible.
 func ListFrontendApps(ctx context.Context, pool *db.Pool, user *DashboardUser) ([]FrontendApp, error) {
 	if user == nil {
 		return nil, errors.New("dashboard: ListFrontendApps called with nil user")
@@ -305,7 +305,7 @@ func UpdateFrontendAppDomain(ctx context.Context, pool *db.Pool, id, customDomai
 
 // Requires CanManage() — admin only. Returns ErrForbidden if the user can see
 // the app but cannot archive it; ErrNotFound if the app doesn't exist (or is
-// already archived — archived apps are invisible per spec T-05) or the user
+// already archived — archived apps are always invisible) or the user
 // has no access at all.
 func ArchiveFrontendApp(ctx context.Context, pool *db.Pool, id string, user *DashboardUser) error {
 	role, err := ResolveAppRole(ctx, pool, user, AppRef{FrontendAppID: id})

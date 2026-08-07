@@ -341,6 +341,7 @@ export interface AppUserSummary {
   phone: string | null
   avatar_url: string | null
   provider: string
+  role: string
   active: boolean
   last_sign_in_at: string | null
   created_at: string
@@ -411,6 +412,27 @@ export function useActivateAppUser(): UseMutationResult<
     mutationFn: ({ appId, userId }) =>
       apiFetch(`/dashboard/api/apps/${appId}/users/${userId}/activate`, {
         method: 'PUT',
+      }),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ['app-users', variables.appId] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+export function useUpdateAppUserRole(): UseMutationResult<
+  { message: string },
+  Error,
+  { appId: string; userId: string; role: string }
+> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ appId, userId, role }) =>
+      apiFetch(`/dashboard/api/apps/${appId}/users/${userId}/role`, {
+        method: 'PUT',
+        body: JSON.stringify({ role }),
       }),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ['app-users', variables.appId] })
@@ -876,7 +898,6 @@ export interface AppMemberListResponse {
 
 export type AppAxis = 'backend' | 'frontend'
 
-/** Builds the URL prefix for the membership management API. */
 function appMembersPath(axis: AppAxis, appId: string): string {
   const base = axis === 'backend' ? 'apps' : 'frontend-apps'
   return `/dashboard/api/${base}/${appId}/members`

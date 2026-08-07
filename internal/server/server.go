@@ -120,7 +120,6 @@ func (s *Server) Start() error {
 	return nil
 }
 
-// buildLogger cria logger zap conforme LOG_LEVEL.
 func buildLogger() (*zap.Logger, error) {
 	if os.Getenv("LOG_LEVEL") == "debug" {
 		return zap.NewDevelopment()
@@ -186,6 +185,7 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Get("/api/apps/{id}/users", dashH.ListAppUsers)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/apps/{id}/users/{userId}/deactivate", dashH.DeactivateAppUser)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/apps/{id}/users/{userId}/activate", dashH.ActivateAppUser)
+		r.With(dashboard.RequireAuth(pool)).Put("/api/apps/{id}/users/{userId}/role", dashH.UpdateAppUserRole)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/apps/{id}/users/{userId}/reset-sessions", dashH.ResetAppUserSessions)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/users", dashH.ListUsers)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/users", dashH.CreateUser)
@@ -231,7 +231,7 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Post("/api/frontend-apps/{id}/sync/regenerate", frontendAppsH.SyncRegenerate)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/frontend-apps/{id}/deploy/retry", frontendAppsH.DeployRetry)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/frontend-apps/{id}/custom-domain", frontendAppsH.SetCustomDomain)
-		// Member management API (T-06 of rbac-per-app). Four handlers
+		// Member management API. Four handlers
 		// (`dashH.ListAppMembers`, `dashH.AddAppMember`,
 		// `dashH.UpdateAppMember`, `dashH.RemoveAppMember`) are mounted
 		// at both /api/apps/{id}/members and

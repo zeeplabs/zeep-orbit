@@ -71,7 +71,6 @@ func pgTypeToUDT(ddlType string) string {
 	}
 }
 
-// Idempotente.
 func (p *Provisioner) ensureMigrationTable(ctx context.Context, schemaName string) error {
 	sql := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %q."_schema_migrations" (
 		"id"          SERIAL PRIMARY KEY,
@@ -94,7 +93,6 @@ func (p *Provisioner) isMigrationApplied(ctx context.Context, schemaName, migrat
 	return exists, err
 }
 
-// recordMigration insere um registro em _schema_migrations.
 func (p *Provisioner) recordMigration(ctx context.Context, schemaName, migrationID, description, sqlExecuted string) error {
 	_, err := p.pool.Exec(ctx,
 		fmt.Sprintf(`INSERT INTO %q."_schema_migrations" (migration_id, description, sql_executed) VALUES ($1, $2, $3)`, schemaName),

@@ -146,10 +146,10 @@ func CreateApp(ctx context.Context, pool *db.Pool, name, ownerID string, authEma
 	}
 	app.Tables = make([]AppTableRow, 0)
 
-	// rbac-per-app T-08: the owner is now added directly to `app_members`
-	// as `admin`, replacing the pre-rbac `app_ownership` insert. The T-02
-	// migration in `ProvisionZeepSystem` handles existing apps; this is
-	// the path new apps take. The partial UNIQUE index on
+	// The owner is added directly to `app_members` as `admin`, replacing
+	// the pre-rbac `app_ownership` insert. The migration in
+	// `ProvisionZeepSystem` handles existing apps; this is the path new
+	// apps take. The partial UNIQUE index on
 	// (backend_app_id, user_id) WHERE backend_app_id IS NOT NULL prevents
 	// duplicates (e.g. if a future migration re-runs for some reason).
 	if _, err := tx.Exec(ctx,

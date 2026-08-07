@@ -707,10 +707,9 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
-	// dashboard-global-roles T-02: action gate replaces the old `role ==
-	// "superadmin"` inline check. admin can also manage users; the per-role
-	// target restriction (only superadmin can create superadmin) is enforced
-	// separately below by CanCreateUserWithRole.
+	// admin can also manage users; the per-role target restriction (only
+	// superadmin can create superadmin) is enforced separately below by
+	// CanCreateUserWithRole.
 	if !HasPlatformPermission(user.Role, ActionManageUsers) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
@@ -738,17 +737,15 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid email address"})
 		return
 	}
-	// dashboard-global-roles T-01: 4 valid role values now. Anything else is 400.
 	switch body.Role {
 	case "superadmin", "admin", "auditor", "member":
-		// valid
 	default:
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "role must be one of: superadmin, admin, auditor, member"})
 		return
 	}
-	// dashboard-global-roles T-03: only a superadmin can create another superadmin.
-	// Other restrictions on the target role live in HasPlatformPermission; this
-	// is the only function that decides "can actor X create role=Y?".
+	// Only a superadmin can create another superadmin. Other restrictions on
+	// the target role live in HasPlatformPermission; this is the only
+	// function that decides "can actor X create role=Y?".
 	if !CanCreateUserWithRole(user.Role, body.Role) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only a superadmin can create a superadmin"})
 		return
@@ -797,9 +794,9 @@ func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// dashboard-global-roles T-05: ≥1 superadmin invariant. Before deleting,
-	// look up the target's role — if it's a superadmin, verify at least one
-	// other superadmin exists. Same helper as UpdateUserRole.
+	// ≥1 superadmin invariant. Before deleting, look up the target's role —
+	// if it's a superadmin, verify at least one other superadmin exists.
+	// Same helper as UpdateUserRole.
 	target, err := GetUser(r.Context(), h.pool, targetID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -1605,7 +1602,8 @@ func (h *Handler) audit(ctx context.Context, userID, userEmail, action, resource
 	}
 }
 
-// SetLanguage handles PUT /dashboard/api/me/language
+// CompleteGoogleSetup handles setting a password for a Google-provisioned
+// account that doesn't have one yet, completing its dashboard login setup.
 func (h *Handler) CompleteGoogleSetup(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
 	if !ok {
@@ -2090,7 +2088,6 @@ type dataBrowserMutationRequest struct {
 	Data  map[string]any `json:"data,omitempty"`
 }
 
-// Insere um novo registro na tabela.
 func (h *Handler) DataBrowserCreate(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
 	if !ok {
@@ -2152,7 +2149,6 @@ func (h *Handler) DataBrowserCreate(w http.ResponseWriter, r *http.Request) {
 	h.audit(r.Context(), user.ID, user.Email, "data.create", "data", "", req.App+"/"+req.Table, nil, r.RemoteAddr)
 }
 
-// Atualiza parcialmente um registro existente.
 func (h *Handler) DataBrowserUpdate(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
 	if !ok {
@@ -2214,7 +2210,6 @@ func (h *Handler) DataBrowserUpdate(w http.ResponseWriter, r *http.Request) {
 	h.audit(r.Context(), user.ID, user.Email, "data.update", "data", req.ID, req.App+"/"+req.Table, nil, r.RemoteAddr)
 }
 
-// Remove um registro pelo ID.
 func (h *Handler) DataBrowserDelete(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
 	if !ok {
@@ -2266,7 +2261,7 @@ func (h *Handler) DataBrowserDelete(w http.ResponseWriter, r *http.Request) {
 	h.audit(r.Context(), user.ID, user.Email, "data.delete", "data", id, appName+"/"+tableName, nil, r.RemoteAddr)
 }
 
-// appUserRequest is the JSON body for app user list params.
+// appUserListParams holds the query params for listing an app's users.
 type appUserListParams struct {
 	Search string `json:"search"`
 	Limit  int    `json:"limit"`
@@ -2395,6 +2390,53 @@ func (h *Handler) ActivateAppUser(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "user activated"})
 	h.audit(r.Context(), user.ID, user.Email, "app.user.activate", "app_user", appID, app.Name+"/"+userID, nil, r.RemoteAddr)
+}
+
+// UpdateAppUserRole handles PUT /dashboard/api/apps/{id}/users/{userId}/role
+func (h *Handler) UpdateAppUserRole(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appID := chi.URLParam(r, "id")
+	app, role, err := GetApp(r.Context(), h.pool, appID, user)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "app not found"})
+		return
+	}
+	if !role.CanManage() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 4*1024)
+	var body struct {
+		Role string `json:"role"`
+	}
+	if !h.decodeJSONBody(w, r, &body) {
+		return
+	}
+	if !identRe.MatchString(body.Role) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "role must match ^[a-z][a-z0-9_]{0,62}$"})
+		return
+	}
+
+	userID := chi.URLParam(r, "userId")
+	schema := schemaNameForDB(app.Name)
+	h.prov.EnsureAuthUserColumns(r.Context(), schema)
+	if err := UpdateAppUserRole(r.Context(), h.pool, schema, userID, body.Role); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
+			return
+		}
+		h.writeError(w, r, http.StatusInternalServerError, "failed to update user role", err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "role updated"})
+	h.audit(r.Context(), user.ID, user.Email, "app.user.role_update", "app_user", appID, app.Name+"/"+userID+" -> "+body.Role, nil, r.RemoteAddr)
 }
 
 // ResetAppUserSessions handles POST /dashboard/api/apps/{id}/users/{userId}/reset-sessions

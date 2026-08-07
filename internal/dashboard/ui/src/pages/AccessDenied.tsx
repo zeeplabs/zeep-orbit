@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/ui/icon'
 import { Button } from '@/components/ui/button'
 
-/** Página 403 genérica — navegação direta a uma tela sem permissão (DRD-22). */
 export default function AccessDenied() {
   const { t } = useTranslation()
   const navigate = useNavigate()

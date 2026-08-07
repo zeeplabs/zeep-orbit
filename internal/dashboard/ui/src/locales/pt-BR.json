@@ -242,6 +242,8 @@
   "appUsers.table.name": "Nome",
   "appUsers.table.phone": "Telefone",
   "appUsers.table.provider": "Provedor",
+  "appUsers.table.role": "Papel",
+  "appUsers.roleInputTitle": "Papel de negócio usado pelas policies de linha (ex: approver, member)",
   "appUsers.table.status": "Status",
   "appUsers.table.lastAccess": "Último acesso",
   "appUsers.table.createdAt": "Criado",

@@ -22,8 +22,8 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 
 	stmts := []string{
 		`CREATE EXTENSION IF NOT EXISTS pgcrypto`,
-		// end-user-row-policies T-03: dedicated Postgres role for end-user
-		// requests (no ownership, no BYPASSRLS, cannot log in directly —
+		// Dedicated Postgres role for end-user requests (no ownership, no
+		// BYPASSRLS, cannot log in directly —
 		// the server reaches it only via SET LOCAL ROLE inside a
 		// transaction). This is what makes native RLS enforcement actually
 		// bite: the principal/connecting role stays the tables' owner
@@ -48,8 +48,8 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			role         TEXT        NOT NULL CHECK (role IN ('superadmin','admin','auditor','member')),
 			created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
-		// dashboard-global-roles T-01: 2→4 role tiers. Existing 'admin' users
-		// (under the OLD 2-value model) are reclassified as 'member' ('admin' is
+		// 2→4 role tiers. Existing 'admin' users (under the OLD 2-value
+		// model) are reclassified as 'member' ('admin' is
 		// now a platform-management role distinct from the per-app "owner"
 		// pattern that 'member' replaces). 'superadmin' is untouched.
 		//
@@ -110,10 +110,10 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			UNIQUE(app_id, name)
 		)`,
 		`ALTER TABLE zeep_system.app_tables ADD COLUMN IF NOT EXISTS indexes JSONB NOT NULL DEFAULT '[]'`,
-		// rbac-per-app T-08: drop the pre-rbac `app_ownership` table.
-		// Its co-owners were migrated to `app_members` as admin in T-02
-		// (idempotent ON CONFLICT DO NOTHING), and T-04 + T-05 enforcement
-		// is 100% on `ResolveAppRole` so the fallback is no longer needed.
+		// Drop the pre-rbac `app_ownership` table. Its co-owners were
+		// migrated to `app_members` as admin (idempotent ON CONFLICT DO
+		// NOTHING), and authorization enforcement is 100% on
+		// `ResolveAppRole` so the fallback is no longer needed.
 		// New apps add the owner to `app_members` directly in CreateApp —
 		// no path in the code touches `app_ownership` anymore.
 		`DROP TABLE IF EXISTS zeep_system.app_ownership`,
@@ -220,12 +220,12 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 		)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_frontend_apps_slug
 		 ON zeep_system.frontend_apps (slug) WHERE archived_at IS NULL`,
-		// rbac-per-app T-01: unified per-app membership. One row per (user, app)
-		// with role admin/editor/viewer. This table is the single source of
-		// truth for "can this user act on this app?" — enforcement in T-04
-		// and T-05 routes every per-app auth check through `ResolveAppRole`,
-		// which reads from here. The pre-rbac `app_ownership` table (co-owners)
-		// was dropped in T-08; its data was migrated here in T-02.
+		// Unified per-app membership. One row per (user, app) with role
+		// admin/editor/viewer. This table is the single source of truth
+		// for "can this user act on this app?" — every per-app auth check
+		// routes through `ResolveAppRole`, which reads from here. The
+		// pre-rbac `app_ownership` table (co-owners) was dropped once its
+		// data was migrated here.
 		//
 		// Schema notes:
 		//   - Exactly one of backend_app_id / frontend_app_id is set (CHECK).
@@ -253,8 +253,8 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 		 ON zeep_system.app_members(frontend_app_id, user_id) WHERE frontend_app_id IS NOT NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_app_members_user
 		 ON zeep_system.app_members(user_id)`,
-		// rbac-per-app T-02: migrate existing ownership into app_members. The
-		// two pre-existing sources of "this user is responsible for this app"
+		// Migrate existing ownership into app_members. The two
+		// pre-existing sources of "this user is responsible for this app"
 		// are collapsed into a single row with role='admin':
 		//   1. apps.owner_id (backend apps, the current single owner)
 		//   2. frontend_apps.created_by (frontend apps; resolved by email
@@ -263,12 +263,11 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 		//      retains access and can add the first admin manually)
 		//
 		// The third source (pre-rbac `app_ownership` co-owners) was migrated
-		// in the original T-02 but is no longer present after T-08 dropped
-		// the table; the migration statement that read from it has been
-		// removed.
+		// previously but is no longer present after the table was dropped;
+		// the migration statement that read from it has been removed.
 		//
-		// Both use ON CONFLICT DO NOTHING against the partial UNIQUE indexes
-		// from T-01, so re-running ProvisionZeepSystem is safe.
+		// Both use ON CONFLICT DO NOTHING against the partial UNIQUE
+		// indexes on app_members, so re-running ProvisionZeepSystem is safe.
 		`INSERT INTO zeep_system.app_members (backend_app_id, user_id, role)
 		 SELECT apps.id, apps.owner_id, 'admin' FROM zeep_system.apps
 		 ON CONFLICT (backend_app_id, user_id) WHERE backend_app_id IS NOT NULL DO NOTHING`,

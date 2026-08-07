@@ -7,6 +7,7 @@ import {
   useDeactivateAppUser,
   useActivateAppUser,
   useResetAppUserSessions,
+  useUpdateAppUserRole,
 } from '../lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,10 +22,51 @@ interface AppUser {
   email: string
   phone: string | null
   provider: string
+  role: string
   active: boolean
   last_sign_in_at: string | null
   created_at: string
   avatar_url: string | null
+}
+
+function RoleCell({
+  appId,
+  userId,
+  role,
+  title,
+}: {
+  appId: string
+  userId: string
+  role: string
+  title: string
+}) {
+  const [value, setValue] = useState(role)
+  const updateRole = useUpdateAppUserRole()
+
+  useEffect(() => setValue(role), [role])
+
+  const commit = () => {
+    const trimmed = value.trim()
+    if (!trimmed || trimmed === role) {
+      setValue(role)
+      return
+    }
+    updateRole.mutate({ appId, userId, role: trimmed })
+  }
+
+  return (
+    <Input
+      value={value}
+      title={title}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur()
+      }}
+      disabled={updateRole.isPending}
+      className="h-7 w-[110px] text-[12.5px]"
+    />
+  )
 }
 
 interface ProviderCount {
@@ -158,6 +200,18 @@ export default function AppUsersPage() {
       render: (u) => <ProviderCell provider={u.provider} />,
     },
     {
+      key: 'role',
+      header: t('appUsers.table.role'),
+      render: (u) => (
+        <RoleCell
+          appId={id!}
+          userId={u.id}
+          role={u.role}
+          title={t('appUsers.roleInputTitle')}
+        />
+      ),
+    },
+    {
       key: 'status',
       header: t('appUsers.table.status'),
       render: (u) => (
@@ -272,7 +326,6 @@ export default function AppUsersPage() {
 
       <PageHeader title={t('appUsers.title')} subtitle={t('appUsers.subtitle', { app: app?.name || id })} />
 
-      {/* Toolbar: provider counts + search + refresh */}
       <div className="mb-5 flex flex-wrap items-center gap-3">
         {providerCounts.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">

@@ -35,17 +35,14 @@ function StateShell({ icon, iconTone, title, description, action, className }: S
   )
 }
 
-/** Estado vazio (sem dados). */
 export function EmptyState(props: Omit<StateShellProps, 'iconTone'>) {
   return <StateShell icon={props.icon ?? 'inbox'} {...props} />
 }
 
-/** Estado de erro (fetch falhou). */
 export function ErrorState(props: Omit<StateShellProps, 'iconTone'>) {
   return <StateShell icon={props.icon ?? 'error'} iconTone="var(--danger)" {...props} />
 }
 
-/** Estado de carregamento — linhas de skeleton. */
 export function LoadingState({ rows = 5, className }: { rows?: number; className?: string }) {
   return (
     <div className={cn('flex flex-col gap-2 p-4', className)}>

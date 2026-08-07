@@ -11,7 +11,8 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 )
 
-// and should not be defined by the user.
+// systemColumnNames lists the reserved column names managed by the server; they
+// are injected automatically on every table and should not be defined by the user.
 var systemColumnNames = map[string]bool{
 	"id":         true,
 	"created_at": true,
@@ -20,7 +21,6 @@ var systemColumnNames = map[string]bool{
 	"deleted_at": true,
 }
 
-// pgType converte o tipo do config para o tipo PostgreSQL correspondente.
 func pgType(t string) string {
 	switch t {
 	case "text":
@@ -254,7 +254,6 @@ func (p *Provisioner) addMissingColumns(ctx context.Context, schemaName, tableNa
 	return added, nil
 }
 
-// fetchExistingColumns retorna um map[nomeColuna]udtName das colunas atuais de uma tabela.
 func (p *Provisioner) fetchExistingColumns(ctx context.Context, schemaName, tableName string) (map[string]string, error) {
 	rows, err := p.pool.Query(ctx,
 		`SELECT column_name, udt_name FROM information_schema.columns

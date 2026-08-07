@@ -65,15 +65,12 @@ interface SidebarFooterProps {
   onSaveLanguage: (lang: string) => void
   onLogout: () => void
   className?: string
-  /** Versão do app exibida no rodapé (handoff linha 267). */
   version?: string
   /** Callback executado quando o usuário fecha o bottom-sheet (mobile only). */
   onNavigate?: () => void
 }
 
-/** Rodapé da sidebar: usuário + toggles de tema/idioma + change-pw + github + logout.
- *  Handoff §F1-07: renderiza também a versão (`Zeep Orbit · v{version}`) e o link
- *  de Changelog, que o protótipo posiciona no footer (linhas 249-251 e 267). */
+/** Rodapé da sidebar: usuário + toggles de tema/idioma + change-pw + github + logout. */
 export function SidebarFooter({
   user,
   currentLang,

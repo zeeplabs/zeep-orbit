@@ -77,7 +77,7 @@ function ChangelogEntryView({ entry }: { entry: ChangelogEntry }) {
 
   return (
     <div className="flex gap-5">
-      {/* Coluna esquerda: versão + data (90px fixo, handoff linha 2177) */}
+      {/* Coluna esquerda: versão + data (90px fixo) */}
       <div className="w-[90px] shrink-0 pt-0.5">
         <div
           className="font-mono text-[13px] font-bold"
@@ -92,7 +92,7 @@ function ChangelogEntryView({ entry }: { entry: ChangelogEntry }) {
           {dateLabel}
         </div>
       </div>
-      {/* Coluna direita: conteúdo com border-left, handoff linha 2181 */}
+      {/* Coluna direita: conteúdo com border-left */}
       <div
         className="flex-1 border-l pl-5 pb-1"
         style={{ borderColor: 'var(--border)' }}
@@ -143,13 +143,6 @@ function ChangelogEntryView({ entry }: { entry: ChangelogEntry }) {
   )
 }
 
-/**
- * Tela de Changelog (T2.9 do spec dashboard-redesign).
- * Handoff §F3-11: timeline com versão+data à esquerda, conteúdo com border-left
- * à direita. Badges coloridos por tipo (success/primary/warning/danger/accent).
- * Drop lucide-react (Megaphone) e tokens hardcoded; usa PageHeader, EmptyState,
- * LoadingState, design tokens canônicos.
- */
 export default function ChangelogPage() {
   const { t } = useTranslation()
   const [offset, setOffset] = useState(0)

@@ -44,7 +44,6 @@ interface UpgradeModalProps {
   onClose: () => void
 }
 
-/** Modal de upgrade reusável, disparado por features gated. */
 export function UpgradeModal({
   open,
   feature,

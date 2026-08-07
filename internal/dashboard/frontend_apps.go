@@ -185,7 +185,6 @@ func (h *FrontendAppsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// T-05: Generate sync credential after successful repo creation.
 	if status == "ready" {
 		if createErr := CreateSyncCredential(r.Context(), h.pool, app.ID); createErr == nil {
 			ghClient, ghErr := h.buildClient(r.Context())
@@ -194,7 +193,6 @@ func (h *FrontendAppsHandler) Create(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// T-10: Deploy step — create service on the connected provider.
 		h.attemptDeploy(r.Context(), app, tmpl, body.Subdomain)
 	}
 
@@ -336,7 +334,6 @@ func (h *FrontendAppsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			if owner, repo := parseGitHubOwnerRepo(app.GithubRepoURL); owner != "" && repo != "" {
 				_ = client.ArchiveRepo(r.Context(), owner, repo)
 
-				// T-10: Best-effort deploy key revocation.
 				if sc, scErr := GetSyncCredential(r.Context(), h.pool, app.ID); scErr == nil && sc.GithubKeyID != nil {
 					_ = client.RevokeDeployKey(r.Context(), owner, repo, *sc.GithubKeyID)
 				}
@@ -344,7 +341,6 @@ func (h *FrontendAppsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// T-12: Best-effort deploy service removal.
 	if app.DeployServiceID != "" {
 		if dcfg, dcfErr := GetDeployProviderConfig(r.Context(), h.pool); dcfErr == nil && dcfg != nil {
 			if provider, provErr := buildDeployProvider(r.Context(), dcfg); provErr == nil {
@@ -653,7 +649,6 @@ func (h *FrontendAppsHandler) attemptDeploy(ctx context.Context, app *FrontendAp
 		return
 	}
 
-	// Add custom domain if base_domain and subdomain are configured.
 	customDomain := ""
 	if strings.TrimSpace(dcfg.BaseDomain) != "" && subdomain != "" && info.ServiceID != "" {
 		customDomain = subdomain + "." + strings.TrimSpace(dcfg.BaseDomain)

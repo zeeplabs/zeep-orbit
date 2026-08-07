@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "promote_threshold": 2,
+  "window_days": 45,
+  "quarantine_threshold": 2,
+  "next_id": 3,
+  "lessons": [
+    {
+      "id": "L-001",
+      "key": "ac_gap::when an ac says a login auth flow embeds a db read value in the issued jwt write the test against the actual login oauth handler and decode the returned token a unit test that calls issuejwt directly with the value as a literal argument does not prove the handler wiring",
+      "text": "When an AC says a login/auth flow embeds a DB-read value in the issued JWT, write the test against the actual login/OAuth handler and decode the returned token — a unit test that calls IssueJWT directly with the value as a literal argument does not prove the handler wiring.",
+      "signal": "ac_gap",
+      "scope": "internal/auth",
+      "status": "candidate",
+      "features": [
+        "end-user-row-policies"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "ROWPOL-02 (internal/auth)"
+      ],
+      "created": "2026-08-07T17:45:14Z",
+      "last_seen": "2026-08-07T17:45:14Z"
+    },
+    {
+      "id": "L-002",
+      "key": "spec_deviation::when a spec claims a role permission switch is unconditional for an entire request path e g all of app grep every handler under that path for direct pool usage before verifying the ac a sibling handler added before the feature e g file storage handlers can silently keep using the owner role and violate the absolute wording even though the new code is correct",
+      "text": "When a spec claims a role/permission switch is unconditional for an entire request path (e.g. all of /{app}/...), grep every handler under that path for direct pool usage before verifying the AC — a sibling handler added before the feature (e.g. file/storage handlers) can silently keep using the owner role and violate the absolute wording even though the new code is correct.",
+      "signal": "spec_deviation",
+      "scope": "internal/server",
+      "status": "candidate",
+      "features": [
+        "end-user-row-policies"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "internal/server/storage_handler.go (internal/server)"
+      ],
+      "created": "2026-08-07T17:45:14Z",
+      "last_seen": "2026-08-07T17:45:14Z"
+    }
+  ]
+}
