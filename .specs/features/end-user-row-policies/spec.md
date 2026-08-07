@@ -200,10 +200,10 @@ Toda ambiguidade está resolvida ou registrada aqui — nada fica silenciosament
 | ROWPOL-18 | P1: UI dashboard | Tasks | Implementing |
 | ROWPOL-19 | P1: UI dashboard | Tasks | Implementing |
 | ROWPOL-20 | P1: UI dashboard | Tasks | Implementing |
-| ROWPOL-21 | P2: FK explícito para `_auth_users` | Design | Pending |
-| ROWPOL-22 | P2: FK explícito para `_auth_users` | Design | Pending |
-| ROWPOL-23 | P2: FK explícito para `_auth_users` | Design | Pending |
-| ROWPOL-24 | P2: FK explícito para `_auth_users` | Design | Pending |
+| ROWPOL-21 | P2: FK explícito para `_auth_users` | Tasks | Implementing |
+| ROWPOL-22 | P2: FK explícito para `_auth_users` | Tasks | Implementing |
+| ROWPOL-23 | P2: FK explícito para `_auth_users` | Tasks | Implementing |
+| ROWPOL-24 | P2: FK explícito para `_auth_users` | Tasks | Implementing |
 | ROWPOL-25 | P2: FK explícito para `_auth_users` | Design | Pending |
 | ROWPOL-26 | P2: Auditoria | - | Pending |
 | ROWPOL-27 | P3: Preview | - | Pending |

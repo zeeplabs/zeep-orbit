@@ -67,6 +67,63 @@ func TestValidateTables_ReferenceSetNullRequiresOptional(t *testing.T) {
 	}
 }
 
+// authUsersRefTable builds a single-table config with one column
+// (requester_id) referencing "_auth_users" — "_auth_users" deliberately
+// never appears in this table set, since it's provisioned separately per
+// app (not one of app_tables), mirroring the real scenario ValidateTables
+// must accept per ROWPOL-21.
+func authUsersRefTable(refCol string, colType string, onDelete string) []TableConfig {
+	return []TableConfig{
+		{
+			Name: "requests",
+			Columns: []ColumnConfig{
+				{Name: "id", Type: "uuid", Required: true},
+				{
+					Name:       "requester_id",
+					Type:       colType,
+					References: &ReferenceConfig{Table: "_auth_users", Column: refCol, OnDelete: onDelete},
+				},
+			},
+		},
+	}
+}
+
+func TestValidateTables_ReferenceAuthUsersValid(t *testing.T) {
+	tables := authUsersRefTable("id", "uuid", "cascade")
+	if err := ValidateTables(tables); err != nil {
+		t.Fatalf("expected no error for a valid _auth_users.id reference, got: %v", err)
+	}
+}
+
+func TestValidateTables_ReferenceAuthUsersWrongType(t *testing.T) {
+	tables := authUsersRefTable("id", "text", "")
+	if err := ValidateTables(tables); err == nil {
+		t.Fatal("expected error when the referencing column is not uuid, got nil")
+	}
+}
+
+func TestValidateTables_ReferenceAuthUsersWrongColumn(t *testing.T) {
+	tables := authUsersRefTable("role", "uuid", "")
+	if err := ValidateTables(tables); err == nil {
+		t.Fatal("expected error when referencing a column other than _auth_users.id, got nil")
+	}
+}
+
+func TestValidateTables_ReferenceAuthUsersInvalidOnDelete(t *testing.T) {
+	tables := authUsersRefTable("id", "uuid", "purge")
+	if err := ValidateTables(tables); err == nil {
+		t.Fatal("expected error for invalid on_delete on an _auth_users reference, got nil")
+	}
+}
+
+func TestValidateTables_ReferenceAuthUsersSetNullRequiresOptional(t *testing.T) {
+	tables := authUsersRefTable("id", "uuid", "set_null")
+	tables[0].Columns[1].Required = true
+	if err := ValidateTables(tables); err == nil {
+		t.Fatal("expected error for on_delete=set_null with required=true on an _auth_users reference, got nil")
+	}
+}
+
 func TestValidateTables_CycleRejected(t *testing.T) {
 	tables := []TableConfig{
 		{

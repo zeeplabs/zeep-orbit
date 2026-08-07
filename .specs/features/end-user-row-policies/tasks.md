@@ -502,11 +502,13 @@ T17
 - Skill: NONE
 
 **Done when**:
-- [ ] A column declared with `references: {table: "_auth_users", column: "id"}` and `type: "uuid"` passes validation and provisions with a real FK to `_auth_users(id)`
-- [ ] The same declaration with `type != "uuid"` is rejected with 400
-- [ ] `references: {table: "_auth_users", column: "role"}` (or any column other than `id`) is rejected with 400
-- [ ] Inserting a row with a `requester_id` not present in `_auth_users` fails with a real Postgres FK violation (not a soft app-level check)
-- [ ] The relationship appears in the dashboard's existing relationships UI (`schema-relationships-and-indexes`) exactly like any other declared FK — no special-casing needed there since it reads the same `references` metadata
+- [x] A column declared with `references: {table: "_auth_users", column: "id"}` and `type: "uuid"` passes validation and provisions with a real FK to `_auth_users(id)`
+- [x] The same declaration with `type != "uuid"` is rejected with 400
+- [x] `references: {table: "_auth_users", column: "role"}` (or any column other than `id`) is rejected with 400
+- [x] Inserting a row with a `requester_id` not present in `_auth_users` fails with a real Postgres FK violation (not a soft app-level check)
+- [x] The relationship appears in the dashboard's existing relationships UI (`schema-relationships-and-indexes`) exactly like any other declared FK — no special-casing needed there since it reads the same `references` metadata
+
+**Note**: the 400-on-invalid-input requirement is satisfied at the `ValidateTables`/`validateReference` layer (returns an error the dashboard's existing create/update-table handlers already turn into 400 — same path every other `references` validation error already takes, unchanged by this task). The UI-relationships bullet needed no code change, exactly as design predicted: that UI reads the same `references` metadata already returned for every column, with no `_auth_users`-specific branch.
 
 **Tests**: integration
 **Gate**: full
