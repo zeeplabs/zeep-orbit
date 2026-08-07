@@ -57,6 +57,7 @@ func TestMain(m *testing.M) {
 			"active"             BOOLEAN     NOT NULL DEFAULT true,
 			"provider"           TEXT        NOT NULL DEFAULT 'email',
 			"google_id"          TEXT,
+			"role"               TEXT        NOT NULL DEFAULT 'member',
 			"created_at"         TIMESTAMPTZ NOT NULL DEFAULT now(),
 			"updated_at"         TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,

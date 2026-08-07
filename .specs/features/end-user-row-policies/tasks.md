@@ -138,9 +138,9 @@ T17
 - Skill: NONE
 
 **Done when**:
-- [ ] A JWT issued after login for a user with `role = 'approver'` decodes with claim `role: "approver"`
-- [ ] A JWT issued for a user still on the `role` default (`member`) decodes with claim `role: "member"`
-- [ ] All existing `IssueJWT` call sites updated (login, Google OAuth) — no call site left passing a stale/empty role
+- [x] A JWT issued after login for a user with `role = 'approver'` decodes with claim `role: "approver"`
+- [x] A JWT issued for a user still on the `role` default (`member`) decodes with claim `role: "member"`
+- [x] All existing `IssueJWT` call sites updated (login, Google OAuth) — no call site left passing a stale/empty role
 
 **Tests**: unit
 **Gate**: quick

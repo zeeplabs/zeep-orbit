@@ -5,6 +5,46 @@ import (
 	"time"
 )
 
+func TestIssueJWT_RoleClaim_CustomRole(t *testing.T) {
+	secret := []byte("test-secret")
+
+	token, err := IssueJWT(secret, "user-1", "approver@test.com", "myapp", "approver")
+	if err != nil {
+		t.Fatalf("IssueJWT failed: %v", err)
+	}
+
+	claims, err := ParseJWT(secret, token)
+	if err != nil {
+		t.Fatalf("ParseJWT failed: %v", err)
+	}
+	if claims.Role != "approver" {
+		t.Fatalf("expected role claim %q, got %q", "approver", claims.Role)
+	}
+	if claims.Email != "approver@test.com" {
+		t.Fatalf("expected email claim %q, got %q", "approver@test.com", claims.Email)
+	}
+	if claims.Subject != "user-1" {
+		t.Fatalf("expected sub claim %q, got %q", "user-1", claims.Subject)
+	}
+}
+
+func TestIssueJWT_RoleClaim_DefaultMemberRole(t *testing.T) {
+	secret := []byte("test-secret")
+
+	token, err := IssueJWT(secret, "user-2", "member@test.com", "myapp", "member")
+	if err != nil {
+		t.Fatalf("IssueJWT failed: %v", err)
+	}
+
+	claims, err := ParseJWT(secret, token)
+	if err != nil {
+		t.Fatalf("ParseJWT failed: %v", err)
+	}
+	if claims.Role != "member" {
+		t.Fatalf("expected default role claim %q, got %q", "member", claims.Role)
+	}
+}
+
 func TestIssueAppTokenJWT_RoundTrip(t *testing.T) {
 	secret := []byte("test-secret")
 	jti := "test-jti-123"

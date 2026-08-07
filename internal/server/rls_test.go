@@ -58,11 +58,11 @@ func TestRLS(t *testing.T) {
 	user1ID := insertRLSUser(t, "rls-user1@test.com")
 	user2ID := insertRLSUser(t, "rls-user2@test.com")
 
-	jwt1, err := auth.IssueJWT([]byte(rlsSecret), user1ID, "rls-user1@test.com", rlsAppName)
+	jwt1, err := auth.IssueJWT([]byte(rlsSecret), user1ID, "rls-user1@test.com", rlsAppName, "member")
 	if err != nil {
 		t.Fatalf("IssueJWT user1: %v", err)
 	}
-	jwt2, err := auth.IssueJWT([]byte(rlsSecret), user2ID, "rls-user2@test.com", rlsAppName)
+	jwt2, err := auth.IssueJWT([]byte(rlsSecret), user2ID, "rls-user2@test.com", rlsAppName, "member")
 	if err != nil {
 		t.Fatalf("IssueJWT user2: %v", err)
 	}

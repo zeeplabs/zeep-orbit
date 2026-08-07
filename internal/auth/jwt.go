@@ -12,15 +12,17 @@ const TokenTTL = time.Hour
 type Claims struct {
 	Email string `json:"email"`
 	App   string `json:"app"`
+	Role  string `json:"role"`
 	jwtlib.RegisteredClaims
 }
 
 // IssueJWT signs and returns a new HS256 JWT for the given user.
-func IssueJWT(secret []byte, userID, email, appName string) (string, error) {
+func IssueJWT(secret []byte, userID, email, appName, role string) (string, error) {
 	now := time.Now()
 	c := Claims{
 		Email: email,
 		App:   appName,
+		Role:  role,
 		RegisteredClaims: jwtlib.RegisteredClaims{
 			Subject:   userID,
 			IssuedAt:  jwtlib.NewNumericDate(now),
