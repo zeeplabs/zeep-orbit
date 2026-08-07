@@ -627,3 +627,99 @@ func TestRenameThenAddColumn(t *testing.T) {
 		t.Errorf("'oldname' should not exist after rename")
 	}
 }
+
+// TestAddColumnWithRowLevelSecurityEnabled is a regression test for
+// end-user-row-policies T9 (spec ROWPOL-15): the provisioner must keep
+// running DDL as the principal/owner role, which Postgres exempts from RLS
+// by default — enabling ROW LEVEL SECURITY on a table (and adding a
+// deny-all policy for an unrelated role, so the table is not silently
+// readable) must never block the provisioner's own ALTER TABLE/add-column
+// path.
+func TestAddColumnWithRowLevelSecurityEnabled(t *testing.T) {
+	pool := testPool(t)
+	defer pool.Close()
+
+	schema := uniqueSchema("test_prov_rls")
+	t.Cleanup(func() { dropSchema(t, pool, schema) })
+
+	prov := provisioner.New(pool)
+
+	cfgV1 := &config.Config{
+		Apps: []config.AppConfig{
+			{
+				Name: schema,
+				Tables: []config.TableConfig{
+					{
+						Name:    "products",
+						Columns: []config.ColumnConfig{{Name: "title", Type: "text"}},
+					},
+				},
+			},
+		},
+	}
+	if _, err := prov.Apply(context.Background(), cfgV1); err != nil {
+		t.Fatalf("Apply v1: %v", err)
+	}
+
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`ALTER TABLE %q.products ENABLE ROW LEVEL SECURITY`, schema)); err != nil {
+		t.Fatalf("enable row level security: %v", err)
+	}
+	if _, err := pool.Exec(ctx, fmt.Sprintf(
+		`CREATE POLICY deny_all ON %q.products FOR SELECT TO PUBLIC USING (false)`, schema,
+	)); err != nil {
+		t.Fatalf("create deny-all policy: %v", err)
+	}
+
+	cfgV2 := &config.Config{
+		Apps: []config.AppConfig{
+			{
+				Name: schema,
+				Tables: []config.TableConfig{
+					{
+						Name: "products",
+						Columns: []config.ColumnConfig{
+							{Name: "title", Type: "text"},
+							{Name: "price", Type: "decimal", Required: true},
+						},
+					},
+				},
+			},
+		},
+	}
+	r2, err := prov.Apply(ctx, cfgV2)
+	if err != nil {
+		t.Fatalf("Apply v2 (table has RLS enabled + deny-all policy): %v", err)
+	}
+	expectedCol := fmt.Sprintf("%s.products.price", schema)
+	if len(r2.ColumnsAdded) != 1 || r2.ColumnsAdded[0] != expectedCol {
+		t.Errorf("expected ColumnsAdded=[%q], got %v", expectedCol, r2.ColumnsAdded)
+	}
+
+	var exists bool
+	if err := pool.QueryRow(ctx,
+		`SELECT EXISTS(
+			SELECT 1 FROM information_schema.columns
+			WHERE table_schema = $1 AND table_name = $2 AND column_name = $3
+		)`, schema, "products", "price",
+	).Scan(&exists); err != nil {
+		t.Fatalf("check column price: %v", err)
+	}
+	if !exists {
+		t.Errorf("column %q.products.price not found after Apply v2, despite RLS being enabled", schema)
+	}
+
+	// Sanity: the deny-all policy really is in effect for a non-owner role —
+	// otherwise this test would trivially pass without proving anything.
+	var rlsEnabled bool
+	if err := pool.QueryRow(ctx,
+		`SELECT relrowsecurity FROM pg_class c
+		 JOIN pg_namespace n ON n.oid = c.relnamespace
+		 WHERE n.nspname = $1 AND c.relname = 'products'`, schema,
+	).Scan(&rlsEnabled); err != nil {
+		t.Fatalf("check relrowsecurity: %v", err)
+	}
+	if !rlsEnabled {
+		t.Fatal("expected RLS to still be enabled on products")
+	}
+}

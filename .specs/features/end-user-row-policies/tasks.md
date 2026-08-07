@@ -306,8 +306,8 @@ T17
 - Skill: NONE
 
 **Done when**:
-- [ ] Purge job deletes expired rows in a table with an active deny-all policy for some role, run as the principal/owner role, unaffected
-- [ ] Provisioner can still `ALTER TABLE`/add columns on a table with RLS enabled, run as the principal/owner role, unaffected
+- [x] Purge job deletes expired rows in a table with an active deny-all policy for some role, run as the principal/owner role, unaffected
+- [x] Provisioner can still `ALTER TABLE`/add columns on a table with RLS enabled, run as the principal/owner role, unaffected
 
 **Tests**: integration
 **Gate**: full
