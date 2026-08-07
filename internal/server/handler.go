@@ -111,7 +111,6 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// HandleCreate implementa POST /{app}/{table} → 201 + row criada.
 func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	app, ok := AppFromContext(r.Context())
 	if !ok {
@@ -336,7 +335,6 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// HandleAppHealth implementa GET /{app}/health → status do app individual.
 func (h *Handler) HandleAppHealth(w http.ResponseWriter, r *http.Request) {
 	appName := chi.URLParam(r, "app")
 
