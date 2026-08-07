@@ -277,10 +277,16 @@ T17
 - Skill: NONE
 
 **Done when**:
-- [ ] Creating the first policy on a table executes `ENABLE ROW LEVEL SECURITY` exactly once (idempotent on subsequent policies for the same table)
-- [ ] Deleting the last policy for a table's action leaves `ROW LEVEL SECURITY` enabled (default-deny) — no automatic `DISABLE`
-- [ ] Duplicate `(app_id, table_name, action, pg_policy_name)` rejected by the `UNIQUE` constraint, mapped to a store-level error
-- [ ] Deleting the parent `app_tables` row cascades to delete its `table_policies` rows
+- [x] Creating the first policy on a table executes `ENABLE ROW LEVEL SECURITY` exactly once (idempotent on subsequent policies for the same table)
+- [x] Deleting the last policy for a table's action leaves `ROW LEVEL SECURITY` enabled (default-deny) — no automatic `DISABLE`
+- [x] Duplicate `(app_id, table_name, action, pg_policy_name)` rejected by the `UNIQUE` constraint, mapped to a store-level error
+- [x] Deleting the parent `app_tables` row cascades to delete its `table_policies` rows
+
+**Deviations**:
+- `CREATE POLICY ... TO <roles>` is invalid SQL for app-defined business roles (Postgres's `TO` clause names a real database role). Fixed during implementation: every native policy targets `TO zeep_app_enduser` (the fixed end-user role), and `def.Roles` is folded into the `USING`/`WITH CHECK` expression itself as `current_setting('app.jwt_role', true) = ANY (ARRAY[...])`, ANDed with the clause fold. `internal/provisioner/policy.go` (T7) was amended accordingly — see its updated tests.
+- Postgres also enforces a unique policy name per table natively (SQLSTATE `42710`), independent of and prior to our own `UNIQUE` constraint (the DDL runs before the metadata INSERT) — `CreateTablePolicy` maps both to `ErrPolicyAlreadyExists`.
+- The cascade-on-table-delete bullet required a small, necessary edit to `apps_store.go`'s existing `DeleteAppTable` (outside this task's listed `Where`) since `table_policies` has no DB-level FK to `app_tables` — noted here rather than silently expanding scope.
+- `PolicyDef.Name` (the real Postgres policy name) is admin-supplied in the create-policy payload, not auto-generated — the spec's duplicate-name-on-same-table/action edge case is only meaningful if the name is caller-controlled.
 
 **Tests**: integration
 **Gate**: full

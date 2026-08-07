@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/zeeplabs/zeep-orbit/internal/config"
+	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
 
 // identRe mirrors internal/dashboard/handler.go's identRe (same allowlist
@@ -93,6 +94,17 @@ type PolicyDef struct {
 // user input into the returned SQL without going through quoteLiteral or the
 // fixed identRe/operator/claim allowlists — every rejection happens before
 // any SQL is assembled (spec ROWPOL-07/08/09).
+//
+// The native policy always targets TO db.EnduserRole (the single, fixed
+// Postgres role every end-user request runs as via db.Pool.WithRLSContext —
+// Postgres CREATE POLICY's TO clause names a real database role, and
+// def.Roles are app-defined business roles, not database roles). def.Roles
+// is instead folded into the USING/WITH CHECK expression itself, ANDed with
+// the clause fold: the policy only applies its row condition to requests
+// whose app.jwt_role claim matches one of def.Roles — any other role hits
+// this policy's boolean expression evaluating to false (denied by this
+// policy, though still subject to whatever other policies exist for other
+// roles on the same table/action).
 func BuildPolicySQL(schema, table string, def PolicyDef, tableColumns []config.ColumnConfig) (string, error) {
 	if !identRe.MatchString(def.Name) {
 		return "", fmt.Errorf("policy: invalid policy name %q", def.Name)
@@ -103,10 +115,12 @@ func BuildPolicySQL(schema, table string, def PolicyDef, tableColumns []config.C
 	if len(def.Roles) == 0 {
 		return "", fmt.Errorf("policy: at least one role is required")
 	}
-	for _, role := range def.Roles {
-		if role == "" {
-			return "", fmt.Errorf("policy: role must not be empty")
+	roleLiterals := make([]string, len(def.Roles))
+	for i, role := range def.Roles {
+		if !identRe.MatchString(role) {
+			return "", fmt.Errorf("policy: invalid role %q", role)
 		}
+		roleLiterals[i] = quoteLiteral(role)
 	}
 	if len(def.Clauses) == 0 {
 		return "", fmt.Errorf("policy: at least one clause is required")
@@ -117,22 +131,17 @@ func BuildPolicySQL(schema, table string, def PolicyDef, tableColumns []config.C
 		colByName[c.Name] = c
 	}
 
-	expr, err := foldClauses(def.Clauses, colByName)
+	clauseExpr, err := foldClauses(def.Clauses, colByName)
 	if err != nil {
 		return "", err
 	}
 
-	roleList := make([]string, len(def.Roles))
-	for i, role := range def.Roles {
-		if !identRe.MatchString(role) {
-			return "", fmt.Errorf("policy: invalid role %q", role)
-		}
-		roleList[i] = fmt.Sprintf("%q", role)
-	}
+	roleCheck := fmt.Sprintf("current_setting('%s', true) = ANY (ARRAY[%s])", claimGUC["role"], strings.Join(roleLiterals, ", "))
+	expr := fmt.Sprintf("(%s) AND (%s)", roleCheck, clauseExpr)
 
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "CREATE POLICY %q ON %q.%q FOR %s TO %s USING (%s)",
-		def.Name, schema, table, strings.ToUpper(def.Action), strings.Join(roleList, ", "), expr)
+		def.Name, schema, table, strings.ToUpper(def.Action), db.EnduserRole, expr)
 	if def.Action == "insert" || def.Action == "update" {
 		fmt.Fprintf(&sb, " WITH CHECK (%s)", expr)
 	}

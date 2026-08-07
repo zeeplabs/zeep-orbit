@@ -314,6 +314,25 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 		 ADD COLUMN IF NOT EXISTS deploy_error_message  TEXT NOT NULL DEFAULT '',
 		 ADD COLUMN IF NOT EXISTS custom_domain         TEXT NOT NULL DEFAULT '',
 		 ADD COLUMN IF NOT EXISTS owner_id              UUID REFERENCES zeep_system.dashboard_users(id)`,
+		// end-user-row-policies T-08: native RLS policy metadata. app_id has
+		// ON DELETE CASCADE (whole-app deletion cleans these up automatically);
+		// a single-table deletion (DeleteAppTable) has no DB-level FK to
+		// app_tables here — table_name is a plain column, resolved logically
+		// the same way app_tables.name already is elsewhere — so that cleanup
+		// path is handled at the application level (see
+		// deleteTablePoliciesForTable in table_policies_store.go).
+		`CREATE TABLE IF NOT EXISTS zeep_system.table_policies (
+			id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+			app_id         UUID        NOT NULL REFERENCES zeep_system.apps(id) ON DELETE CASCADE,
+			table_name     TEXT        NOT NULL,
+			action         TEXT        NOT NULL CHECK (action IN ('select','insert','update','delete')),
+			roles          JSONB       NOT NULL,
+			clauses        JSONB       NOT NULL,
+			pg_policy_name TEXT        NOT NULL,
+			created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+			created_by     UUID        NOT NULL REFERENCES zeep_system.dashboard_users(id),
+			UNIQUE (app_id, table_name, action, pg_policy_name)
+		)`,
 		`CREATE TABLE IF NOT EXISTS zeep_system.changelog_entries (
 			id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			version      TEXT NOT NULL,

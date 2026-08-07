@@ -185,7 +185,7 @@ Toda ambiguidade está resolvida ou registrada aqui — nada fica silenciosament
 | ROWPOL-03 | P1: Papel no JWT | Tasks | Implementing |
 | ROWPOL-04 | P1: Papel no JWT | Tasks | Implementing |
 | ROWPOL-05 | P1: Policy nativa | Design | Pending |
-| ROWPOL-06 | P1: Policy nativa | Design | Pending |
+| ROWPOL-06 | P1: Policy nativa | Tasks | Implementing |
 | ROWPOL-07 | P1: Policy nativa | Tasks | Implementing |
 | ROWPOL-08 | P1: Policy nativa | Tasks | Implementing |
 | ROWPOL-09 | P1: Policy nativa | Tasks | Implementing |

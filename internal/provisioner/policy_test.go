@@ -30,14 +30,14 @@ func TestBuildPolicySQL_ValidEqualityClaim(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	wantUsing := `USING ("requester_id" != current_setting('app.jwt_sub', true)::UUID)`
+	wantUsing := `USING ((current_setting('app.jwt_role', true) = ANY (ARRAY['approver'])) AND ("requester_id" != current_setting('app.jwt_sub', true)::UUID))`
 	if !strings.Contains(sql, wantUsing) {
 		t.Fatalf("sql = %q, want it to contain %q", sql, wantUsing)
 	}
 	if !strings.Contains(sql, `WITH CHECK (`) {
 		t.Fatalf("update policy must include WITH CHECK, got %q", sql)
 	}
-	if !strings.HasPrefix(sql, `CREATE POLICY "approver_no_self_approve" ON "app_schema"."requests" FOR UPDATE TO "approver"`) {
+	if !strings.HasPrefix(sql, `CREATE POLICY "approver_no_self_approve" ON "app_schema"."requests" FOR UPDATE TO zeep_app_enduser`) {
 		t.Fatalf("unexpected prefix: %q", sql)
 	}
 }
@@ -365,7 +365,9 @@ func TestBuildPolicySQL_ThreeClauseFoldExactParenthesization(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	wantExpr := `(("requester_id" != current_setting('app.jwt_sub', true)::UUID AND "approved_by" IS NULL) OR "status" = 'active'::TEXT)`
+	roleCheck := `current_setting('app.jwt_role', true) = ANY (ARRAY['member'])`
+	clauseExpr := `(("requester_id" != current_setting('app.jwt_sub', true)::UUID AND "approved_by" IS NULL) OR "status" = 'active'::TEXT)`
+	wantExpr := "(" + roleCheck + ") AND (" + clauseExpr + ")"
 	wantUsing := "USING (" + wantExpr + ")"
 	if !strings.Contains(sql, wantUsing) {
 		t.Fatalf("sql = %q\nwant it to contain exact fold:\n%q", sql, wantUsing)
@@ -392,7 +394,9 @@ func TestBuildPolicySQL_FourClauseFoldExactParenthesization(t *testing.T) {
 	c2 := `"status" = 'b'::TEXT`
 	c3 := `"status" = 'c'::TEXT`
 	c4 := `"status" = 'd'::TEXT`
-	wantExpr := "(((" + c1 + " OR " + c2 + ") AND " + c3 + ") OR " + c4 + ")"
+	roleCheck := `current_setting('app.jwt_role', true) = ANY (ARRAY['member'])`
+	clauseExpr := "(((" + c1 + " OR " + c2 + ") AND " + c3 + ") OR " + c4 + ")"
+	wantExpr := "(" + roleCheck + ") AND (" + clauseExpr + ")"
 	wantUsing := "USING (" + wantExpr + ")"
 	if !strings.Contains(sql, wantUsing) {
 		t.Fatalf("sql = %q\nwant it to contain exact fold:\n%q", sql, wantUsing)
@@ -443,6 +447,43 @@ func TestBuildPolicySQL_NonFirstClauseInvalidLogicIsRejected(t *testing.T) {
 	_, err := BuildPolicySQL("app_schema", "requests", def, testColumns())
 	if err == nil {
 		t.Fatal("expected error for invalid logic value, got nil")
+	}
+}
+
+func TestBuildPolicySQL_MultipleRolesUseAnyArray(t *testing.T) {
+	def := PolicyDef{
+		Name:   "multi_role",
+		Action: "select",
+		Roles:  []string{"approver", "admin"},
+		Clauses: []PolicyClause{
+			{Column: "status", Operator: "IS NOT NULL"},
+		},
+	}
+	sql, err := BuildPolicySQL("app_schema", "requests", def, testColumns())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := `current_setting('app.jwt_role', true) = ANY (ARRAY['approver', 'admin'])`
+	if !strings.Contains(sql, want) {
+		t.Fatalf("sql = %q, want it to contain %q", sql, want)
+	}
+	if !strings.Contains(sql, "TO zeep_app_enduser") {
+		t.Fatalf("sql = %q, want it to target TO zeep_app_enduser (not the business roles)", sql)
+	}
+}
+
+func TestBuildPolicySQL_RejectsRoleFailingIdentRe(t *testing.T) {
+	def := PolicyDef{
+		Name:   "p",
+		Action: "select",
+		Roles:  []string{"bad role; --"},
+		Clauses: []PolicyClause{
+			{Column: "status", Operator: "IS NOT NULL"},
+		},
+	}
+	_, err := BuildPolicySQL("app_schema", "requests", def, testColumns())
+	if err == nil {
+		t.Fatal("expected error for role failing identRe, got nil")
 	}
 }
 

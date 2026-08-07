@@ -444,7 +444,11 @@ func UpdateAppTable(ctx context.Context, pool *db.Pool, appID, tableID, rls stri
 }
 
 // DeleteAppTable removes a table's metadata row and returns its name so the
-// caller can drop the physical table too.
+// caller can drop the physical table too. Also deletes any table_policies
+// rows registered for this table (end-user-row-policies spec edge case: the
+// physical DROP TABLE already removes the native Postgres policies, this
+// only cleans up Orbit's own policy metadata, which has no DB-level FK to
+// app_tables to cascade on its own).
 func DeleteAppTable(ctx context.Context, pool *db.Pool, appID, tableID string) (string, error) {
 	var name string
 	err := pool.QueryRow(ctx,
@@ -456,6 +460,9 @@ func DeleteAppTable(ctx context.Context, pool *db.Pool, appID, tableID string) (
 			return "", ErrNotFound
 		}
 		return "", fmt.Errorf("dashboard: delete app table %s: %w", tableID, err)
+	}
+	if err := deleteTablePoliciesForTable(ctx, pool, appID, name); err != nil {
+		return "", err
 	}
 	return name, nil
 }
