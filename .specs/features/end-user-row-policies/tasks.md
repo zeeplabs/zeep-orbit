@@ -427,13 +427,15 @@ T17
 - Skill: NONE
 
 **Done when**:
-- [ ] Column dropdown is populated only from the table's real columns (no free-text input)
-- [ ] Operator dropdown only offers `=`/`!=`/`IN`/`NOT IN`/`>`/`<`/`>=`/`<=`/`IS NULL`/`IS NOT NULL`
-- [ ] Selecting `IS NULL`/`IS NOT NULL` hides the value field for that clause (unary operator, nothing to compare)
-- [ ] Claim dropdown only offers `role`/`sub`/`email` when `value_source` is `claim`
-- [ ] From the second clause onward, an `AND`/`OR` connector select is shown and required; the first clause never shows it
-- [ ] Successful submit shows a success toast and refreshes the policy list (T13); failed submit shows `toast.error(error.message)`
-- [ ] `npx tsc -b && npm run build` passes
+- [x] Column dropdown is populated only from the table's real columns (no free-text input)
+- [x] Operator dropdown only offers `=`/`!=`/`IN`/`NOT IN`/`>`/`<`/`>=`/`<=`/`IS NULL`/`IS NOT NULL`
+- [x] Selecting `IS NULL`/`IS NOT NULL` hides the value field for that clause (unary operator, nothing to compare)
+- [x] Claim dropdown only offers `role`/`sub`/`email` when `value_source` is `claim`
+- [x] From the second clause onward, an `AND`/`OR` connector select is shown and required; the first clause never shows it
+- [x] Successful submit shows a success toast and refreshes the policy list (T13); failed submit shows `toast.error(error.message)`
+- [x] `npx tsc -b && npm run build` passes
+
+**Deviation**: `roles` (business roles, free strings per app — not an Orbit-defined vocabulary, per spec Assumptions) is a comma-separated text input, not a fixed dropdown — there is no allowlist of roles to select from, unlike columns/operators/claims which the spec explicitly restricts to allowlists. `columns` prop added to `TablePoliciesTabProps` (T13 didn't need it); `TableCard` now passes the table's persisted `table.columns` (not the local unsaved-edit draft `columns` state), since the Policies tab addresses the table as it exists in Postgres today.
 
 **Tests**: none
 **Gate**: build
