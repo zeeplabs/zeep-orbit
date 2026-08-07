@@ -160,9 +160,9 @@ T17
 - Skill: NONE
 
 **Done when**:
-- [ ] Running `ProvisionZeepSystem` twice does not error and does not duplicate the role
-- [ ] `pg_roles` shows `zeep_app_enduser` with `rolbypassrls = false`, `rolsuper = false`, `rolcanlogin = false`
-- [ ] The connecting/principal role can successfully `SET ROLE zeep_app_enduser` (membership granted)
+- [x] Running `ProvisionZeepSystem` twice does not error and does not duplicate the role
+- [x] `pg_roles` shows `zeep_app_enduser` with `rolbypassrls = false`, `rolsuper = false`, `rolcanlogin = false`
+- [x] The connecting/principal role can successfully `SET ROLE zeep_app_enduser` (membership granted)
 
 **Tests**: integration
 **Gate**: full

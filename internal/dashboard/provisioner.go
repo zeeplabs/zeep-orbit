@@ -22,6 +22,23 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 
 	stmts := []string{
 		`CREATE EXTENSION IF NOT EXISTS pgcrypto`,
+		// end-user-row-policies T-03: dedicated Postgres role for end-user
+		// requests (no ownership, no BYPASSRLS, cannot log in directly —
+		// the server reaches it only via SET LOCAL ROLE inside a
+		// transaction). This is what makes native RLS enforcement actually
+		// bite: the principal/connecting role stays the tables' owner
+		// (exempt from RLS by default), so without this second role every
+		// policy would be invisible to every request. Idempotent: skips
+		// CREATE ROLE if it already exists, and GRANT of a membership that
+		// already holds is a no-op.
+		`DO $do$
+		 BEGIN
+		   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'zeep_app_enduser') THEN
+		     CREATE ROLE zeep_app_enduser NOSUPERUSER NOBYPASSRLS NOLOGIN;
+		   END IF;
+		 END
+		 $do$`,
+		`GRANT zeep_app_enduser TO CURRENT_USER`,
 		`CREATE SCHEMA IF NOT EXISTS zeep_system`,
 		`CREATE TABLE IF NOT EXISTS zeep_system.dashboard_users (
 			id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
