@@ -35,8 +35,8 @@ Toda ambiguidade está resolvida ou registrada aqui — nada fica silenciosament
 
 | Assumption / decision | Chosen default | Rationale | Confirmed? |
 | --- | --- | --- | --- |
-| Operadores suportados no builder de cláusula | `=`, `!=`, `IN`, `NOT IN` sobre `(coluna, claim ou literal)` | Cobre o caso motivador (`requester_id != claim.sub`) e listas de papel/valor, sem abrir para expressões arbitrárias | n — confirmar se cobre os casos reais de `asset-manager-web` antes de fechar Design |
-| Composição de cláusulas dentro de uma policy | Só `AND` entre cláusulas na V1 (sem `OR`) | Reduz superfície de tradução SQL seguro; a maioria dos casos de "papel + condição de linha" é conjuntiva | n — se um caso real precisar de `OR`, vira P2 |
+| Operadores suportados no builder de cláusula | `=`, `!=`, `IN`, `NOT IN`, `>`, `<`, `>=`, `<=`, `IS NULL`, `IS NOT NULL` sobre `(coluna, claim ou literal)` | Decisão explícita do usuário: cobrir os casos de comparação numérica/data (`valor <= claim.limite`) e checagem de nulidade (`aprovado_por IS NULL`, comum em workflow de aprovação) além do caso motivador de igualdade/desigualdade. `LIKE`/`ILIKE` e agrupamento arbitrário ficam fora — sem caso motivador concreto, custo desproporcional (risco de scan sem índice, ambiguidade de escaping) | y — confirmado pelo usuário em 2026-08-07 |
+| Composição de cláusulas dentro de uma policy | `AND`/`OR` no mesmo nível, sem agrupamento (parênteses aninhados) — avaliação estritamente left-to-right, cada cláusula além da primeira carrega o conector (`AND`/`OR`) que a liga ao resultado acumulado até ali | Cobre a maioria dos casos reais de "papel + condição de linha" sem exigir builder de árvore de expressão (validação/tradução SQL muito mais simples e segura que agrupamento arbitrário) | y — confirmado pelo usuário em 2026-08-07 |
 | Fonte de claims disponíveis nas cláusulas | `role` (novo), `sub`/user id (já existe em `RegisteredClaims.Subject`), `email` (já existe) | São os únicos dados de identidade que o JWT já carrega ou vai carregar nesta feature | y (decorre da spec, sem gray area real) |
 | Mecanismo de isenção de RLS para rotinas internas | Segundo role Postgres, sem privilégio de owner/`BYPASSRLS`, usado só no caminho de request de usuário final via `SET LOCAL ROLE` dentro da transação; Data Browser/purge/provisionador continuam como o role owner (que o Postgres já isenta de RLS por padrão, sem `FORCE`) | Mecanismo de permissão real do Postgres (GRANT/membership), não uma flag de sessão forjável por bug futuro de código — validado com o usuário no início do Design | y |
 | Janela de staleness quando papel do usuário muda em sessão ativa | Aceitar até 1h (TTL atual do JWT, `TokenTTL` em `internal/auth/jwt.go`) sem revogação ativa | Revogação ativa pra JWT de usuário final é Out of Scope (ver tabela acima); é o mesmo risco já aceito no RBAC per-app de dashboard | y |
@@ -73,14 +73,15 @@ Toda ambiguidade está resolvida ou registrada aqui — nada fica silenciosament
 
 **Acceptance Criteria**:
 
-1. WHEN um admin do app (`AppRoleAdmin` ou `superadmin` global) cria uma policy para uma tabela via `POST /dashboard/api/apps/{id}/tables/{table}/policies` com `{action, roles: [...], clauses: [{column, operator, value_source, value}]}` válidos THEN o sistema SHALL persistir a policy e traduzi-la para `CREATE POLICY "<nome>" ON "<schema>"."<tabela>" FOR <ação> USING (<cláusulas AND>) WITH CHECK (<cláusulas AND>)` (`WITH CHECK` só para `insert`/`update`).
+1. WHEN um admin do app (`AppRoleAdmin` ou `superadmin` global) cria uma policy para uma tabela via `POST /dashboard/api/apps/{id}/tables/{table}/policies` com `{action, roles: [...], clauses: [{column, operator, value_source, value, logic}]}` válidos THEN o sistema SHALL persistir a policy e traduzi-la para `CREATE POLICY "<nome>" ON "<schema>"."<tabela>" FOR <ação> USING (<cláusulas dobradas left-to-right por `logic`, cada passo totalmente parenteseado>) WITH CHECK (<mesma expressão>)` (`WITH CHECK` só para `insert`/`update`); a primeira cláusula não carrega `logic` (não há acumulado anterior), toda cláusula seguinte SHALL informar `logic: "AND"|"OR"`.
 2. WHEN a policy é criada pela primeira vez para uma tabela que ainda não tem RLS nativo habilitado THEN o sistema SHALL executar `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` e `GRANT` das permissões necessárias ao role de usuário final antes de criar a policy (sem `FORCE ROW LEVEL SECURITY` — o role owner, usado pelas rotinas internas, já é isento de RLS por padrão do Postgres).
-3. IF uma cláusula referencia uma coluna que não existe na tabela, ou um nome de coluna fora do padrão `identRe` (`^[a-z][a-z0-9_]{0,62}$`, mesmo allowlist de `internal/dashboard/handler.go:85`), ou um operador fora de `{=, !=, IN, NOT IN}` THEN o sistema SHALL rejeitar a criação com 400 e mensagem em inglês descrevendo qual cláusula falhou, sem executar DDL algum.
-4. WHEN uma cláusula usa `value_source: "claim"` THEN o sistema SHALL aceitar só `role`, `sub` ou `email` como `value`, traduzindo para `current_setting('app.jwt_<claim>', true)` (com cast explícito pro tipo da coluna via `::uuid`/`::text` conforme o tipo declarado da coluna).
-5. WHEN uma cláusula usa `value_source: "literal"` THEN o sistema SHALL embutir o valor via `quote_literal()`/formatação segura equivalente (nunca concatenação direta de string do usuário no DDL).
-6. WHEN um usuário final autenticado por JWT executa uma ação sobre uma tabela com policy cadastrada para o papel dele e a ação THEN o Postgres SHALL permitir ou negar a linha conforme a policy, independente de o request ter vindo da API REST do Orbit ou de uma conexão direta ao Postgres autenticada como o role de usuário final (não o role owner).
-7. WHEN um admin do app deleta uma policy via `DELETE .../policies/{id}` THEN o sistema SHALL executar `DROP POLICY` correspondente; SE for a última policy da tabela para toda ação, a tabela permanece com `ROW LEVEL SECURITY` habilitado (nenhuma linha visível ao role de usuário final até nova policy existir) — comportamento default-deny explícito, não implícito.
-8. WHEN qualquer operação de criar/atualizar/deletar policy é aplicada com sucesso THEN o sistema SHALL registrar entrada em `audit_log` (mesmo padrão de `InsertAuditLog` usado em `rbac-per-app`).
+3. IF uma cláusula referencia uma coluna que não existe na tabela, ou um nome de coluna fora do padrão `identRe` (`^[a-z][a-z0-9_]{0,62}$`, mesmo allowlist de `internal/dashboard/handler.go:85`), ou um operador fora de `{=, !=, IN, NOT IN, >, <, >=, <=, IS NULL, IS NOT NULL}`, ou (quando não for a primeira cláusula da policy) um `logic` fora de `{AND, OR}` THEN o sistema SHALL rejeitar a criação com 400 e mensagem em inglês descrevendo qual cláusula falhou, sem executar DDL algum.
+4. IF uma cláusula usa operador `IS NULL` ou `IS NOT NULL` e o payload informa `value_source`/`value` não-vazios THEN o sistema SHALL rejeitar com 400 — são operadores unários, não recebem valor comparável.
+5. WHEN uma cláusula usa `value_source: "claim"` THEN o sistema SHALL aceitar só `role`, `sub` ou `email` como `value`, traduzindo para `current_setting('app.jwt_<claim>', true)` (com cast explícito pro tipo da coluna via `::uuid`/`::text`/`::numeric`/etc. conforme o tipo declarado da coluna).
+6. WHEN uma cláusula usa `value_source: "literal"` THEN o sistema SHALL embutir o valor via `quote_literal()`/formatação segura equivalente (nunca concatenação direta de string do usuário no DDL).
+7. WHEN um usuário final autenticado por JWT executa uma ação sobre uma tabela com policy cadastrada para o papel dele e a ação THEN o Postgres SHALL permitir ou negar a linha conforme a policy, independente de o request ter vindo da API REST do Orbit ou de uma conexão direta ao Postgres autenticada como o role de usuário final (não o role owner).
+8. WHEN um admin do app deleta uma policy via `DELETE .../policies/{id}` THEN o sistema SHALL executar `DROP POLICY` correspondente; SE for a última policy da tabela para toda ação, a tabela permanece com `ROW LEVEL SECURITY` habilitado (nenhuma linha visível ao role de usuário final até nova policy existir) — comportamento default-deny explícito, não implícito.
+9. WHEN qualquer operação de criar/atualizar/deletar policy é aplicada com sucesso THEN o sistema SHALL registrar entrada em `audit_log` (mesmo padrão de `InsertAuditLog` usado em `rbac-per-app`).
 
 **Independent Test**: Criar tabela `requests` com coluna `requester_id UUID`; criar policy `FOR UPDATE`, papel `approver`, cláusula `requester_id != claim:sub`; autenticar como usuário A (`role=approver`) e tentar `UPDATE` numa linha onde `requester_id = A.id` → negado pelo Postgres (não pela API); tentar `UPDATE` numa linha de outro requester → permitido. Repetir a mesma tentativa de `UPDATE` via conexão `psql` direta autenticada como o role de usuário final com os mesmos GUCs de sessão setados manualmente, confirmando que o bloqueio é do Postgres, não da camada HTTP.
 
@@ -112,7 +113,7 @@ Toda ambiguidade está resolvida ou registrada aqui — nada fica silenciosament
 **Acceptance Criteria**:
 
 1. WHEN um admin do app abre a tela de policies de uma tabela (nova aba/seção dentro da página de detalhe da tabela no dashboard) THEN o sistema SHALL listar as policies existentes (ação, papéis, cláusulas) e um formulário pra criar uma nova.
-2. WHEN o admin monta uma cláusula no formulário THEN o sistema SHALL oferecer só as colunas reais da tabela (vindas do schema já carregado, mesmo padrão de `filterCol` em `DataBrowserPage.tsx`) e só os operadores suportados (`=`, `!=`, `IN`, `NOT IN`) — sem campo de texto livre pra nome de coluna ou operador.
+2. WHEN o admin monta uma cláusula no formulário THEN o sistema SHALL oferecer só as colunas reais da tabela (vindas do schema já carregado, mesmo padrão de `filterCol` em `DataBrowserPage.tsx`), só os operadores suportados (`=`, `!=`, `IN`, `NOT IN`, `>`, `<`, `>=`, `<=`, `IS NULL`, `IS NOT NULL`) — sem campo de texto livre pra nome de coluna ou operador — e, a partir da segunda cláusula, um select `AND`/`OR` ligando-a à cláusula anterior; ao escolher `IS NULL`/`IS NOT NULL` o sistema SHALL ocultar o campo de valor (operador unário).
 3. WHEN o admin escolhe `value_source: claim` numa cláusula THEN o sistema SHALL oferecer um select fixo com `role`, `sub`, `email` — sem texto livre.
 4. WHEN o formulário é submetido com sucesso THEN o sistema SHALL mostrar toast de sucesso (`sonner`) e atualizar a lista de policies sem reload de página; IF a API retornar erro (400/403/500) THEN o sistema SHALL mostrar `toast.error(error.message)`.
 5. The system SHALL ter todo texto da UI (labels, botões, mensagens) traduzido em `en.json` e `pt-BR.json` via `react-i18next`, sem string hardcoded.
@@ -170,6 +171,8 @@ Toda ambiguidade está resolvida ou registrada aqui — nada fica silenciosament
 - IF o admin tenta usar `value_source: claim` com um claim que não seja `role`/`sub`/`email` THEN o sistema SHALL rejeitar com 400 (ver AC-04 da story principal).
 - WHEN uma tabela nunca teve nenhuma policy cadastrada THEN o sistema SHALL manter `ROW LEVEL SECURITY` desabilitado nela (comportamento idêntico ao atual) — só é habilitado no momento em que a primeira policy é criada (AC-02 da story principal), nunca preventivamente.
 - IF o `role` claim do JWT de um usuário não corresponde a nenhum papel referenciado em nenhuma policy da tabela, mas a tabela tem `ROW LEVEL SECURITY` habilitado (por outra policy de outro papel) THEN o sistema SHALL negar todo acesso a esse usuário nessa tabela (default-deny do próprio Postgres, sem policy = sem linha visível para o role de usuário final).
+- IF a policy tem só 1 cláusula THEN o campo `logic` SHALL ser omitido/ignorado (não há cláusula anterior pra ligar) — presença de `logic` numa policy de 1 cláusula é erro de validação, não é silenciosamente descartada.
+- WHEN a policy mistura `AND` e `OR` entre mais de 2 cláusulas THEN a tradução SQL SHALL dobrar left-to-right, parenteseando cada passo (`((c1 AND c2) OR c3)`, nunca `(c1 AND (c2 OR c3))`) — ordem de avaliação determinística, sem depender de precedência implícita de operador.
 
 ---
 
@@ -204,12 +207,14 @@ Toda ambiguidade está resolvida ou registrada aqui — nada fica silenciosament
 | ROWPOL-25 | P2: FK explícito para `_auth_users` | Design | Pending |
 | ROWPOL-26 | P2: Auditoria | - | Pending |
 | ROWPOL-27 | P3: Preview | - | Pending |
+| ROWPOL-28 | P1: Policy nativa — operadores estendidos (`>`,`<`,`>=`,`<=`,`IS NULL`,`IS NOT NULL`) | Design | Pending |
+| ROWPOL-29 | P1: Policy nativa — composição `AND`/`OR` flat (fold left-to-right) | Design | Pending |
 
 **ID format:** `ROWPOL-[NUMBER]`
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 27 total, 0 mapped to tasks, 27 unmapped ⚠️ (esperado nesta fase — Tasks ainda não rodou)
+**Coverage:** 29 total, 0 mapped to tasks, 29 unmapped ⚠️ (esperado nesta fase — Tasks ainda não rodou)
 
 ---
 

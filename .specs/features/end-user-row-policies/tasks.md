@@ -20,7 +20,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 | Code Layer | Required Test Type | Coverage Expectation | Location Pattern | Run Command |
 | --- | --- | --- | --- | --- |
 | Provisioner / migration (`internal/provisioner`) | integration (real Postgres) | Idempotency (run twice, no error) + every listed edge case (existing users default to `member`, role bootstrap, GRANT wiring) | `internal/provisioner/*_test.go` | `TEST_DATABASE_URL=... go test ./internal/provisioner/...` |
-| `policy.Builder` (clause validation/translation) | unit | All branches; 1:1 to spec ACs ROWPOL-07/08/09; every rejected-input edge case (bad column, bad operator, injection-shaped literal) has a test | `internal/provisioner/policy_test.go` | `go test ./internal/provisioner/...` |
+| `policy.Builder` (clause validation/translation) | unit | All branches; 1:1 to spec ACs ROWPOL-07/08/09/28/29; every rejected-input edge case (bad column, bad operator, injection-shaped literal, unary operator with a value, missing/invalid `logic`) has a test; AND/OR fold parenthesization asserted exactly, not just semantically | `internal/provisioner/policy_test.go` | `go test ./internal/provisioner/...` |
 | `db.Pool.WithRLSContext` | integration (real Postgres) | Role switch + GUCs set/reverted + `statement_timeout` preserved (regression) | `internal/db/client_test.go` | `TEST_DATABASE_URL=... go test ./internal/db/...` |
 | `auth.Claims`/`IssueJWT` (role claim) | unit | 1:1 to ROWPOL-02/03/04 | `internal/auth/jwt_test.go` | `go test ./internal/auth/...` |
 | Store layer (`TablePolicyStore`, `_auth_users.role` migration) | integration (real Postgres) | Key CRUD paths + constraint/error paths (`UNIQUE`, cascade delete) | `internal/dashboard/table_policies_store_test.go` | `TEST_DATABASE_URL=... go test ./internal/dashboard/...` |
@@ -237,11 +237,11 @@ T17
 
 ### T7: Implement `policy.Builder` (clause validation + SQL translation)
 
-**What**: `BuildPolicySQL(schema, table string, def PolicyDef, tableColumns []config.ColumnConfig) (string, error)` validating clauses against `identRe` + operator allowlist (`=`,`!=`,`IN`,`NOT IN`) + real column existence, casting via `pgType()`, and `quoteLiteral` for literal values via `SELECT quote_literal($1)` round-trip.
+**What**: `BuildPolicySQL(schema, table string, def PolicyDef, tableColumns []config.ColumnConfig) (string, error)` validating clauses against `identRe` + operator allowlist (`=`,`!=`,`IN`,`NOT IN`,`>`,`<`,`>=`,`<=`,`IS NULL`,`IS NOT NULL`) + real column existence, casting via `pgType()`, `quoteLiteral` for literal values via `SELECT quote_literal($1)` round-trip, and folding clauses left-to-right by each clause's `Logic` (`AND`/`OR`) into a fully-parenthesized expression (`((c1 AND c2) OR c3)` — never relies on SQL operator precedence).
 **Where**: `internal/provisioner/policy.go` (new file)
 **Depends on**: None
 **Reuses**: `identRe` (`internal/dashboard/handler.go:85`), `pgType()` (`internal/provisioner/table.go:24-45`)
-**Requirement**: ROWPOL-05, ROWPOL-07, ROWPOL-08, ROWPOL-09
+**Requirement**: ROWPOL-05, ROWPOL-07, ROWPOL-08, ROWPOL-09, ROWPOL-28, ROWPOL-29
 
 **Tools**:
 - MCP: NONE
@@ -252,6 +252,10 @@ T17
 - [ ] Column name failing `identRe`, non-existent column, or operator outside the allowlist is rejected with a descriptive error and zero DDL executed
 - [ ] `value_source: claim` accepts only `role`/`sub`/`email`, rejecting anything else
 - [ ] Literal values containing SQL metacharacters (`'`, `;`, `--`) are safely embedded via `quote_literal()` round-trip — test asserts the generated SQL is syntactically valid and the metacharacters don't break out of the literal
+- [ ] Each of `>`,`<`,`>=`,`<=` produces correct SQL against a numeric/date column (claim and literal value sources both tested)
+- [ ] `IS NULL`/`IS NOT NULL` produce correct unary SQL (no operand); a clause supplying `value_source`/`value` alongside either is rejected
+- [ ] A 3-clause policy mixing `AND`/`OR` (e.g. `c1 AND c2 OR c3`, `logic` on c2="AND", c3="OR") folds to `((c1 AND c2) OR c3)`, not `(c1 AND (c2 OR c3))` — test asserts the exact parenthesization, not just semantic equivalence
+- [ ] First clause with a non-empty `Logic`, or any non-first clause with `Logic` outside `{AND, OR}`, is rejected with a descriptive error
 
 **Tests**: unit
 **Gate**: quick
@@ -394,11 +398,11 @@ T17
 
 ### T14: Policy builder form
 
-**What**: Form to create a policy — table columns/operators as fixed dropdowns (no free text), `value_source: claim` restricted to `role`/`sub`/`email`, submits via `useCreateTablePolicy`.
+**What**: Form to create a policy — table columns/operators as fixed dropdowns (no free text), `value_source: claim` restricted to `role`/`sub`/`email`, a per-clause `AND`/`OR` connector select from the second clause onward, submits via `useCreateTablePolicy`.
 **Where**: `internal/dashboard/ui/src/pages/` (same tab as T13, form component)
 **Depends on**: T13
 **Reuses**: `filterRules`/`draftCol`/`draftOp`/`draftValue` pattern from `DataBrowserPage.tsx`
-**Requirement**: ROWPOL-17, ROWPOL-18, ROWPOL-19
+**Requirement**: ROWPOL-17, ROWPOL-18, ROWPOL-19, ROWPOL-28, ROWPOL-29
 
 **Tools**:
 - MCP: NONE
@@ -406,8 +410,10 @@ T17
 
 **Done when**:
 - [ ] Column dropdown is populated only from the table's real columns (no free-text input)
-- [ ] Operator dropdown only offers `=`/`!=`/`IN`/`NOT IN`
+- [ ] Operator dropdown only offers `=`/`!=`/`IN`/`NOT IN`/`>`/`<`/`>=`/`<=`/`IS NULL`/`IS NOT NULL`
+- [ ] Selecting `IS NULL`/`IS NOT NULL` hides the value field for that clause (unary operator, nothing to compare)
 - [ ] Claim dropdown only offers `role`/`sub`/`email` when `value_source` is `claim`
+- [ ] From the second clause onward, an `AND`/`OR` connector select is shown and required; the first clause never shows it
 - [ ] Successful submit shows a success toast and refreshes the policy list (T13); failed submit shows `toast.error(error.message)`
 - [ ] `npx tsc -b && npm run build` passes
 

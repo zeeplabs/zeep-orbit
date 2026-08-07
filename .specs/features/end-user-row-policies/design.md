@@ -68,7 +68,7 @@ Já resolvido com o usuário no início do Design (ver spec, Assumptions). Regis
 | `InsertAuditLog` | `internal/dashboard/audit_store.go:25` | Reusado nos 3 endpoints de policy (create/update/delete) — mesma assinatura, `resourceType="table_policy"`. |
 | `addMissingAuthUserColumns` (migração idempotente de coluna) | `internal/provisioner/auth.go` | Modelo direto para adicionar `role TEXT NOT NULL DEFAULT 'member'` em `_auth_users`. |
 | `AppTableRow`/`loadAppTables`/`InsertAppTable`/`UpdateAppTable` | `internal/dashboard/apps_store.go:33-39,364-429` | Não reusados diretamente (tabela `app_tables` não tem coluna pra policies) — nova tabela `zeep_system.table_policies` é análoga em padrão (JSON de cláusulas, mesmo estilo de `columns`/`indexes` já usado). |
-| `filterRules`/`draftCol`/`draftOp`/`draftValue` (builder de condição single-clause) | `internal/dashboard/ui/src/pages/DataBrowserPage.tsx:73-76` | Padrão de UI de referência pro novo builder de cláusulas de policy — adaptado pra lista de cláusulas (múltiplas, AND) em vez de uma condição de filtro por vez. |
+| `filterRules`/`draftCol`/`draftOp`/`draftValue` (builder de condição single-clause) | `internal/dashboard/ui/src/pages/DataBrowserPage.tsx:73-76` | Padrão de UI de referência pro novo builder de cláusulas de policy — adaptado pra lista de cláusulas (múltiplas, cada uma além da primeira com conector `AND`/`OR`) em vez de uma condição de filtro por vez. |
 | `toast.error(error.message)` (padrão de erro em mutation) | Convenção do repo (`AGENTS.md` §5) | Aplicado no formulário de policy do dashboard. |
 | `validateReference`/`columnDDL` (FK genérico já existente) | `internal/config/validate.go:128-160`, `internal/provisioner/table.go:88-89` | Reusado quase inteiro — `columnDDL` já gera `REFERENCES %q.%q(%q)` genérico, funciona pra `_auth_users` sem mudança; só `validateReference` precisa do caso especial (ver Componente novo abaixo). |
 
@@ -102,7 +102,7 @@ Já resolvido com o usuário no início do Design (ver spec, Assumptions). Regis
 
 ### `policy.Builder` (tradução de cláusula → SQL)
 
-- **Purpose**: Valida e traduz uma lista de cláusulas estruturadas (`{column, operator, value_source, value}`) em fragmentos seguros de `USING`/`WITH CHECK` para `CREATE POLICY`.
+- **Purpose**: Valida e traduz uma lista de cláusulas estruturadas (`{column, operator, value_source, value, logic}`) em fragmentos seguros de `USING`/`WITH CHECK` para `CREATE POLICY`, dobrando as cláusulas left-to-right pelo `logic` de cada uma (totalmente parenteseado a cada passo — sem depender de precedência SQL implícita entre `AND`/`OR`).
 - **Location**: `internal/provisioner/policy.go` (novo arquivo, mesmo pacote que já gera DDL de tabela)
 - **Interfaces**:
   - `func BuildPolicySQL(schema, table string, def PolicyDef, tableColumns []config.ColumnConfig) (string, error)` — retorna o `CREATE POLICY ...` completo ou erro descrevendo a cláusula inválida.
@@ -142,7 +142,7 @@ CREATE TABLE IF NOT EXISTS zeep_system.table_policies (
     table_name  TEXT NOT NULL,
     action      TEXT NOT NULL CHECK (action IN ('select','insert','update','delete')),
     roles       JSONB NOT NULL,   -- ["approver","admin"]
-    clauses     JSONB NOT NULL,   -- [{"column":"requester_id","operator":"!=","value_source":"claim","value":"sub"}]
+    clauses     JSONB NOT NULL,   -- [{"column":"requester_id","operator":"!=","value_source":"claim","value":"sub"},{"column":"aprovado_por","operator":"IS NULL","logic":"AND"}]
     pg_policy_name TEXT NOT NULL, -- nome real usado no CREATE POLICY, pra DROP determinístico
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     created_by  UUID NOT NULL REFERENCES zeep_system.dashboard_users(id),
@@ -155,9 +155,10 @@ Go model (`internal/dashboard/table_policies_store.go`):
 ```go
 type PolicyClause struct {
     Column      string `json:"column"`
-    Operator    string `json:"operator"`      // "=", "!=", "IN", "NOT IN"
-    ValueSource string `json:"value_source"`  // "claim" | "literal"
-    Value       string `json:"value"`         // "role"/"sub"/"email" quando claim
+    Operator    string `json:"operator"`      // "=", "!=", "IN", "NOT IN", ">", "<", ">=", "<=", "IS NULL", "IS NOT NULL"
+    ValueSource string `json:"value_source,omitempty"` // "claim" | "literal" - vazio para IS NULL/IS NOT NULL (unários)
+    Value       string `json:"value,omitempty"`        // "role"/"sub"/"email" quando claim - vazio para IS NULL/IS NOT NULL
+    Logic       string `json:"logic,omitempty"`         // "AND" | "OR" - vazio só na primeira cláusula da lista
 }
 
 type TablePolicyRow struct {
@@ -194,7 +195,8 @@ type Claims struct {
 | Error Scenario | Handling | User Impact |
 | --- | --- | --- |
 | Cláusula referencia coluna inexistente/fora de `identRe` | `policy.Builder` retorna erro antes de qualquer DDL; handler responde 400 com mensagem em inglês nomeando a cláusula | Toast de erro no formulário do dashboard, sem policy criada |
-| Operador fora do allowlist (`=`,`!=`,`IN`,`NOT IN`) | Mesma validação acima, mesmo fluxo | Idem |
+| Operador fora do allowlist (`=`,`!=`,`IN`,`NOT IN`,`>`,`<`,`>=`,`<=`,`IS NULL`,`IS NOT NULL`) | Mesma validação acima, mesmo fluxo | Idem |
+| `IS NULL`/`IS NOT NULL` recebido com `value_source`/`value` preenchidos, ou cláusula não-primeira sem `logic` (ou `logic` fora de `{AND,OR}`) | Mesma validação acima, mesmo fluxo | Idem |
 | `zeep_app_enduser` não existe/sem membership no ambiente (erro de config, não de request) | `WithRLSContext` retorna erro explícito (não silencioso); logado como erro 500 real no servidor, resposta genérica ao cliente (`AGENTS.md` §4 — nunca `err.Error()` bruto) | Request de usuário final falha com 500 genérico até o ambiente ser corrigido — nunca falha aberto (nunca substitui por acesso irrestrito) |
 | Policy duplicada (mesmo nome/ação/tabela) | `UNIQUE (app_id, table_name, action, pg_policy_name)` retorna erro de constraint; handler mapeia pra 409 | Toast "policy already exists" |
 | Tabela deletada com policies associadas | `ON DELETE CASCADE` em `table_policies.app_id`; policies nativas somem junto com `DROP TABLE` | Nenhum, limpeza transparente |
@@ -219,7 +221,8 @@ type Claims struct {
 | Decision | Choice | Rationale |
 | --- | --- | --- |
 | Mecanismo de isenção de RLS pra rotinas internas | Segundo role Postgres (`zeep_app_enduser`) + `SET LOCAL ROLE`, sem `FORCE ROW LEVEL SECURITY` | Ver Approach Exploration acima — permissão real do Postgres em vez de flag de sessão. Refina o texto original da spec (que citava `FORCE` + GUC custom) após validação com o usuário; spec já atualizada para refletir isso. |
-| Composição de cláusulas | Só `AND` na V1 | Decidido na spec (Assumption), sem mudança no Design. |
+| Composição de cláusulas | `AND`/`OR` flat, sem agrupamento — fold left-to-right totalmente parenteseado a cada passo (`((c1 AND c2) OR c3)`), nunca depende de precedência implícita SQL | Decisão do usuário (2026-08-07, revisada durante fechamento de Design): cobre casos reais de mistura AND/OR sem o custo de um builder de árvore de expressão (agrupamento arbitrário) — ver spec Assumptions. |
+| Operadores unários (`IS NULL`/`IS NOT NULL`) | `value_source`/`value` obrigatoriamente vazios nesses dois; validado no mesmo ponto que o allowlist de operador | Postgres não aceita operando à direita nesses operadores — validar na borda em vez de deixar o `BuildPolicySQL` gerar SQL inválido silenciosamente. |
 | Onde a tradução SQL roda | `internal/provisioner` (mesmo pacote que já gera DDL de tabela), não em `internal/dashboard` | Mantém toda geração de SQL/DDL num lugar só, consistente com `table.go` — dashboard só orquestra HTTP + persistência de metadado. |
 | Nome do role Postgres novo | `zeep_app_enduser` (fixo, singleton por instância, não por app) | Um role só isolado por transação via `SET LOCAL ROLE` + GUCs de claim já basta pra diferenciar apps/usuários dentro das policies — não precisa de um role Postgres por app (explodiria em N roles por instância). |
 
