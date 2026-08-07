@@ -98,8 +98,16 @@ Features:
 ## M9 — Enterprise Licensing 🔵 in development
 
 - [ ] Dual-license model (MIT core + gated enterprise features, GrowthBook-style) — spec: `.specs/features/enterprise-licensing/`
-- [ ] License server contract (issuance, Stripe one-time payment, revocation) — implementation lives in a separate Zeep Labs repo, contract only here
+- [ ] License server contract (issuance, Stripe **subscription** — annual recurring, auto-renew, 7-day grace period, revocation) — implementation lives in a separate Zeep Labs repo, contract only here
 - [ ] First concrete enterprise-gated features: Datadog/New Relic observability exporters (see M8)
+
+---
+
+## M10 — End-User Row Authorization 🔵 in development
+
+- [ ] Business role per end user (`role` claim on login JWT, persisted in `_auth_users`) — spec: `.specs/features/end-user-row-policies/`
+- [ ] Admin-configured row policies (structured clause builder, no free SQL) translated to native Postgres `CREATE POLICY`/RLS — enforced in-database, closes the direct-Postgres-connection bypass that the current Go-side owner filter doesn't cover
+- [ ] Explicit FK declaration from a business column to `_auth_users.id` (beyond the existing implicit `owner_id`)
 
 ---
 
@@ -111,6 +119,5 @@ Features:
 - Multi-region support
 - Marketplace of app templates
 - PostgREST as optional engine mode
-- Per-row ownership via JWT `sub` mapped to `owner_id` column
 - Schema versioning + rollback
 - Multi-PostgreSQL cluster support

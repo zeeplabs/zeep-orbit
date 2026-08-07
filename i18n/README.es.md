@@ -490,7 +490,8 @@ El detalle completo (checklists por milestone, specs vinculadas) vive en [`.spec
 | **M6 — i18n** | ✅ Hecho | pt-BR / English, selector de idioma |
 | **M7 — SDKs** | ✅ Hecho | Clientes TS, Go, Python, Rust, Java, PHP |
 | **M8 — Platform Services** | 🔵 En desarrollo | planeado: [integración SMTP/email](../.specs/features/smtp-email-integration/) (invitaciones, recuperación de contraseña), [integraciones de observabilidad](../.specs/features/observability-integrations/) (OpenTelemetry, Datadog, New Relic) |
-| **M9 — Enterprise Licensing** | 🔵 En desarrollo | planeado: [modelo de licenciamiento dual](../.specs/features/enterprise-licensing/) (núcleo MIT + funcionalidades enterprise bloqueadas) |
+| **M9 — Enterprise Licensing** | 🔵 En desarrollo | planeado: [modelo de licenciamiento dual](../.specs/features/enterprise-licensing/) (núcleo MIT + funcionalidades enterprise bloqueadas, suscripción anual) |
+| **M10 — Autorización de fila (usuario final)** | 🔵 En desarrollo | planeado: [políticas de fila por usuario final](../.specs/features/end-user-row-policies/) (claim de rol de negocio + RLS nativo de Postgres configurado por el admin) |
 
 ### Planeado — visible en el dashboard, todavía no funcional
 

@@ -492,7 +492,8 @@ Full detail (per-milestone checklists, linked specs) lives in [`.specs/project/R
 | **M6 — i18n** | ✅ Done | pt-BR / English, language switcher |
 | **M7 — SDKs** | ✅ Done | TS, Go, Python, Rust, Java, PHP clients |
 | **M8 — Platform Services** | 🔵 In progress | planned: [SMTP/email integration](.specs/features/smtp-email-integration/) (invites, password reset), [observability integrations](.specs/features/observability-integrations/) (OpenTelemetry, Datadog, New Relic) |
-| **M9 — Enterprise Licensing** | 🔵 In progress | planned: [dual-license model](.specs/features/enterprise-licensing/) (MIT core + gated enterprise features) |
+| **M9 — Enterprise Licensing** | 🔵 In progress | planned: [dual-license model](.specs/features/enterprise-licensing/) (MIT core + gated enterprise features, annual subscription) |
+| **M10 — End-User Row Authorization** | 🔵 In progress | planned: [end-user row policies](.specs/features/end-user-row-policies/) (business role claim + admin-configured native Postgres RLS) |
 
 ### Planned — visible in the dashboard, not functional yet
 
