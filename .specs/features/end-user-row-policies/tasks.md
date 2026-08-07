@@ -356,10 +356,12 @@ T17
 - Skill: NONE
 
 **Done when**:
-- [ ] User A (`role=approver`) `UPDATE`ing a row where `requester_id = A.id` is denied — via the REST API
-- [ ] The same denial reproduces on a raw `pgx` connection authenticated as `zeep_app_enduser` with `app.jwt_role='approver'`/`app.jwt_sub=A.id` set manually — proves enforcement is DB-level, not HTTP-level
-- [ ] User A updating a row where `requester_id != A.id` succeeds via the REST API
-- [ ] Data Browser (principal/owner role) still lists and edits 100% of rows in `requests` throughout, regardless of the policy
+- [x] User A (`role=approver`) `UPDATE`ing a row where `requester_id = A.id` is denied — via the REST API
+- [x] The same denial reproduces on a raw `pgx` connection authenticated as `zeep_app_enduser` with `app.jwt_role='approver'`/`app.jwt_sub=A.id` set manually — proves enforcement is DB-level, not HTTP-level
+- [x] User A updating a row where `requester_id != A.id` succeeds via the REST API
+- [x] Data Browser (principal/owner role) still lists and edits 100% of rows in `requests` throughout, regardless of the policy
+
+**Deviation**: the fixture also creates a paired, intentionally-broad `SELECT` policy for role `approver` (`requester_id IS NOT NULL`, always true) alongside the `UPDATE` policy under test. Reason: Postgres requires a row to satisfy a `SELECT` policy for `UPDATE ... RETURNING` to return anything at all, even when the `UPDATE` itself succeeded — without it, the "allowed" REST case (rowB) would come back as an empty `RETURNING` (surfacing as 404 despite a successful write), masking the very behavior this task proves. This is what a real admin would also configure in practice (a role that can update rows generally also needs to read them), not a workaround specific to the test.
 
 **Tests**: integration
 **Gate**: full

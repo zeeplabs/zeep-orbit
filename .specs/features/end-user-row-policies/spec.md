@@ -185,16 +185,16 @@ Toda ambiguidade está resolvida ou registrada aqui — nada fica silenciosament
 | ROWPOL-03 | P1: Papel no JWT | Tasks | Implementing |
 | ROWPOL-04 | P1: Papel no JWT | Tasks | Implementing |
 | ROWPOL-05 | P1: Policy nativa | Tasks | Implementing |
-| ROWPOL-06 | P1: Policy nativa | Tasks | Implementing |
+| ROWPOL-06 | P1: Policy nativa | Tasks | Verified |
 | ROWPOL-07 | P1: Policy nativa | Tasks | Implementing |
 | ROWPOL-08 | P1: Policy nativa | Tasks | Implementing |
 | ROWPOL-09 | P1: Policy nativa | Tasks | Implementing |
-| ROWPOL-10 | P1: Policy nativa | Design | Pending |
-| ROWPOL-11 | P1: Policy nativa | Tasks | Implementing |
+| ROWPOL-10 | P1: Policy nativa | Tasks | Verified |
+| ROWPOL-11 | P1: Policy nativa | Tasks | Verified |
 | ROWPOL-12 | P1: Policy nativa | Tasks | Implementing |
-| ROWPOL-13 | P1: Bypass interno | Tasks | Implementing |
-| ROWPOL-14 | P1: Bypass interno | Tasks | Implementing |
-| ROWPOL-15 | P1: Bypass interno | Tasks | Implementing |
+| ROWPOL-13 | P1: Bypass interno | Tasks | Verified |
+| ROWPOL-14 | P1: Bypass interno | Tasks | Verified |
+| ROWPOL-15 | P1: Bypass interno | Tasks | Verified |
 | ROWPOL-16 | P1: UI dashboard | Design | Pending |
 | ROWPOL-17 | P1: UI dashboard | Design | Pending |
 | ROWPOL-18 | P1: UI dashboard | Design | Pending |
@@ -214,7 +214,7 @@ Toda ambiguidade está resolvida ou registrada aqui — nada fica silenciosament
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 29 total, 0 mapped to tasks, 29 unmapped ⚠️ (esperado nesta fase — Tasks ainda não rodou)
+**Coverage:** 29 total, 17 mapped to tasks (T1–T11 done: ROWPOL-01/02/03/04/05/06/07/08/09/10/11/12/13/14/15/28/29), 12 unmapped (ROWPOL-16 through ROWPOL-27 — Phase 5 UI, Phase 6 docs, and the standalone T17 phase, none of which have run yet)
 
 ---
 
