@@ -180,10 +180,10 @@ Toda ambiguidade está resolvida ou registrada aqui — nada fica silenciosament
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| ROWPOL-01 | P1: Papel no JWT | Design | Pending |
+| ROWPOL-01 | P1: Papel no JWT | Tasks | Implementing |
 | ROWPOL-02 | P1: Papel no JWT | Design | Pending |
-| ROWPOL-03 | P1: Papel no JWT | Design | Pending |
-| ROWPOL-04 | P1: Papel no JWT | Design | Pending |
+| ROWPOL-03 | P1: Papel no JWT | Tasks | Implementing |
+| ROWPOL-04 | P1: Papel no JWT | Tasks | Implementing |
 | ROWPOL-05 | P1: Policy nativa | Design | Pending |
 | ROWPOL-06 | P1: Policy nativa | Design | Pending |
 | ROWPOL-07 | P1: Policy nativa | Design | Pending |

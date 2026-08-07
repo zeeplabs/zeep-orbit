@@ -116,9 +116,9 @@ T17
 - Skill: NONE
 
 **Done when**:
-- [ ] Running the migration twice on the same schema does not error (idempotency)
-- [ ] Existing `_auth_users` rows read back `role = 'member'` after migration, with no manual backfill step
-- [ ] `role` accepts any string value (no CHECK/enum constraint) — set via the existing generic Data Browser row-edit modal, no new UI needed for this task
+- [x] Running the migration twice on the same schema does not error (idempotency)
+- [x] Existing `_auth_users` rows read back `role = 'member'` after migration, with no manual backfill step
+- [x] `role` accepts any string value (no CHECK/enum constraint) — set via the existing generic Data Browser row-edit modal, no new UI needed for this task
 
 **Tests**: integration
 **Gate**: full
