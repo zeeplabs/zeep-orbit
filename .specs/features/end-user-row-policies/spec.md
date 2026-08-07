@@ -186,9 +186,9 @@ Toda ambiguidade está resolvida ou registrada aqui — nada fica silenciosament
 | ROWPOL-04 | P1: Papel no JWT | Tasks | Implementing |
 | ROWPOL-05 | P1: Policy nativa | Design | Pending |
 | ROWPOL-06 | P1: Policy nativa | Design | Pending |
-| ROWPOL-07 | P1: Policy nativa | Design | Pending |
-| ROWPOL-08 | P1: Policy nativa | Design | Pending |
-| ROWPOL-09 | P1: Policy nativa | Design | Pending |
+| ROWPOL-07 | P1: Policy nativa | Tasks | Implementing |
+| ROWPOL-08 | P1: Policy nativa | Tasks | Implementing |
+| ROWPOL-09 | P1: Policy nativa | Tasks | Implementing |
 | ROWPOL-10 | P1: Policy nativa | Design | Pending |
 | ROWPOL-11 | P1: Policy nativa | Design | Pending |
 | ROWPOL-12 | P1: Policy nativa | Design | Pending |
@@ -207,8 +207,8 @@ Toda ambiguidade está resolvida ou registrada aqui — nada fica silenciosament
 | ROWPOL-25 | P2: FK explícito para `_auth_users` | Design | Pending |
 | ROWPOL-26 | P2: Auditoria | - | Pending |
 | ROWPOL-27 | P3: Preview | - | Pending |
-| ROWPOL-28 | P1: Policy nativa — operadores estendidos (`>`,`<`,`>=`,`<=`,`IS NULL`,`IS NOT NULL`) | Design | Pending |
-| ROWPOL-29 | P1: Policy nativa — composição `AND`/`OR` flat (fold left-to-right) | Design | Pending |
+| ROWPOL-28 | P1: Policy nativa — operadores estendidos (`>`,`<`,`>=`,`<=`,`IS NULL`,`IS NOT NULL`) | Tasks | Implementing |
+| ROWPOL-29 | P1: Policy nativa — composição `AND`/`OR` flat (fold left-to-right) | Tasks | Implementing |
 
 **ID format:** `ROWPOL-[NUMBER]`
 

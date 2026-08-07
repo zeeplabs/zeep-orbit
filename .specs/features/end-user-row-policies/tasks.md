@@ -248,14 +248,16 @@ T17
 - Skill: NONE
 
 **Done when**:
-- [ ] Valid clause set (`requester_id != claim:sub`) produces a `CREATE POLICY` string with correct `USING`/`WITH CHECK` per action
-- [ ] Column name failing `identRe`, non-existent column, or operator outside the allowlist is rejected with a descriptive error and zero DDL executed
-- [ ] `value_source: claim` accepts only `role`/`sub`/`email`, rejecting anything else
-- [ ] Literal values containing SQL metacharacters (`'`, `;`, `--`) are safely embedded via `quote_literal()` round-trip — test asserts the generated SQL is syntactically valid and the metacharacters don't break out of the literal
-- [ ] Each of `>`,`<`,`>=`,`<=` produces correct SQL against a numeric/date column (claim and literal value sources both tested)
-- [ ] `IS NULL`/`IS NOT NULL` produce correct unary SQL (no operand); a clause supplying `value_source`/`value` alongside either is rejected
-- [ ] A 3-clause policy mixing `AND`/`OR` (e.g. `c1 AND c2 OR c3`, `logic` on c2="AND", c3="OR") folds to `((c1 AND c2) OR c3)`, not `(c1 AND (c2 OR c3))` — test asserts the exact parenthesization, not just semantic equivalence
-- [ ] First clause with a non-empty `Logic`, or any non-first clause with `Logic` outside `{AND, OR}`, is rejected with a descriptive error
+- [x] Valid clause set (`requester_id != claim:sub`) produces a `CREATE POLICY` string with correct `USING`/`WITH CHECK` per action
+- [x] Column name failing `identRe`, non-existent column, or operator outside the allowlist is rejected with a descriptive error and zero DDL executed
+- [x] `value_source: claim` accepts only `role`/`sub`/`email`, rejecting anything else
+- [x] Literal values containing SQL metacharacters (`'`, `;`, `--`) are safely embedded via `quote_literal()` round-trip — test asserts the generated SQL is syntactically valid and the metacharacters don't break out of the literal
+- [x] Each of `>`,`<`,`>=`,`<=` produces correct SQL against a numeric/date column (claim and literal value sources both tested)
+- [x] `IS NULL`/`IS NOT NULL` produce correct unary SQL (no operand); a clause supplying `value_source`/`value` alongside either is rejected
+- [x] A 3-clause policy mixing `AND`/`OR` (e.g. `c1 AND c2 OR c3`, `logic` on c2="AND", c3="OR") folds to `((c1 AND c2) OR c3)`, not `(c1 AND (c2 OR c3))` — test asserts the exact parenthesization, not just semantic equivalence
+- [x] First clause with a non-empty `Logic`, or any non-first clause with `Logic` outside `{AND, OR}`, is rejected with a descriptive error
+
+**Deviation**: `quoteLiteral` is a pure-Go equivalent of Postgres's `quote_literal()` (doubles `'`, uses `E''` + doubled `\` when a backslash is present) instead of a `SELECT quote_literal($1)` DB round-trip. `BuildPolicySQL`'s signature (per design) takes no `pool`/`ctx`, and this task's Gate is `quick` (no `TEST_DATABASE_URL`) — a DB round-trip inside `BuildPolicySQL` would be both a signature mismatch and untestable under this task's own gate. The escaping is safe regardless (dedicated injection-shaped test asserts exact escaped output).
 
 **Tests**: unit
 **Gate**: quick
