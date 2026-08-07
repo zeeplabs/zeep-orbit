@@ -193,7 +193,7 @@ Toda ambiguidade está resolvida ou registrada aqui — nada fica silenciosament
 | ROWPOL-11 | P1: Policy nativa | Design | Pending |
 | ROWPOL-12 | P1: Policy nativa | Design | Pending |
 | ROWPOL-13 | P1: Bypass interno | Tasks | Implementing |
-| ROWPOL-14 | P1: Bypass interno | Design | Pending |
+| ROWPOL-14 | P1: Bypass interno | Tasks | Implementing |
 | ROWPOL-15 | P1: Bypass interno | Design | Pending |
 | ROWPOL-16 | P1: UI dashboard | Design | Pending |
 | ROWPOL-17 | P1: UI dashboard | Design | Pending |

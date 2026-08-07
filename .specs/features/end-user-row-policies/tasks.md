@@ -203,10 +203,10 @@ T17
 - Skill: NONE
 
 **Done when**:
-- [ ] A query run inside `WithRLSContext` executes as `zeep_app_enduser` (verified via `SELECT current_user`)
-- [ ] The session GUCs (`app.jwt_role`, `app.jwt_sub`, `app.jwt_email`) are readable via `current_setting()` inside `fn`, and unset again on a connection reused from the pool afterward (no leakage between pooled connections)
-- [ ] `statement_timeout` still applies when `timeoutMs > 0` — passing the same regression test `WithTimeout` already has
-- [ ] `WithRLSContext` returns an explicit error (not silently no-op) if `zeep_app_enduser` doesn't exist / connecting role lacks membership (per design's Risks & Concerns — never fail open)
+- [x] A query run inside `WithRLSContext` executes as `zeep_app_enduser` (verified via `SELECT current_user`)
+- [x] The session GUCs (`app.jwt_role`, `app.jwt_sub`, `app.jwt_email`) are readable via `current_setting()` inside `fn`, and unset again on a connection reused from the pool afterward (no leakage between pooled connections)
+- [x] `statement_timeout` still applies when `timeoutMs > 0` — passing the same regression test `WithTimeout` already has
+- [x] `WithRLSContext` returns an explicit error (not silently no-op) if `zeep_app_enduser` doesn't exist / connecting role lacks membership (per design's Risks & Concerns — never fail open)
 
 **Tests**: integration
 **Gate**: full
