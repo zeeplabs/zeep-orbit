@@ -381,12 +381,12 @@ T14 → T15
 - Skill: `react-composition-patterns`
 
 **Done when**:
-- [ ] Botão "Editar" aparece por linha na coluna Ações
-- [ ] Drawer abre com `Select` pré-selecionado na role atual do usuário
-- [ ] Role órfã (fora de `enduserRolesConfig`) aparece selecionada no `Select` sem forçar troca
-- [ ] "Salvar" chama `useUpdateAppUserRole` e fecha o drawer; "Cancelar"/fechar não chama mutation alguma
-- [ ] `npx tsc -b` e `npm run build` limpos
-- [ ] Gate check passa: full gate
+- [x] Botão "Editar" aparece por linha na coluna Ações
+- [x] Drawer abre com `Select` pré-selecionado na role atual do usuário
+- [x] Role órfã (fora de `enduserRolesConfig`) aparece selecionada no `Select` sem forçar troca
+- [x] "Salvar" chama `useUpdateAppUserRole` e fecha o drawer; "Cancelar"/fechar não chama mutation alguma
+- [x] `npx tsc -b` e `npm run build` limpos
+- [x] Gate check passa: full gate
 
 **Tests**: none (cobertura funcional fica no e2e de T13)
 **Gate**: full

@@ -7,10 +7,27 @@ import {
   useDeactivateAppUser,
   useActivateAppUser,
   useResetAppUserSessions,
+  useUpdateAppUserRole,
 } from '../lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Icon } from '@/components/ui/icon'
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerBody,
+  DrawerFooter,
+  DrawerTitle,
+} from '@/components/ui/drawer'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { PageHeader, EmptyState, DataTable, StatusPill } from '@/components/patterns'
 import type { Column } from '@/components/patterns'
 import { cn } from '@/lib/utils'
@@ -26,6 +43,72 @@ interface AppUser {
   last_sign_in_at: string | null
   created_at: string
   avatar_url: string | null
+}
+
+// Role editor for an app user, opened from the Actions column (ROLECFG-10..14).
+// Populated by enduser_roles_config; a role already assigned to the user but
+// outside that list (orphaned) is shown as an extra selected option instead
+// of being silently dropped.
+function EditRoleDrawer({
+  appId,
+  user,
+  availableRoles,
+  onClose,
+}: {
+  appId: string
+  user: AppUser
+  availableRoles: string[]
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+  const updateRole = useUpdateAppUserRole()
+  const [role, setRole] = useState(user.role)
+
+  const options = availableRoles.includes(user.role) ? availableRoles : [...availableRoles, user.role]
+
+  const save = () => {
+    updateRole.mutate({ appId, userId: user.id, role }, { onSuccess: onClose })
+  }
+
+  return (
+    <Drawer
+      open
+      onOpenChange={(o) => {
+        if (!o) onClose()
+      }}
+    >
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle>{t('appUsers.editRoleTitle')}</DrawerTitle>
+        </DrawerHeader>
+        <DrawerBody>
+          <div className="flex flex-col gap-1.5">
+            <Label>{t('appUsers.editRoleLabel')}</Label>
+            <Select value={role} onValueChange={setRole}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {options.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {r}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </DrawerBody>
+        <DrawerFooter>
+          <Button variant="outline" onClick={onClose}>
+            {t('appUsers.editRoleCancel')}
+          </Button>
+          <Button onClick={save} disabled={updateRole.isPending}>
+            {t('appUsers.editRoleSave')}
+          </Button>
+        </DrawerFooter>
+      </DrawerContent>
+    </Drawer>
+  )
 }
 
 interface ProviderCount {
@@ -95,6 +178,7 @@ export default function AppUsersPage() {
   const deactivate = useDeactivateAppUser()
   const activate = useActivateAppUser()
   const resetSessions = useResetAppUserSessions()
+  const [editingUser, setEditingUser] = useState<AppUser | null>(null)
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -206,6 +290,19 @@ export default function AppUsersPage() {
         const isResetting = resetSessions.isPending && resetSessions.variables?.userId === u.id
         return (
           <div className="flex items-center justify-end gap-1">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setEditingUser(u)}
+              title={t('appUsers.editRole')}
+              className="size-7 rounded-[8px]"
+              style={{
+                borderColor: 'var(--border)',
+                color: 'var(--text-tertiary)',
+              }}
+            >
+              <Icon name="edit" size={12} />
+            </Button>
             {u.active && (
               <Button
                 variant="outline"
@@ -370,6 +467,16 @@ export default function AppUsersPage() {
             : undefined
         }
       />
+
+      {editingUser && (
+        <EditRoleDrawer
+          key={editingUser.id}
+          appId={id!}
+          user={editingUser}
+          availableRoles={app?.enduser_roles_config ?? []}
+          onClose={() => setEditingUser(null)}
+        />
+      )}
     </>
   )
 }
