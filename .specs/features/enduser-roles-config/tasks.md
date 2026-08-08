@@ -154,10 +154,10 @@ T14 → T15
 - Skill: `security-best-practices`
 
 **Done when**:
-- [ ] `CountAppUsersByRole` retorna a contagem correta (0 quando ninguém usa a role, N quando N end-users usam)
-- [ ] `CountTablePoliciesByRole` retorna a contagem correta usando o operador jsonb `?` (existência de elemento top-level)
-- [ ] Testes de integração cobrem: zero uso, uso por end-user, uso por policy, uso por ambos
-- [ ] Gate check passa: `go build ./... && go test ./internal/dashboard/... && go vet ./internal/dashboard/...`
+- [x] `CountAppUsersByRole` retorna a contagem correta (0 quando ninguém usa a role, N quando N end-users usam)
+- [x] `CountTablePoliciesByRole` retorna a contagem correta usando o operador jsonb `?` (existência de elemento top-level)
+- [x] Testes de integração cobrem: zero uso, uso por end-user, uso por policy, uso por ambos
+- [x] Gate check passa: `go build ./... && go test ./internal/dashboard/... && go vet ./internal/dashboard/...`
 
 **Tests**: integration
 **Gate**: quick

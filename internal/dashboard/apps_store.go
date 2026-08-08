@@ -299,6 +299,43 @@ func DeleteApp(ctx context.Context, pool *db.Pool, appID string, user *Dashboard
 	return nil
 }
 
+// CountAppUsersByRole counts _auth_users rows in the app's schema with the
+// given role. Used by UpdateAppEnduserRoles to block removing a role that is
+// still assigned to at least one end user. schema must be resolved via
+// schemaNameForDB — never hardcode "app_" + name (AGENTS.md).
+func CountAppUsersByRole(ctx context.Context, pool *db.Pool, schema, role string) (int, error) {
+	var count int
+	err := pool.QueryRow(ctx,
+		fmt.Sprintf(`SELECT COUNT(*) FROM %q."_auth_users" WHERE role = $1`, schema),
+		role,
+	).Scan(&count)
+	if err != nil {
+		if isPgRelationNotFound(err) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("dashboard: count app users by role: %w", err)
+	}
+	return count, nil
+}
+
+// CountTablePoliciesByRole counts zeep_system.table_policies rows for the app
+// whose roles array contains the given role. roles is a flat JSONB array of
+// strings, so the "?" existence operator (does the array contain this
+// top-level element) is the correct check — not "@>", which compares JSON
+// document containment. Used by UpdateAppEnduserRoles to block removing a
+// role still referenced by at least one row policy.
+func CountTablePoliciesByRole(ctx context.Context, pool *db.Pool, appID, role string) (int, error) {
+	var count int
+	err := pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM zeep_system.table_policies WHERE app_id = $1 AND roles ? $2`,
+		appID, role,
+	).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("dashboard: count table policies by role: %w", err)
+	}
+	return count, nil
+}
+
 func UpdateAppRateLimitConfig(ctx context.Context, pool *db.Pool, appID string, cfg *config.RateLimitConfig) error {
 	jsonCfg, err := json.Marshal(cfg)
 	if err != nil {

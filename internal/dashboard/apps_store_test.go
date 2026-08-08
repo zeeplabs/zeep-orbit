@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -144,6 +145,142 @@ func TestEnduserRolesConfig_DefaultsAndRoundTrips(t *testing.T) {
 	}
 	if len(found.EnduserRolesConfig) != 2 || found.EnduserRolesConfig[0] != "member" || found.EnduserRolesConfig[1] != "viewer" {
 		t.Fatalf("ListApps: expected [\"member\",\"viewer\"], got %+v", found.EnduserRolesConfig)
+	}
+}
+
+// TestCountAppUsersByRole covers ROLECFG-05: zero use, use by end-users, and
+// the isPgRelationNotFound fallback (schema/table not provisioned yet -> 0,
+// no error, matching CountAppUsersByProvider's existing pattern).
+func TestCountAppUsersByRole(t *testing.T) {
+	pool := appsStoreTestPool(t)
+	ctx := context.Background()
+	schema := "cnt_role_test"
+
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DROP SCHEMA IF EXISTS `+schema+` CASCADE`)
+	})
+	if _, err := pool.Exec(ctx, `CREATE SCHEMA `+schema); err != nil {
+		t.Fatalf("create schema: %v", err)
+	}
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE TABLE %q."_auth_users" (
+		id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		email         TEXT NOT NULL UNIQUE,
+		password_hash TEXT NOT NULL DEFAULT '',
+		role          TEXT NOT NULL DEFAULT 'member'
+	)`, schema)); err != nil {
+		t.Fatalf("create _auth_users: %v", err)
+	}
+
+	count, err := CountAppUsersByRole(ctx, pool, schema, "admin")
+	if err != nil {
+		t.Fatalf("CountAppUsersByRole (zero use): %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected 0 with no users, got %d", count)
+	}
+
+	if _, err := pool.Exec(ctx,
+		fmt.Sprintf(`INSERT INTO %q."_auth_users" (email, role) VALUES ($1, 'admin'), ($2, 'admin'), ($3, 'member')`, schema),
+		"cnt-a@example.com", "cnt-b@example.com", "cnt-c@example.com",
+	); err != nil {
+		t.Fatalf("seed users: %v", err)
+	}
+
+	count, err = CountAppUsersByRole(ctx, pool, schema, "admin")
+	if err != nil {
+		t.Fatalf("CountAppUsersByRole (in use): %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("expected 2 users with role admin, got %d", count)
+	}
+
+	count, err = CountAppUsersByRole(ctx, pool, "no_such_schema_xyz", "admin")
+	if err != nil {
+		t.Fatalf("CountAppUsersByRole (missing relation): %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected 0 for a schema whose _auth_users doesn't exist, got %d", count)
+	}
+}
+
+// TestCountTablePoliciesByRole covers ROLECFG-05: zero use, use by a policy,
+// and use by both an end-user AND a policy at once (the combined case the
+// handler diffs against when blocking a removal).
+func TestCountTablePoliciesByRole(t *testing.T) {
+	pool := tablePoliciesTestPool(t)
+	ctx := context.Background()
+	appID, userID := tablePoliciesTestApp(t, pool)
+
+	count, err := CountTablePoliciesByRole(ctx, pool, appID, "admin")
+	if err != nil {
+		t.Fatalf("CountTablePoliciesByRole (zero use): %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected 0 with no policies, got %d", count)
+	}
+
+	def := PolicyDef{
+		Name:   "admin_only",
+		Action: "select",
+		Roles:  []string{"admin"},
+		Clauses: []PolicyClause{
+			{Column: "requester_id", Operator: "=", ValueSource: "claim", Value: "sub"},
+		},
+	}
+	if _, err := CreateTablePolicy(ctx, pool, appID, "tp_test", "requests", requestsColumns(), def, userID); err != nil {
+		t.Fatalf("CreateTablePolicy: %v", err)
+	}
+
+	count, err = CountTablePoliciesByRole(ctx, pool, appID, "admin")
+	if err != nil {
+		t.Fatalf("CountTablePoliciesByRole (used by policy): %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 policy referencing admin, got %d", count)
+	}
+
+	count, err = CountTablePoliciesByRole(ctx, pool, appID, "viewer")
+	if err != nil {
+		t.Fatalf("CountTablePoliciesByRole (unrelated role): %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected 0 policies referencing viewer, got %d", count)
+	}
+
+	// Combined case: same role also assigned to an end-user in a real app
+	// schema (separate from tp_test) — both counters report nonzero for it.
+	schema := "cnt_both_test"
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DROP SCHEMA IF EXISTS `+schema+` CASCADE`)
+	})
+	if _, err := pool.Exec(ctx, `CREATE SCHEMA `+schema); err != nil {
+		t.Fatalf("create schema: %v", err)
+	}
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE TABLE %q."_auth_users" (
+		id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		email         TEXT NOT NULL UNIQUE,
+		password_hash TEXT NOT NULL DEFAULT '',
+		role          TEXT NOT NULL DEFAULT 'member'
+	)`, schema)); err != nil {
+		t.Fatalf("create _auth_users: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		fmt.Sprintf(`INSERT INTO %q."_auth_users" (email, role) VALUES ($1, 'admin')`, schema),
+		"cnt-both@example.com",
+	); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+
+	userCount, err := CountAppUsersByRole(ctx, pool, schema, "admin")
+	if err != nil {
+		t.Fatalf("CountAppUsersByRole (combined case): %v", err)
+	}
+	policyCount, err := CountTablePoliciesByRole(ctx, pool, appID, "admin")
+	if err != nil {
+		t.Fatalf("CountTablePoliciesByRole (combined case): %v", err)
+	}
+	if userCount != 1 || policyCount != 1 {
+		t.Fatalf("expected both counters to be 1 in the combined case, got userCount=%d policyCount=%d", userCount, policyCount)
 	}
 }
 
