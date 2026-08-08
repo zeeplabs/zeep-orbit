@@ -66,6 +66,11 @@ const ON_DELETE_LABEL_KEYS: Record<string, string> = {
   set_null: "tableCard.onDeleteSetNull",
 };
 
+// Mirrors internal/dashboard/handler.go's special-cased "_auth_users" target
+// — not a real entry in app.tables (provisioned separately when email auth
+// is on), so it never shows up via the otherTables prop and needs its own UI path.
+const AUTH_USERS_TABLE = "_auth_users";
+
 const BASE_AUTO_COLUMNS = [
   { name: "id", type: "uuid", required: true, unique: true },
   { name: "created_at", type: "timestamptz", required: true, unique: false },
@@ -170,6 +175,7 @@ export default function TableCard({
     setColumns((prev) => prev.map((c, i) => (i === ci ? { ...c, ...patch } : c)));
 
   const referenceTargetColumns = (tableName: string): string[] => {
+    if (tableName === AUTH_USERS_TABLE) return ["id"];
     const target = otherTables.find((t) => t.name === tableName);
     if (!target) return ["id"];
     return ["id", ...target.columns.filter((c) => c.unique).map((c) => c.name)];
@@ -313,6 +319,7 @@ export default function TableCard({
           columns={columns}
           indexes={indexes}
           otherTables={otherTables}
+          authEmailEnabled={authEmailEnabled}
           isDraft={isDraft}
           table={table}
           deleting={deleting}
@@ -357,6 +364,7 @@ export default function TableCard({
               columns={columns}
               indexes={indexes}
               otherTables={otherTables}
+              authEmailEnabled={authEmailEnabled}
               isDraft={isDraft}
               table={table}
               deleting={deleting}
@@ -394,6 +402,7 @@ function SchemaEditor({
   columns,
   indexes,
   otherTables,
+  authEmailEnabled,
   isDraft,
   table,
   deleting,
@@ -420,6 +429,7 @@ function SchemaEditor({
   columns: ColumnDef[];
   indexes: IndexDef[];
   otherTables: TableDef[];
+  authEmailEnabled: boolean;
   isDraft: boolean;
   table: TableDef;
   deleting: boolean;
@@ -607,13 +617,19 @@ function SchemaEditor({
                   <button
                     type="button"
                     title={t("tableCard.referenceFk")}
-                    disabled={otherTables.length === 0}
+                    disabled={otherTables.length === 0 && !(authEmailEnabled && col.type === "uuid")}
                     onClick={() =>
                       updateColumn(
                         ci,
                         col.references
                           ? { references: null }
-                          : { references: { table: otherTables[0]?.name ?? "", column: "id", on_delete: "no_action" } },
+                          : {
+                              references: {
+                                table: otherTables[0]?.name ?? (authEmailEnabled && col.type === "uuid" ? AUTH_USERS_TABLE : ""),
+                                column: "id",
+                                on_delete: "no_action",
+                              },
+                            },
                       )
                     }
                     className={cn(
@@ -621,7 +637,7 @@ function SchemaEditor({
                       col.references
                         ? "border-[var(--primary)]/40 bg-[var(--primary)]/10 text-[var(--primary)]"
                         : "border-[var(--border)] bg-transparent text-[var(--text-secondary)]",
-                      otherTables.length === 0 && "opacity-30 cursor-not-allowed",
+                      otherTables.length === 0 && !(authEmailEnabled && col.type === "uuid") && "opacity-30 cursor-not-allowed",
                     )}
                   >
                     <Icon name="link" size={12} />
@@ -654,6 +670,11 @@ function SchemaEditor({
                       <SelectValue placeholder={t("tableCard.tablePlaceholder")} />
                     </SelectTrigger>
                     <SelectContent className="bg-[var(--surface-raised)] border-[var(--border)] text-[var(--text-primary)]">
+                      {authEmailEnabled && col.type === "uuid" && (
+                        <SelectItem value={AUTH_USERS_TABLE} className="text-[12px] focus:bg-[var(--hover-surface)] focus:text-[var(--text-primary)]">
+                          {AUTH_USERS_TABLE}
+                        </SelectItem>
+                      )}
                       {otherTables.map((ot) => (
                         <SelectItem key={ot.name} value={ot.name} className="text-[12px] focus:bg-[var(--hover-surface)] focus:text-[var(--text-primary)]">
                           {ot.name}
