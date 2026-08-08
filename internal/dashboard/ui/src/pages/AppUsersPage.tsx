@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
   useApp,
@@ -28,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { PageHeader, EmptyState, DataTable, StatusPill } from '@/components/patterns'
+import { EmptyState, DataTable, StatusPill } from '@/components/patterns'
 import type { Column } from '@/components/patterns'
 import { cn } from '@/lib/utils'
 
@@ -484,25 +483,3 @@ export function AppUsersTab({ appId }: { appId: string }) {
   )
 }
 
-// SPEC_DEVIATION: kept as a thin back-compat wrapper around AppUsersTab so the
-// standalone /apps/:id/users route stays buildable during this feature's
-// intermediate commits. Removed, along with the route, in the follow-up
-// commit that finishes moving app-user management into the Users tab.
-export default function AppUsersPage() {
-  const { t } = useTranslation()
-  const { id } = useParams<{ id: string }>()
-  return (
-    <>
-      <Link
-        to={`/apps/${id}`}
-        className="mb-5 inline-flex items-center gap-1.5 text-[13px] font-semibold no-underline transition-colors"
-        style={{ color: 'var(--text-secondary)' }}
-      >
-        <Icon name="arrow_back" size={17} />
-        {t('appUsers.back')}
-      </Link>
-      <PageHeader title={t('appUsers.title')} subtitle={t('appUsers.subtitle', { app: id })} />
-      <AppUsersTab appId={id!} />
-    </>
-  )
-}

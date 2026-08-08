@@ -16,7 +16,6 @@ import AuditLogPage from './pages/AuditLogPage'
 import GitHubIntegrationPage from './pages/GitHubIntegrationPage'
 import SdkPage from './pages/SdkPage'
 import ChangelogPage from './pages/ChangelogPage'
-import AppUsersPage from './pages/AppUsersPage'
 import DataBrowserPage from './pages/DataBrowserPage'
 import AccessDenied from './pages/AccessDenied'
 import { RequireRole } from './components/patterns/RequireRole'
@@ -111,7 +110,6 @@ function App() {
           <Route path="/apps/new" element={<AppOnboardingPage />} />
           <Route path="/apps/:id" element={<AppDetailsPage />} />
           <Route path="/apps/:id/edit" element={<RedirectToAppDetails />} />
-          <Route path="/apps/:id/users" element={<AppUsersPage />} />
           <Route
             path="/configuracoes"
             element={<RequireRole allow={['superadmin', 'admin']}><BrandSettingsPage /></RequireRole>}
