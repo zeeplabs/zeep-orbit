@@ -174,9 +174,9 @@ function ProviderCell({ provider }: { provider: string }) {
   )
 }
 
-export default function AppUsersPage() {
+export function AppUsersTab({ appId }: { appId: string }) {
   const { t, i18n } = useTranslation()
-  const { id } = useParams<{ id: string }>()
+  const id = appId
   const { data: app } = useApp(id || '')
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -382,17 +382,6 @@ export default function AppUsersPage() {
 
   return (
     <>
-      <Link
-        to={`/apps/${id}`}
-        className="mb-5 inline-flex items-center gap-1.5 text-[13px] font-semibold no-underline transition-colors"
-        style={{ color: 'var(--text-secondary)' }}
-      >
-        <Icon name="arrow_back" size={17} />
-        {t('appUsers.back')}
-      </Link>
-
-      <PageHeader title={t('appUsers.title')} subtitle={t('appUsers.subtitle', { app: app?.name || id })} />
-
       <div className="mb-5 flex flex-wrap items-center gap-3">
         {providerCounts.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">
@@ -491,6 +480,29 @@ export default function AppUsersPage() {
           onClose={() => setEditingUser(null)}
         />
       )}
+    </>
+  )
+}
+
+// SPEC_DEVIATION: kept as a thin back-compat wrapper around AppUsersTab so the
+// standalone /apps/:id/users route stays buildable during this feature's
+// intermediate commits. Removed, along with the route, in the follow-up
+// commit that finishes moving app-user management into the Users tab.
+export default function AppUsersPage() {
+  const { t } = useTranslation()
+  const { id } = useParams<{ id: string }>()
+  return (
+    <>
+      <Link
+        to={`/apps/${id}`}
+        className="mb-5 inline-flex items-center gap-1.5 text-[13px] font-semibold no-underline transition-colors"
+        style={{ color: 'var(--text-secondary)' }}
+      >
+        <Icon name="arrow_back" size={17} />
+        {t('appUsers.back')}
+      </Link>
+      <PageHeader title={t('appUsers.title')} subtitle={t('appUsers.subtitle', { app: id })} />
+      <AppUsersTab appId={id!} />
     </>
   )
 }
