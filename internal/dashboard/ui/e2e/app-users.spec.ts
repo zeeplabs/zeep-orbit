@@ -63,13 +63,29 @@ test.describe('App user edit fields', () => {
     await page.click('[title="Edit user"]')
     await expect(page.locator('text=Edit user')).toBeVisible()
 
+    // AUE-01: the drawer opens pre-filled with the user's current email
+    // (registration left phone empty, so the phone field starts blank too).
+    await expect(page.locator('input[type="email"]')).toHaveValue(originalEmail)
+    await expect(page.locator('[role="dialog"] input:not([type="email"])')).toHaveValue('')
+
+    // AUE-02: capture the actual PUT body to prove all three keys are sent
+    // together, not just that the table ends up with the right values.
+    const putPromise = page.waitForRequest(
+      (req) => req.method() === 'PUT' && /\/dashboard\/api\/apps\/[^/]+\/users\/[^/]+$/.test(new URL(req.url()).pathname),
+    )
+
     await page.locator('input[type="email"]').fill(newEmail)
     // The phone field is the drawer's only other text input (email is the
     // only "email"-typed one; role is a combobox, not an input).
     await page.locator('[role="dialog"] input:not([type="email"])').fill('555-9876')
 
     await page.click('button:has-text("Save")')
+    const putReq = await putPromise
+    const putBody: { email?: string; phone?: string; role?: string } = putReq.postDataJSON()
     await expect(page.locator('text=Edit user')).toHaveCount(0)
+
+    expect(putBody).toMatchObject({ email: newEmail, phone: '555-9876', role: 'member' })
+    expect(Object.keys(putBody).sort()).toEqual(['email', 'phone', 'role'])
 
     await expect(page.locator('td', { hasText: newEmail })).toBeVisible()
     await expect(page.locator('td', { hasText: '555-9876' })).toBeVisible()

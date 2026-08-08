@@ -9,7 +9,17 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: `.specs/features/app-user-edit-fields/design.md`
-**Status**: Done (T1-T7 complete, all gates green)
+**Status**: Done (T1-T7 complete, all gates green; Verifier round 1 found 4 coverage gaps, fixed — see T8 below)
+
+### T8: Verifier fix round 1 — close 4 coverage gaps — ✅ Complete
+
+The independent Verifier (Execute step 9) found 4 of 12 ACs with no test evidence despite being marked "Verified": AUE-06 (audit log entry), AUE-04 (session deletion on email change — `email_confirmed_at` half was covered, session-delete half wasn't), AUE-01 (drawer prefill), AUE-02 (all 3 keys always sent in the PUT body). Fixed:
+
+- `internal/dashboard/app_users_handler_test.go`: extended `TestUpdateAppUserHandler_Success` to assert `countAuditLog(t, pool, "app.user.update") == 1` (AUE-06); added `TestUpdateAppUserHandler_EmailChangeResetsSessions` (seeds a session, changes email, asserts session row deleted) and `TestUpdateAppUserHandler_UnchangedEmailKeepsSessions` (negative case — session survives when email is resubmitted unchanged) (AUE-04); added `_auth_sessions` table creation to `appUsersHandlerSetup` and a new `appUsersHandlerInsertSession` helper to support these.
+- `internal/dashboard/ui/e2e/app-users.spec.ts`: added `toHaveValue` assertions on the email/phone inputs right after opening the drawer, before any edit (AUE-01); added a `page.waitForRequest` capture of the actual PUT body, asserting it contains exactly `{email, phone, role}` with the expected values even though only phone was meant to change (AUE-02).
+
+**Tests**: unit (Go, 2 new + 1 extended) + e2e (Playwright, 1 test extended with 2 new assertion blocks).
+**Gate**: build (backend: `go build/vet/gofmt` + `go test ./internal/dashboard/...`, all pass; frontend: `tsc -b` + `npm run build`, both pass; e2e: `app-users.spec.ts` + `enduser-roles.spec.ts`, 7/7 pass).
 
 ---
 

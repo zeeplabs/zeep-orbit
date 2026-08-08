@@ -109,7 +109,7 @@ The app-user edit drawer (`EditRoleDrawer`, `AppUsersPage.tsx`) only lets an adm
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 12 total, 12 mapped to tasks, 0 unmapped. All tasks (T1-T7) implemented, tested, and gates green. Independent Verifier pass pending (see Execute step 9).
+**Coverage:** 12 total, 12 mapped to tasks, 0 unmapped. All tasks (T1-T7) implemented, tested, and gates green. Verifier round 1 flagged AUE-01/02/04/06 as evidence-free despite being marked Verified; fixed in T8 — see `validation.md` for the round-1 report.
 
 ---
 

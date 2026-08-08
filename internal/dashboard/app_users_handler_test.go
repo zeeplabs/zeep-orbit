@@ -54,7 +54,26 @@ func appUsersHandlerSetup(t *testing.T, pool *db.Pool, appName string) (schema s
 	)`); err != nil {
 		t.Fatalf("create %s._auth_users: %v", schema, err)
 	}
+	if _, err := pool.Exec(context.Background(), `CREATE TABLE `+schema+`."_auth_sessions" (
+		"id"            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		"user_id"       UUID NOT NULL REFERENCES `+schema+`."_auth_users"("id") ON DELETE CASCADE,
+		"refresh_token" TEXT NOT NULL UNIQUE,
+		"expires_at"    TIMESTAMPTZ NOT NULL,
+		"created_at"    TIMESTAMPTZ NOT NULL DEFAULT now()
+	)`); err != nil {
+		t.Fatalf("create %s._auth_sessions: %v", schema, err)
+	}
 	return schema
+}
+
+func appUsersHandlerInsertSession(t *testing.T, pool *db.Pool, schema, userID, refreshToken string) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(),
+		`INSERT INTO `+schema+`."_auth_sessions" (user_id, refresh_token, expires_at) VALUES ($1, $2, now() + interval '1 day')`,
+		userID, refreshToken,
+	); err != nil {
+		t.Fatalf("insert session: %v", err)
+	}
 }
 
 func appUsersHandlerInsertUser(t *testing.T, pool *db.Pool, schema, email string) string {
@@ -101,6 +120,76 @@ func TestUpdateAppUserHandler_Success(t *testing.T) {
 	}
 	if email != "updated@example.com" || phone != "555-1234" || role != "approver" {
 		t.Fatalf("row = (%q, %q, %q), want (updated@example.com, 555-1234, approver)", email, phone, role)
+	}
+
+	if got := countAuditLog(t, pool, "app.user.update"); got != 1 {
+		t.Fatalf("app.user.update audit log count = %d, want 1", got)
+	}
+}
+
+// TestUpdateAppUserHandler_EmailChangeResetsSessions covers AUE-04's session
+// half (email_confirmed_at reset is covered at the store layer in
+// app_users_store_test.go): changing the email deletes the user's existing
+// sessions.
+func TestUpdateAppUserHandler_EmailChangeResetsSessions(t *testing.T) {
+	pool, h, actors, appID, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+
+	app, _, err := GetApp(context.Background(), pool, appID, actors["loner"])
+	if err != nil {
+		t.Fatalf("GetApp: %v", err)
+	}
+	schema := appUsersHandlerSetup(t, pool, app.Name)
+	userID := appUsersHandlerInsertUser(t, pool, schema, "session-reset@example.com")
+	appUsersHandlerInsertSession(t, pool, schema, userID, "refresh-token-1")
+
+	var before int
+	if err := pool.QueryRow(context.Background(), `SELECT COUNT(*) FROM `+schema+`."_auth_sessions" WHERE user_id = $1`, userID).Scan(&before); err != nil {
+		t.Fatalf("count sessions before: %v", err)
+	}
+	if before != 1 {
+		t.Fatalf("expected 1 seeded session, got %d", before)
+	}
+
+	w := callUpdateAppUser(h, actors["loner"], appID, userID, `{"email":"session-reset-new@example.com","phone":"","role":"member"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+
+	var after int
+	if err := pool.QueryRow(context.Background(), `SELECT COUNT(*) FROM `+schema+`."_auth_sessions" WHERE user_id = $1`, userID).Scan(&after); err != nil {
+		t.Fatalf("count sessions after: %v", err)
+	}
+	if after != 0 {
+		t.Fatalf("expected sessions deleted after email change, got %d remaining", after)
+	}
+}
+
+// TestUpdateAppUserHandler_UnchangedEmailKeepsSessions covers the negative
+// side of AUE-04/AUE-05: resubmitting the same email must NOT clear sessions.
+func TestUpdateAppUserHandler_UnchangedEmailKeepsSessions(t *testing.T) {
+	pool, h, actors, appID, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+
+	app, _, err := GetApp(context.Background(), pool, appID, actors["loner"])
+	if err != nil {
+		t.Fatalf("GetApp: %v", err)
+	}
+	schema := appUsersHandlerSetup(t, pool, app.Name)
+	userID := appUsersHandlerInsertUser(t, pool, schema, "session-keep@example.com")
+	appUsersHandlerInsertSession(t, pool, schema, userID, "refresh-token-2")
+
+	w := callUpdateAppUser(h, actors["loner"], appID, userID, `{"email":"session-keep@example.com","phone":"555-0000","role":"member"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+
+	var after int
+	if err := pool.QueryRow(context.Background(), `SELECT COUNT(*) FROM `+schema+`."_auth_sessions" WHERE user_id = $1`, userID).Scan(&after); err != nil {
+		t.Fatalf("count sessions after: %v", err)
+	}
+	if after != 1 {
+		t.Fatalf("expected session preserved when email is unchanged, got %d remaining", after)
 	}
 }
 
