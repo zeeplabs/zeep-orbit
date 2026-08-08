@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { EmptyState, DataTable, StatusPill } from '@/components/patterns'
+import { EmptyState, DataTable, StatusPill, PhoneInput } from '@/components/patterns'
 import type { Column } from '@/components/patterns'
 import { cn } from '@/lib/utils'
 
@@ -92,7 +92,7 @@ function EditUserDrawer({
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>{t('appUsers.editUserPhoneLabel')}</Label>
-              <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
+              <PhoneInput value={phone} onChange={setPhone} />
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>{t('appUsers.editRoleLabel')}</Label>
