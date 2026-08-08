@@ -408,9 +408,9 @@ T14 → T15
 - Skill: `react-best-practices`
 
 **Done when**:
-- [ ] Teste "edita role de um end-user via drawer" passa
-- [ ] Gate check passa: `cd internal/dashboard/ui && npx playwright test enduser-roles` (Build gate, fecha a Phase 5)
-- [ ] Test count: 3 testes passam no arquivo (2 de T10 + 1 novo, sem exclusão silenciosa)
+- [x] Teste "edita role de um end-user via drawer" passa
+- [x] Gate check passa: `cd internal/dashboard/ui && npx playwright test enduser-roles` (Build gate, fecha a Phase 5)
+- [x] Test count: 3 testes passam no arquivo (2 de T10 + 1 novo, sem exclusão silenciosa)
 
 **Tests**: e2e
 **Gate**: build

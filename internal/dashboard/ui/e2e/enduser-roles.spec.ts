@@ -82,4 +82,40 @@ test.describe('End-user roles configuration', () => {
     // The chip is still there — the blocked removal never persisted.
     await expect(page.getByText('member', { exact: true })).toBeVisible()
   })
+
+  test('edits an end-user role via drawer', async ({ page }) => {
+    await bootstrapOrSkip(page)
+    await login(page)
+    const appName = uniqueAppName('e2e_roles_edit')
+    await createAuthApp(page, appName)
+    const appId = appIdFromUrl(page.url())
+
+    // Add "viewer" so there's a second option to switch to.
+    await page.click('[role="tab"]:has-text("Login providers")')
+    await page.fill('input[placeholder="New role (e.g. viewer)"]', 'viewer')
+    await page.click('button:has-text("Add")')
+    await expect(page.getByText('viewer', { exact: true })).toBeVisible()
+
+    // Register an end-user — defaults to the "member" role.
+    const registerRes = await page.request.post(`/${appName}/auth/register`, {
+      data: { email: `enduser-${Date.now()}@test.com`, password: 'test1234' },
+    })
+    expect(registerRes.status()).toBe(201)
+
+    await page.goto(`/dashboard/apps/${appId}/users`)
+
+    // The role column is plain text — no input/select inline in the cell.
+    const roleCell = page.locator('td', { hasText: 'member' })
+    await expect(roleCell).toBeVisible()
+    await expect(roleCell.locator('input, select')).toHaveCount(0)
+
+    await page.click('[title="Edit role"]')
+    await expect(page.locator('text=Edit role')).toBeVisible()
+
+    await page.getByRole('combobox').click()
+    await page.getByRole('option', { name: 'viewer' }).click()
+    await page.click('button:has-text("Save")')
+
+    await expect(page.locator('td', { hasText: 'viewer' })).toBeVisible()
+  })
 })
