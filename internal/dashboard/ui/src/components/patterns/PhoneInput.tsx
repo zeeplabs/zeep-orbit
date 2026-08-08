@@ -82,7 +82,7 @@ export function PhoneInput({
         </SelectTrigger>
         <SelectContent>
           {sortedCountries.map((c) => (
-            <SelectItem key={c.code} value={c.code}>
+            <SelectItem key={c.code} value={c.code} textValue={c.en}>
               {c.flag} {c.en} ({c.dialCode})
             </SelectItem>
           ))}

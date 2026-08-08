@@ -75,20 +75,77 @@ test.describe('App user edit fields', () => {
     )
 
     await page.locator('input[type="email"]').fill(newEmail)
-    // The phone field is the drawer's only other text input (email is the
-    // only "email"-typed one; role is a combobox, not an input).
-    await page.locator('[role="dialog"] input:not([type="email"])').fill('555-9876')
+    // The phone field is PhoneInput's masked text input (email is the only
+    // "email"-typed input; the country select and role select are comboboxes,
+    // not inputs). Typing raw national digits through the BR-default mask.
+    await page.locator('[role="dialog"] input:not([type="email"])').fill('11987654321')
 
     await page.click('button:has-text("Save")')
     const putReq = await putPromise
     const putBody: { email?: string; phone?: string; role?: string } = putReq.postDataJSON()
     await expect(page.locator('text=Edit user')).toHaveCount(0)
 
-    expect(putBody).toMatchObject({ email: newEmail, phone: '555-9876', role: 'member' })
+    // AUT-05: phone is sent as +{dialCode}{digits}, not the raw typed string.
+    expect(putBody).toMatchObject({ email: newEmail, phone: '+5511987654321', role: 'member' })
     expect(Object.keys(putBody).sort()).toEqual(['email', 'phone', 'role'])
 
     await expect(page.locator('td', { hasText: newEmail })).toBeVisible()
-    await expect(page.locator('td', { hasText: '555-9876' })).toBeVisible()
+    await expect(page.locator('td', { hasText: '+5511987654321' })).toBeVisible()
+  })
+
+  test('defaults phone country to Brazil, masks by country, and round-trips on next edit', async ({ page }) => {
+    const appName = uniqueAppName('e2e_users_phone')
+    await createAuthApp(page, appName)
+    const appId = appIdFromUrl(page.url())
+
+    const email = `enduser-${Date.now()}@test.com`
+    await page.request.post(`/${appName}/auth/register`, { data: { email, password: 'test1234' } })
+
+    await page.goto(`/dashboard/apps/${appId}?tab=users`)
+    await expect(page.locator('td', { hasText: email })).toBeVisible()
+
+    await page.click('[title="Edit user"]')
+    await expect(page.locator('text=Edit user')).toBeVisible()
+
+    // AUT-02: no stored phone yet, country select defaults to Brazil.
+    const countrySelect = page.locator('[role="dialog"]').getByRole('combobox').first()
+    await expect(countrySelect).toContainText('Brazil')
+
+    // AUT-04/AUT-05: type national digits through the BR mask, save.
+    const putPromise = page.waitForRequest(
+      (req) => req.method() === 'PUT' && /\/dashboard\/api\/apps\/[^/]+\/users\/[^/]+$/.test(new URL(req.url()).pathname),
+    )
+    await page.locator('[role="dialog"] input:not([type="email"])').fill('11987654321')
+    await page.click('button:has-text("Save")')
+    const putBody: { phone?: string } = (await putPromise).postDataJSON()
+    expect(putBody.phone).toBe('+5511987654321')
+    await expect(page.locator('text=Edit user')).toHaveCount(0)
+
+    // AUT-01: reopening the drawer re-derives the country and national digits
+    // from the stored +{dialCode}{digits} value.
+    await page.click('[title="Edit user"]')
+    await expect(page.locator('text=Edit user')).toBeVisible()
+    await expect(countrySelect).toContainText('Brazil')
+    await expect(page.locator('[role="dialog"] input:not([type="email"])')).toHaveValue('(11) 98765-4321')
+
+    // AUT-06: Brazil is listed first in the country dropdown.
+    await countrySelect.click()
+    await expect(page.locator('[role="listbox"] [role="option"]').first()).toContainText('Brazil')
+
+    // AUT-03: switching the country re-masks using the new country's mask
+    // and keeps the same national digits when saved. Albania is the 3rd
+    // alphabetical entry after Brazil (pinned first), so it's visible in the
+    // dropdown without scrolling the 235-item list.
+    await page.click('[role="option"]:has-text("Albania (+355)")')
+    await expect(countrySelect).toContainText('Albania')
+    await expect(page.locator('[role="dialog"] input:not([type="email"])')).toHaveValue('119 876 5432')
+
+    const putPromise2 = page.waitForRequest(
+      (req) => req.method() === 'PUT' && /\/dashboard\/api\/apps\/[^/]+\/users\/[^/]+$/.test(new URL(req.url()).pathname),
+    )
+    await page.click('button:has-text("Save")')
+    const putBody2: { phone?: string } = (await putPromise2).postDataJSON()
+    expect(putBody2.phone).toBe('+35511987654321')
   })
 
   test('reaches the tab from the apps list card, switches tabs, and toggles user status', async ({ page }) => {

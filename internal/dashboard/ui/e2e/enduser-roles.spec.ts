@@ -160,7 +160,9 @@ test.describe('End-user roles configuration', () => {
     })
     await page.click('[title="Edit user"]')
     await expect(page.locator('text=Edit user')).toBeVisible()
-    await page.getByRole('combobox').click()
+    // The drawer now also has a phone-country combobox (app-user-phone-mask);
+    // role select is the last combobox in the dialog.
+    await page.getByRole('combobox').last().click()
     await page.getByRole('option', { name: 'viewer' }).click()
     await page.click('button:has-text("Cancel")')
     await expect(page.locator('text=Edit user')).toHaveCount(0)
@@ -185,11 +187,13 @@ test.describe('End-user roles configuration', () => {
     await page.goto(`/dashboard/apps/${appId}?tab=users`)
     await expect(page.locator('td', { hasText: 'orphaned_role' })).toBeVisible()
     await page.click('[title="Edit user"]')
-    await expect(page.getByRole('combobox').getByText('orphaned_role', { exact: true })).toBeVisible()
+    await expect(page.getByRole('combobox').last().getByText('orphaned_role', { exact: true })).toBeVisible()
 
     // ROLECFG-10/11/13: switching to a configured role and saving updates
     // the table — no typing involved.
-    await page.getByRole('combobox').click()
+    // The drawer now also has a phone-country combobox (app-user-phone-mask);
+    // role select is the last combobox in the dialog.
+    await page.getByRole('combobox').last().click()
     await page.getByRole('option', { name: 'viewer' }).click()
     await page.click('button:has-text("Save")')
     await expect(page.locator('td', { hasText: 'viewer' })).toBeVisible()
