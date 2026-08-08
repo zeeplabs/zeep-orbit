@@ -82,15 +82,15 @@ App-user management lives on a standalone page (`/apps/:id/users`), reached only
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| AUT-01 | P1 | Execute | Implemented |
-| AUT-02 | P1 | Execute | Implemented |
-| AUT-03 | P1 | Execute | Implemented |
-| AUT-04 | P1 | Execute | Implemented |
-| AUT-05 | P1 | Execute | Implemented |
-| AUT-06 | P1 | Execute | Implemented |
-| AUT-07 | P2 | Execute | Implemented |
-| AUT-08 | P2 | Execute | Implemented |
-| AUT-09 | P2 | Execute | Implemented |
+| AUT-01 | P1 | Execute | Verified |
+| AUT-02 | P1 | Execute | Verified |
+| AUT-03 | P1 | Execute | Verified |
+| AUT-04 | P1 | Execute | Verified |
+| AUT-05 | P1 | Execute | Verified |
+| AUT-06 | P1 | Execute | Verified |
+| AUT-07 | P2 | Execute | Verified |
+| AUT-08 | P2 | Execute | Verified |
+| AUT-09 | P2 | Execute | Verified |
 
 **Coverage:** 9 total, 9 mapped to Execute (Medium scope — no formal tasks.md), 0 unmapped.
 

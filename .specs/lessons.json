@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 7,
+  "next_id": 8,
   "lessons": [
     {
       "id": "L-001",
@@ -112,6 +112,24 @@
       ],
       "created": "2026-08-08T14:54:00Z",
       "last_seen": "2026-08-08T14:54:00Z"
+    },
+    {
+      "id": "L-007",
+      "key": "ac_gap::for navigation ui composition features write e2e tests that click the real trigger card button tab trigger instead of page goto shortcuts goto only tests miss regressions in the actual wiring nav target tab switching in tab actions",
+      "text": "For navigation/UI-composition features, write e2e tests that click the real trigger (card button, tab trigger) instead of page.goto shortcuts — goto-only tests miss regressions in the actual wiring (nav target, tab switching, in-tab actions).",
+      "signal": "ac_gap",
+      "scope": "internal/dashboard/ui/e2e",
+      "status": "candidate",
+      "features": [
+        "app-users-tab"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "AUT-02,AUT-04,AUT-05 (internal/dashboard/ui/e2e)"
+      ],
+      "created": "2026-08-08T19:14:32Z",
+      "last_seen": "2026-08-08T19:14:32Z"
     }
   ]
 }

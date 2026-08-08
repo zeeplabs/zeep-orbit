@@ -50,6 +50,12 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: internal/dashboard/ui/e2e/enduser-roles.spec.ts:95,137-138 | ROLECFG-08, ROLECFG-14 (dashboard-ui,e2e)
 - last seen: 2026-08-08T14:54:00Z
 
+### L-007 - For navigation/UI-composition features, write e2e tests that click the real trigger (card button, tab trigger) instead of page.goto shortcuts — goto-only tests miss regressions in the actual wiring (nav target, tab switching, in-tab actions).
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `internal/dashboard/ui/e2e` · harmful: 0
+- features: app-users-tab
+- evidence: AUT-02,AUT-04,AUT-05 (internal/dashboard/ui/e2e)
+- last seen: 2026-08-08T19:14:32Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.
