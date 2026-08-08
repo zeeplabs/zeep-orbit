@@ -11,13 +11,13 @@ import { bootstrapOrSkip, login } from './helpers'
  * apps with end-user email auth enabled. This file has its own helper that
  * follows the current flow and flips the switch.
  */
-async function createAuthApp(page: Page, name: string) {
+async function createAuthApp(page: Page, name: string, authEmail = true) {
   await page.goto('/dashboard/apps')
   await page.click('button:has-text("Create app")')
   await page.click('button:has-text("Backend App")')
   await page.waitForURL('**/apps/new')
   await page.fill('input[placeholder="my-app"]', name)
-  await page.click('button[role="switch"]')
+  if (authEmail) await page.click('button[role="switch"]')
   await page.click('button:has-text("Create app")')
   // "**/apps/*" would also match the current "/apps/new" URL before the
   // POST finishes, resolving before the real redirect (and before the
@@ -83,7 +83,24 @@ test.describe('End-user roles configuration', () => {
     await expect(page.getByText('member', { exact: true })).toBeVisible()
   })
 
-  test('edits an end-user role via drawer', async ({ page }) => {
+  test('hides the roles section when auth_email_enabled is false', async ({ page }) => {
+    await bootstrapOrSkip(page)
+    await login(page)
+    // No email auth — the "role" claim doesn't exist for this app, so the
+    // Settings section that manages it must not render at all (ROLECFG-08).
+    await createAuthApp(page, uniqueAppName('e2e_roles_noauth'), false)
+
+    await page.click('[role="tab"]:has-text("Login providers")')
+
+    await expect(page.locator('text=End-user roles')).toHaveCount(0)
+  })
+
+  // Merged into one test/one login: the dashboard's own login endpoint is
+  // rate-limited to 5/minute per IP (internal/server/server.go, authLimiter),
+  // and this spec file runs 5 tests sequentially in well under a minute —
+  // splitting P2's sub-behaviors into more top-level tests would trip that
+  // limiter. Each stage below still asserts one behavior independently.
+  test('edits an end-user role via drawer (save, cancel, orphan role)', async ({ page }) => {
     await bootstrapOrSkip(page)
     await login(page)
     const appName = uniqueAppName('e2e_roles_edit')
@@ -97,25 +114,50 @@ test.describe('End-user roles configuration', () => {
     await expect(page.getByText('viewer', { exact: true })).toBeVisible()
 
     // Register an end-user — defaults to the "member" role.
+    const email = `enduser-${Date.now()}@test.com`
     const registerRes = await page.request.post(`/${appName}/auth/register`, {
-      data: { email: `enduser-${Date.now()}@test.com`, password: 'test1234' },
+      data: { email, password: 'test1234' },
     })
     expect(registerRes.status()).toBe(201)
 
     await page.goto(`/dashboard/apps/${appId}/users`)
 
-    // The role column is plain text — no input/select inline in the cell.
+    // ROLECFG-09: the role column is plain text — no input/select inline.
     const roleCell = page.locator('td', { hasText: 'member' })
     await expect(roleCell).toBeVisible()
     await expect(roleCell.locator('input, select')).toHaveCount(0)
 
+    // ROLECFG-14: cancelling the drawer never calls the mutation.
     await page.click('[title="Edit role"]')
     await expect(page.locator('text=Edit role')).toBeVisible()
+    await page.getByRole('combobox').click()
+    await page.getByRole('option', { name: 'viewer' }).click()
+    await page.click('button:has-text("Cancel")')
+    await expect(page.locator('text=Edit role')).toHaveCount(0)
+    await expect(page.locator('td', { hasText: 'member' })).toBeVisible()
+    await expect(page.locator('td', { hasText: 'viewer' })).toHaveCount(0)
 
+    // ROLECFG-12: a role assigned outside enduser_roles_config (orphan) is
+    // still shown pre-selected in the drawer, not silently swapped out. Set
+    // it directly through the (unchanged) role-update endpoint, bypassing
+    // the UI's own list — the same thing a pre-existing/legacy value would do.
+    const usersRes = await page.request.get(`/dashboard/api/apps/${appId}/users`)
+    const usersBody = await usersRes.json()
+    const user = usersBody.data.find((u: { email: string }) => u.email === email)
+    const orphanRes = await page.request.put(`/dashboard/api/apps/${appId}/users/${user.id}/role`, {
+      data: { role: 'orphaned_role' },
+    })
+    expect(orphanRes.status()).toBe(200)
+    await page.goto(`/dashboard/apps/${appId}/users`)
+    await expect(page.locator('td', { hasText: 'orphaned_role' })).toBeVisible()
+    await page.click('[title="Edit role"]')
+    await expect(page.getByRole('combobox').getByText('orphaned_role', { exact: true })).toBeVisible()
+
+    // ROLECFG-10/11/13: switching to a configured role and saving updates
+    // the table — no typing involved.
     await page.getByRole('combobox').click()
     await page.getByRole('option', { name: 'viewer' }).click()
     await page.click('button:has-text("Save")')
-
     await expect(page.locator('td', { hasText: 'viewer' })).toBeVisible()
   })
 
