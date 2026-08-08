@@ -433,7 +433,7 @@ function EnduserRolesSection({ app }: { app: NonNullable<ReturnType<typeof useAp
       <div className="flex flex-wrap gap-2">
         {roles.map((role) => (
           <Badge key={role} variant="outline" className="gap-1.5 py-1">
-            {role}
+            <span>{role}</span>
             <button
               type="button"
               onClick={() => removeRole(role)}

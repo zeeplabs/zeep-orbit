@@ -331,10 +331,10 @@ T14 → T15
 - Skill: `react-best-practices`
 
 **Done when**:
-- [ ] Teste "adiciona role nova via Settings" passa
-- [ ] Teste "remoção de role em uso é bloqueada com mensagem de erro" passa
-- [ ] Gate check passa: `cd internal/dashboard/ui && npx playwright test enduser-roles` (Build gate, fecha a Phase 4)
-- [ ] Test count: 2 testes passam (sem exclusão silenciosa)
+- [x] Teste "adiciona role nova via Settings" passa
+- [x] Teste "remoção de role em uso é bloqueada com mensagem de erro" passa
+- [x] Gate check passa: `cd internal/dashboard/ui && npx playwright test enduser-roles` (Build gate, fecha a Phase 4)
+- [x] Test count: 2 testes passam (sem exclusão silenciosa)
 
 **Tests**: e2e
 **Gate**: build
