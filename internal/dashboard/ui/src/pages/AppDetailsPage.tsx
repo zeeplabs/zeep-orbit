@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import {
   useApp,
   useUpdateApp,
+  useUpdateAppEnduserRoles,
   useCreateAppTable,
   useUpdateAppTable,
   useDeleteAppTable,
@@ -20,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Icon } from "@/components/ui/icon";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -383,9 +385,85 @@ function LoginTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]>
         )}
       </ProviderCard>
 
+      <EnduserRolesSection app={app} />
+
       {error && <p className="text-xs text-[var(--danger)]">{error}</p>}
       <SaveBar onSave={save} saving={updateApp.isPending} saved={saved} />
     </div>
+  );
+}
+
+// End-user business roles (ROLECFG-01..08). Gated by auth_email_enabled —
+// same pattern as the fix ROWPOL-25 for the `_auth_users` FK dropdown — since
+// the end-user "role" claim only exists when end-user auth is on.
+function EnduserRolesSection({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]> }) {
+  const { t } = useTranslation();
+  const updateRoles = useUpdateAppEnduserRoles();
+  const [newRole, setNewRole] = useState("");
+
+  if (!app.auth_email_enabled) return null;
+
+  const roles = app.enduser_roles_config;
+  const identRe = /^[a-z][a-z0-9_]{0,62}$/;
+
+  const addRole = () => {
+    const trimmed = newRole.trim();
+    if (!trimmed) return;
+    if (!identRe.test(trimmed)) {
+      toast.error(t("appDetails.enduserRolesFormatError"));
+      return;
+    }
+    if (roles.includes(trimmed)) {
+      toast.error(t("appDetails.enduserRolesDuplicateError"));
+      return;
+    }
+    updateRoles.mutate(
+      { id: app.id, roles: [...roles, trimmed] },
+      { onSuccess: () => setNewRole("") },
+    );
+  };
+
+  const removeRole = (role: string) => {
+    updateRoles.mutate({ id: app.id, roles: roles.filter((r) => r !== role) });
+  };
+
+  return (
+    <Panel title={t("appDetails.enduserRolesTitle")}>
+      <p className="text-[11px] text-[var(--text-secondary)]">{t("appDetails.enduserRolesDesc")}</p>
+      <div className="flex flex-wrap gap-2">
+        {roles.map((role) => (
+          <Badge key={role} variant="outline" className="gap-1.5 py-1">
+            {role}
+            <button
+              type="button"
+              onClick={() => removeRole(role)}
+              disabled={updateRoles.isPending}
+              title={t("appDetails.enduserRolesRemove")}
+              className="flex cursor-pointer items-center justify-center border-none bg-transparent p-0 text-[var(--text-tertiary)] hover:text-[var(--danger)] disabled:cursor-not-allowed"
+            >
+              <Icon name="close" size={11} />
+            </button>
+          </Badge>
+        ))}
+      </div>
+      <div className="flex items-center gap-2">
+        <Input
+          value={newRole}
+          onChange={(e) => setNewRole(e.target.value)}
+          placeholder={t("appDetails.enduserRolesAddPlaceholder")}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              addRole();
+            }
+          }}
+          className="h-9 max-w-[220px]"
+        />
+        <Button variant="outline" onClick={addRole} disabled={updateRoles.isPending || !newRole.trim()}>
+          {t("appDetails.enduserRolesAdd")}
+        </Button>
+      </div>
+    </Panel>
   );
 }
 

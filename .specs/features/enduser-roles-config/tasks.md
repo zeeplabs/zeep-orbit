@@ -304,12 +304,12 @@ T14 → T15
 - Skill: `react-composition-patterns`
 
 **Done when**:
-- [ ] Seção oculta quando `authEmailEnabled === false`
-- [ ] Lista renderiza `enduserRolesConfig` atual (mínimo `["member"]`) como chips
-- [ ] Adicionar role nova via Input+botão persiste e atualiza a lista sem reload manual (invalidação de query)
-- [ ] Remover role sem uso persiste; remover role em uso mostra toast de erro com a mensagem do backend, sem remover o chip
-- [ ] `npx tsc -b` e `npm run build` limpos
-- [ ] Gate check passa: full gate
+- [x] Seção oculta quando `authEmailEnabled === false`
+- [x] Lista renderiza `enduserRolesConfig` atual (mínimo `["member"]`) como chips
+- [x] Adicionar role nova via Input+botão persiste e atualiza a lista sem reload manual (invalidação de query)
+- [x] Remover role sem uso persiste; remover role em uso mostra toast de erro com a mensagem do backend, sem remover o chip
+- [x] `npx tsc -b` e `npm run build` limpos
+- [x] Gate check passa: full gate
 
 **Tests**: none (cobertura funcional fica no e2e de T10)
 **Gate**: full
