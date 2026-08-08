@@ -84,6 +84,7 @@ func normalizeName(name string) string {
 var (
 	identRe      = regexp.MustCompile(`^[a-z][a-z0-9_]{0,62}$`)
 	appNameRe    = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
+	phoneE164Re  = regexp.MustCompile(`^\+[1-9]\d{7,14}$`)
 	allowedTypes = map[string]bool{
 		"text": true, "integer": true, "bigint": true, "boolean": true,
 		"uuid": true, "timestamptz": true, "numeric": true, "jsonb": true,
@@ -2429,6 +2430,10 @@ func (h *Handler) UpdateAppUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if !identRe.MatchString(body.Role) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "role must match ^[a-z][a-z0-9_]{0,62}$"})
+		return
+	}
+	if body.Phone != "" && !phoneE164Re.MatchString(body.Phone) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid phone number"})
 		return
 	}
 

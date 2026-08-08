@@ -102,7 +102,7 @@ func TestUpdateAppUserHandler_Success(t *testing.T) {
 	schema := appUsersHandlerSetup(t, pool, app.Name)
 	userID := appUsersHandlerInsertUser(t, pool, schema, "success@example.com")
 
-	w := callUpdateAppUser(h, actors["loner"], appID, userID, `{"email":"updated@example.com","phone":"555-1234","role":"approver"}`)
+	w := callUpdateAppUser(h, actors["loner"], appID, userID, `{"email":"updated@example.com","phone":"+15555551234","role":"approver"}`)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
 	}
@@ -118,8 +118,8 @@ func TestUpdateAppUserHandler_Success(t *testing.T) {
 	if err := pool.QueryRow(context.Background(), `SELECT email, phone, role FROM `+schema+`."_auth_users" WHERE id = $1`, userID).Scan(&email, &phone, &role); err != nil {
 		t.Fatalf("read updated row: %v", err)
 	}
-	if email != "updated@example.com" || phone != "555-1234" || role != "approver" {
-		t.Fatalf("row = (%q, %q, %q), want (updated@example.com, 555-1234, approver)", email, phone, role)
+	if email != "updated@example.com" || phone != "+15555551234" || role != "approver" {
+		t.Fatalf("row = (%q, %q, %q), want (updated@example.com, +15555551234, approver)", email, phone, role)
 	}
 
 	if got := countAuditLog(t, pool, "app.user.update"); got != 1 {
@@ -179,7 +179,7 @@ func TestUpdateAppUserHandler_UnchangedEmailKeepsSessions(t *testing.T) {
 	userID := appUsersHandlerInsertUser(t, pool, schema, "session-keep@example.com")
 	appUsersHandlerInsertSession(t, pool, schema, userID, "refresh-token-2")
 
-	w := callUpdateAppUser(h, actors["loner"], appID, userID, `{"email":"session-keep@example.com","phone":"555-0000","role":"member"}`)
+	w := callUpdateAppUser(h, actors["loner"], appID, userID, `{"email":"session-keep@example.com","phone":"+15555550000","role":"member"}`)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
 	}
@@ -240,6 +240,86 @@ func TestUpdateAppUserHandler_InvalidRole(t *testing.T) {
 	}
 	if resp["error"] != "role must match ^[a-z][a-z0-9_]{0,62}$" {
 		t.Fatalf("error = %q, want the identRe format message", resp["error"])
+	}
+}
+
+// TestUpdateAppUserHandler_InvalidPhone covers AUT-07: a non-empty phone that
+// doesn't match the loose E.164 shape is rejected before the store is called.
+func TestUpdateAppUserHandler_InvalidPhone(t *testing.T) {
+	pool, h, actors, appID, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+
+	app, _, err := GetApp(context.Background(), pool, appID, actors["loner"])
+	if err != nil {
+		t.Fatalf("GetApp: %v", err)
+	}
+	schema := appUsersHandlerSetup(t, pool, app.Name)
+	userID := appUsersHandlerInsertUser(t, pool, schema, "invalid-phone@example.com")
+
+	w := callUpdateAppUser(h, actors["loner"], appID, userID, `{"email":"invalid-phone@example.com","phone":"555-1234","role":"member"}`)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", w.Code, w.Body.String())
+	}
+	var resp map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp["error"] != "invalid phone number" {
+		t.Fatalf("error = %q, want %q", resp["error"], "invalid phone number")
+	}
+
+	var phone string
+	if err := pool.QueryRow(context.Background(), `SELECT COALESCE(phone, '') FROM `+schema+`."_auth_users" WHERE id = $1`, userID).Scan(&phone); err != nil {
+		t.Fatalf("read row: %v", err)
+	}
+	if phone != "" {
+		t.Fatalf("phone = %q, want unchanged empty string (store must not be called)", phone)
+	}
+}
+
+// TestUpdateAppUserHandler_EmptyPhoneAllowed covers AUT-08: phone stays
+// optional, an empty string is not rejected.
+func TestUpdateAppUserHandler_EmptyPhoneAllowed(t *testing.T) {
+	pool, h, actors, appID, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+
+	app, _, err := GetApp(context.Background(), pool, appID, actors["loner"])
+	if err != nil {
+		t.Fatalf("GetApp: %v", err)
+	}
+	schema := appUsersHandlerSetup(t, pool, app.Name)
+	userID := appUsersHandlerInsertUser(t, pool, schema, "empty-phone@example.com")
+
+	w := callUpdateAppUser(h, actors["loner"], appID, userID, `{"email":"empty-phone@example.com","phone":"","role":"member"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+}
+
+// TestUpdateAppUserHandler_ValidE164PhonePersists covers AUT-09: a phone
+// matching the E.164 shape is persisted unchanged.
+func TestUpdateAppUserHandler_ValidE164PhonePersists(t *testing.T) {
+	pool, h, actors, appID, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+
+	app, _, err := GetApp(context.Background(), pool, appID, actors["loner"])
+	if err != nil {
+		t.Fatalf("GetApp: %v", err)
+	}
+	schema := appUsersHandlerSetup(t, pool, app.Name)
+	userID := appUsersHandlerInsertUser(t, pool, schema, "valid-phone@example.com")
+
+	w := callUpdateAppUser(h, actors["loner"], appID, userID, `{"email":"valid-phone@example.com","phone":"+5511987654321","role":"member"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+
+	var phone string
+	if err := pool.QueryRow(context.Background(), `SELECT phone FROM `+schema+`."_auth_users" WHERE id = $1`, userID).Scan(&phone); err != nil {
+		t.Fatalf("read row: %v", err)
+	}
+	if phone != "+5511987654321" {
+		t.Fatalf("phone = %q, want +5511987654321", phone)
 	}
 }
 

@@ -98,9 +98,9 @@ Explicitly excluded. Documented to prevent scope creep.
 | AUT-04 | P1: Country-aware phone entry | Execute | Implementing |
 | AUT-05 | P1: Country-aware phone entry | Execute | Implementing |
 | AUT-06 | P1: Country-aware phone entry | Execute | Implementing |
-| AUT-07 | P2: Backend rejects malformed phone | Execute | Pending |
-| AUT-08 | P2: Backend rejects malformed phone | Execute | Pending |
-| AUT-09 | P2: Backend rejects malformed phone | Execute | Pending |
+| AUT-07 | P2: Backend rejects malformed phone | Execute | Implementing |
+| AUT-08 | P2: Backend rejects malformed phone | Execute | Implementing |
+| AUT-09 | P2: Backend rejects malformed phone | Execute | Implementing |
 
 **ID format:** `AUT-[NUMBER]` (reusing the `AUT` prefix already established for this app-users surface in `app-users-tab` and `app-user-edit-fields`).
 
