@@ -73,7 +73,7 @@ func appUsersInsertTestUser(t *testing.T, pool *db.Pool, schema, email string) s
 	return id
 }
 
-func TestUpdateAppUserRoleChangesRoleFromDefault(t *testing.T) {
+func TestUpdateAppUserChangesRoleFromDefault(t *testing.T) {
 	pool, schema := appUsersTestPool(t)
 	ctx := context.Background()
 	userID := appUsersInsertTestUser(t, pool, schema, "role-update@example.com")
@@ -86,23 +86,80 @@ func TestUpdateAppUserRoleChangesRoleFromDefault(t *testing.T) {
 		t.Fatalf("expected default role %q, got %q", "member", initialRole)
 	}
 
-	if err := UpdateAppUserRole(ctx, pool, schema, userID, "approver"); err != nil {
-		t.Fatalf("UpdateAppUserRole: %v", err)
+	emailChanged, err := UpdateAppUser(ctx, pool, schema, userID, "role-update@example.com", "555-0100", "approver")
+	if err != nil {
+		t.Fatalf("UpdateAppUser: %v", err)
+	}
+	if emailChanged {
+		t.Fatalf("expected emailChanged=false when email is resubmitted unchanged")
 	}
 
-	var role string
-	if err := pool.QueryRow(ctx, `SELECT role FROM `+schema+`."_auth_users" WHERE id = $1`, userID).Scan(&role); err != nil {
-		t.Fatalf("read role after update: %v", err)
+	var role, phone string
+	if err := pool.QueryRow(ctx, `SELECT role, phone FROM `+schema+`."_auth_users" WHERE id = $1`, userID).Scan(&role, &phone); err != nil {
+		t.Fatalf("read row after update: %v", err)
 	}
 	if role != "approver" {
 		t.Fatalf("expected role %q after update, got %q", "approver", role)
 	}
+	if phone != "555-0100" {
+		t.Fatalf("expected phone %q after update, got %q", "555-0100", phone)
+	}
 }
 
-func TestUpdateAppUserRoleUnknownUserReturnsNotFound(t *testing.T) {
+func TestUpdateAppUserEmailChangeResetsConfirmation(t *testing.T) {
+	pool, schema := appUsersTestPool(t)
+	ctx := context.Background()
+	userID := appUsersInsertTestUser(t, pool, schema, "confirm-me@example.com")
+
+	if _, err := pool.Exec(ctx, `UPDATE `+schema+`."_auth_users" SET email_confirmed_at = now() WHERE id = $1`, userID); err != nil {
+		t.Fatalf("seed email_confirmed_at: %v", err)
+	}
+
+	emailChanged, err := UpdateAppUser(ctx, pool, schema, userID, "new-address@example.com", "", "member")
+	if err != nil {
+		t.Fatalf("UpdateAppUser: %v", err)
+	}
+	if !emailChanged {
+		t.Fatalf("expected emailChanged=true when email differs")
+	}
+
+	var email string
+	var confirmedAt *time.Time
+	if err := pool.QueryRow(ctx, `SELECT email, email_confirmed_at FROM `+schema+`."_auth_users" WHERE id = $1`, userID).Scan(&email, &confirmedAt); err != nil {
+		t.Fatalf("read row after update: %v", err)
+	}
+	if email != "new-address@example.com" {
+		t.Fatalf("expected email %q, got %q", "new-address@example.com", email)
+	}
+	if confirmedAt != nil {
+		t.Fatalf("expected email_confirmed_at to be reset to NULL, got %v", confirmedAt)
+	}
+}
+
+func TestUpdateAppUserEmailConflictReturnsErrEmailConflict(t *testing.T) {
+	pool, schema := appUsersTestPool(t)
+	ctx := context.Background()
+	_ = appUsersInsertTestUser(t, pool, schema, "taken@example.com")
+	userID := appUsersInsertTestUser(t, pool, schema, "available@example.com")
+
+	_, err := UpdateAppUser(ctx, pool, schema, userID, "taken@example.com", "", "member")
+	if err != ErrEmailConflict {
+		t.Fatalf("expected ErrEmailConflict, got %v", err)
+	}
+
+	var email string
+	if err := pool.QueryRow(ctx, `SELECT email FROM `+schema+`."_auth_users" WHERE id = $1`, userID).Scan(&email); err != nil {
+		t.Fatalf("read row after conflicting update: %v", err)
+	}
+	if email != "available@example.com" {
+		t.Fatalf("expected email unchanged at %q after conflict, got %q", "available@example.com", email)
+	}
+}
+
+func TestUpdateAppUserUnknownUserReturnsNotFound(t *testing.T) {
 	pool, schema := appUsersTestPool(t)
 
-	err := UpdateAppUserRole(context.Background(), pool, schema, "00000000-0000-0000-0000-000000000000", "approver")
+	_, err := UpdateAppUser(context.Background(), pool, schema, "00000000-0000-0000-0000-000000000000", "nobody@example.com", "", "approver")
 	if err != ErrNotFound {
 		t.Fatalf("expected ErrNotFound for unknown user, got %v", err)
 	}
@@ -112,8 +169,8 @@ func TestListAppUsersIncludesRole(t *testing.T) {
 	pool, schema := appUsersTestPool(t)
 	ctx := context.Background()
 	userID := appUsersInsertTestUser(t, pool, schema, "list-role@example.com")
-	if err := UpdateAppUserRole(ctx, pool, schema, userID, "approver"); err != nil {
-		t.Fatalf("UpdateAppUserRole: %v", err)
+	if _, err := UpdateAppUser(ctx, pool, schema, userID, "list-role@example.com", "", "approver"); err != nil {
+		t.Fatalf("UpdateAppUser: %v", err)
 	}
 
 	users, total, err := ListAppUsers(ctx, pool, schema, "", 50, 0)

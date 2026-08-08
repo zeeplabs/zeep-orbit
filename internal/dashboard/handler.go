@@ -2392,8 +2392,10 @@ func (h *Handler) ActivateAppUser(w http.ResponseWriter, r *http.Request) {
 	h.audit(r.Context(), user.ID, user.Email, "app.user.activate", "app_user", appID, app.Name+"/"+userID, nil, r.RemoteAddr)
 }
 
-// UpdateAppUserRole handles PUT /dashboard/api/apps/{id}/users/{userId}/role
-func (h *Handler) UpdateAppUserRole(w http.ResponseWriter, r *http.Request) {
+// UpdateAppUser handles PUT /dashboard/api/apps/{id}/users/{userId}. Updates
+// email, phone, and role together; email/phone are otherwise uneditable
+// fields not covered by /activate, /deactivate, or /reset-sessions.
+func (h *Handler) UpdateAppUser(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
 	if !ok {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
@@ -2413,9 +2415,16 @@ func (h *Handler) UpdateAppUserRole(w http.ResponseWriter, r *http.Request) {
 
 	r.Body = http.MaxBytesReader(w, r.Body, 4*1024)
 	var body struct {
-		Role string `json:"role"`
+		Email string `json:"email"`
+		Phone string `json:"phone"`
+		Role  string `json:"role"`
 	}
 	if !h.decodeJSONBody(w, r, &body) {
+		return
+	}
+	email := normalizeEmail(body.Email)
+	if !isValidEmail(email) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid email"})
 		return
 	}
 	if !identRe.MatchString(body.Role) {
@@ -2426,17 +2435,27 @@ func (h *Handler) UpdateAppUserRole(w http.ResponseWriter, r *http.Request) {
 	userID := chi.URLParam(r, "userId")
 	schema := schemaNameForDB(app.Name)
 	h.prov.EnsureAuthUserColumns(r.Context(), schema)
-	if err := UpdateAppUserRole(r.Context(), h.pool, schema, userID, body.Role); err != nil {
+	emailChanged, err := UpdateAppUser(r.Context(), h.pool, schema, userID, email, body.Phone, body.Role)
+	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
 			return
 		}
-		h.writeError(w, r, http.StatusInternalServerError, "failed to update user role", err)
+		if errors.Is(err, ErrEmailConflict) {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "email already in use"})
+			return
+		}
+		h.writeError(w, r, http.StatusInternalServerError, "failed to update user", err)
 		return
 	}
+	if emailChanged {
+		if err := ResetAppUserSessions(r.Context(), h.pool, schema, userID); err != nil {
+			h.logger.Warn("failed to reset app user sessions after email change", zap.Error(err))
+		}
+	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"message": "role updated"})
-	h.audit(r.Context(), user.ID, user.Email, "app.user.role_update", "app_user", appID, app.Name+"/"+userID+" -> "+body.Role, nil, r.RemoteAddr)
+	writeJSON(w, http.StatusOK, map[string]string{"message": "user updated"})
+	h.audit(r.Context(), user.ID, user.Email, "app.user.update", "app_user", appID, app.Name+"/"+userID, nil, r.RemoteAddr)
 }
 
 // UpdateAppEnduserRoles handles PUT /dashboard/api/apps/{id}/roles. Replaces
