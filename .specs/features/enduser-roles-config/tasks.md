@@ -280,9 +280,9 @@ T14 → T15
 - Skill: `react-best-practices`
 
 **Done when**:
-- [ ] Toda string nova tem chave em `en.json` E `pt-BR.json` (nenhuma órfã em só um idioma)
-- [ ] `python3 -c "import json; json.load(open('internal/dashboard/ui/src/locales/en.json')); json.load(open('internal/dashboard/ui/src/locales/pt-BR.json'))"` sem erro
-- [ ] Gate check passa: full gate (T7) + validação JSON acima
+- [x] Toda string nova tem chave em `en.json` E `pt-BR.json` (nenhuma órfã em só um idioma)
+- [x] `python3 -c "import json; json.load(open('internal/dashboard/ui/src/locales/en.json')); json.load(open('internal/dashboard/ui/src/locales/pt-BR.json'))"` sem erro
+- [x] Gate check passa: full gate (T7) + validação JSON acima — nota: `npx tsc -b` isolado falha neste ambiente por resolver um binário `tsc` global divergente (`TS5102`, pré-existente, reproduz até em HEAD sem as mudanças deste batch); `npm run build` (que roda `tsc -b` via o binário correto do `node_modules` local) é o check autoritativo e passou limpo.
 
 **Tests**: none
 **Gate**: full
