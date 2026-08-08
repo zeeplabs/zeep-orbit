@@ -255,10 +255,10 @@ T14 → T15
 - Skill: `react-best-practices`
 
 **Done when**:
-- [ ] `App.enduserRolesConfig` tipado como `string[]`
-- [ ] `useUpdateAppEnduserRoles` chama `onError` com `toast.error(error.message)` (regra do `AGENTS.md` seção 5 - mutation sem `onError` é hook incompleto)
-- [ ] `npx tsc -b` limpo
-- [ ] Gate check passa: `go build ./... && go test ./... && go vet ./... && cd internal/dashboard/ui && npx tsc -b && npm run build`
+- [x] `App.enduserRolesConfig` tipado como `string[]` — implementado como `AppDef.enduser_roles_config: string[]` (snake_case, seguindo a convenção real do `AppDef` existente: os payloads chegam direto do JSON do backend sem camada de tradução de case; `auth_email_enabled`/`owner_id`/`created_at` já são snake_case no mesmo tipo — usar camelCase quebraria o acesso em runtime, ver nota de desvio no commit)
+- [x] `useUpdateAppEnduserRoles` chama `onError` com `toast.error(error.message)` (regra do `AGENTS.md` seção 5 - mutation sem `onError` é hook incompleto)
+- [x] `npx tsc -b` limpo
+- [x] Gate check passa: `go build ./... && go test ./... && go vet ./... && cd internal/dashboard/ui && npx tsc -b && npm run build`
 
 **Tests**: none
 **Gate**: full

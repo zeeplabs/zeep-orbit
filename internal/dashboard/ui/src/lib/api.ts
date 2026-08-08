@@ -43,6 +43,7 @@ export interface AppDef {
   name: string
   jwt_secret: string
   auth_email_enabled: boolean
+  enduser_roles_config: string[]
   owner_id: string
   owner_email?: string
   owner_name?: string
@@ -436,6 +437,28 @@ export function useUpdateAppUserRole(): UseMutationResult<
       }),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ['app-users', variables.appId] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+export function useUpdateAppEnduserRoles(): UseMutationResult<
+  { roles: string[] },
+  Error,
+  { id: string; roles: string[] }
+> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, roles }) =>
+      apiFetch<{ roles: string[] }>(`/dashboard/api/apps/${id}/roles`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roles }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['apps'] })
     },
     onError: (error) => {
       toast.error(error.message)
