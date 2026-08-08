@@ -7,7 +7,6 @@ import {
   useDeactivateAppUser,
   useActivateAppUser,
   useResetAppUserSessions,
-  useUpdateAppUserRole,
 } from '../lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -27,46 +26,6 @@ interface AppUser {
   last_sign_in_at: string | null
   created_at: string
   avatar_url: string | null
-}
-
-function RoleCell({
-  appId,
-  userId,
-  role,
-  title,
-}: {
-  appId: string
-  userId: string
-  role: string
-  title: string
-}) {
-  const [value, setValue] = useState(role)
-  const updateRole = useUpdateAppUserRole()
-
-  useEffect(() => setValue(role), [role])
-
-  const commit = () => {
-    const trimmed = value.trim()
-    if (!trimmed || trimmed === role) {
-      setValue(role)
-      return
-    }
-    updateRole.mutate({ appId, userId, role: trimmed })
-  }
-
-  return (
-    <Input
-      value={value}
-      title={title}
-      onChange={(e) => setValue(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') e.currentTarget.blur()
-      }}
-      disabled={updateRole.isPending}
-      className="h-7 w-[110px] text-[12.5px]"
-    />
-  )
 }
 
 interface ProviderCount {
@@ -203,12 +162,9 @@ export default function AppUsersPage() {
       key: 'role',
       header: t('appUsers.table.role'),
       render: (u) => (
-        <RoleCell
-          appId={id!}
-          userId={u.id}
-          role={u.role}
-          title={t('appUsers.roleInputTitle')}
-        />
+        <span className="text-[12.5px]" style={{ color: 'var(--text-secondary)' }}>
+          {u.role}
+        </span>
       ),
     },
     {

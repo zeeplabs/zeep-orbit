@@ -356,10 +356,10 @@ T14 → T15
 - Skill: `react-composition-patterns`
 
 **Done when**:
-- [ ] Coluna `role` não tem mais `Input`/estado de edição inline
-- [ ] `RoleCell` (definição antiga) removido do arquivo, sem código morto deixado
-- [ ] `npx tsc -b` limpo
-- [ ] Gate check passa: full gate
+- [x] Coluna `role` não tem mais `Input`/estado de edição inline
+- [x] `RoleCell` (definição antiga) removido do arquivo, sem código morto deixado
+- [x] `npx tsc -b` limpo
+- [x] Gate check passa: full gate
 
 **Tests**: none (cobertura funcional fica no e2e de T13)
 **Gate**: full
