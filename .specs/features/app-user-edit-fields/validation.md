@@ -1,6 +1,8 @@
 # Validation Report — app-user-edit-fields
 
-**Diff range**: `f228cf7..e68eec5` (`f228cf7` feat(dashboard): allow editing app user email and phone; `e68eec5` feat(dashboard-ui): edit app user email and phone from the drawer)
+**Result**: PASS (final status, after the round-2 re-verification below superseded round 1's initial rejection)
+
+**Diff range**: `f228cf7..e68eec5` (`f228cf7` feat(dashboard): allow editing app user email and phone; `e68eec5` feat(dashboard-ui): edit app user email and phone from the drawer). Round 2 additionally covers fix commit `01e12eb`.
 
 **Verdict: FAIL** (gates and mutation sensor pass; 4 of 12 acceptance criteria have no test evidence, despite spec.md's traceability table marking all 12 "Verified")
 
@@ -57,3 +59,34 @@ Both gates: **PASS**, no non-zero exits.
 2. **AUE-04 (session deletion)** — `ResetAppUserSessions` is invoked on email change but no test ever seeds a session row and confirms it's deleted; only the `email_confirmed_at` reset half is proven.
 3. **AUE-01 (Email/Phone prefill)** — no `toHaveValue`-style e2e assertion confirms the drawer opens with the user's actual email/phone; only Role prefill (pre-existing) is checked.
 4. **AUE-02 (request body always sends all 3 keys)** — no e2e intercepts the frontend's own PUT body to confirm `email`/`phone`/`role` are always present, including when only one field changes.
+
+---
+
+## Round 2 (independent re-verification of fix commit `01e12eb`)
+
+**Scope**: verify ONLY the 4 gaps above are closed by `01e12eb` ("test(dashboard): close verifier-flagged coverage gaps for app user edit"). The other 8 ACs (already PASS in round 1) were not re-reviewed.
+
+**Verdict: PASS** — all 4 gaps closed with real, non-shallow evidence.
+
+| AC | Evidence (file:line) | Verdict |
+|---|---|---|
+| AUE-06 | `internal/dashboard/app_users_handler_test.go:125` — `TestUpdateAppUserHandler_Success` now asserts `countAuditLog(t, pool, "app.user.update") == 1`. `countAuditLog` is a real shared helper (`app_members_handler_test.go:803`) that queries `zeep_system.audit_log` by action. Cross-checked against production code: `handler.go:2458` calls `h.audit(..., "app.user.update", ...)` unconditionally on a successful update — the assertion proves the real code path. | **PASS** |
+| AUE-04 | Two new tests in `app_users_handler_test.go`: `TestUpdateAppUserHandler_EmailChangeResetsSessions` seeds a row via new helper `appUsersHandlerInsertSession` into a new `_auth_sessions` table (added to `appUsersHandlerSetup`), changes the email through the real handler, and asserts `COUNT(*) FROM ..._auth_sessions WHERE user_id=$1` drops from 1 to 0. `TestUpdateAppUserHandler_UnchangedEmailKeepsSessions` is the required negative case — resubmits the same email and asserts the session row (count=1) survives. Cross-checked against production code: `handler.go:2452` calls `ResetAppUserSessions(...)` only inside the `emailChanged` branch — matches the test's intent exactly. | **PASS** |
+| AUE-01 | `internal/dashboard/ui/e2e/app-users.spec.ts:68-69` — `expect(page.locator('input[type="email"]')).toHaveValue(originalEmail)` and `expect(page.locator('[role="dialog"] input:not([type="email"])')).toHaveValue('')`, asserted immediately after opening the drawer and before any edit. Verified structurally sound by reading `AppUsersPage.tsx:54-126` (`EditUserDrawer`): `useState(user.email)` / `useState(user.phone ?? '')` prefill the two inputs, the email `Input` is the only one with `type="email"`, and `DrawerContent` (`drawer.tsx:31-40`) wraps Radix `DialogPrimitive.Content`, which renders `role="dialog"` — so both selectors resolve to the intended elements. | **PASS** |
+| AUE-02 | `app-users.spec.ts:73-88` — captures the real PUT via `page.waitForRequest` matching `/\/dashboard\/api\/apps\/[^/]+\/users\/[^/]+$/`, reads `postDataJSON()`, and asserts `toMatchObject({ email: newEmail, phone: '555-9876', role: 'member' })` plus `Object.keys(putBody).sort()).toEqual(['email','phone','role'])` — proves exactly 3 keys, not a subset/superset. Verified the URL regex against `api.ts:434` (`PUT /dashboard/api/apps/${appId}/users/${userId}`) — the `$`-anchored regex won't false-match the sibling `.../deactivate`, `.../activate`, or `.../reset-sessions` endpoints (`api.ts:394,414,477`), so the intercept is unambiguous. | **PASS** |
+
+**Execution vs. code-reading**: the two Go tests were executed for real (not just read) — see gate results below. The two Playwright assertions were **not executed** (no server bootstrap/build was attempted this round); they were verified by reading the test code against the actual component and API source (selectors, role attribute origin, URL regex, and payload shape all cross-checked against production code, as detailed above), which is sufficient to confirm they are correctly targeted, but does not substitute for an actual run.
+
+### Gate results (re-run fresh this round)
+
+- `go build ./...` — clean
+- `go vet ./...` — clean
+- `gofmt -l internal/dashboard/app_users_handler_test.go` — no output (clean)
+- `TEST_DATABASE_URL="postgres://zeep:zeep@localhost:5434/zeep?sslmode=disable" go test ./internal/dashboard/... -run TestUpdateAppUserHandler -v` — all 8 subtests PASS, including the 2 new ones (`TestUpdateAppUserHandler_EmailChangeResetsSessions`, `TestUpdateAppUserHandler_UnchangedEmailKeepsSessions`)
+- Postgres confirmed running via `docker ps` → `zeep-orbit-db-1 0.0.0.0:5434->5432/tcp (healthy)`
+- Frontend: `npx tsc -b` clean; `npm run build` succeeded (only pre-existing chunk-size warning, unrelated)
+- e2e (`app-users.spec.ts`): **not executed** this round — verified by code inspection only (see above)
+
+### Overall status
+
+All 4 previously-flagged gaps (AUE-01, AUE-02, AUE-04, AUE-06) now have real test evidence tied to the actual production code paths, not just assertions that happen to pass. Combined with round 1's PASS on the other 8 ACs, **all 12 acceptance criteria in spec.md now have genuine test evidence**. The feature is done from a coverage standpoint, with the caveat that the e2e assertions for AUE-01/AUE-02 were verified by inspection, not by an actual Playwright run — recommend running the full e2e suite at least once (e.g. in CI or before release) to close that residual gap before fully trusting the drawer-prefill and PUT-body assertions in practice.

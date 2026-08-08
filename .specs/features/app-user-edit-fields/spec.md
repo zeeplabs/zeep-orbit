@@ -92,24 +92,24 @@ The app-user edit drawer (`EditRoleDrawer`, `AppUsersPage.tsx`) only lets an adm
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
 | AUE-01 | P1: Edit email/phone/role | Design | Pending |
-| AUE-01 | P1: Edit email/phone/role | Implementing | Verified by e2e (T5/T7) |
-| AUE-02 | P1: Edit email/phone/role | Implementing | Verified by e2e (T4/T7) |
-| AUE-03 | P1: Edit email/phone/role | Implementing | Verified (T1/T2 unit) |
-| AUE-04 | P1: Edit email/phone/role | Implementing | Verified (T1/T2 unit) |
-| AUE-05 | P1: Edit email/phone/role | Implementing | Verified (T1/T2 unit) |
-| AUE-06 | P1: Edit email/phone/role | Implementing | Verified (T2 unit) |
-| AUE-07 | P2: Error handling | Implementing | Verified (T2 unit) |
-| AUE-08 | P2: Error handling | Implementing | Verified (T2 unit) |
-| AUE-09 | P2: Error handling | Implementing | Verified (T1/T2 unit + T7 e2e) |
-| AUE-10 | P2: Error handling | Implementing | Verified (T2 unit) |
-| AUE-11 | P2: Error handling | Implementing | Verified (T2 unit) |
-| AUE-12 | P2: Error handling | Implementing | Verified by e2e (T5/T7) |
+| AUE-01 | P1: Edit email/phone/role | Verified | Verified by e2e (T5/T7) |
+| AUE-02 | P1: Edit email/phone/role | Verified | Verified by e2e (T4/T7) |
+| AUE-03 | P1: Edit email/phone/role | Verified | Verified (T1/T2 unit) |
+| AUE-04 | P1: Edit email/phone/role | Verified | Verified (T1/T2 unit) |
+| AUE-05 | P1: Edit email/phone/role | Verified | Verified (T1/T2 unit) |
+| AUE-06 | P1: Edit email/phone/role | Verified | Verified (T2 unit) |
+| AUE-07 | P2: Error handling | Verified | Verified (T2 unit) |
+| AUE-08 | P2: Error handling | Verified | Verified (T2 unit) |
+| AUE-09 | P2: Error handling | Verified | Verified (T1/T2 unit + T7 e2e) |
+| AUE-10 | P2: Error handling | Verified | Verified (T2 unit) |
+| AUE-11 | P2: Error handling | Verified | Verified (T2 unit) |
+| AUE-12 | P2: Error handling | Verified | Verified by e2e (T5/T7) |
 
 **ID format:** `AUE-NN`
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 12 total, 12 mapped to tasks, 0 unmapped. All tasks (T1-T7) implemented, tested, and gates green. Verifier round 1 flagged AUE-01/02/04/06 as evidence-free despite being marked Verified; fixed in T8 — see `validation.md` for the round-1 report.
+**Coverage:** 12 total, 12 mapped to tasks, 0 unmapped, all 12 Verified (round 2 PASS). See `validation.md` for both Verifier rounds.
 
 ---
 

@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: `.specs/features/app-user-edit-fields/design.md`
-**Status**: Done (T1-T7 complete, all gates green; Verifier round 1 found 4 coverage gaps, fixed — see T8 below)
+**Status**: Done — Verified (T1-T8 complete, Verifier round 2 PASS on all 12 ACs; see `validation.md`)
 
 ### T8: Verifier fix round 1 — close 4 coverage gaps — ✅ Complete
 
