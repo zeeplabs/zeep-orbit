@@ -10,7 +10,30 @@ import { bootstrapOrSkip, login } from './helpers'
  * — the roles section (P1) and the end-user "role" claim only exist for
  * apps with end-user email auth enabled. This file has its own helper that
  * follows the current flow and flips the switch.
+ *
+ * The dashboard's own login endpoint is rate-limited to 5 requests/minute
+ * per IP (internal/server/server.go, authLimiter — shared with /api/bootstrap,
+ * so a bootstrap call and a login call draw from the same budget). Logging
+ * in fresh per test blows through that budget once this file has more than
+ * ~4 tests. So this file logs in exactly once, in beforeAll, and every test
+ * reuses that session via storageState instead of calling login() again.
  */
+let storageState: Awaited<ReturnType<import('@playwright/test').BrowserContext['storageState']>>
+
+test.beforeAll(async ({ browser }) => {
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  await bootstrapOrSkip(page)
+  await login(page)
+  storageState = await context.storageState()
+  await context.close()
+})
+
+test.beforeEach(async ({ page, context }) => {
+  await context.addCookies(storageState.cookies)
+  await page.goto('/dashboard/apps')
+})
+
 async function createAuthApp(page: Page, name: string, authEmail = true) {
   await page.goto('/dashboard/apps')
   await page.click('button:has-text("Create app")')
@@ -42,8 +65,6 @@ function uniqueAppName(prefix: string): string {
 
 test.describe('End-user roles configuration', () => {
   test('adds a new role via Settings', async ({ page }) => {
-    await bootstrapOrSkip(page)
-    await login(page)
     await createAuthApp(page, uniqueAppName('e2e_roles_add'))
 
     await page.click('[role="tab"]:has-text("Login providers")')
@@ -58,8 +79,6 @@ test.describe('End-user roles configuration', () => {
   })
 
   test('blocks removing a role in use, shows error', async ({ page }) => {
-    await bootstrapOrSkip(page)
-    await login(page)
     const appName = uniqueAppName('e2e_roles_block')
     await createAuthApp(page, appName)
 
@@ -84,13 +103,17 @@ test.describe('End-user roles configuration', () => {
   })
 
   test('hides the roles section when auth_email_enabled is false', async ({ page }) => {
-    await bootstrapOrSkip(page)
-    await login(page)
     // No email auth — the "role" claim doesn't exist for this app, so the
     // Settings section that manages it must not render at all (ROLECFG-08).
     await createAuthApp(page, uniqueAppName('e2e_roles_noauth'), false)
 
     await page.click('[role="tab"]:has-text("Login providers")')
+    // Wait for the tab panel to actually finish rendering before asserting
+    // absence — otherwise toHaveCount(0) can resolve on its first poll,
+    // before the panel (and the section it would contain) has mounted,
+    // passing vacuously regardless of the gate. This marker text is always
+    // on this tab, gate or no gate.
+    await expect(page.getByText('Register and login via email/password').first()).toBeVisible()
 
     await expect(page.locator('text=End-user roles')).toHaveCount(0)
   })
@@ -101,8 +124,6 @@ test.describe('End-user roles configuration', () => {
   // splitting P2's sub-behaviors into more top-level tests would trip that
   // limiter. Each stage below still asserts one behavior independently.
   test('edits an end-user role via drawer (save, cancel, orphan role)', async ({ page }) => {
-    await bootstrapOrSkip(page)
-    await login(page)
     const appName = uniqueAppName('e2e_roles_edit')
     await createAuthApp(page, appName)
     const appId = appIdFromUrl(page.url())
@@ -127,13 +148,26 @@ test.describe('End-user roles configuration', () => {
     await expect(roleCell).toBeVisible()
     await expect(roleCell.locator('input, select')).toHaveCount(0)
 
-    // ROLECFG-14: cancelling the drawer never calls the mutation.
+    // ROLECFG-14: cancelling the drawer never calls the mutation. Assert on
+    // the network call itself, not just DOM text — the "member" cell text
+    // predates the click either way, so checking it alone can pass even if
+    // a PUT fired and simply hadn't refetched yet (a stale-DOM false pass).
+    const roleUpdateRequests: string[] = []
+    page.on('request', (req) => {
+      if (req.method() === 'PUT' && /\/users\/[^/]+\/role$/.test(new URL(req.url()).pathname)) {
+        roleUpdateRequests.push(req.url())
+      }
+    })
     await page.click('[title="Edit role"]')
     await expect(page.locator('text=Edit role')).toBeVisible()
     await page.getByRole('combobox').click()
     await page.getByRole('option', { name: 'viewer' }).click()
     await page.click('button:has-text("Cancel")')
     await expect(page.locator('text=Edit role')).toHaveCount(0)
+    // Give any pending request time to actually reach the network layer
+    // before asserting none did.
+    await page.waitForLoadState('networkidle')
+    expect(roleUpdateRequests).toHaveLength(0)
     await expect(page.locator('td', { hasText: 'member' })).toBeVisible()
     await expect(page.locator('td', { hasText: 'viewer' })).toHaveCount(0)
 
@@ -162,8 +196,6 @@ test.describe('End-user roles configuration', () => {
   })
 
   test('creates a policy selecting roles via chips', async ({ page }) => {
-    await bootstrapOrSkip(page)
-    await login(page)
     await createAuthApp(page, uniqueAppName('e2e_roles_policy'))
 
     // Add a role beyond the "member" default so the chip toggle is
