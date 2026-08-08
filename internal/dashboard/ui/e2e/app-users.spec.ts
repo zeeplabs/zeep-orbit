@@ -91,6 +91,44 @@ test.describe('App user edit fields', () => {
     await expect(page.locator('td', { hasText: '555-9876' })).toBeVisible()
   })
 
+  test('reaches the tab from the apps list card, switches tabs, and toggles user status', async ({ page }) => {
+    const appName = uniqueAppName('e2e_users_nav')
+    await createAuthApp(page, appName)
+
+    const email = `enduser-${Date.now()}@test.com`
+    const registerRes = await page.request.post(`/${appName}/auth/register`, {
+      data: { email, password: 'test1234' },
+    })
+    expect(registerRes.status()).toBe(201)
+
+    // AUT-05: the apps-list card's "Users" action opens the tab, not the
+    // removed standalone route.
+    await page.goto('/dashboard/apps')
+    const card = page.locator('div.flex.h-full.flex-col', {
+      has: page.locator('h3', { hasText: appName }),
+    })
+    await card.getByRole('button', { name: 'Users' }).click()
+    await page.waitForURL(/\/apps\/[^/]+\?tab=users$/)
+    await expect(page.locator('td', { hasText: email })).toBeVisible()
+
+    // AUT-02: clicking another tab trigger and back updates the URL and
+    // content without a full page navigation (SPA route stays mounted).
+    await page.click('[role="tab"]:has-text("Login providers")')
+    await page.waitForURL(/tab=auth$/)
+    await page.click('[role="tab"]:has-text("Users")')
+    await page.waitForURL(/tab=users$/)
+    await expect(page.locator('td', { hasText: email })).toBeVisible()
+
+    // AUT-04: activate/deactivate mutation still works unchanged from inside
+    // the tab.
+    const row = page.locator('tr', { has: page.locator('td', { hasText: email }) })
+    await expect(row.locator('text=Active')).toBeVisible()
+    await row.locator('[title="Deactivate"]').click()
+    await expect(row.locator('text=Inactive')).toBeVisible()
+    await row.locator('[title="Reactivate"]').click()
+    await expect(row.locator('text=Active')).toBeVisible()
+  })
+
   test('shows an error toast when the new email is already in use', async ({ page }) => {
     const appName = uniqueAppName('e2e_users_conflict')
     await createAuthApp(page, appName)
