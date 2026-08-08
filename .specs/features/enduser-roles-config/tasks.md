@@ -129,10 +129,10 @@ T14 → T15
 - Skill: `security-best-practices`
 
 **Done when**:
-- [ ] `AppRow` expõe `EnduserRolesConfig []string`
-- [ ] `ListApps`, `GetApp` e `CreateApp` decodificam a coluna sem erro quando ela é `["member"]` (default) ou uma lista customizada
-- [ ] Teste de integração cobre round-trip (cria app, lê de volta, lista igual à persistida)
-- [ ] Gate check passa: `go build ./... && go test ./internal/dashboard/... && go vet ./internal/dashboard/...`
+- [x] `AppRow` expõe `EnduserRolesConfig []string`
+- [x] `ListApps`, `GetApp` e `CreateApp` decodificam a coluna sem erro quando ela é `["member"]` (default) ou uma lista customizada
+- [x] Teste de integração cobre round-trip (cria app, lê de volta, lista igual à persistida)
+- [x] Gate check passa: `go build ./... && go test ./internal/dashboard/... && go vet ./internal/dashboard/...`
 
 **Tests**: integration
 **Gate**: quick

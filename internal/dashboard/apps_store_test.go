@@ -84,6 +84,69 @@ func TestInsertAppTable_RoundTripsIndexes(t *testing.T) {
 	}
 }
 
+// TestEnduserRolesConfig_DefaultsAndRoundTrips covers ROLECFG-01/ROLECFG-07:
+// a newly created app gets the seeded ["member"] default, and GetApp/ListApps
+// decode a custom list back exactly as persisted.
+func TestEnduserRolesConfig_DefaultsAndRoundTrips(t *testing.T) {
+	pool := appsStoreTestPool(t)
+	ownerID := testUser(t, pool, "roles-owner@example.com", "superadmin")
+	owner, err := GetUser(context.Background(), pool, ownerID)
+	if err != nil {
+		t.Fatalf("GetUser: %v", err)
+	}
+
+	created, err := CreateApp(context.Background(), pool, "roles-app", ownerID, true)
+	if err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+	if len(created.EnduserRolesConfig) != 1 || created.EnduserRolesConfig[0] != "member" {
+		t.Fatalf("CreateApp: expected default [\"member\"], got %+v", created.EnduserRolesConfig)
+	}
+
+	got, _, err := GetApp(context.Background(), pool, created.ID, owner)
+	if err != nil {
+		t.Fatalf("GetApp: %v", err)
+	}
+	if len(got.EnduserRolesConfig) != 1 || got.EnduserRolesConfig[0] != "member" {
+		t.Fatalf("GetApp: expected default [\"member\"], got %+v", got.EnduserRolesConfig)
+	}
+
+	// Persist a custom list directly (bypassing the store's own writer, which
+	// is added in a later task) and confirm both GetApp and ListApps decode
+	// it back exactly.
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE zeep_system.apps SET enduser_roles_config = $1 WHERE id = $2`,
+		`["member","viewer"]`, created.ID,
+	); err != nil {
+		t.Fatalf("seed custom roles: %v", err)
+	}
+
+	got, _, err = GetApp(context.Background(), pool, created.ID, owner)
+	if err != nil {
+		t.Fatalf("GetApp after custom roles: %v", err)
+	}
+	if len(got.EnduserRolesConfig) != 2 || got.EnduserRolesConfig[0] != "member" || got.EnduserRolesConfig[1] != "viewer" {
+		t.Fatalf("GetApp: expected [\"member\",\"viewer\"], got %+v", got.EnduserRolesConfig)
+	}
+
+	list, err := ListApps(context.Background(), pool, owner)
+	if err != nil {
+		t.Fatalf("ListApps: %v", err)
+	}
+	var found *AppRow
+	for _, a := range list {
+		if a.ID == created.ID {
+			found = a
+		}
+	}
+	if found == nil {
+		t.Fatalf("ListApps: created app not found")
+	}
+	if len(found.EnduserRolesConfig) != 2 || found.EnduserRolesConfig[0] != "member" || found.EnduserRolesConfig[1] != "viewer" {
+		t.Fatalf("ListApps: expected [\"member\",\"viewer\"], got %+v", found.EnduserRolesConfig)
+	}
+}
+
 func TestUpdateAppTable_RoundTripsIndexes(t *testing.T) {
 	pool := appsStoreTestPool(t)
 	appID := appsStoreTestApp(t, pool)
