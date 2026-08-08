@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 3,
+  "next_id": 7,
   "lessons": [
     {
       "id": "L-001",
@@ -40,6 +40,78 @@
       ],
       "created": "2026-08-07T17:45:14Z",
       "last_seen": "2026-08-07T17:45:14Z"
+    },
+    {
+      "id": "L-003",
+      "key": "ac_gap::when a ui section is gated behind a feature flag config toggle add an e2e test with the flag off asserting the section is absent not only the happy path test with it on",
+      "text": "When a UI section is gated behind a feature flag/config toggle, add an e2e test with the flag off asserting the section is absent, not only the happy-path test with it on.",
+      "signal": "ac_gap",
+      "scope": "frontend-e2e",
+      "status": "candidate",
+      "features": [
+        "enduser-roles-config"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "ROLECFG-08 - validation.md P1 AC8 (frontend-e2e)"
+      ],
+      "created": "2026-08-08T14:25:04Z",
+      "last_seen": "2026-08-08T14:25:04Z"
+    },
+    {
+      "id": "L-004",
+      "key": "ac_gap::for any drawer modal dialog with cancel and confirm actions add a test for the cancel path asserting the underlying mutation was not called not just the confirm path",
+      "text": "For any drawer/modal/dialog with Cancel and Confirm actions, add a test for the Cancel path asserting the underlying mutation was not called, not just the confirm path.",
+      "signal": "ac_gap",
+      "scope": "frontend-e2e",
+      "status": "candidate",
+      "features": [
+        "enduser-roles-config"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "ROLECFG-14 - validation.md P2 AC6 (frontend-e2e)"
+      ],
+      "created": "2026-08-08T14:25:04Z",
+      "last_seen": "2026-08-08T14:25:04Z"
+    },
+    {
+      "id": "L-005",
+      "key": "ac_gap::when a spec requires that a value outside the current configured options still displays correctly an orphan value add a test that seeds data with that out of list value before asserting the ui not only values already inside the list",
+      "text": "When a spec requires that a value outside the current configured options still displays correctly (an orphan value), add a test that seeds data with that out-of-list value before asserting the UI, not only values already inside the list.",
+      "signal": "ac_gap",
+      "scope": "frontend-e2e",
+      "status": "candidate",
+      "features": [
+        "enduser-roles-config"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "ROLECFG-12/ROLECFG-16 - validation.md P2 AC4 / P3 AC2 (frontend-e2e)"
+      ],
+      "created": "2026-08-08T14:25:04Z",
+      "last_seen": "2026-08-08T14:25:04Z"
+    },
+    {
+      "id": "L-006",
+      "key": "surviving_mutant::in playwright e2e tests a negative assertion tohavecount 0 or a positive assertion on text already present before the action under test tobevisible on pre existing dom content can pass vacuously if it resolves before an async render refetch settles assert on a stable post action marker or await the network response instead of relying on the first poll of a negative pre existing content check",
+      "text": "In Playwright e2e tests, a negative assertion (toHaveCount(0)) or a positive assertion on text already present before the action under test (toBeVisible on pre-existing DOM content) can pass vacuously if it resolves before an async render/refetch settles - assert on a stable post-action marker or await the network response instead of relying on the first poll of a negative/pre-existing-content check.",
+      "signal": "surviving_mutant",
+      "scope": "dashboard-ui,e2e",
+      "status": "candidate",
+      "features": [
+        "enduser-roles-config"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "internal/dashboard/ui/e2e/enduser-roles.spec.ts:95,137-138 | ROLECFG-08, ROLECFG-14 (dashboard-ui,e2e)"
+      ],
+      "created": "2026-08-08T14:54:00Z",
+      "last_seen": "2026-08-08T14:54:00Z"
     }
   ]
 }

@@ -26,6 +26,30 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: internal/server/storage_handler.go (internal/server)
 - last seen: 2026-08-07T17:45:14Z
 
+### L-003 - When a UI section is gated behind a feature flag/config toggle, add an e2e test with the flag off asserting the section is absent, not only the happy-path test with it on.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `frontend-e2e` · harmful: 0
+- features: enduser-roles-config
+- evidence: ROLECFG-08 - validation.md P1 AC8 (frontend-e2e)
+- last seen: 2026-08-08T14:25:04Z
+
+### L-004 - For any drawer/modal/dialog with Cancel and Confirm actions, add a test for the Cancel path asserting the underlying mutation was not called, not just the confirm path.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `frontend-e2e` · harmful: 0
+- features: enduser-roles-config
+- evidence: ROLECFG-14 - validation.md P2 AC6 (frontend-e2e)
+- last seen: 2026-08-08T14:25:04Z
+
+### L-005 - When a spec requires that a value outside the current configured options still displays correctly (an orphan value), add a test that seeds data with that out-of-list value before asserting the UI, not only values already inside the list.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `frontend-e2e` · harmful: 0
+- features: enduser-roles-config
+- evidence: ROLECFG-12/ROLECFG-16 - validation.md P2 AC4 / P3 AC2 (frontend-e2e)
+- last seen: 2026-08-08T14:25:04Z
+
+### L-006 - In Playwright e2e tests, a negative assertion (toHaveCount(0)) or a positive assertion on text already present before the action under test (toBeVisible on pre-existing DOM content) can pass vacuously if it resolves before an async render/refetch settles - assert on a stable post-action marker or await the network response instead of relying on the first poll of a negative/pre-existing-content check.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `dashboard-ui,e2e` · harmful: 0
+- features: enduser-roles-config
+- evidence: internal/dashboard/ui/e2e/enduser-roles.spec.ts:95,137-138 | ROLECFG-08, ROLECFG-14 (dashboard-ui,e2e)
+- last seen: 2026-08-08T14:54:00Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.
