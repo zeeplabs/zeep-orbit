@@ -92,15 +92,15 @@ Explicitly excluded. Documented to prevent scope creep.
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| AUT-01 | P1: Country-aware phone entry | Execute | Implementing |
-| AUT-02 | P1: Country-aware phone entry | Execute | Implementing |
-| AUT-03 | P1: Country-aware phone entry | Execute | Implementing |
-| AUT-04 | P1: Country-aware phone entry | Execute | Implementing |
-| AUT-05 | P1: Country-aware phone entry | Execute | Implementing |
-| AUT-06 | P1: Country-aware phone entry | Execute | Implementing |
-| AUT-07 | P2: Backend rejects malformed phone | Execute | Implementing |
-| AUT-08 | P2: Backend rejects malformed phone | Execute | Implementing |
-| AUT-09 | P2: Backend rejects malformed phone | Execute | Implementing |
+| AUT-01 | P1: Country-aware phone entry | Execute | Verified |
+| AUT-02 | P1: Country-aware phone entry | Execute | Verified |
+| AUT-03 | P1: Country-aware phone entry | Execute | Verified |
+| AUT-04 | P1: Country-aware phone entry | Execute | Verified |
+| AUT-05 | P1: Country-aware phone entry | Execute | Verified |
+| AUT-06 | P1: Country-aware phone entry | Execute | Verified |
+| AUT-07 | P2: Backend rejects malformed phone | Execute | Verified |
+| AUT-08 | P2: Backend rejects malformed phone | Execute | Verified |
+| AUT-09 | P2: Backend rejects malformed phone | Execute | Verified |
 
 **ID format:** `AUT-[NUMBER]` (reusing the `AUT` prefix already established for this app-users surface in `app-users-tab` and `app-user-edit-fields`).
 

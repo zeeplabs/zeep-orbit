@@ -56,6 +56,12 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: AUT-02,AUT-04,AUT-05 (internal/dashboard/ui/e2e)
 - last seen: 2026-08-08T19:14:32Z
 
+### L-008 - When a form field's clear action must send an explicit empty value (not omit the key), add a dedicated e2e test that clears the field and asserts the exact empty-value payload — don't rely on backend acceptance of empty values as proof the frontend actually sends them.
+- signal: `spec_precision_gap` · recurrence: 1 feature(s) · scope: `internal/dashboard/ui/src/components/patterns/PhoneInput.tsx` · harmful: 0
+- features: app-user-phone-mask
+- evidence: AUT-05 (internal/dashboard/ui/src/components/patterns/PhoneInput.tsx)
+- last seen: 2026-08-08T20:08:15Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

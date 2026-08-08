@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 8,
+  "next_id": 9,
   "lessons": [
     {
       "id": "L-001",
@@ -130,6 +130,24 @@
       ],
       "created": "2026-08-08T19:14:32Z",
       "last_seen": "2026-08-08T19:14:32Z"
+    },
+    {
+      "id": "L-008",
+      "key": "spec_precision_gap::when a form field s clear action must send an explicit empty value not omit the key add a dedicated e2e test that clears the field and asserts the exact empty value payload don t rely on backend acceptance of empty values as proof the frontend actually sends them",
+      "text": "When a form field's clear action must send an explicit empty value (not omit the key), add a dedicated e2e test that clears the field and asserts the exact empty-value payload — don't rely on backend acceptance of empty values as proof the frontend actually sends them.",
+      "signal": "spec_precision_gap",
+      "scope": "internal/dashboard/ui/src/components/patterns/PhoneInput.tsx",
+      "status": "candidate",
+      "features": [
+        "app-user-phone-mask"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "AUT-05 (internal/dashboard/ui/src/components/patterns/PhoneInput.tsx)"
+      ],
+      "created": "2026-08-08T20:08:15Z",
+      "last_seen": "2026-08-08T20:08:15Z"
     }
   ]
 }
