@@ -231,9 +231,9 @@ T14 → T15
 - Skill: `security-best-practices`
 
 **Done when**:
-- [ ] `r.Put("/api/apps/{id}/roles", dashH.UpdateAppEnduserRoles)` registrado no mesmo grupo protegido
-- [ ] Teste de integração (pode estender o de T5) confirma a rota responde via HTTP real, não só chamando o handler direto
-- [ ] Gate check passa: `go build ./... && go test ./... && go vet ./...` (gate completo de backend, fecha a Phase 2)
+- [x] `r.Put("/api/apps/{id}/roles", dashH.UpdateAppEnduserRoles)` registrado no mesmo grupo protegido
+- [x] Teste de integração (pode estender o de T5) confirma a rota responde via HTTP real, não só chamando o handler direto
+- [x] Gate check passa: `go build ./... && go test ./... && go vet ./...` (gate completo de backend, fecha a Phase 2)
 
 **Tests**: integration
 **Gate**: full

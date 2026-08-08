@@ -186,6 +186,7 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Put("/api/apps/{id}/users/{userId}/deactivate", dashH.DeactivateAppUser)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/apps/{id}/users/{userId}/activate", dashH.ActivateAppUser)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/apps/{id}/users/{userId}/role", dashH.UpdateAppUserRole)
+		r.With(dashboard.RequireAuth(pool)).Put("/api/apps/{id}/roles", dashH.UpdateAppEnduserRoles)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/apps/{id}/users/{userId}/reset-sessions", dashH.ResetAppUserSessions)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/users", dashH.ListUsers)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/users", dashH.CreateUser)

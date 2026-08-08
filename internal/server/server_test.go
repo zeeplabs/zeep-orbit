@@ -41,6 +41,34 @@ func TestServerHealth(t *testing.T) {
 	}
 }
 
+// TestServerEnduserRolesRouteRegistered covers ROLECFG-02: PUT
+// /dashboard/api/apps/{id}/roles must be reachable through the real chi
+// router (not just callable by invoking the handler directly). With no
+// session cookie, RequireAuth rejects the request with 401 before ever
+// touching the (nil) pool — a 404 here would mean chi never matched the
+// route at all, so 401 is the proof the route is wired up.
+func TestServerEnduserRolesRouteRegistered(t *testing.T) {
+	s := newTestServer(t)
+	ts := httptest.NewServer(s.Router())
+	defer ts.Close()
+
+	req, err := http.NewRequest(http.MethodPut, ts.URL+"/dashboard/api/apps/some-app-id/roles", strings.NewReader(`{"roles":["member"]}`))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT .../roles error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("status = %d, want 401 (route registered, rejected by auth)", resp.StatusCode)
+	}
+}
+
 func TestServerMetrics(t *testing.T) {
 	s := newTestServer(t)
 	ts := httptest.NewServer(s.Router())
