@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/select";
 import TableCard from "@/components/TableCard";
 import { AppMembersList } from "@/components/patterns/AppMembersList";
+import { AppUsersTab } from "./AppUsersPage";
 import {
   ProviderCard,
   SettingRow,
@@ -51,7 +52,7 @@ import {
   type StatusTone,
 } from "@/components/patterns";
 
-const TABS = ["database", "auth", "storage", "api", "tokens", "members", "observability"] as const;
+const TABS = ["database", "auth", "users", "storage", "api", "tokens", "members", "observability"] as const;
 
 export default function AppDetailsPage() {
   const { t } = useTranslation();
@@ -74,6 +75,7 @@ export default function AppDetailsPage() {
   const tabDefs: { v: (typeof TABS)[number]; label: string; badge?: boolean }[] = [
     { v: "database", label: t("appForm.tabDatabase") },
     { v: "auth", label: t("appForm.tabAuth") },
+    { v: "users", label: t("appDetails.tabUsers") },
     { v: "storage", label: t("appForm.tabStorage") },
     { v: "api", label: t("appForm.tabApi") },
     { v: "tokens", label: t("appDetails.tabTokens") },
@@ -126,6 +128,9 @@ export default function AppDetailsPage() {
         </TabsContent>
         <TabsContent value="auth" className="mt-0">
           <LoginTab app={app} />
+        </TabsContent>
+        <TabsContent value="users" className="mt-0">
+          <AppUsersTab appId={app.id} />
         </TabsContent>
         <TabsContent value="storage" className="mt-0">
           <StorageTab app={app} />

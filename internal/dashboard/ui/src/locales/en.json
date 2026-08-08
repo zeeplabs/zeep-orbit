@@ -615,6 +615,7 @@
   "appDetails.providerActive": "Active",
   "appDetails.providerInactive": "Inactive",
   "appDetails.tabTokens": "Tokens",
+  "appDetails.tabUsers": "Users",
   "appDetails.tabMembers": "Members",
   "appDetails.storageEnableTitle": "Enable storage",
   "appDetails.storageEnableDesc": "Allow file uploads for this app",
