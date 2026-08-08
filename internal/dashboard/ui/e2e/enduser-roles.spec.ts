@@ -154,16 +154,16 @@ test.describe('End-user roles configuration', () => {
     // a PUT fired and simply hadn't refetched yet (a stale-DOM false pass).
     const roleUpdateRequests: string[] = []
     page.on('request', (req) => {
-      if (req.method() === 'PUT' && /\/users\/[^/]+\/role$/.test(new URL(req.url()).pathname)) {
+      if (req.method() === 'PUT' && /\/users\/[^/]+$/.test(new URL(req.url()).pathname)) {
         roleUpdateRequests.push(req.url())
       }
     })
-    await page.click('[title="Edit role"]')
-    await expect(page.locator('text=Edit role')).toBeVisible()
+    await page.click('[title="Edit user"]')
+    await expect(page.locator('text=Edit user')).toBeVisible()
     await page.getByRole('combobox').click()
     await page.getByRole('option', { name: 'viewer' }).click()
     await page.click('button:has-text("Cancel")')
-    await expect(page.locator('text=Edit role')).toHaveCount(0)
+    await expect(page.locator('text=Edit user')).toHaveCount(0)
     // Give any pending request time to actually reach the network layer
     // before asserting none did.
     await page.waitForLoadState('networkidle')
@@ -178,13 +178,13 @@ test.describe('End-user roles configuration', () => {
     const usersRes = await page.request.get(`/dashboard/api/apps/${appId}/users`)
     const usersBody = await usersRes.json()
     const user = usersBody.data.find((u: { email: string }) => u.email === email)
-    const orphanRes = await page.request.put(`/dashboard/api/apps/${appId}/users/${user.id}/role`, {
-      data: { role: 'orphaned_role' },
+    const orphanRes = await page.request.put(`/dashboard/api/apps/${appId}/users/${user.id}`, {
+      data: { email: user.email, phone: user.phone ?? '', role: 'orphaned_role' },
     })
     expect(orphanRes.status()).toBe(200)
     await page.goto(`/dashboard/apps/${appId}/users`)
     await expect(page.locator('td', { hasText: 'orphaned_role' })).toBeVisible()
-    await page.click('[title="Edit role"]')
+    await page.click('[title="Edit user"]')
     await expect(page.getByRole('combobox').getByText('orphaned_role', { exact: true })).toBeVisible()
 
     // ROLECFG-10/11/13: switching to a configured role and saving updates

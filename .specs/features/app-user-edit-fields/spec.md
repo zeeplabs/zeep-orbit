@@ -92,24 +92,24 @@ The app-user edit drawer (`EditRoleDrawer`, `AppUsersPage.tsx`) only lets an adm
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
 | AUE-01 | P1: Edit email/phone/role | Design | Pending |
-| AUE-02 | P1: Edit email/phone/role | Implementing | In progress (T4/T5 pending) |
-| AUE-03 | P1: Edit email/phone/role | Implementing | Backend done (T1/T2) |
-| AUE-04 | P1: Edit email/phone/role | Implementing | Backend done (T1/T2) |
-| AUE-05 | P1: Edit email/phone/role | Implementing | Backend done (T1/T2) |
-| AUE-06 | P1: Edit email/phone/role | Implementing | Backend done (T2) |
-| AUE-07 | P2: Error handling | Implementing | Backend done (T2) |
-| AUE-08 | P2: Error handling | Implementing | Backend done (T2) |
-| AUE-09 | P2: Error handling | Implementing | Backend done (T1/T2) |
-| AUE-10 | P2: Error handling | Implementing | Backend done (T2) |
-| AUE-11 | P2: Error handling | Implementing | Backend done (T2) |
-| AUE-12 | P2: Error handling | In Tasks | Pending (T5) |
-| AUE-01 | P1: Edit email/phone/role | In Tasks | Pending (T5) |
+| AUE-01 | P1: Edit email/phone/role | Implementing | Verified by e2e (T5/T7) |
+| AUE-02 | P1: Edit email/phone/role | Implementing | Verified by e2e (T4/T7) |
+| AUE-03 | P1: Edit email/phone/role | Implementing | Verified (T1/T2 unit) |
+| AUE-04 | P1: Edit email/phone/role | Implementing | Verified (T1/T2 unit) |
+| AUE-05 | P1: Edit email/phone/role | Implementing | Verified (T1/T2 unit) |
+| AUE-06 | P1: Edit email/phone/role | Implementing | Verified (T2 unit) |
+| AUE-07 | P2: Error handling | Implementing | Verified (T2 unit) |
+| AUE-08 | P2: Error handling | Implementing | Verified (T2 unit) |
+| AUE-09 | P2: Error handling | Implementing | Verified (T1/T2 unit + T7 e2e) |
+| AUE-10 | P2: Error handling | Implementing | Verified (T2 unit) |
+| AUE-11 | P2: Error handling | Implementing | Verified (T2 unit) |
+| AUE-12 | P2: Error handling | Implementing | Verified by e2e (T5/T7) |
 
 **ID format:** `AUE-NN`
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 12 total, 12 mapped to tasks, 0 unmapped. Backend (T1-T3) implemented and committed; frontend (T4-T7) pending.
+**Coverage:** 12 total, 12 mapped to tasks, 0 unmapped. All tasks (T1-T7) implemented, tested, and gates green. Independent Verifier pass pending (see Execute step 9).
 
 ---
 

@@ -423,17 +423,17 @@ export function useActivateAppUser(): UseMutationResult<
   })
 }
 
-export function useUpdateAppUserRole(): UseMutationResult<
+export function useUpdateAppUser(): UseMutationResult<
   { message: string },
   Error,
-  { appId: string; userId: string; role: string }
+  { appId: string; userId: string; email: string; phone: string; role: string }
 > {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ appId, userId, role }) =>
-      apiFetch(`/dashboard/api/apps/${appId}/users/${userId}/role`, {
+    mutationFn: ({ appId, userId, email, phone, role }) =>
+      apiFetch(`/dashboard/api/apps/${appId}/users/${userId}`, {
         method: 'PUT',
-        body: JSON.stringify({ role }),
+        body: JSON.stringify({ email, phone, role }),
       }),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ['app-users', variables.appId] })

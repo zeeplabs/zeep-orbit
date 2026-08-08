@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: `.specs/features/app-user-edit-fields/design.md`
-**Status**: In Progress (Phase 1 done, Phase 2 pending)
+**Status**: Done (T1-T7 complete, all gates green)
 
 ---
 
@@ -131,7 +131,7 @@ T3 → T4 → T5 → T6 → T7
 
 ---
 
-### T4: Add `useUpdateAppUser`, remove `useUpdateAppUserRole`
+### T4: Add `useUpdateAppUser`, remove `useUpdateAppUserRole` — ✅ Complete
 
 **What**: Replace `useUpdateAppUserRole` with `useUpdateAppUser`: same `useMutation` shape, `PUT /dashboard/api/apps/${appId}/users/${userId}` with body `{ email, phone, role }`; invalidates the same query key(s) the old hook did.
 **Where**: `internal/dashboard/ui/src/lib/api.ts`
@@ -155,7 +155,7 @@ T3 → T4 → T5 → T6 → T7
 
 ---
 
-### T5: Rename/expand `EditRoleDrawer` → `EditUserDrawer`
+### T5: Rename/expand `EditRoleDrawer` → `EditUserDrawer` — ✅ Complete
 
 **What**: Rename component; add `email`/`phone` local state initialized from `user.email`/`user.phone ?? ''`; add two `Input` fields (email required, phone optional) above the existing Role `Select`, same `flex flex-col gap-1.5`/`Label` pattern already used; `save()` calls `useUpdateAppUser().mutate({ appId, userId: user.id, email, phone, role }, { onSuccess: onClose, onError: (e) => toast.error(e.message) })`; update the "Editar" action button's drawer trigger to the renamed component.
 **Where**: `internal/dashboard/ui/src/pages/AppUsersPage.tsx`
@@ -180,7 +180,7 @@ T3 → T4 → T5 → T6 → T7
 
 ---
 
-### T6: Add i18n strings
+### T6: Add i18n strings — ✅ Complete
 
 **What**: Add/rename keys for the drawer title, email label, phone label (keep existing `editRoleLabel`/`editRoleCancel`/`editRoleSave` keys if still applicable, or rename to `editUser*` consistently across both files in the same change).
 **Where**: `internal/dashboard/ui/src/locales/en.json`, `internal/dashboard/ui/src/locales/pt-BR.json`
@@ -204,7 +204,9 @@ T3 → T4 → T5 → T6 → T7
 
 ---
 
-### T7: Playwright e2e coverage
+### T7: Playwright e2e coverage — ✅ Complete
+
+> Note: renaming the drawer's copy ("Edit role" → "Edit user", T5/T6) broke two pre-existing selectors and one direct API call in `e2e/enduser-roles.spec.ts` (`[title="Edit role"]`, `text=Edit role`, and a direct `PUT .../users/{id}/role` call to seed an "orphan role" scenario). Fixed as part of this task, since it's a direct consequence of T5/T6's copy change, not unrelated scope creep — verified all 5 pre-existing tests in that file still pass afterward.
 
 **What**: Two tests: (1) happy path — open drawer for a seeded app user, change email + phone + role, save, assert the table row reflects new values; (2) error path — attempt to change email to one already used by a second seeded user in the same app, assert a toast with "email already in use" appears and the row is unchanged. Follow `enduser-roles.spec.ts`'s setup/helpers conventions (`helpers.ts`).
 **Where**: `internal/dashboard/ui/e2e/app-users.spec.ts` (new)

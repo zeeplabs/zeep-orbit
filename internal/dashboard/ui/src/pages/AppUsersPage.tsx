@@ -7,7 +7,7 @@ import {
   useDeactivateAppUser,
   useActivateAppUser,
   useResetAppUserSessions,
-  useUpdateAppUserRole,
+  useUpdateAppUser,
 } from '../lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -45,11 +45,13 @@ interface AppUser {
   avatar_url: string | null
 }
 
-// Role editor for an app user, opened from the Actions column (ROLECFG-10..14).
-// Populated by enduser_roles_config; a role already assigned to the user but
+// Editor for an app user's email, phone, and role, opened from the Actions
+// column (ROLECFG-10..14, extended by app-user-edit-fields). Role options are
+// populated by enduser_roles_config; a role already assigned to the user but
 // outside that list (orphaned) is shown as an extra selected option instead
-// of being silently dropped.
-function EditRoleDrawer({
+// of being silently dropped. Status (active/inactive) stays a separate
+// table-row toggle, not part of this drawer.
+function EditUserDrawer({
   appId,
   user,
   availableRoles,
@@ -61,13 +63,15 @@ function EditRoleDrawer({
   onClose: () => void
 }) {
   const { t } = useTranslation()
-  const updateRole = useUpdateAppUserRole()
+  const updateUser = useUpdateAppUser()
+  const [email, setEmail] = useState(user.email)
+  const [phone, setPhone] = useState(user.phone ?? '')
   const [role, setRole] = useState(user.role)
 
   const options = availableRoles.includes(user.role) ? availableRoles : [...availableRoles, user.role]
 
   const save = () => {
-    updateRole.mutate({ appId, userId: user.id, role }, { onSuccess: onClose })
+    updateUser.mutate({ appId, userId: user.id, email, phone, role }, { onSuccess: onClose })
   }
 
   return (
@@ -79,30 +83,40 @@ function EditRoleDrawer({
     >
       <DrawerContent>
         <DrawerHeader>
-          <DrawerTitle>{t('appUsers.editRoleTitle')}</DrawerTitle>
+          <DrawerTitle>{t('appUsers.editUserTitle')}</DrawerTitle>
         </DrawerHeader>
         <DrawerBody>
-          <div className="flex flex-col gap-1.5">
-            <Label>{t('appUsers.editRoleLabel')}</Label>
-            <Select value={role} onValueChange={setRole}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {options.map((r) => (
-                  <SelectItem key={r} value={r}>
-                    {r}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label>{t('appUsers.editUserEmailLabel')}</Label>
+              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>{t('appUsers.editUserPhoneLabel')}</Label>
+              <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>{t('appUsers.editRoleLabel')}</Label>
+              <Select value={role} onValueChange={setRole}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {options.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {r}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </DrawerBody>
         <DrawerFooter>
           <Button variant="outline" onClick={onClose}>
             {t('appUsers.editRoleCancel')}
           </Button>
-          <Button onClick={save} disabled={updateRole.isPending}>
+          <Button onClick={save} disabled={updateUser.isPending}>
             {t('appUsers.editRoleSave')}
           </Button>
         </DrawerFooter>
@@ -469,7 +483,7 @@ export default function AppUsersPage() {
       />
 
       {editingUser && (
-        <EditRoleDrawer
+        <EditUserDrawer
           key={editingUser.id}
           appId={id!}
           user={editingUser}
