@@ -2439,6 +2439,95 @@ func (h *Handler) UpdateAppUserRole(w http.ResponseWriter, r *http.Request) {
 	h.audit(r.Context(), user.ID, user.Email, "app.user.role_update", "app_user", appID, app.Name+"/"+userID+" -> "+body.Role, nil, r.RemoteAddr)
 }
 
+// UpdateAppEnduserRoles handles PUT /dashboard/api/apps/{id}/roles. Replaces
+// the app's full enduser_roles_config list (total replace, same semantics as
+// storage_config/rate_limit_config — not a merge). Removing a role that is
+// still assigned to at least one end user or referenced by at least one row
+// policy is blocked with 409 (spec.md "role órfã" decision: values already
+// persisted elsewhere keep working even after their role drops off this
+// list, but the list itself can't drop a role still in active use).
+func (h *Handler) UpdateAppEnduserRoles(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appID := chi.URLParam(r, "id")
+	app, appRole, err := GetApp(r.Context(), h.pool, appID, user)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "app not found"})
+		return
+	}
+	if !appRole.CanManage() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 16*1024)
+	var body struct {
+		Roles []string `json:"roles"`
+	}
+	if !h.decodeJSONBody(w, r, &body) {
+		return
+	}
+	if body.Roles == nil {
+		body.Roles = []string{}
+	}
+
+	newSet := make(map[string]bool, len(body.Roles))
+	for _, roleName := range body.Roles {
+		if !identRe.MatchString(roleName) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "role must match ^[a-z][a-z0-9_]{0,62}$"})
+			return
+		}
+		if newSet[roleName] {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "role already exists"})
+			return
+		}
+		newSet[roleName] = true
+	}
+
+	schema := schemaNameForDB(app.Name)
+	h.prov.EnsureAuthUserColumns(r.Context(), schema)
+	for _, oldRole := range app.EnduserRolesConfig {
+		if newSet[oldRole] {
+			continue
+		}
+		endUserCount, err := CountAppUsersByRole(r.Context(), h.pool, schema, oldRole)
+		if err != nil {
+			h.writeError(w, r, http.StatusInternalServerError, "failed to check role usage", err)
+			return
+		}
+		policyCount, err := CountTablePoliciesByRole(r.Context(), h.pool, app.ID, oldRole)
+		if err != nil {
+			h.writeError(w, r, http.StatusInternalServerError, "failed to check role usage", err)
+			return
+		}
+		if endUserCount+policyCount > 0 {
+			writeJSON(w, http.StatusConflict, map[string]any{
+				"error":        "role in use",
+				"role":         oldRole,
+				"endUserCount": endUserCount,
+				"policyCount":  policyCount,
+			})
+			return
+		}
+	}
+
+	if err := UpdateAppEnduserRoles(r.Context(), h.pool, app.ID, body.Roles); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "app not found"})
+			return
+		}
+		h.writeError(w, r, http.StatusInternalServerError, "failed to update enduser roles", err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"roles": body.Roles})
+	h.audit(r.Context(), user.ID, user.Email, "app.roles.update", "app", appID, app.Name, nil, r.RemoteAddr)
+}
+
 // ResetAppUserSessions handles POST /dashboard/api/apps/{id}/users/{userId}/reset-sessions
 func (h *Handler) ResetAppUserSessions(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())

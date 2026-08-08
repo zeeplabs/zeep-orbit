@@ -204,12 +204,12 @@ T14 → T15
 - Skill: `security-best-practices`
 
 **Done when**:
-- [ ] 400 quando role não casa `identRe`, mensagem igual à de `UpdateAppUserRole`
-- [ ] 400 `role already exists` quando o array submetido tem duplicata
-- [ ] 409 com `endUserCount`/`policyCount` > 0 quando tenta remover role em uso (por end-user e/ou por policy, testado nos dois casos)
-- [ ] 200 com lista persistida quando remoção não afeta role em uso, ou quando só adiciona role nova
-- [ ] Teste de integração cobre os 4 cenários acima
-- [ ] Gate check passa: `go build ./... && go test ./internal/dashboard/... && go vet ./internal/dashboard/...`
+- [x] 400 quando role não casa `identRe`, mensagem igual à de `UpdateAppUserRole`
+- [x] 400 `role already exists` quando o array submetido tem duplicata
+- [x] 409 com `endUserCount`/`policyCount` > 0 quando tenta remover role em uso (por end-user e/ou por policy, testado nos dois casos)
+- [x] 200 com lista persistida quando remoção não afeta role em uso, ou quando só adiciona role nova
+- [x] Teste de integração cobre os 4 cenários acima
+- [x] Gate check passa: `go build ./... && go test ./internal/dashboard/... && go vet ./internal/dashboard/...`
 
 **Tests**: integration
 **Gate**: quick
