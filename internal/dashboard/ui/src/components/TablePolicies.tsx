@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { ColumnDef, PolicyClause, TablePolicyRow, useCreateTablePolicy, useDeleteTablePolicy, useTablePolicies } from "../lib/api";
+import { ColumnDef, PolicyClause, TablePolicyRow, useApp, useCreateTablePolicy, useDeleteTablePolicy, useTablePolicies } from "../lib/api";
 import { Icon } from "@/components/ui/icon";
 import { EmptyState } from "@/components/patterns";
 import { Input } from "@/components/ui/input";
@@ -58,6 +58,8 @@ function clauseSummary(clause: TablePolicyRow["clauses"][number]): string {
 
 export default function TablePoliciesTab({ appId, tableName, columns }: TablePoliciesTabProps) {
   const { t } = useTranslation();
+  const { data: app } = useApp(appId);
+  const availableRoles = app?.enduser_roles_config ?? [];
   const { data: policies, isLoading } = useTablePolicies(appId, tableName);
   const deletePolicy = useDeleteTablePolicy(appId, tableName);
   const createPolicy = useCreateTablePolicy(appId, tableName);
@@ -66,9 +68,17 @@ export default function TablePoliciesTab({ appId, tableName, columns }: TablePol
   const firstColumn = columns[0]?.name ?? "";
   const [name, setName] = useState("");
   const [action, setAction] = useState("select");
-  const [rolesInput, setRolesInput] = useState("");
+  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
   const [clauses, setClauses] = useState<ClauseDraft[]>([emptyClause(firstColumn)]);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Roles offered as chips: the app's configured list, plus any role
+  // already selected but no longer in that list (orphaned) — always shown,
+  // never silently dropped (ROLECFG-16).
+  const chipRoles = Array.from(new Set([...availableRoles, ...selectedRoles]));
+
+  const toggleRole = (role: string) =>
+    setSelectedRoles((prev) => (prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]));
 
   const remove = (policy: TablePolicyRow) => {
     if (!confirm(t("tablePolicies.deleteConfirm", { name: policy.pg_policy_name }))) return;
@@ -78,7 +88,7 @@ export default function TablePoliciesTab({ appId, tableName, columns }: TablePol
   const resetForm = () => {
     setName("");
     setAction("select");
-    setRolesInput("");
+    setSelectedRoles([]);
     setClauses([emptyClause(firstColumn)]);
     setFormError(null);
   };
@@ -95,15 +105,11 @@ export default function TablePoliciesTab({ appId, tableName, columns }: TablePol
 
   const submit = async () => {
     setFormError(null);
-    const roles = rolesInput
-      .split(",")
-      .map((r) => r.trim())
-      .filter((r) => r.length > 0);
     if (!name.trim()) {
       setFormError(t("tablePolicies.nameRequired"));
       return;
     }
-    if (roles.length === 0) {
+    if (selectedRoles.length === 0) {
       setFormError(t("tablePolicies.rolesRequired"));
       return;
     }
@@ -124,7 +130,7 @@ export default function TablePoliciesTab({ appId, tableName, columns }: TablePol
     });
 
     try {
-      await createPolicy.mutateAsync({ name: name.trim(), action, roles, clauses: payloadClauses });
+      await createPolicy.mutateAsync({ name: name.trim(), action, roles: selectedRoles, clauses: payloadClauses });
       toast.success(t("tablePolicies.createSuccess"));
       setShowForm(false);
       resetForm();
@@ -166,12 +172,33 @@ export default function TablePoliciesTab({ appId, tableName, columns }: TablePol
                 ))}
               </SelectContent>
             </Select>
-            <Input
-              value={rolesInput}
-              onChange={(e) => setRolesInput(e.target.value)}
-              placeholder={t("tablePolicies.rolesPlaceholder")}
-              className="h-8 flex-1 min-w-[160px] px-2.5 text-[13px] bg-[var(--surface)] border-[var(--border)] rounded-md brand-focus"
-            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5" title={t("tablePolicies.rolesChipsHint")}>
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+              {t("tablePolicies.rolesChipsLabel")}
+            </span>
+            {chipRoles.length === 0 ? (
+              <span className="text-[12px] text-[var(--text-tertiary)]">{t("tablePolicies.rolesPlaceholder")}</span>
+            ) : (
+              chipRoles.map((role) => {
+                const selected = selectedRoles.includes(role);
+                return (
+                  <button
+                    key={role}
+                    type="button"
+                    onClick={() => toggleRole(role)}
+                    className={
+                      selected
+                        ? "rounded-full border border-[var(--primary)] bg-[var(--primary)] px-2.5 py-1 text-[12px] font-semibold text-white cursor-pointer"
+                        : "rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[12px] font-semibold text-[var(--text-secondary)] cursor-pointer hover:bg-[var(--hover-surface)]"
+                    }
+                  >
+                    {role}
+                  </button>
+                );
+              })
+            )}
           </div>
 
           <div className="flex flex-col gap-2">

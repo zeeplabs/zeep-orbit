@@ -432,12 +432,12 @@ T14 → T15
 - Skill: `react-composition-patterns`
 
 **Done when**:
-- [ ] `Input` CSV de roles removido, substituído por chips toggle
-- [ ] Role órfã de uma policy já existente aparece como chip selecionado, sem ser removida automaticamente
-- [ ] Salvar a policy persiste exatamente o array `selectedRoles` (sem parse de string)
-- [ ] Backend (`BuildPolicySQL`, inalterado) continua validando cada role via `identRe` - nenhuma regressão introduzida
-- [ ] `npx tsc -b` e `npm run build` limpos
-- [ ] Gate check passa: full gate
+- [x] `Input` CSV de roles removido, substituído por chips toggle
+- [x] Role órfã de uma policy já existente aparece como chip selecionado, sem ser removida automaticamente
+- [x] Salvar a policy persiste exatamente o array `selectedRoles` (sem parse de string)
+- [x] Backend (`BuildPolicySQL`, inalterado) continua validando cada role via `identRe` - nenhuma regressão introduzida
+- [x] `npx tsc -b` e `npm run build` limpos
+- [x] Gate check passa: full gate
 
 **Tests**: none (cobertura funcional fica no e2e de T15)
 **Gate**: full
