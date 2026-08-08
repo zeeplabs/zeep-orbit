@@ -118,4 +118,48 @@ test.describe('End-user roles configuration', () => {
 
     await expect(page.locator('td', { hasText: 'viewer' })).toBeVisible()
   })
+
+  test('creates a policy selecting roles via chips', async ({ page }) => {
+    await bootstrapOrSkip(page)
+    await login(page)
+    await createAuthApp(page, uniqueAppName('e2e_roles_policy'))
+
+    // Add a role beyond the "member" default so the chip toggle is
+    // exercised against more than a single option.
+    await page.click('[role="tab"]:has-text("Login providers")')
+    await page.fill('input[placeholder="New role (e.g. viewer)"]', 'admin')
+    await page.click('button:has-text("Add")')
+    await expect(page.getByText('admin', { exact: true })).toBeVisible()
+
+    // Add a table with one column.
+    await page.click('[role="tab"]:has-text("Database")')
+    await page.click('text=Add table')
+    await page.fill('input[placeholder="table_name"]', 'items')
+    await page.fill('input[placeholder="column_name"]', 'title')
+    await page.click('text=Save table')
+    await expect(page.locator('text=Save table')).toHaveCount(0)
+
+    // Saving collapses the card into a clickable summary row; clicking it
+    // re-enters edit mode, which is where its Schema/Policies tabs live.
+    await page.click('text=items')
+
+    // Open the table's Policies tab and create a policy via chips only.
+    await page.click('[role="tab"]:has-text("Policies")')
+    await page.click('button:has-text("Add policy")')
+    await page.fill('input[placeholder="Policy name"]', 'admin_only')
+    // Select only "admin" — "member" stays untoggled.
+    await page.click('button:has-text("admin")')
+    // The default clause needs a claim value picked to pass validation —
+    // unrelated to the roles-chips behavior under test, just satisfying
+    // the form's existing "value required" rule. Two triggers show "Claim"
+    // text: the value-source select (already selected to "Claim") and the
+    // claim-value select (still showing its placeholder) — the second one.
+    await page.locator('button', { hasText: 'Claim' }).nth(1).click()
+    await page.getByRole('option', { name: 'role' }).click()
+    await page.click('button:has-text("Save policy")')
+
+    await expect(page.locator('text=Policy created')).toBeVisible()
+    // The persisted policy shows exactly the role picked via chips.
+    await expect(page.getByText('admin', { exact: true })).toBeVisible()
+  })
 })

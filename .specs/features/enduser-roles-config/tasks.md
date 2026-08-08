@@ -459,9 +459,9 @@ T14 → T15
 - Skill: `react-best-practices`
 
 **Done when**:
-- [ ] Teste "cria policy selecionando roles via chips" passa
-- [ ] Gate check passa: `cd internal/dashboard/ui && npx playwright test enduser-roles` (Build gate, fecha a Phase 6 e a feature)
-- [ ] Test count: 4 testes passam no arquivo (3 anteriores + 1 novo, sem exclusão silenciosa)
+- [x] Teste "cria policy selecionando roles via chips" passa
+- [x] Gate check passa: `cd internal/dashboard/ui && npx playwright test enduser-roles` (Build gate, fecha a Phase 6 e a feature)
+- [x] Test count: 4 testes passam no arquivo (3 anteriores + 1 novo, sem exclusão silenciosa)
 
 **Tests**: e2e
 **Gate**: build
