@@ -56,7 +56,7 @@ test.describe('App user edit fields', () => {
     })
     expect(registerRes.status()).toBe(201)
 
-    await page.goto(`/dashboard/apps/${appId}/users`)
+    await page.goto(`/dashboard/apps/${appId}?tab=users`)
     await expect(page.locator('td', { hasText: originalEmail })).toBeVisible()
 
     const newEmail = `enduser-updated-${Date.now()}@test.com`
@@ -101,7 +101,7 @@ test.describe('App user edit fields', () => {
     await page.request.post(`/${appName}/auth/register`, { data: { email: emailA, password: 'test1234' } })
     await page.request.post(`/${appName}/auth/register`, { data: { email: emailB, password: 'test1234' } })
 
-    await page.goto(`/dashboard/apps/${appId}/users`)
+    await page.goto(`/dashboard/apps/${appId}?tab=users`)
     await expect(page.locator('td', { hasText: emailB })).toBeVisible()
 
     const rowB = page.locator('tr', { has: page.locator('td', { hasText: emailB }) })

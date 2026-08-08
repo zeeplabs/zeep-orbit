@@ -141,7 +141,7 @@ test.describe('End-user roles configuration', () => {
     })
     expect(registerRes.status()).toBe(201)
 
-    await page.goto(`/dashboard/apps/${appId}/users`)
+    await page.goto(`/dashboard/apps/${appId}?tab=users`)
 
     // ROLECFG-09: the role column is plain text — no input/select inline.
     const roleCell = page.locator('td', { hasText: 'member' })
@@ -182,7 +182,7 @@ test.describe('End-user roles configuration', () => {
       data: { email: user.email, phone: user.phone ?? '', role: 'orphaned_role' },
     })
     expect(orphanRes.status()).toBe(200)
-    await page.goto(`/dashboard/apps/${appId}/users`)
+    await page.goto(`/dashboard/apps/${appId}?tab=users`)
     await expect(page.locator('td', { hasText: 'orphaned_role' })).toBeVisible()
     await page.click('[title="Edit user"]')
     await expect(page.getByRole('combobox').getByText('orphaned_role', { exact: true })).toBeVisible()
