@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -281,6 +282,49 @@ func TestCountTablePoliciesByRole(t *testing.T) {
 	}
 	if userCount != 1 || policyCount != 1 {
 		t.Fatalf("expected both counters to be 1 in the combined case, got userCount=%d policyCount=%d", userCount, policyCount)
+	}
+}
+
+// TestUpdateAppEnduserRoles covers ROLECFG-02: persists a populated list, an
+// empty list (the deliberate-empty edge case from spec.md), round-trips
+// through GetApp, and returns ErrNotFound for a nonexistent app ID.
+func TestUpdateAppEnduserRoles(t *testing.T) {
+	pool := appsStoreTestPool(t)
+	ctx := context.Background()
+	ownerID := testUser(t, pool, "roles-update-owner@example.com", "superadmin")
+	owner, err := GetUser(ctx, pool, ownerID)
+	if err != nil {
+		t.Fatalf("GetUser: %v", err)
+	}
+	app, err := CreateApp(ctx, pool, "roles-update-app", ownerID, true)
+	if err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+
+	if err := UpdateAppEnduserRoles(ctx, pool, app.ID, []string{"member", "viewer"}); err != nil {
+		t.Fatalf("UpdateAppEnduserRoles (populated): %v", err)
+	}
+	got, _, err := GetApp(ctx, pool, app.ID, owner)
+	if err != nil {
+		t.Fatalf("GetApp after populated update: %v", err)
+	}
+	if len(got.EnduserRolesConfig) != 2 || got.EnduserRolesConfig[0] != "member" || got.EnduserRolesConfig[1] != "viewer" {
+		t.Fatalf("expected [\"member\",\"viewer\"], got %+v", got.EnduserRolesConfig)
+	}
+
+	if err := UpdateAppEnduserRoles(ctx, pool, app.ID, []string{}); err != nil {
+		t.Fatalf("UpdateAppEnduserRoles (empty): %v", err)
+	}
+	got, _, err = GetApp(ctx, pool, app.ID, owner)
+	if err != nil {
+		t.Fatalf("GetApp after empty update: %v", err)
+	}
+	if len(got.EnduserRolesConfig) != 0 {
+		t.Fatalf("expected an empty list after deliberate removal, got %+v", got.EnduserRolesConfig)
+	}
+
+	if err := UpdateAppEnduserRoles(ctx, pool, "00000000-0000-0000-0000-000000000000", []string{"member"}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound for nonexistent app, got %v", err)
 	}
 }
 

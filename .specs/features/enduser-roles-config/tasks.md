@@ -179,10 +179,10 @@ T14 → T15
 - Skill: `security-best-practices`
 
 **Done when**:
-- [ ] Persiste array vazio e array populado corretamente
-- [ ] Retorna erro se `appID` não existir (mesmo padrão de erro dos updates existentes)
-- [ ] Teste de integração cobre persistência e leitura de volta via `GetApp`
-- [ ] Gate check passa: `go build ./... && go test ./internal/dashboard/... && go vet ./internal/dashboard/...`
+- [x] Persiste array vazio e array populado corretamente
+- [x] Retorna erro se `appID` não existir (mesmo padrão de erro dos updates existentes)
+- [x] Teste de integração cobre persistência e leitura de volta via `GetApp`
+- [x] Gate check passa: `go build ./... && go test ./internal/dashboard/... && go vet ./internal/dashboard/...`
 
 **Tests**: integration
 **Gate**: quick

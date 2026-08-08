@@ -336,6 +336,29 @@ func CountTablePoliciesByRole(ctx context.Context, pool *db.Pool, appID, role st
 	return count, nil
 }
 
+// UpdateAppEnduserRoles replaces the full enduser_roles_config list for an
+// app. Pure persistence, no validation — format checks, duplicate rejection,
+// and the in-use guard against removed roles all live in the handler
+// (UpdateAppEnduserRoles in handler.go), which computes the diff and calls
+// this only once every check has passed.
+func UpdateAppEnduserRoles(ctx context.Context, pool *db.Pool, appID string, roles []string) error {
+	rolesJSON, err := json.Marshal(roles)
+	if err != nil {
+		return fmt.Errorf("dashboard: marshal enduser roles: %w", err)
+	}
+	tag, err := pool.Exec(ctx,
+		`UPDATE zeep_system.apps SET enduser_roles_config = $1 WHERE id = $2`,
+		rolesJSON, appID,
+	)
+	if err != nil {
+		return fmt.Errorf("dashboard: update enduser roles: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func UpdateAppRateLimitConfig(ctx context.Context, pool *db.Pool, appID string, cfg *config.RateLimitConfig) error {
 	jsonCfg, err := json.Marshal(cfg)
 	if err != nil {
