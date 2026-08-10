@@ -67,7 +67,7 @@ func GetSystemConfig(ctx context.Context, pool *db.Pool) (*SystemConfig, error) 
 		 FROM zeep_system.system_config LIMIT 1`,
 	).Scan(&cfg.SoftDeleteEnabled, &rawStorage, &cfg.MaxCSVExportRows, &cfg.StatementTimeoutMs, &cfg.RequireRLSDefault, &cfg.RetentionDays)
 	if err != nil {
-		return &SystemConfig{}, nil
+		return nil, fmt.Errorf("dashboard: get system config: %w", err)
 	}
 	if len(rawStorage) > 0 && string(rawStorage) != "{}" {
 		var sc GlobalStorageConfig
