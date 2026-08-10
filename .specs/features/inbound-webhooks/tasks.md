@@ -298,15 +298,17 @@ T16 -> T17
 - Skill: NONE
 
 **Done when**:
-- [ ] `update` mapping with a matching row overwrites only the linked columns, `200`, logged `updated`
-- [ ] `delete` mapping with a matching row removes it per the app's soft-delete config, `200`, logged `deleted`
-- [ ] `update`/`delete` with no row matching the match-key value → `200`, logged `row_not_found`, no write
-- [ ] A single webhook holding an `insert`, an `update`, and a `delete` mapping for different event-type values all resolve correctly in sequence (the Google Workspace employee-sync scenario from `context.md`)
-- [ ] Gate check passes: `go test ./internal/server/...`
-- [ ] Test count: at least 5 new tests (update happy path, delete happy path, update-not-found, delete-not-found, full create→update→delete sequence)
+- [x] `update` mapping with a matching row overwrites only the linked columns, `200`, logged `updated`
+- [x] `delete` mapping with a matching row removes it per the app's soft-delete config, `200`, logged `deleted`
+- [x] `update`/`delete` with no row matching the match-key value → `200`, logged `row_not_found`, no write
+- [x] A single webhook holding an `insert`, an `update`, and a `delete` mapping for different event-type values all resolve correctly in sequence (the Google Workspace employee-sync scenario from `context.md`)
+- [x] Gate check passes: `go test ./internal/server/...`
+- [x] Test count: at least 5 new tests (update happy path, delete happy path, update-not-found, delete-not-found, full create→update→delete sequence) (5 tests, all pass)
 
 **Tests**: integration
 **Gate**: quick
+
+**Status**: ✅ Complete
 
 ---
 

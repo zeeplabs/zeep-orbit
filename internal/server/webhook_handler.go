@@ -190,10 +190,126 @@ func (h *WebhookHandler) handleActiveDelivery(ctx context.Context, w http.Respon
 	switch mapping.Action {
 	case "insert":
 		h.dispatchInsert(ctx, w, wh, app, table, mapping, resolved, rawPayload, eventTypeValue, eventID)
+	case "update", "delete":
+		h.dispatchUpdateOrDelete(ctx, w, wh, app, table, mapping, resolved, rawPayload, eventTypeValue, eventID)
 	default:
-		// update/delete land in T8.
-		writeError(w, http.StatusNotImplemented, "update/delete dispatch not yet implemented")
+		// SaveEventMapping only ever persists insert/update/delete
+		// (ErrInvalidAction otherwise) — unreachable in practice, defensive only.
+		h.logDelivery(ctx, wh.ID, http.StatusInternalServerError, "write_error", rawPayload, eventTypeValue, eventID, fmt.Sprintf("unknown mapping action %q", mapping.Action))
+		writeError(w, http.StatusInternalServerError, "internal error")
 	}
+}
+
+// errWebhookRowNotFound is the sentinel dispatchUpdateOrDelete's
+// WithRLSContext closure returns when the match-key lookup finds no row —
+// distinguished from a genuine write failure so the caller logs
+// row_not_found (200) instead of write_error (500), per spec P2
+// update/delete-with-match-key AC4.
+var errWebhookRowNotFound = errors.New("server: webhook match key matched no row")
+
+// matchColumnCast returns the same ::uuid/::timestamptz cast
+// query.BuildInsert/Update apply internally (that helper is package-private
+// in internal/query, so this is a minimal local duplicate) — needed because
+// pgx's extended protocol doesn't auto-cast a text parameter into a uuid
+// column for a bare WHERE col = $1.
+func matchColumnCast(table *registry.Table, column string) string {
+	for _, c := range table.Columns {
+		if c.Name == column {
+			switch c.Type {
+			case "uuid":
+				return "::uuid"
+			case "timestamptz":
+				return "::timestamptz"
+			}
+		}
+	}
+	return ""
+}
+
+// dispatchUpdateOrDelete locates the target row by the mapping's match key
+// (resolved from the same field-mapping set as the written columns) and
+// applies query.BuildUpdate/BuildDelete — both statements inside the one
+// transaction WithRLSContext opens, per design.md Risks & Concerns (a
+// lookup-then-write race is bounded the same way HandleUpdate/HandleDelete
+// already accept it, not a new class of risk this feature introduces).
+func (h *WebhookHandler) dispatchUpdateOrDelete(ctx context.Context, w http.ResponseWriter, wh dashboard.WebhookRow, app *registry.App, table *registry.Table, mapping dashboard.EventMappingRow, resolved map[string]any, rawPayload []byte, eventTypeValue, eventID string) {
+	if mapping.MatchKeyColumn == nil || *mapping.MatchKeyColumn == "" {
+		// SaveEventMapping enforces a non-empty match key for update/delete
+		// (ErrMatchKeyRequired) — unreachable in practice, defensive only.
+		h.logDelivery(ctx, wh.ID, http.StatusInternalServerError, "write_error", rawPayload, eventTypeValue, eventID, "mapping has no match_key_column")
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	matchColumn := *mapping.MatchKeyColumn
+	matchValue, ok := resolved[matchColumn]
+	if !ok {
+		h.logDelivery(ctx, wh.ID, http.StatusInternalServerError, "write_error", rawPayload, eventTypeValue, eventID,
+			fmt.Sprintf("match_key_column %q is not among this mapping's field_mappings, so its value can't be resolved from the payload", matchColumn))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	lookupSQL := fmt.Sprintf(`SELECT id FROM %s.%s WHERE %s = $1%s`,
+		app.SchemaName, mapping.TargetTable, matchColumn, matchColumnCast(table, matchColumn))
+
+	var targetRowID string
+	var outcome string
+	err := h.pool.WithRLSContext(ctx, db.RLSClaims{Role: "webhook", Sub: wh.ID}, h.reg.SystemConfig().StatementTimeoutMs, func(qx db.Querier) error {
+		var rowID string
+		if err := qx.QueryRow(ctx, lookupSQL, matchValue).Scan(&rowID); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return errWebhookRowNotFound
+			}
+			return err
+		}
+
+		switch mapping.Action {
+		case "update":
+			q, err := query.BuildUpdate(app.SchemaName, mapping.TargetTable, table, rowID, resolved, "")
+			if err != nil {
+				return err
+			}
+			rows, err := qx.Query(ctx, q.SQL, q.Args...)
+			if err != nil {
+				return err
+			}
+			row, err := pgx.CollectOneRow(rows, pgx.RowToMap)
+			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					return errWebhookRowNotFound
+				}
+				return err
+			}
+			targetRowID, _ = sanitizeRow(row)["id"].(string)
+			outcome = "updated"
+		case "delete":
+			q := query.BuildDelete(app.SchemaName, mapping.TargetTable, rowID, "", h.reg.SystemConfig().SoftDeleteEnabled)
+			tag, err := qx.Exec(ctx, q.SQL, q.Args...)
+			if err != nil {
+				return err
+			}
+			if tag.RowsAffected() == 0 {
+				return errWebhookRowNotFound
+			}
+			targetRowID = rowID
+			outcome = "deleted"
+		}
+		return nil
+	})
+
+	if err != nil {
+		if errors.Is(err, errWebhookRowNotFound) {
+			h.logDelivery(ctx, wh.ID, http.StatusOK, "row_not_found", rawPayload, eventTypeValue, eventID, "")
+			writeJSON(w, http.StatusOK, map[string]string{"status": "row_not_found"})
+			return
+		}
+		h.logDelivery(ctx, wh.ID, http.StatusInternalServerError, "write_error", rawPayload, eventTypeValue, eventID, err.Error())
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	h.logDeliveryWithTarget(ctx, wh.ID, http.StatusOK, outcome, rawPayload, eventTypeValue, eventID, targetRowID, "")
+	writeJSON(w, http.StatusOK, map[string]any{"status": outcome, "id": targetRowID})
 }
 
 // dispatchInsert runs query.BuildInsert inside WithRLSContext under the
