@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
+	"github.com/zeeplabs/zeep-orbit/internal/registry"
 )
 
 // ErrNoMappings is returned by ActivateWebhook when the webhook has zero
@@ -278,6 +279,208 @@ func SoftDeleteWebhook(ctx context.Context, pool *db.Pool, webhookID string) err
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrWebhookNotFound
+	}
+	return nil
+}
+
+// ----------------------------------------------------------------------------
+// Event mapping CRUD (T3)
+// ----------------------------------------------------------------------------
+
+// ErrUnknownTargetTable is returned by SaveEventMapping when the mapping's
+// target table does not exist in the app's registry.
+var ErrUnknownTargetTable = errors.New("dashboard: unknown target table")
+
+// ErrUnknownTargetColumn is returned by SaveEventMapping when a field
+// mapping or the match key references a column that does not exist on the
+// target table.
+var ErrUnknownTargetColumn = errors.New("dashboard: unknown target column")
+
+// ErrMatchKeyRequired is returned by SaveEventMapping when action is
+// update/delete and no match_key_column was supplied (spec P2 AC1).
+var ErrMatchKeyRequired = errors.New("dashboard: match_key_column is required for update/delete actions")
+
+// ErrInvalidAction is returned by SaveEventMapping for an action outside
+// insert/update/delete.
+var ErrInvalidAction = errors.New("dashboard: action must be insert, update, or delete")
+
+// ErrMappingConflict is returned when the UNIQUE (webhook_id,
+// event_type_value) constraint is violated (spec P2 second story AC5: one
+// mapping per event-type value per webhook).
+var ErrMappingConflict = errors.New("dashboard: a mapping already exists for this event-type value")
+
+// ErrMappingNotFound is returned when an event mapping id/lookup does not
+// resolve to an existing row.
+var ErrMappingNotFound = errors.New("dashboard: webhook event mapping not found")
+
+// FieldMappingDef is one field→column link inside an event mapping.
+type FieldMappingDef struct {
+	SourcePath string `json:"source_path"`
+	Column     string `json:"column"`
+}
+
+// EventMappingDef is the save-mapping request payload.
+type EventMappingDef struct {
+	EventTypeValue string
+	Action         string // insert | update | delete
+	TargetTable    string
+	MatchKeyColumn string // required when Action is update/delete
+	FieldMappings  []FieldMappingDef
+}
+
+// EventMappingRow is a row from zeep_system.webhook_event_mappings.
+type EventMappingRow struct {
+	ID             string
+	WebhookID      string
+	EventTypeValue string
+	Action         string
+	TargetTable    string
+	MatchKeyColumn *string
+	FieldMappings  []FieldMappingDef
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+// SaveEventMapping validates def against the target app's registry (table
+// and every referenced column — including the match key — must exist) and
+// persists it. reg/appName are needed to call registry.GetTable directly
+// here in the store layer (design.md names this store's dependency on
+// registry.Registry for exactly this validation).
+//
+// SPEC_DEVIATION: design.md's interface listing shows SaveEventMapping
+// taking only (ctx, pool, webhookID, def); reg and appName are added because
+// registry.GetTable needs an app name to resolve the target table, which
+// design.md's own "Reuses" note for this method requires calling.
+func SaveEventMapping(ctx context.Context, pool *db.Pool, reg *registry.Registry, appName, webhookID string, def EventMappingDef) (EventMappingRow, error) {
+	switch def.Action {
+	case "insert", "update", "delete":
+	default:
+		return EventMappingRow{}, ErrInvalidAction
+	}
+	if def.Action != "insert" && def.MatchKeyColumn == "" {
+		return EventMappingRow{}, ErrMatchKeyRequired
+	}
+
+	table, ok := reg.GetTable(appName, def.TargetTable)
+	if !ok {
+		return EventMappingRow{}, ErrUnknownTargetTable
+	}
+	known := make(map[string]struct{}, len(table.Columns))
+	for _, c := range table.Columns {
+		known[c.Name] = struct{}{}
+	}
+	if def.MatchKeyColumn != "" {
+		if _, ok := known[def.MatchKeyColumn]; !ok {
+			return EventMappingRow{}, ErrUnknownTargetColumn
+		}
+	}
+	for _, fm := range def.FieldMappings {
+		if _, ok := known[fm.Column]; !ok {
+			return EventMappingRow{}, ErrUnknownTargetColumn
+		}
+	}
+
+	fieldMappingsJSON, err := json.Marshal(def.FieldMappings)
+	if err != nil {
+		return EventMappingRow{}, fmt.Errorf("dashboard: marshal field mappings: %w", err)
+	}
+
+	var matchKeyColumn *string
+	if def.MatchKeyColumn != "" {
+		matchKeyColumn = &def.MatchKeyColumn
+	}
+
+	var row EventMappingRow
+	err = pool.QueryRow(ctx,
+		`INSERT INTO zeep_system.webhook_event_mappings
+		 (webhook_id, event_type_value, action, target_table, match_key_column, field_mappings)
+		 VALUES ($1, $2, $3, $4, $5, $6)
+		 RETURNING id, webhook_id, event_type_value, action, target_table, match_key_column, created_at, updated_at`,
+		webhookID, def.EventTypeValue, def.Action, def.TargetTable, matchKeyColumn, fieldMappingsJSON,
+	).Scan(&row.ID, &row.WebhookID, &row.EventTypeValue, &row.Action, &row.TargetTable, &row.MatchKeyColumn, &row.CreatedAt, &row.UpdatedAt)
+	if err != nil {
+		if isUniqueViolation(err) {
+			return EventMappingRow{}, ErrMappingConflict
+		}
+		return EventMappingRow{}, fmt.Errorf("dashboard: save event mapping: %w", err)
+	}
+	row.FieldMappings = def.FieldMappings
+	return row, nil
+}
+
+func scanEventMappingRow(row pgx.Row) (EventMappingRow, error) {
+	var m EventMappingRow
+	var fieldMappingsJSON []byte
+	err := row.Scan(&m.ID, &m.WebhookID, &m.EventTypeValue, &m.Action, &m.TargetTable, &m.MatchKeyColumn,
+		&fieldMappingsJSON, &m.CreatedAt, &m.UpdatedAt)
+	if err != nil {
+		return EventMappingRow{}, err
+	}
+	if len(fieldMappingsJSON) > 0 {
+		if err := json.Unmarshal(fieldMappingsJSON, &m.FieldMappings); err != nil {
+			return EventMappingRow{}, fmt.Errorf("dashboard: unmarshal field mappings: %w", err)
+		}
+	}
+	return m, nil
+}
+
+const eventMappingRowColumns = `id, webhook_id, event_type_value, action, target_table, match_key_column, field_mappings, created_at, updated_at`
+
+// ListEventMappings returns every mapping saved for a webhook.
+func ListEventMappings(ctx context.Context, pool *db.Pool, webhookID string) ([]EventMappingRow, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT `+eventMappingRowColumns+` FROM zeep_system.webhook_event_mappings
+		 WHERE webhook_id = $1 ORDER BY created_at ASC`,
+		webhookID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("dashboard: list event mappings: %w", err)
+	}
+	defer rows.Close()
+
+	result := make([]EventMappingRow, 0)
+	for rows.Next() {
+		m, err := scanEventMappingRow(rows)
+		if err != nil {
+			return nil, fmt.Errorf("dashboard: scan event mapping row: %w", err)
+		}
+		result = append(result, m)
+	}
+	return result, rows.Err()
+}
+
+// GetEventMappingByType looks up the single mapping (if any) configured for
+// a given event-type value on a webhook — the lookup the public delivery
+// handler (T7) performs on every active-mode call. Returns ErrMappingNotFound
+// when no mapping is configured for that value (the "unmapped event"
+// outcome, spec P2 AC5).
+func GetEventMappingByType(ctx context.Context, pool *db.Pool, webhookID, eventTypeValue string) (EventMappingRow, error) {
+	row := pool.QueryRow(ctx,
+		`SELECT `+eventMappingRowColumns+` FROM zeep_system.webhook_event_mappings
+		 WHERE webhook_id = $1 AND event_type_value = $2`,
+		webhookID, eventTypeValue,
+	)
+	m, err := scanEventMappingRow(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return EventMappingRow{}, ErrMappingNotFound
+		}
+		return EventMappingRow{}, fmt.Errorf("dashboard: get event mapping for webhook %s type %q: %w", webhookID, eventTypeValue, err)
+	}
+	return m, nil
+}
+
+// DeleteEventMapping removes a single mapping row by id.
+func DeleteEventMapping(ctx context.Context, pool *db.Pool, mappingID string) error {
+	tag, err := pool.Exec(ctx,
+		`DELETE FROM zeep_system.webhook_event_mappings WHERE id = $1`,
+		mappingID,
+	)
+	if err != nil {
+		return fmt.Errorf("dashboard: delete event mapping %s: %w", mappingID, err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrMappingNotFound
 	}
 	return nil
 }

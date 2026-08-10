@@ -165,14 +165,16 @@ T16 -> T17
 - Skill: NONE
 
 **Done when**:
-- [ ] `SaveEventMapping` rejects an unknown table or column with a typed validation error (not a raw DB error)
-- [ ] `SaveEventMapping` rejects `update`/`delete` action with no `match_key_column`
-- [ ] Unique constraint violation on `(webhook_id, event_type_value)` surfaces as a typed conflict error
-- [ ] Gate check passes: `go test ./internal/dashboard/...`
-- [ ] Test count: at least 5 new tests (happy path insert/update/delete mapping, unknown table rejected, missing match key rejected, duplicate event-type-value conflict)
+- [x] `SaveEventMapping` rejects an unknown table or column with a typed validation error (not a raw DB error)
+- [x] `SaveEventMapping` rejects `update`/`delete` action with no `match_key_column`
+- [x] Unique constraint violation on `(webhook_id, event_type_value)` surfaces as a typed conflict error
+- [x] Gate check passes: `go test ./internal/dashboard/...`
+- [x] Test count: at least 5 new tests (happy path insert/update/delete mapping, unknown table rejected, missing match key rejected, duplicate event-type-value conflict) (7 tests, all pass)
 
 **Tests**: integration
 **Gate**: quick
+
+**Status**: ✅ Complete
 
 ---
 

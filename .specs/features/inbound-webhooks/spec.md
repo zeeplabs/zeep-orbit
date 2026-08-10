@@ -144,17 +144,17 @@ App owners today have no way to let an external system (Google Workspace, or any
 | WEBHOOK-04 | P1: Create webhook + capture sample | Design | Pending |
 | WEBHOOK-05 | P1: Create webhook + capture sample | Design | Pending |
 | WEBHOOK-06 | P1: Create webhook + capture sample | Design | Pending |
-| WEBHOOK-07 | P2: Map + activate for inserts | Design | Pending |
+| WEBHOOK-07 | P2: Map + activate for inserts | Design | Implementing |
 | WEBHOOK-08 | P2: Map + activate for inserts | Design | Pending |
 | WEBHOOK-09 | P2: Map + activate for inserts | Design | Pending |
 | WEBHOOK-10 | P2: Map + activate for inserts | Design | Pending |
 | WEBHOOK-11 | P2: Map + activate for inserts | Design | Pending |
 | WEBHOOK-12 | P2: Map + activate for inserts | Design | Pending |
-| WEBHOOK-13 | P2: Update/delete with match key | Design | Pending |
+| WEBHOOK-13 | P2: Update/delete with match key | Design | Implementing |
 | WEBHOOK-14 | P2: Update/delete with match key | Design | Pending |
 | WEBHOOK-15 | P2: Update/delete with match key | Design | Pending |
 | WEBHOOK-16 | P2: Update/delete with match key | Design | Pending |
-| WEBHOOK-17 | P2: Update/delete with match key | Design | Pending |
+| WEBHOOK-17 | P2: Update/delete with match key | Design | Implementing |
 | WEBHOOK-18 | P2: Dashboard delivery log | Design | Pending |
 | WEBHOOK-19 | P2: Dashboard delivery log | Design | Pending |
 | WEBHOOK-20 | P2: Dashboard delivery log | Design | Pending |
