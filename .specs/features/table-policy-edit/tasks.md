@@ -95,13 +95,13 @@ T5 → T6 → T7
 - Skill: `security-best-practices`
 
 **Done when**:
-- [ ] Happy path: edita roles/clauses/action de uma policy existente, `pg_policies` reflete o novo `USING`, catálogo reflete `updated_at`/`updated_by` preenchidos
-- [ ] `policyID` inexistente ou de outro app retorna `ErrPolicyNotFound`
-- [ ] Clause/coluna/operador inválido rejeitado por `BuildPolicySQL` ANTES de qualquer `DROP`/`CREATE` (nenhuma mutação parcial)
-- [ ] Conflito de unicidade (`action`+`pg_policy_name` já usado por outra policy) retorna `ErrPolicyConflict`, sem commit
-- [ ] Editar uma policy renomeando (`name` diferente) dropa o nome ANTIGO e cria com o nome NOVO - nenhuma policy nativa órfã
-- [ ] Teste de integração cobre os 5 cenários acima
-- [ ] Gate check passa: `go build ./... && go test ./internal/dashboard/... && go vet ./internal/dashboard/...`
+- [x] Happy path: edita roles/clauses/action de uma policy existente, `pg_policies` reflete o novo `USING`, catálogo reflete `updated_at`/`updated_by` preenchidos
+- [x] `policyID` inexistente ou de outro app retorna `ErrPolicyNotFound`
+- [x] Clause/coluna/operador inválido rejeitado por `BuildPolicySQL` ANTES de qualquer `DROP`/`CREATE` (nenhuma mutação parcial)
+- [x] Conflito de unicidade (`action`+`pg_policy_name` já usado por outra policy) retorna `ErrPolicyConflict`, sem commit
+- [x] Editar uma policy renomeando (`name` diferente) dropa o nome ANTIGO e cria com o nome NOVO - nenhuma policy nativa órfã
+- [x] Teste de integração cobre os 5 cenários acima
+- [x] Gate check passa: `go build ./... && go test ./internal/dashboard/... && go vet ./internal/dashboard/...`
 
 **Tests**: integration
 **Gate**: quick
