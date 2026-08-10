@@ -217,14 +217,16 @@ T16 -> T17
 - Skill: NONE
 
 **Done when**:
-- [ ] `ExtractPath` resolves a flat key, a nested key, and an array-index segment (e.g. `items.0.id`)
-- [ ] `ExtractPath` returns `found=false` (no error) for a missing path
-- [ ] `ResolveFields` returns an error naming the missing source path when a mapping's `source_path` isn't found in the payload
-- [ ] Gate check passes: `go test ./internal/webhookengine/...`
-- [ ] Test count: at least 6 unit tests (flat, nested, array index, missing path, empty mappings, full multi-field resolution)
+- [x] `ExtractPath` resolves a flat key, a nested key, and an array-index segment (e.g. `items.0.id`)
+- [x] `ExtractPath` returns `found=false` (no error) for a missing path
+- [x] `ResolveFields` returns an error naming the missing source path when a mapping's `source_path` isn't found in the payload
+- [x] Gate check passes: `go test ./internal/webhookengine/...`
+- [x] Test count: at least 6 unit tests (flat, nested, array index, missing path, empty mappings, full multi-field resolution) (7 tests, all pass)
 
 **Tests**: unit
 **Gate**: quick
+
+**Status**: ✅ Complete
 
 ---
 
