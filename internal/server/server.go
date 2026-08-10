@@ -176,6 +176,7 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Delete("/api/apps/{id}/tables/{tableId}", dashH.DeleteAppTable)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/apps/{id}/tables/{table}/policies", dashH.ListTablePolicies)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/apps/{id}/tables/{table}/policies", dashH.CreateTablePolicy)
+		r.With(dashboard.RequireAuth(pool)).Put("/api/apps/{id}/tables/{table}/policies/{policyId}", dashH.UpdateTablePolicy)
 		r.With(dashboard.RequireAuth(pool)).Delete("/api/apps/{id}/tables/{table}/policies/{policyId}", dashH.DeleteTablePolicy)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/apps/{id}/tokens", dashH.ListAppTokens)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/apps/{id}/tokens", dashH.CreateAppToken)
