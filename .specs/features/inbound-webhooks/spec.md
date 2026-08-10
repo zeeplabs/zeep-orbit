@@ -145,11 +145,11 @@ App owners today have no way to let an external system (Google Workspace, or any
 | WEBHOOK-05 | P1: Create webhook + capture sample | Design | Implementing |
 | WEBHOOK-06 | P1: Create webhook + capture sample | Design | Implementing |
 | WEBHOOK-07 | P2: Map + activate for inserts | Design | Implementing |
-| WEBHOOK-08 | P2: Map + activate for inserts | Design | Pending |
-| WEBHOOK-09 | P2: Map + activate for inserts | Design | Pending |
-| WEBHOOK-10 | P2: Map + activate for inserts | Design | Pending |
-| WEBHOOK-11 | P2: Map + activate for inserts | Design | Pending |
-| WEBHOOK-12 | P2: Map + activate for inserts | Design | Pending |
+| WEBHOOK-08 | P2: Map + activate for inserts | Design | Implementing |
+| WEBHOOK-09 | P2: Map + activate for inserts | Design | Implementing |
+| WEBHOOK-10 | P2: Map + activate for inserts | Design | Implementing |
+| WEBHOOK-11 | P2: Map + activate for inserts | Design | Implementing |
+| WEBHOOK-12 | P2: Map + activate for inserts | Design | Implementing |
 | WEBHOOK-13 | P2: Update/delete with match key | Design | Implementing |
 | WEBHOOK-14 | P2: Update/delete with match key | Design | Pending |
 | WEBHOOK-15 | P2: Update/delete with match key | Design | Pending |

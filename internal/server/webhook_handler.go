@@ -3,13 +3,18 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/zeeplabs/zeep-orbit/internal/dashboard"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
+	"github.com/zeeplabs/zeep-orbit/internal/query"
 	"github.com/zeeplabs/zeep-orbit/internal/registry"
+	"github.com/zeeplabs/zeep-orbit/internal/webhookengine"
 )
 
 // WebhookHandler serves the public, unauthenticated (token-in-URL) inbound
@@ -87,12 +92,144 @@ func (h *WebhookHandler) HandleWebhookDelivery(w http.ResponseWriter, r *http.Re
 	h.handleActiveDelivery(ctx, w, wh, payload, rawPayload)
 }
 
-// handleActiveDelivery dispatches an active-mode call once a mapping is
-// resolved. Insert dispatch lands in T7, update/delete in T8 — until then
-// there is no active-mode business logic to run yet (T6's scope is
-// routing/auth/capture only, per tasks.md).
+// stringifyPathValue renders a resolved payload value (any JSON scalar) as
+// a plain string for event-type/event-id comparison and dedup lookups —
+// providers send these as either JSON strings or, occasionally, numbers.
+func stringifyPathValue(v any) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return fmt.Sprint(v)
+}
+
+// resolveAppName looks up the owning app's name (the registry's lookup key)
+// from a webhook's app_id — the public URL only carries {webhookId}, so the
+// app name isn't known until the webhook row itself is resolved.
+func resolveAppName(ctx context.Context, pool *db.Pool, appID string) (string, error) {
+	var name string
+	if err := pool.QueryRow(ctx, `SELECT name FROM zeep_system.apps WHERE id = $1`, appID).Scan(&name); err != nil {
+		return "", err
+	}
+	return name, nil
+}
+
+// handleActiveDelivery dispatches an active-mode call: resolves the
+// event-type value, looks up its saved mapping (unmapped → 200/logged,
+// spec P2 AC5), checks event-id dedup (duplicate → 200/logged, no write,
+// spec P2 AC4), then applies the mapping's action. Insert dispatch lands
+// here (T7); update/delete land in T8.
 func (h *WebhookHandler) handleActiveDelivery(ctx context.Context, w http.ResponseWriter, wh dashboard.WebhookRow, payload map[string]any, rawPayload []byte) {
-	writeError(w, http.StatusNotImplemented, "active-mode dispatch not yet implemented")
+	eventTypeRaw, found := webhookengine.ExtractPath(payload, wh.EventTypePath)
+	var eventTypeValue string
+	if found {
+		eventTypeValue = stringifyPathValue(eventTypeRaw)
+	}
+
+	mapping, err := dashboard.GetEventMappingByType(ctx, h.pool, wh.ID, eventTypeValue)
+	if err != nil {
+		if errors.Is(err, dashboard.ErrMappingNotFound) {
+			h.logDelivery(ctx, wh.ID, http.StatusOK, "unmapped", rawPayload, eventTypeValue, "", "")
+			writeJSON(w, http.StatusOK, map[string]string{"status": "unmapped"})
+			return
+		}
+		h.logDelivery(ctx, wh.ID, http.StatusInternalServerError, "write_error", rawPayload, eventTypeValue, "", err.Error())
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	var eventID string
+	if wh.EventIDPath != nil && *wh.EventIDPath != "" {
+		if v, found := webhookengine.ExtractPath(payload, *wh.EventIDPath); found {
+			eventID = stringifyPathValue(v)
+		}
+	}
+	if eventID != "" {
+		seen, err := dashboard.HasProcessedEventID(ctx, h.pool, wh.ID, eventID)
+		if err != nil {
+			h.logDelivery(ctx, wh.ID, http.StatusInternalServerError, "write_error", rawPayload, eventTypeValue, eventID, err.Error())
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		if seen {
+			h.logDelivery(ctx, wh.ID, http.StatusOK, "duplicate_skipped", rawPayload, eventTypeValue, eventID, "")
+			writeJSON(w, http.StatusOK, map[string]string{"status": "duplicate_skipped"})
+			return
+		}
+	}
+
+	appName, err := resolveAppName(ctx, h.pool, wh.AppID)
+	if err != nil {
+		h.logDelivery(ctx, wh.ID, http.StatusInternalServerError, "write_error", rawPayload, eventTypeValue, eventID, err.Error())
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	app, ok := h.reg.Get(appName)
+	if !ok {
+		h.logDelivery(ctx, wh.ID, http.StatusInternalServerError, "write_error", rawPayload, eventTypeValue, eventID, fmt.Sprintf("app %q not found in registry", appName))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	table, ok := app.Tables[mapping.TargetTable]
+	if !ok {
+		h.logDelivery(ctx, wh.ID, http.StatusInternalServerError, "write_error", rawPayload, eventTypeValue, eventID, fmt.Sprintf("target table %q not found", mapping.TargetTable))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	fieldMappings := make([]webhookengine.FieldMapping, len(mapping.FieldMappings))
+	for i, fm := range mapping.FieldMappings {
+		fieldMappings[i] = webhookengine.FieldMapping{SourcePath: fm.SourcePath, Column: fm.Column}
+	}
+	resolved, err := webhookengine.ResolveFields(payload, fieldMappings)
+	if err != nil {
+		h.logDelivery(ctx, wh.ID, http.StatusInternalServerError, "write_error", rawPayload, eventTypeValue, eventID, err.Error())
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	switch mapping.Action {
+	case "insert":
+		h.dispatchInsert(ctx, w, wh, app, table, mapping, resolved, rawPayload, eventTypeValue, eventID)
+	default:
+		// update/delete land in T8.
+		writeError(w, http.StatusNotImplemented, "update/delete dispatch not yet implemented")
+	}
+}
+
+// dispatchInsert runs query.BuildInsert inside WithRLSContext under the
+// dedicated "webhook" RLS role (design.md Tech Decisions), exactly the
+// pattern end-user write requests already use (internal/server/handler.go
+// HandleCreate) — no bypass, no second authorization path.
+func (h *WebhookHandler) dispatchInsert(ctx context.Context, w http.ResponseWriter, wh dashboard.WebhookRow, app *registry.App, table *registry.Table, mapping dashboard.EventMappingRow, resolved map[string]any, rawPayload []byte, eventTypeValue, eventID string) {
+	q, err := query.BuildInsert(app.SchemaName, mapping.TargetTable, table, resolved, "")
+	if err != nil {
+		h.logDelivery(ctx, wh.ID, http.StatusInternalServerError, "write_error", rawPayload, eventTypeValue, eventID, err.Error())
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	var row map[string]any
+	err = h.pool.WithRLSContext(ctx, db.RLSClaims{Role: "webhook", Sub: wh.ID}, h.reg.SystemConfig().StatementTimeoutMs, func(qx db.Querier) error {
+		rows, err := qx.Query(ctx, q.SQL, q.Args...)
+		if err != nil {
+			return err
+		}
+		row, err = pgx.CollectOneRow(rows, pgx.RowToMap)
+		return err
+	})
+	if err != nil {
+		// Real error (including an RLS-denied write) logged server-side only
+		// in the delivery record; the HTTP caller gets a fixed generic
+		// message (AGENTS.md §4: never leak err.Error() into a 500 response).
+		h.logDelivery(ctx, wh.ID, http.StatusInternalServerError, "write_error", rawPayload, eventTypeValue, eventID, err.Error())
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	row = sanitizeRow(row)
+	targetRowID, _ := row["id"].(string)
+	h.logDeliveryWithTarget(ctx, wh.ID, http.StatusOK, "inserted", rawPayload, eventTypeValue, eventID, targetRowID, "")
+	writeJSON(w, http.StatusOK, map[string]any{"status": "inserted", "id": targetRowID})
 }
 
 // parseWebhookPayload normalizes the incoming request into a
@@ -131,6 +268,15 @@ func parseWebhookPayload(r *http.Request) (map[string]any, error) {
 // codebase) — a delivery-log write failure must never itself change the
 // HTTP response already decided by the caller.
 func (h *WebhookHandler) logDelivery(ctx context.Context, webhookID string, httpStatus int, outcome string, rawPayload []byte, eventTypeValue, eventID, errorDetail string) {
+	h.logDeliveryWithTarget(ctx, webhookID, httpStatus, outcome, rawPayload, eventTypeValue, eventID, "", errorDetail)
+}
+
+// logDeliveryWithTarget is logDelivery's superset, additionally recording
+// which row an insert/update/delete affected (target_row_id) — used by the
+// active-mode write paths (T7/T8); the simpler branches (capture, invalid
+// token, malformed, unmapped, duplicate) never have a target row and go
+// through logDelivery instead.
+func (h *WebhookHandler) logDeliveryWithTarget(ctx context.Context, webhookID string, httpStatus int, outcome string, rawPayload []byte, eventTypeValue, eventID, targetRowID, errorDetail string) {
 	_ = dashboard.InsertDelivery(ctx, h.pool, dashboard.DeliveryEntry{
 		WebhookID:      webhookID,
 		HTTPStatus:     httpStatus,
@@ -138,6 +284,7 @@ func (h *WebhookHandler) logDelivery(ctx context.Context, webhookID string, http
 		EventTypeValue: eventTypeValue,
 		EventID:        eventID,
 		RawPayload:     rawPayload,
+		TargetRowID:    targetRowID,
 		ErrorDetail:    errorDetail,
 	})
 }

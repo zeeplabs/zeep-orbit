@@ -271,15 +271,17 @@ T16 -> T17
 - Skill: NONE
 
 **Done when**:
-- [ ] Unmapped event-type value → `200`, logged `unmapped`, no write
-- [ ] Repeated event id (per `event_id_path`) → `200`, logged `duplicate_skipped`, no second row created
-- [ ] Valid insert mapping → row created in target table with mapped values, `200`, logged `inserted`
-- [ ] Missing/insufficient RLS permission on target table (role `webhook` not permitted) → `500`, logged `write_error`, response body contains no raw DB error text
-- [ ] Gate check passes: `go test ./internal/server/...`
-- [ ] Test count: at least 5 new tests (unmapped, duplicate, insert happy path, insert RLS-denied write error, insert with missing mapped field)
+- [x] Unmapped event-type value → `200`, logged `unmapped`, no write
+- [x] Repeated event id (per `event_id_path`) → `200`, logged `duplicate_skipped`, no second row created
+- [x] Valid insert mapping → row created in target table with mapped values, `200`, logged `inserted`
+- [x] Missing/insufficient RLS permission on target table (role `webhook` not permitted) → `500`, logged `write_error`, response body contains no raw DB error text
+- [x] Gate check passes: `go test ./internal/server/...`
+- [x] Test count: at least 5 new tests (unmapped, duplicate, insert happy path, insert RLS-denied write error, insert with missing mapped field) (5 tests, all pass)
 
 **Tests**: integration
 **Gate**: quick
+
+**Status**: ✅ Complete
 
 ---
 
