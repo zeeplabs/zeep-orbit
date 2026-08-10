@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: `.specs/features/table-policy-edit/design.md`
-**Status**: Draft
+**Status**: T1-T7 complete, all gates green — pending Verifier
 
 ---
 
@@ -226,10 +226,10 @@ T5 → T6 → T7
 - Skill: `react-best-practices`
 
 **Done when**:
-- [ ] Teste "edita policy existente via form pré-populado" passa
-- [ ] Teste "role órfã aparece selecionada ao reabrir edição" passa
-- [ ] Gate check passa: `cd internal/dashboard/ui && npx playwright test enduser-roles` (Build gate, fecha a feature)
-- [ ] Test count: 2 testes novos, nenhum dos existentes removido/pulado
+- [x] Teste "edita policy existente via form pré-populado" passa
+- [x] Teste "role órfã aparece selecionada ao reabrir edição" passa
+- [x] Gate check passa: `cd internal/dashboard/ui && npx playwright test enduser-roles` (Build gate, fecha a feature)
+- [x] Test count: 2 testes novos, nenhum dos existentes removido/pulado
 
 **Tests**: e2e
 **Gate**: build
