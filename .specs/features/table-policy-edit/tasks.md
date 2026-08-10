@@ -174,10 +174,10 @@ T5 → T6 → T7
 - Skill: `react-best-practices`
 
 **Done when**:
-- [ ] `TablePolicyRow` tipado com as duas novas colunas
-- [ ] `useUpdateTablePolicy` chama `onError: toast.error(error.message)` (regra do `AGENTS.md`)
-- [ ] `npm run build` limpo
-- [ ] Gate check passa: full gate
+- [x] `TablePolicyRow` tipado com as duas novas colunas
+- [x] `useUpdateTablePolicy` chama `onError: toast.error(error.message)` (regra do `AGENTS.md`)
+- [x] `npm run build` limpo
+- [x] Gate check passa: full gate
 
 **Tests**: none
 **Gate**: full

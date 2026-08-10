@@ -227,6 +227,8 @@ export interface TablePolicyRow {
   pg_policy_name: string
   created_at: string
   created_by: string
+  updated_at: string | null
+  updated_by: string | null
 }
 
 export function useTablePolicies(appId: string, table: string): UseQueryResult<TablePolicyRow[]> {
@@ -250,6 +252,30 @@ export function useCreateTablePolicy(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(def),
       }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['table-policies', appId, table] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+export function useUpdateTablePolicy(
+  appId: string,
+  table: string,
+): UseMutationResult<TablePolicyRow, Error, { policyId: string; def: PolicyDef }> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ policyId, def }) =>
+      apiFetch<TablePolicyRow>(
+        `/dashboard/api/apps/${appId}/tables/${table}/policies/${policyId}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(def),
+        },
+      ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['table-policies', appId, table] })
     },
