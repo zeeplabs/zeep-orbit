@@ -73,6 +73,8 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/aminhaapp/tarefas
 | **Autenticação por Email** | Registo e login com email/palavra-passe por aplicação |
 | **Google OAuth**       | Início de sessão com Google — dashboard e por aplicação  |
 | **Row-Level Security** | Filtragem automática de dados por proprietário (`rls: owner`), com opção de "exigir RLS por omissão" em tabelas novas |
+| **Policies de Linha para Utilizador Final** | Regras de acesso por linha, por tabela/ação, combinando o papel de negócio do utilizador final com uma condição sobre os dados da própria linha, aplicadas por RLS nativo do Postgres (`CREATE POLICY`) — não um filtro na camada Go |
+| **Papéis de Utilizador Final Configuráveis** | Defina a sua própria lista de papéis de negócio por app, usada pelas policies de linha e mostrada na gestão de utilizadores do app |
 | **App Tokens**         | Gestão de JWT para aplicações sem auth por email (criar, revogar, renovar) |
 | **Health por Aplicação** | `GET /{app}/health` para monitorização e readiness probes |
 | **Soft Delete**        | Toggle configurável de eliminação lógica (definições do dashboard) |
@@ -491,7 +493,7 @@ Detalhe completo (checklists por milestone, specs ligadas) vive em [`.specs/proj
 | **M7 — SDKs** | ✅ Concluído | Clientes TS, Go, Python, Rust, Java, PHP |
 | **M8 — Platform Services** | 🔵 Em desenvolvimento | planeado: [integração SMTP/email](../.specs/features/smtp-email-integration/) (convites, recuperação de senha), [integrações de observabilidade](../.specs/features/observability-integrations/) (OpenTelemetry, Datadog, New Relic) |
 | **M9 — Enterprise Licensing** | 🔵 Em desenvolvimento | planeado: [modelo de licenciamento dual](../.specs/features/enterprise-licensing/) (núcleo MIT + funcionalidades enterprise trancadas, subscrição anual) |
-| **M10 — Autorização de linha (utilizador final)** | 🔵 Em desenvolvimento | planeado: [policies de linha por utilizador final](../.specs/features/end-user-row-policies/) (claim de papel de negócio + RLS nativo do Postgres configurado pelo admin) |
+| **M10 — Autorização de linha (utilizador final)** | ✅ Concluído | [Policies de linha por utilizador final](../.specs/features/end-user-row-policies/) (claim de papel de negócio + RLS nativo do Postgres configurado pelo admin) e [papéis de utilizador final configuráveis por app](../.specs/features/enduser-roles-config/) |
 
 ### Planeado — visível no dashboard, ainda não funcional
 

@@ -73,6 +73,8 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/meu-app/tarefas
 | **Auth por Email**      | Registro e login com email/senha por app                 |
 | **Google OAuth**        | Login com Google — tanto no dashboard quanto por app     |
 | **Row-Level Security**  | Filtro automático por dono (`rls: owner`), com opção de "exigir RLS por padrão" em tabelas novas |
+| **Row Policies para Usuário Final** | Regras de acesso por linha, por tabela/ação, combinando o papel de negócio do usuário final com uma condição sobre os dados da própria linha, aplicadas por RLS nativo do Postgres (`CREATE POLICY`) — não um filtro na camada Go |
+| **Papéis de Usuário Final Configuráveis** | Defina sua própria lista de papéis de negócio por app, usada pelas row policies e exibida na gestão de usuários do app |
 | **App Tokens**          | Gestão de JWT para apps sem auth por email (criar, revogar, renovar) |
 | **Health por App**      | `GET /{app}/health` para monitoramento e readiness       |
 | **Soft Delete**         | Exclusão lógica configurável (toggle nas configurações)  |
@@ -491,7 +493,7 @@ Detalhe completo (checklists por milestone, specs vinculadas) vive em [`.specs/p
 | **M7 — SDKs** | ✅ Concluído | Clients TS, Go, Python, Rust, Java, PHP |
 | **M8 — Platform Services** | 🔵 Em desenvolvimento | planejado: [integração SMTP/email](../.specs/features/smtp-email-integration/) (convites, recuperação de senha), [integrações de observabilidade](../.specs/features/observability-integrations/) (OpenTelemetry, Datadog, New Relic) |
 | **M9 — Enterprise Licensing** | 🔵 Em desenvolvimento | planejado: [modelo de licenciamento dual](../.specs/features/enterprise-licensing/) (núcleo MIT + features enterprise travadas, assinatura anual) |
-| **M10 — Autorização de linha (usuário final)** | 🔵 Em desenvolvimento | planejado: [policies de linha por usuário final](../.specs/features/end-user-row-policies/) (claim de papel de negócio + RLS nativo do Postgres configurado pelo admin) |
+| **M10 — Autorização de linha (usuário final)** | ✅ Concluído | [Row policies para usuário final](../.specs/features/end-user-row-policies/) (claim de papel de negócio + RLS nativo do Postgres configurado pelo admin) e [papéis de usuário final configuráveis por app](../.specs/features/enduser-roles-config/) |
 
 ### Planejado — visível no dashboard, ainda não funcional
 
