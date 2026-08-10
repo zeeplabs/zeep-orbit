@@ -9,6 +9,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-08-10
+
 ### Added
 
 - **Table policy editing** — admins can now edit an existing row policy (roles, clauses, action) instead of deleting and recreating it. New `PUT /dashboard/api/apps/{id}/tables/{table}/policies/{policyId}` replaces the native Postgres policy (`DROP`+`CREATE`, same transaction as the catalog update) and stamps `updated_at`/`updated_by` on `zeep_system.table_policies`. The Policies tab now has an "Edit" button next to delete, opening the same builder form pre-populated with the policy's current data — including any role no longer in the app's configured role list, still shown as a selected chip.
