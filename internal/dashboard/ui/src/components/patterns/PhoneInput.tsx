@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { countries, globalCellphoneMask, clearMask } from '@zeeptech/toolkit'
 import { Input } from '@/components/ui/input'
 import {
@@ -62,10 +63,23 @@ export function PhoneInput({
   value: string
   onChange: (value: string) => void
 }) {
-  const { country, national } = parsePhone(value)
+  // Country is tracked in local state, not derived fresh from `value` on
+  // every render: when the field is empty, parsePhone('') always falls back
+  // to BR, which would silently snap the country select back to Brazil the
+  // moment the user picks a different country before typing any digits (or
+  // clears the number entirely). Re-synced from `value` only when it's
+  // non-empty, since that's the only case where it encodes a real dial code.
+  const parsed = parsePhone(value)
+  const [country, setCountryState] = useState(parsed.country)
+  useEffect(() => {
+    if (value) setCountryState(parsePhone(value).country)
+  }, [value])
+
+  const national = value ? parsed.national : ''
   const masked = globalCellphoneMask(country, national)
 
   const setCountry = (nextCountry: string) => {
+    setCountryState(nextCountry)
     onChange(national ? `${dialCodeFor(nextCountry)}${national}` : '')
   }
 
