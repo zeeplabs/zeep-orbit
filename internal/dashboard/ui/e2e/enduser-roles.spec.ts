@@ -240,4 +240,101 @@ test.describe('End-user roles configuration', () => {
     // The persisted policy shows exactly the role picked via chips.
     await expect(page.getByText('admin', { exact: true })).toBeVisible()
   })
+
+  // table-policy-edit T7 (TPEDIT-06/07): editing an existing policy via the
+  // same form used for creation, pre-populated with its current data, and
+  // saved through PUT instead of POST.
+  test('edits an existing table policy via the pre-populated form', async ({ page }) => {
+    await createAuthApp(page, uniqueAppName('e2e_policy_edit'))
+
+    await page.click('[role="tab"]:has-text("Login providers")')
+    await page.fill('input[placeholder="New role (e.g. viewer)"]', 'admin')
+    await page.click('button:has-text("Add")')
+    await expect(page.getByText('admin', { exact: true })).toBeVisible()
+
+    await page.click('[role="tab"]:has-text("Database")')
+    await page.click('text=Add table')
+    await page.fill('input[placeholder="table_name"]', 'items')
+    await page.fill('input[placeholder="column_name"]', 'title')
+    await page.click('text=Save table')
+    await expect(page.locator('text=Save table')).toHaveCount(0)
+    await page.click('text=items')
+
+    await page.click('[role="tab"]:has-text("Policies")')
+    await page.click('button:has-text("Add policy")')
+    await page.fill('input[placeholder="Policy name"]', 'editable_policy')
+    // Exact match: "button:has-text()" is a case-insensitive substring
+    // match, so a plain "member" text selector also hits the sidebar's
+    // "Members" tab button and navigates away instead of toggling the role
+    // chip.
+    await page.getByRole('button', { name: 'member', exact: true }).click()
+    await page.locator('button', { hasText: 'Claim' }).nth(1).click()
+    await page.getByRole('option', { name: 'role' }).click()
+    await page.click('button:has-text("Save policy")')
+    await expect(page.locator('text=Policy created')).toBeVisible()
+
+    // Reopen for edit: the form must show the policy's current data, not a
+    // blank create form.
+    await page.click('[title="Edit policy"]')
+    await expect(page.locator('input[placeholder="Policy name"]')).toHaveValue('editable_policy')
+
+    // Add "admin" to the existing "member" role, then save via PUT.
+    await page.click('button:has-text("admin")')
+    await page.click('button:has-text("Save policy")')
+    await expect(page.locator('text=Policy updated')).toBeVisible()
+
+    // The list reflects both roles without a manual page reload.
+    await expect(page.getByText('admin', { exact: true })).toBeVisible()
+    await expect(page.getByText('member', { exact: true })).toBeVisible()
+  })
+
+  // table-policy-edit T7 (ROLECFG-16, now testable): a role assigned to a
+  // policy outside enduser_roles_config must still show as a selected chip
+  // when the edit form reopens, same guarantee already covered for app
+  // users above.
+  test('shows an orphan role as a selected chip when reopening a policy for edit', async ({ page }) => {
+    const appName = uniqueAppName('e2e_policy_orphan')
+    await createAuthApp(page, appName)
+    const appId = appIdFromUrl(page.url())
+
+    await page.click('[role="tab"]:has-text("Database")')
+    await page.click('text=Add table')
+    await page.fill('input[placeholder="table_name"]', 'items')
+    await page.fill('input[placeholder="column_name"]', 'title')
+    await page.click('text=Save table')
+    await expect(page.locator('text=Save table')).toHaveCount(0)
+    await page.click('text=items')
+
+    await page.click('[role="tab"]:has-text("Policies")')
+    await page.click('button:has-text("Add policy")')
+    await page.fill('input[placeholder="Policy name"]', 'orphan_policy')
+    // Exact match: see the note in the previous test — "member" also
+    // substring-matches the sidebar's "Members" tab button.
+    await page.getByRole('button', { name: 'member', exact: true }).click()
+    await page.locator('button', { hasText: 'Claim' }).nth(1).click()
+    await page.getByRole('option', { name: 'role' }).click()
+    await page.click('button:has-text("Save policy")')
+    await expect(page.locator('text=Policy created')).toBeVisible()
+
+    // Assign a role outside enduser_roles_config directly through the API —
+    // the UI's own chips never offer it, same as a pre-existing/legacy value
+    // would arrive from a prior state of the app's roles list.
+    const policiesRes = await page.request.get(`/dashboard/api/apps/${appId}/tables/items/policies`)
+    const policies = await policiesRes.json()
+    const policy = policies.find((p: { pg_policy_name: string }) => p.pg_policy_name === 'orphan_policy')
+    const orphanRes = await page.request.put(
+      `/dashboard/api/apps/${appId}/tables/items/policies/${policy.id}`,
+      { data: { name: 'orphan_policy', action: policy.action, roles: ['ghost_role'], clauses: policy.clauses } },
+    )
+    expect(orphanRes.status()).toBe(200)
+
+    // Reload drops local component state (the expanded table row, the
+    // active Schema/Policies sub-tab) — re-enter them the same way the test
+    // did the first time, same as a fresh page load would.
+    await page.reload()
+    await page.click('text=items')
+    await page.click('[role="tab"]:has-text("Policies")')
+    await page.click('[title="Edit policy"]')
+    await expect(page.locator('button', { hasText: 'ghost_role' })).toHaveClass(/bg-\[var\(--primary\)\]/)
+  })
 })
