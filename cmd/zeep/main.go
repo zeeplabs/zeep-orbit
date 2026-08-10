@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/zeeplabs/zeep-orbit/internal/dashboard"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
+	"github.com/zeeplabs/zeep-orbit/internal/provisioner"
 	"github.com/zeeplabs/zeep-orbit/internal/registry"
 	"github.com/zeeplabs/zeep-orbit/internal/server"
 )
@@ -83,6 +84,21 @@ func cmdServe() *cobra.Command {
 			if err := reg.LoadFromDB(context.Background(), pool); err != nil {
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				os.Exit(1)
+			}
+
+			schemaNames := make([]string, 0, len(reg.Apps()))
+			for _, app := range reg.Apps() {
+				schemaNames = append(schemaNames, app.SchemaName)
+			}
+			// Grants zeep_app_enduser access to every existing app's schema.
+			// Without this, apps provisioned before end-user-row-policies
+			// shipped get "permission denied" on every end-user request,
+			// since those now always run as zeep_app_enduser (see
+			// db.Pool.WithRLSContext), not the schema-owning role. Warn
+			// loudly instead of failing boot — one app with a stale/missing
+			// schema shouldn't take every other app down with it.
+			for _, err := range provisioner.New(pool).BackfillEnduserGrants(context.Background(), schemaNames) {
+				fmt.Fprintf(os.Stderr, "WARNING: %v\n", err)
 			}
 
 			sysCfg, err := dashboard.GetSystemConfig(context.Background(), pool)

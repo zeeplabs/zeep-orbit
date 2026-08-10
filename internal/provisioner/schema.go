@@ -42,6 +42,27 @@ func (p *Provisioner) createSchema(ctx context.Context, schemaName string) (bool
 	return true, nil
 }
 
+// BackfillEnduserGrants re-runs grantEnduserSchemaAccess for every schema
+// name given. Apply/createSchema only grants access to a schema when an app
+// is created or edited through the Dashboard — an app that hasn't been
+// touched since end-user-row-policies shipped never gets the GRANT, so its
+// end-user requests (which now always run as zeep_app_enduser, not the
+// owner role — see db.Pool.WithRLSContext) fail with "permission denied".
+// Call this once at boot for every app already in the registry so upgrading
+// doesn't silently break existing apps. Idempotent, safe to run every boot.
+// Returns one error per schema that failed, so a single bad schema doesn't
+// stop the rest from being granted (and doesn't need to block boot — the
+// caller decides whether a partial failure is fatal).
+func (p *Provisioner) BackfillEnduserGrants(ctx context.Context, schemaNames []string) []error {
+	var errs []error
+	for _, schemaName := range schemaNames {
+		if err := p.grantEnduserSchemaAccess(ctx, schemaName); err != nil {
+			errs = append(errs, fmt.Errorf("provisioner: backfill enduser grants %q: %w", schemaName, err))
+		}
+	}
+	return errs
+}
+
 // grantEnduserSchemaAccess ensures zeep_app_enduser can access every table in
 // schemaName — the ones that already exist (explicit GRANT on all current
 // tables, covering apps that existed before this feature shipped) and the
