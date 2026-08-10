@@ -123,12 +123,12 @@ T5 → T6 → T7
 - Skill: `security-best-practices`
 
 **Done when**:
-- [ ] 200 com a `TablePolicyRow` atualizada no happy path
-- [ ] 400 quando payload inválido, mesma mensagem de erro de `CreateTablePolicy`
-- [ ] 404 quando `policyId` não existe/não pertence ao app
-- [ ] 409 quando a edição colide com outra policy existente
-- [ ] Teste de integração cobre os 4 cenários acima (mirror de `TestCreateTablePolicyHandler_*`)
-- [ ] Gate check passa: `go build ./... && go test ./internal/dashboard/... && go vet ./internal/dashboard/...`
+- [x] 200 com a `TablePolicyRow` atualizada no happy path
+- [x] 400 quando payload inválido, mesma mensagem de erro de `CreateTablePolicy`
+- [x] 404 quando `policyId` não existe/não pertence ao app
+- [x] 409 quando a edição colide com outra policy existente
+- [x] Teste de integração cobre os 4 cenários acima (mirror de `TestCreateTablePolicyHandler_*`)
+- [x] Gate check passa: `go build ./... && go test ./internal/dashboard/... && go vet ./internal/dashboard/...`
 
 **Tests**: integration
 **Gate**: quick
