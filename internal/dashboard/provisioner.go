@@ -333,6 +333,9 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			created_by     UUID        NOT NULL REFERENCES zeep_system.dashboard_users(id),
 			UNIQUE (app_id, table_name, action, pg_policy_name)
 		)`,
+		`ALTER TABLE zeep_system.table_policies
+		 ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ,
+		 ADD COLUMN IF NOT EXISTS updated_by UUID REFERENCES zeep_system.dashboard_users(id)`,
 		`CREATE TABLE IF NOT EXISTS zeep_system.changelog_entries (
 			id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			version      TEXT NOT NULL,
