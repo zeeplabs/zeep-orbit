@@ -401,12 +401,14 @@ T16 -> T17
 - Skill: NONE
 
 **Done when**:
-- [ ] Purge call runs once at boot and on every subsequent tick, same as the existing soft-delete purge
-- [ ] No new goroutine or ticker introduced — reuses the existing one
-- [ ] Gate check passes: `go build ./...`
+- [x] Purge call runs once at boot and on every subsequent tick, same as the existing soft-delete purge
+- [x] No new goroutine or ticker introduced — reuses the existing one
+- [x] Gate check passes: `go build ./...`
 
 **Tests**: none
 **Gate**: build
+
+**Status**: ✅ Complete
 
 ---
 
