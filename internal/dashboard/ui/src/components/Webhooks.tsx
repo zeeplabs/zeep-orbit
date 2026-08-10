@@ -4,10 +4,12 @@ import { toast } from "sonner";
 import {
   CreateWebhookInput,
   CreatedWebhook,
+  WebhookDelivery,
   WebhookSubscription,
   useCreateWebhook,
   useDeleteWebhook,
   useRotateWebhookToken,
+  useWebhookDeliveries,
   useWebhooks,
 } from "../lib/api";
 import { Icon } from "@/components/ui/icon";
@@ -60,6 +62,7 @@ export default function Webhooks({ appId }: WebhooksProps) {
   const [eventIdPath, setEventIdPath] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<CreatedWebhook | null>(null);
+  const [expandedWebhookId, setExpandedWebhookId] = useState<string | null>(null);
 
   const resetForm = () => {
     setName("");
@@ -226,6 +229,15 @@ export default function Webhooks({ appId }: WebhooksProps) {
                   <span className="text-[11px] text-[var(--text-tertiary)]">{webhook.method}</span>
                 </div>
                 <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setExpandedWebhookId(expandedWebhookId === webhook.id ? null : webhook.id)}
+                  >
+                    {expandedWebhookId === webhook.id
+                      ? t("webhooks.hideDeliveries")
+                      : t("webhooks.viewDeliveries")}
+                  </Button>
                   <Button variant="ghost" size="sm" onClick={() => rotate(webhook)} title={t("webhooks.rotateToken")}>
                     <Icon name="refresh" size={15} />
                   </Button>
@@ -235,10 +247,87 @@ export default function Webhooks({ appId }: WebhooksProps) {
                 </div>
               </div>
               <p className="text-[11px] text-[var(--text-tertiary)]">{t("webhooks.eventTypePathLabel")}: {webhook.event_type_path}</p>
+              {expandedWebhookId === webhook.id && (
+                <WebhookDeliveryLog appId={appId} webhookId={webhook.id} />
+              )}
             </div>
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// SUCCESS_OUTCOMES / ERROR_OUTCOMES drive the visual distinction the spec
+// requires between success and error deliveries (spec P2
+// dashboard-delivery-log AC1). "unmapped"/"duplicate_skipped"/"row_not_found"
+// are deliberate no-ops, not failures, so they get a neutral tone.
+const SUCCESS_OUTCOMES = new Set<WebhookDelivery["outcome"]>(["captured", "inserted", "updated", "deleted"]);
+const ERROR_OUTCOMES = new Set<WebhookDelivery["outcome"]>(["invalid_token", "malformed", "write_error"]);
+
+function outcomeBadgeClass(outcome: WebhookDelivery["outcome"]): string {
+  if (SUCCESS_OUTCOMES.has(outcome)) {
+    return "bg-[var(--success-surface)] text-[var(--success)]";
+  }
+  if (ERROR_OUTCOMES.has(outcome)) {
+    return "bg-[var(--danger-surface,var(--danger))] text-[var(--on-danger,white)]";
+  }
+  return "bg-[var(--hover-surface)] text-[var(--text-secondary)]";
+}
+
+interface WebhookDeliveryLogProps {
+  appId: string;
+  webhookId: string;
+}
+
+// WebhookDeliveryLog: T16 — read-only list of a webhook's deliveries
+// (timestamp, outcome badge, event-type value), expandable per entry to show
+// the raw received payload and, on failure, the recorded error detail
+// (spec P2 dashboard-delivery-log AC1/AC2).
+function WebhookDeliveryLog({ appId, webhookId }: WebhookDeliveryLogProps) {
+  const { t } = useTranslation();
+  const { data: deliveries, isLoading } = useWebhookDeliveries(appId, webhookId);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  if (isLoading) return <LoadingState rows={3} />;
+
+  if (!deliveries?.length) {
+    return (
+      <p className="mt-2 text-[11px] text-[var(--text-tertiary)]">{t("webhooks.deliveriesEmpty")}</p>
+    );
+  }
+
+  return (
+    <div className="mt-2 flex flex-col gap-1 rounded-[10px] border border-[var(--border)] bg-[var(--sunken)] p-2">
+      {deliveries.map((d) => (
+        <div key={d.id} className="flex flex-col gap-1">
+          <button
+            type="button"
+            onClick={() => setExpandedId(expandedId === d.id ? null : d.id)}
+            className="flex items-center justify-between gap-2 rounded-md px-2 py-1 text-left text-[12px] hover:bg-[var(--hover-surface)]"
+          >
+            <span className="text-[var(--text-tertiary)]">{new Date(d.received_at).toLocaleString()}</span>
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${outcomeBadgeClass(d.outcome)}`}>
+              {d.outcome}
+            </span>
+            <span className="truncate font-mono text-[var(--text-secondary)]">{d.event_type_value ?? "—"}</span>
+          </button>
+          {expandedId === d.id && (
+            <div className="flex flex-col gap-1 rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-[11px]">
+              <p className="font-medium text-[var(--text-secondary)]">{t("webhooks.rawPayload")}</p>
+              <pre className="overflow-x-auto whitespace-pre-wrap font-mono">
+                {JSON.stringify(d.raw_payload, null, 2)}
+              </pre>
+              {d.error_detail && (
+                <>
+                  <p className="font-medium text-[var(--danger)]">{t("webhooks.errorDetail")}</p>
+                  <p className="font-mono text-[var(--danger)]">{d.error_detail}</p>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

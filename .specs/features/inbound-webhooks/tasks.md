@@ -498,12 +498,14 @@ T16 -> T17
 - Skill: NONE
 
 **Done when**:
-- [ ] Outcome values are visually distinguishable (e.g. success vs error styling)
-- [ ] i18n keys added to both locale files
-- [ ] Gate check passes: `npm run build`
+- [x] Outcome values are visually distinguishable (e.g. success vs error styling)
+- [x] i18n keys added to both locale files
+- [x] Gate check passes: `npm run build`
 
 **Tests**: none
 **Gate**: full
+
+**Status**: ✅ Complete
 
 ---
 

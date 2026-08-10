@@ -869,5 +869,10 @@
   "webhookMapping.targetTableRequired": "Tabela de destino é obrigatória",
   "webhookMapping.fieldMappingRequired": "Pelo menos um campo deve ser vinculado a uma coluna",
   "webhookMapping.matchKeyRequired": "Uma coluna de chave de correspondência é obrigatória para ações de update/delete",
-  "webhookMapping.saveSuccess": "Mapeamento salvo"
+  "webhookMapping.saveSuccess": "Mapeamento salvo",
+  "webhooks.viewDeliveries": "Ver entregas",
+  "webhooks.hideDeliveries": "Ocultar entregas",
+  "webhooks.deliveriesEmpty": "Nenhuma entrega registrada ainda",
+  "webhooks.rawPayload": "Payload bruto",
+  "webhooks.errorDetail": "Detalhe do erro"
 }

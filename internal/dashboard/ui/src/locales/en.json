@@ -869,5 +869,10 @@
   "webhookMapping.targetTableRequired": "Target table is required",
   "webhookMapping.fieldMappingRequired": "At least one field must be linked to a column",
   "webhookMapping.matchKeyRequired": "A match key column is required for update/delete actions",
-  "webhookMapping.saveSuccess": "Mapping saved"
+  "webhookMapping.saveSuccess": "Mapping saved",
+  "webhooks.viewDeliveries": "View deliveries",
+  "webhooks.hideDeliveries": "Hide deliveries",
+  "webhooks.deliveriesEmpty": "No deliveries recorded yet",
+  "webhooks.rawPayload": "Raw payload",
+  "webhooks.errorDetail": "Error detail"
 }
