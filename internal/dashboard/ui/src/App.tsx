@@ -50,9 +50,9 @@ function LoadingScreen() {
   )
 }
 
-function RedirectToAppDetails() {
+function RedirectToAppDetails({ tab }: { tab?: string }) {
   const { id } = useParams()
-  return <Navigate to={`/apps/${id}`} replace />
+  return <Navigate to={tab ? `/apps/${id}?tab=${tab}` : `/apps/${id}`} replace />
 }
 
 function App() {
@@ -110,6 +110,7 @@ function App() {
           <Route path="/apps/new" element={<AppOnboardingPage />} />
           <Route path="/apps/:id" element={<AppDetailsPage />} />
           <Route path="/apps/:id/edit" element={<RedirectToAppDetails />} />
+          <Route path="/apps/:id/users" element={<RedirectToAppDetails tab="users" />} />
           <Route
             path="/configuracoes"
             element={<RequireRole allow={['superadmin', 'admin']}><BrandSettingsPage /></RequireRole>}
