@@ -73,6 +73,8 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/miapp/tareas
 | **Auth por Email**     | Registro e inicio de sesión con email/contraseña por app |
 | **Google OAuth**       | Inicio de sesión con Google — dashboard y por app        |
 | **Row-Level Security** | Filtra datos automáticamente por dueño (`rls: owner`), con opción de "exigir RLS por defecto" en tablas nuevas |
+| **Políticas de Fila para Usuario Final** | Reglas de acceso por fila, por tabla/acción, combinando el rol de negocio del usuario final con una condición sobre los datos de la propia fila, aplicadas por RLS nativo de Postgres (`CREATE POLICY`) — no un filtro en la capa Go |
+| **Roles de Usuario Final Configurables** | Define tu propia lista de roles de negocio por app, usada por las políticas de fila y mostrada en la gestión de usuarios del app |
 | **App Tokens**         | Gestión de JWT para apps sin auth por email (crear, revocar, renovar) |
 | **Health por App**     | `GET /{app}/health` para monitoreo y readiness probes    |
 | **Soft Delete**        | Toggle configurable de eliminación lógica (settings del dashboard) |
@@ -490,7 +492,8 @@ El detalle completo (checklists por milestone, specs vinculadas) vive en [`.spec
 | **M6 — i18n** | ✅ Hecho | pt-BR / English, selector de idioma |
 | **M7 — SDKs** | ✅ Hecho | Clientes TS, Go, Python, Rust, Java, PHP |
 | **M8 — Platform Services** | 🔵 En desarrollo | planeado: [integración SMTP/email](../.specs/features/smtp-email-integration/) (invitaciones, recuperación de contraseña), [integraciones de observabilidad](../.specs/features/observability-integrations/) (OpenTelemetry, Datadog, New Relic) |
-| **M9 — Enterprise Licensing** | 🔵 En desarrollo | planeado: [modelo de licenciamiento dual](../.specs/features/enterprise-licensing/) (núcleo MIT + funcionalidades enterprise bloqueadas) |
+| **M9 — Enterprise Licensing** | 🔵 En desarrollo | planeado: [modelo de licenciamiento dual](../.specs/features/enterprise-licensing/) (núcleo MIT + funcionalidades enterprise bloqueadas, suscripción anual) |
+| **M10 — Autorización de fila (usuario final)** | ✅ Hecho | [Políticas de fila por usuario final](../.specs/features/end-user-row-policies/) (claim de rol de negocio + RLS nativo de Postgres configurado por el admin) y [roles de usuario final configurables por app](../.specs/features/enduser-roles-config/) |
 
 ### Planeado — visible en el dashboard, todavía no funcional
 

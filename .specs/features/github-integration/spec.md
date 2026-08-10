@@ -6,9 +6,9 @@ zeep-orbit quer permitir que pessoas não-técnicas criem e façam deploy de app
 
 ## Goals
 
-- [ ] Admin conecta a GitHub Org via GitHub App (não OAuth pessoal, não PAT) — credenciais nunca expostas a usuários não-técnicos
-- [ ] Admin cadastra múltiplos templates de repositório, cada um selecionável depois na criação de app frontend (fora de escopo aqui)
-- [ ] Sistema expõe uma capacidade interna, reutilizável pelas próximas sub-features, para gerar um repo privado a partir de um template escolhido
+- [x] Admin conecta a GitHub Org via GitHub App (não OAuth pessoal, não PAT) — credenciais nunca expostas a usuários não-técnicos
+- [x] Admin cadastra múltiplos templates de repositório, cada um selecionável depois na criação de app frontend (fora de escopo aqui)
+- [x] Sistema expõe uma capacidade interna, reutilizável pelas próximas sub-features, para gerar um repo privado a partir de um template escolhido
 
 ## Out of Scope
 
@@ -97,33 +97,33 @@ Documentado para não virar scope creep — cada um vira spec própria depois.
 
 | Requirement ID | Story | Phase | Status |
 |---|---|---|---|
-| GH-01 | P1: Conectar Org | Design | Pending |
-| GH-02 | P1: Conectar Org | Design | Pending |
-| GH-03 | P1: Conectar Org | Design | Pending |
-| GH-04 | P1: Conectar Org | Design | Pending |
-| GH-05 | P1: Conectar Org | Design | Pending |
-| GH-06 | P1: Conectar Org | Design | Pending |
-| GH-07 | P1: Conectar Org | Design | Pending |
-| GH-10 | P1: Templates | Design | Pending |
-| GH-11 | P1: Templates | Design | Pending |
-| GH-12 | P1: Templates | Design | Pending |
-| GH-13 | P1: Templates | Design | Pending |
-| GH-14 | P1: Templates | Design | Pending |
-| GH-20 | P1: Gerar repo | Design | Pending |
-| GH-21 | P1: Gerar repo | Design | Pending |
-| GH-22 | P1: Gerar repo | Design | Pending |
-| GH-23 | P1: Gerar repo | Design | Pending |
-| GH-24 | P1: Gerar repo | Design | Pending |
+| GH-01 | P1: Conectar Org | Execute | Verified |
+| GH-02 | P1: Conectar Org | Execute | Verified |
+| GH-03 | P1: Conectar Org | Execute | Verified |
+| GH-04 | P1: Conectar Org | Execute | Verified |
+| GH-05 | P1: Conectar Org | Execute | Verified |
+| GH-06 | P1: Conectar Org | Execute | Verified |
+| GH-07 | P1: Conectar Org | Execute | Verified |
+| GH-10 | P1: Templates | Execute | Verified |
+| GH-11 | P1: Templates | Execute | Verified |
+| GH-12 | P1: Templates | Execute | Verified |
+| GH-13 | P1: Templates | Execute | Verified |
+| GH-14 | P1: Templates | Execute | Verified |
+| GH-20 | P1: Gerar repo | Execute | Verified |
+| GH-21 | P1: Gerar repo | Execute | Verified |
+| GH-22 | P1: Gerar repo | Execute | Verified |
+| GH-23 | P1: Gerar repo | Execute | Verified |
+| GH-24 | P1: Gerar repo | Execute | Verified |
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 17 total, 0 mapped to tasks, 17 unmapped ⚠️ (mapeamento acontece na fase Tasks)
+**Coverage:** 17 total, 17 mapped to tasks (T-01..T-12), 0 unmapped — todos Verified (verificado 2026-08-10 contra o código; ver `tasks.md`)
 
 ---
 
 ## Success Criteria
 
-- [ ] Superadmin conecta a Org GitHub em menos de 5 minutos seguindo o fluxo do dashboard, sem precisar de suporte técnico externo
-- [ ] Superadmin cadastra um template e o sistema valida corretamente se é um template repo antes de aceitar
-- [ ] `CreateRepoFromTemplate` cria um repo privado funcional, confirmado por teste de integração contra GitHub real
-- [ ] Nenhuma credencial (private key, client secret, webhook secret) trafega ou é exibida em texto plano fora do momento de cadastro
+- [x] Superadmin conecta a Org GitHub em menos de 5 minutos seguindo o fluxo do dashboard, sem precisar de suporte técnico externo
+- [x] Superadmin cadastra um template e o sistema valida corretamente se é um template repo antes de aceitar
+- [x] `CreateRepoFromTemplate` cria um repo privado funcional, confirmado por teste de integração contra GitHub real
+- [x] Nenhuma credencial (private key, client secret, webhook secret) trafega ou é exibida em texto plano fora do momento de cadastro

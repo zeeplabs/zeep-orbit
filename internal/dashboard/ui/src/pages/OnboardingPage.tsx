@@ -15,7 +15,7 @@ type Step = 'welcome' | 'create-superadmin' | 'done'
 
 const STEPS: Step[] = ['welcome', 'create-superadmin', 'done']
 
-/** Step indicator (handoff linhas 152-157): 3 círculos numerados, check quando done, primary quando current. */
+/** Step indicator: 3 círculos numerados, check quando done, primary quando current. */
 function StepIndicator({ current }: { current: Step }) {
   const currentIdx = STEPS.indexOf(current)
   return (

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
@@ -27,6 +28,7 @@ type AppUserSummary struct {
 	Phone        *string    `json:"phone"`
 	AvatarURL    *string    `json:"avatar_url"`
 	Provider     string     `json:"provider"`
+	Role         string     `json:"role"`
 	Active       bool       `json:"active"`
 	LastSignInAt *time.Time `json:"last_sign_in_at"`
 	CreatedAt    time.Time  `json:"created_at"`
@@ -64,7 +66,7 @@ func ListAppUsers(ctx context.Context, pool *db.Pool, schema, search string, lim
 	}
 	queryArgs = append(queryArgs, limit, offset)
 	rows, err := pool.Query(ctx,
-		fmt.Sprintf(`SELECT id, email, name, phone, avatar_url, provider, active, last_sign_in_at, created_at
+		fmt.Sprintf(`SELECT id, email, name, phone, avatar_url, provider, role, active, last_sign_in_at, created_at
 		 FROM %q."_auth_users"%s
 		 ORDER BY created_at DESC
 		 LIMIT $%d OFFSET $%d`, schema, where, paramOffset+1, paramOffset+2),
@@ -81,7 +83,7 @@ func ListAppUsers(ctx context.Context, pool *db.Pool, schema, search string, lim
 	var users []*AppUserSummary
 	for rows.Next() {
 		var u AppUserSummary
-		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Phone, &u.AvatarURL, &u.Provider, &u.Active, &u.LastSignInAt, &u.CreatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Phone, &u.AvatarURL, &u.Provider, &u.Role, &u.Active, &u.LastSignInAt, &u.CreatedAt); err != nil {
 			return nil, 0, fmt.Errorf("dashboard: scan app user: %w", err)
 		}
 		users = append(users, &u)
@@ -150,6 +152,53 @@ func ActivateAppUser(ctx context.Context, pool *db.Pool, schema, userID string) 
 		return ErrNotFound
 	}
 	return nil
+}
+
+// ErrEmailConflict is returned by UpdateAppUser when the new email collides
+// with another user's email in the same app schema (UNIQUE violation).
+var ErrEmailConflict = errors.New("email already in use")
+
+// UpdateAppUser sets a user's email, phone, and business role (the latter
+// used by end-user-row-policies clause matching, e.g.
+// current_setting('app.jwt_role')). email/role must already be
+// validated/normalized by the caller before reaching here. emailChanged
+// reports whether the normalized email differed from the stored one, so the
+// caller can decide whether to reset sessions.
+func UpdateAppUser(ctx context.Context, pool *db.Pool, schema, userID, email, phone, role string) (emailChanged bool, err error) {
+	var currentEmail string
+	err = pool.QueryRow(ctx,
+		fmt.Sprintf(`SELECT email FROM %q."_auth_users" WHERE id = $1`, schema),
+		userID,
+	).Scan(&currentEmail)
+	if err != nil {
+		if isPgRelationNotFound(err) || errors.Is(err, pgx.ErrNoRows) {
+			return false, ErrNotFound
+		}
+		return false, fmt.Errorf("dashboard: read app user email: %w", err)
+	}
+
+	emailChanged = normalizeEmail(currentEmail) != normalizeEmail(email)
+
+	query := fmt.Sprintf(`UPDATE %q."_auth_users" SET email = $1, phone = $2, role = $3, updated_at = now() WHERE id = $4`, schema)
+	if emailChanged {
+		query = fmt.Sprintf(`UPDATE %q."_auth_users" SET email = $1, phone = $2, role = $3, email_confirmed_at = NULL, updated_at = now() WHERE id = $4`, schema)
+	}
+
+	tag, err := pool.Exec(ctx, query, email, phone, role, userID)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return false, ErrEmailConflict
+		}
+		if isPgRelationNotFound(err) {
+			return false, ErrNotFound
+		}
+		return false, fmt.Errorf("dashboard: update app user: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return false, ErrNotFound
+	}
+	return emailChanged, nil
 }
 
 // ResetAppUserSessions deletes all sessions for a given user in an app schema.

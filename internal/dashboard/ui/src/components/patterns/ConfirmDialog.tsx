@@ -27,7 +27,6 @@ interface ConfirmDialogProps {
 /**
  * Diálogo de confirmação genérico e reusável — cobre delete E logout (e qualquer
  * confirmação simples). Título/mensagem adaptam ao que está sendo confirmado.
- * Generaliza o antigo `DeleteConfirmDialog` (a ser reapontado nas telas na Fase 2).
  */
 export function ConfirmDialog({
   open,

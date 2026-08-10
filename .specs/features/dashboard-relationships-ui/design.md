@@ -1,7 +1,7 @@
 # Dashboard UI for Foreign Keys and Indexes Design
 
 **Spec**: `.specs/features/dashboard-relationships-ui/spec.md`
-**Status**: Draft
+**Status**: Verified — implementado e mergeado (verificado 2026-08-10 contra o código; ver `tasks.md`)
 
 ---
 

@@ -11,6 +11,7 @@ type AuthUser struct {
 	ID    string
 	Email string
 	App   string
+	Role  string
 }
 
 // WithUser returns a new context with the authenticated user injected.

@@ -8,6 +8,13 @@
 
 **Pré-requisito externo**: nenhum dentro do zeep-orbit. `license-server` (repo separado) não é dependência de bloqueio — as tasks T-05/T-06 assumem apenas o contrato de `GET /v1/status?ref=` fixado no `design.md`; um stub/mock local cobre os testes até o `license-server` real existir.
 
+**Nota de estado real (2026-08-10) — UI mock já mergeada, backend ainda Draft**: o `Status: Draft` acima continua correto para o escopo desta spec (backend `internal/enterprise/` não existe: `ls internal/` não lista o pacote, não há `License`/`Verify`/`HasFeature`/`GET /dashboard/api/license/status`). Porém a **UI de preview já está no repo**, entregue por `dashboard-settings-consolidation` S3.2, não por esta spec:
+
+- `internal/dashboard/ui/src/pages/BrandSettingsPage.tsx:574-614+` — `LicensePreviewState`/`LICENSE_PREVIEW_STATES` e o componente `LicenseTab()`, com plan card, feature checklist, switcher de estado (Free/Enterprise/Trial/Expired), textarea de license key e demo de badge/upgrade. Comentário no próprio código: *"License tab: UI-only preview (no `internal/enterprise` backend exists yet)"*. Todos os dados são hardcoded e as ações chamam `previewOnly()` (`toast.info`), sem persistir nada.
+- A tab está **travada atrás de um `disabled`**: `BrandSettingsPage.tsx:82-83` renderiza o `TabsTrigger` com `disabled={tb.value === "license"}` + `title={t("apps.soon")}`, então o preview é inalcançável por clique em produção.
+
+Consequência para o planejamento desta spec: **T-09 (Página "Licença" + badge de upgrade) já tem a casca visual pronta e não deve ser reescrita do zero** — a task vira "ligar o `LicenseTab` existente ao backend real (T-06 `GET /dashboard/api/license/status` + T-08 `useFeature`), substituir os dados hardcoded e remover o `disabled` do `TabsTrigger`". T-10 (i18n) também já tem parte das chaves `settings.license*` criadas em `en.json`/`pt-BR.json`. Nenhuma outra task muda.
+
 ---
 
 ## Execution Plan
@@ -45,7 +52,7 @@ Fase 5: Frontend                          Fase 6: Licença do repositório
 
 ### T-01: `License` — tipos e `Verify` (Ed25519)
 
-- **What**: Struct `License` (`Org`, `Plan`, `Ref`, `Trial`, `IssuedAt`, `ExpiresAt *time.Time`), constantes `PlanOSS`/`PlanEnterprise`, função `Verify(key string) *License` que faz split/decode base64url, `ed25519.Verify` contra chave pública embutida, parse do JSON, checagem de `exp`. Nunca retorna erro fatal — qualquer falha de verificação retorna `License{Plan: PlanOSS}` e loga warning.
+- **What**: Struct `License` (`Org`, `Plan`, `Ref`, `Trial`, `IssuedAt`, `ExpiresAt *time.Time`, `RenewalDueAt *time.Time` — D-133/D-134: `ExpiresAt` já vem do `license-server` com os 7 dias de graça embutidos, `RenewalDueAt` é só a data real de cobrança pra exibição, nunca usada em lógica de gating), constantes `PlanOSS`/`PlanEnterprise`, função `Verify(key string) *License` que faz split/decode base64url, `ed25519.Verify` contra chave pública embutida, parse do JSON, checagem de `exp`. Nunca retorna erro fatal — qualquer falha de verificação retorna `License{Plan: PlanOSS}` e loga warning.
 - **Where**: `internal/enterprise/license/license.go`, `internal/enterprise/license/publickey.go`
 - **Depends on**: nenhuma
 - **Reuses**: nenhum (pacote novo)
@@ -120,7 +127,7 @@ Fase 5: Frontend                          Fase 6: Licença do repositório
 
 ### T-06: `GET /dashboard/api/license/status`
 
-- **What**: Handler que retorna `{plan, features: []string, org, trial, expires_at}` a partir do `State.Current()` — nunca expõe a key crua nem o `ref` completo.
+- **What**: Handler que retorna `{plan, features: []string, org, trial, expires_at, renewal_due_at}` a partir do `State.Current()` — nunca expõe a key crua nem o `ref` completo.
 - **Where**: `internal/dashboard/license.go`
 - **Depends on**: T-03
 - **Reuses**: roteamento padrão do dashboard, mesmo padrão de handler leve de outros endpoints públicos de config
@@ -165,14 +172,14 @@ Fase 5: Frontend                          Fase 6: Licença do repositório
 
 ### T-09: Página "Licença" + badge de upgrade
 
-- **What**: Página no dashboard mostrando plano atual, `org`, status (válida/expirada/revogada), campo para colar nova key (some/reaparece a depender de permissão — reusa checagem de admin já existente, não RBAC per-app que ainda não existe). Componente de badge "Enterprise" + link de upgrade para uso em qualquer feature futura gated.
+- **What**: Página no dashboard mostrando plano atual, `org`, status (válida/expirada/revogada), campo para colar nova key (some/reaparece a depender de permissão — reusa checagem de admin já existente, não RBAC per-app que ainda não existe). Componente de badge "Enterprise" + link de upgrade para uso em qualquer feature futura gated. Novo (D-134/LIC-16): quando `renewal_due_at` estiver a ≤14 dias, exibir aviso de renovação próxima — visualmente distinto de "licença expirada/travada" (graça de 7 dias após `exp` nunca é mostrada como problema até o `exp` real passar).
 - **Where**: `internal/dashboard/ui/src/enterprise/LicensePage.tsx`, `internal/dashboard/ui/src/enterprise/EnterpriseBadge.tsx`
 - **Depends on**: T-08
 - **Reuses**: componentes de layout/formulário já existentes no dashboard, `toast.error` padrão em mutação de erro
-- **Requirement**: LIC-14
+- **Requirement**: LIC-14, LIC-16
 - **Tools**: nenhum
-- **Done when**: página renderiza os 3 estados de licença (sem key, válida, revogada/expirada) sem erro de console
-- **Tests**: teste de componente para os 3 estados
+- **Done when**: página renderiza os 4 estados de licença (sem key, válida em dia, válida com renovação próxima, expirada/travada) sem erro de console
+- **Tests**: teste de componente para os 4 estados
 - **Gate**: `npx tsc -b` + `npm run build`
 - **Commit**: não (agrupa com T-10)
 

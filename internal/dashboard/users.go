@@ -22,7 +22,7 @@ var errLastSuperadmin = errors.New("last superadmin")
 // error is a DB failure.
 //
 // Reused by both the PATCH /users/{id} role-change path and DELETE /users/{id}
-// — same invariant applies to both (dashboard-global-roles T-05).
+// — same invariant applies to both.
 func assertAtLeastOneSuperadminRemains(ctx context.Context, pool *db.Pool, excludeUserID string) error {
 	var count int
 	err := pool.QueryRow(ctx,
@@ -44,7 +44,7 @@ func assertAtLeastOneSuperadminRemains(ctx context.Context, pool *db.Pool, exclu
 //   - ActionManageUsers: actor must be superadmin or admin
 //   - CanCreateUserWithRole: same rule as CreateUser (only superadmin can
 //     assign superadmin)
-//   - ≥1 superadmin invariant (T-05): if the target is currently a superadmin
+//   - ≥1 superadmin invariant: if the target is currently a superadmin
 //     and the new role is not, at least one other superadmin must exist
 //
 // On success, a user.role_changed audit entry is written with metadata

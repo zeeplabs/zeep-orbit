@@ -84,6 +84,7 @@ func normalizeName(name string) string {
 var (
 	identRe      = regexp.MustCompile(`^[a-z][a-z0-9_]{0,62}$`)
 	appNameRe    = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
+	phoneE164Re  = regexp.MustCompile(`^\+[1-9]\d{7,14}$`)
 	allowedTypes = map[string]bool{
 		"text": true, "integer": true, "bigint": true, "boolean": true,
 		"uuid": true, "timestamptz": true, "numeric": true, "jsonb": true,
@@ -707,10 +708,9 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
-	// dashboard-global-roles T-02: action gate replaces the old `role ==
-	// "superadmin"` inline check. admin can also manage users; the per-role
-	// target restriction (only superadmin can create superadmin) is enforced
-	// separately below by CanCreateUserWithRole.
+	// admin can also manage users; the per-role target restriction (only
+	// superadmin can create superadmin) is enforced separately below by
+	// CanCreateUserWithRole.
 	if !HasPlatformPermission(user.Role, ActionManageUsers) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
@@ -738,17 +738,15 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid email address"})
 		return
 	}
-	// dashboard-global-roles T-01: 4 valid role values now. Anything else is 400.
 	switch body.Role {
 	case "superadmin", "admin", "auditor", "member":
-		// valid
 	default:
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "role must be one of: superadmin, admin, auditor, member"})
 		return
 	}
-	// dashboard-global-roles T-03: only a superadmin can create another superadmin.
-	// Other restrictions on the target role live in HasPlatformPermission; this
-	// is the only function that decides "can actor X create role=Y?".
+	// Only a superadmin can create another superadmin. Other restrictions on
+	// the target role live in HasPlatformPermission; this is the only
+	// function that decides "can actor X create role=Y?".
 	if !CanCreateUserWithRole(user.Role, body.Role) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only a superadmin can create a superadmin"})
 		return
@@ -797,9 +795,9 @@ func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// dashboard-global-roles T-05: ≥1 superadmin invariant. Before deleting,
-	// look up the target's role — if it's a superadmin, verify at least one
-	// other superadmin exists. Same helper as UpdateUserRole.
+	// ≥1 superadmin invariant. Before deleting, look up the target's role —
+	// if it's a superadmin, verify at least one other superadmin exists.
+	// Same helper as UpdateUserRole.
 	target, err := GetUser(r.Context(), h.pool, targetID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -1315,6 +1313,159 @@ func (h *Handler) DeleteAppTable(w http.ResponseWriter, r *http.Request) {
 	h.audit(r.Context(), user.ID, user.Email, "app.table.delete", "app_table", tableID, app.Name+"/"+tableName, nil, r.RemoteAddr)
 }
 
+// findAppTableByName looks up a table by name in an already-loaded AppRow.
+// Table policy routes address the table by name (not tableId, per spec's
+// API shape), so every policy handler resolves the real column list this way
+// before it can call into policy.Builder via CreateTablePolicy.
+func findAppTableByName(app *AppRow, tableName string) *AppTableRow {
+	for i := range app.Tables {
+		if app.Tables[i].Name == tableName {
+			return &app.Tables[i]
+		}
+	}
+	return nil
+}
+
+// ListTablePolicies handles GET /dashboard/api/apps/{id}/tables/{table}/policies.
+// Gated the same as create/delete (CanManage — admin/superadmin only), per
+// spec: policy definitions are part of an app's access-control surface, not
+// general read-only data any member can see.
+func (h *Handler) ListTablePolicies(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appID := chi.URLParam(r, "id")
+	tableName := chi.URLParam(r, "table")
+	app, role, err := GetApp(r.Context(), h.pool, appID, user)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+	if !role.CanManage() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+	if findAppTableByName(app, tableName) == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
+		return
+	}
+
+	policies, err := ListTablePolicies(r.Context(), h.pool, appID, tableName)
+	if err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, policies)
+}
+
+// CreateTablePolicy handles POST /dashboard/api/apps/{id}/tables/{table}/policies.
+func (h *Handler) CreateTablePolicy(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appID := chi.URLParam(r, "id")
+	tableName := chi.URLParam(r, "table")
+	app, role, err := GetApp(r.Context(), h.pool, appID, user)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+	if !role.CanManage() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+	table := findAppTableByName(app, tableName)
+	if table == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
+	var body PolicyDef
+	if !h.decodeJSONBody(w, r, &body) {
+		return
+	}
+
+	schemaName := schemaNameForDB(app.Name)
+	row, err := CreateTablePolicy(r.Context(), h.pool, appID, schemaName, tableName, table.Columns, body, user.ID)
+	if err != nil {
+		var valErr *provisioner.ValidationError
+		switch {
+		case errors.As(err, &valErr):
+			// Safe to expose: describes which clause/field failed, never
+			// internal detail (AGENTS.md §4 — provisioner.ValidationError is
+			// the explicit exception to "never leak err.Error() on 500s",
+			// same pattern as provisioner.TypeChangeError).
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": valErr.Error()})
+		case errors.Is(err, ErrPolicyAlreadyExists):
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "a policy with this name already exists on this table"})
+		default:
+			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, row)
+	h.audit(r.Context(), user.ID, user.Email, "app.table_policy.create", "table_policy", row.ID, app.Name+"/"+tableName+"/"+row.PgPolicyName, nil, r.RemoteAddr)
+}
+
+// DeleteTablePolicy handles DELETE /dashboard/api/apps/{id}/tables/{table}/policies/{policyId}.
+func (h *Handler) DeleteTablePolicy(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appID := chi.URLParam(r, "id")
+	tableName := chi.URLParam(r, "table")
+	policyID := chi.URLParam(r, "policyId")
+	app, role, err := GetApp(r.Context(), h.pool, appID, user)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+	if !role.CanManage() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+	if findAppTableByName(app, tableName) == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
+		return
+	}
+
+	schemaName := schemaNameForDB(app.Name)
+	if err := DeleteTablePolicy(r.Context(), h.pool, appID, schemaName, policyID); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "policy not found"})
+			return
+		}
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "policy deleted"})
+	h.audit(r.Context(), user.ID, user.Email, "app.table_policy.delete", "table_policy", policyID, app.Name+"/"+tableName, nil, r.RemoteAddr)
+}
+
 // buildAppConfig converts an AppRow into a config.AppConfig for the provisioner.
 func buildAppConfig(app *AppRow) config.AppConfig {
 	tables := make([]config.TableConfig, 0, len(app.Tables))
@@ -1452,7 +1603,8 @@ func (h *Handler) audit(ctx context.Context, userID, userEmail, action, resource
 	}
 }
 
-// SetLanguage handles PUT /dashboard/api/me/language
+// CompleteGoogleSetup handles setting a password for a Google-provisioned
+// account that doesn't have one yet, completing its dashboard login setup.
 func (h *Handler) CompleteGoogleSetup(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
 	if !ok {
@@ -1937,7 +2089,6 @@ type dataBrowserMutationRequest struct {
 	Data  map[string]any `json:"data,omitempty"`
 }
 
-// Insere um novo registro na tabela.
 func (h *Handler) DataBrowserCreate(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
 	if !ok {
@@ -1999,7 +2150,6 @@ func (h *Handler) DataBrowserCreate(w http.ResponseWriter, r *http.Request) {
 	h.audit(r.Context(), user.ID, user.Email, "data.create", "data", "", req.App+"/"+req.Table, nil, r.RemoteAddr)
 }
 
-// Atualiza parcialmente um registro existente.
 func (h *Handler) DataBrowserUpdate(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
 	if !ok {
@@ -2061,7 +2211,6 @@ func (h *Handler) DataBrowserUpdate(w http.ResponseWriter, r *http.Request) {
 	h.audit(r.Context(), user.ID, user.Email, "data.update", "data", req.ID, req.App+"/"+req.Table, nil, r.RemoteAddr)
 }
 
-// Remove um registro pelo ID.
 func (h *Handler) DataBrowserDelete(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
 	if !ok {
@@ -2113,7 +2262,7 @@ func (h *Handler) DataBrowserDelete(w http.ResponseWriter, r *http.Request) {
 	h.audit(r.Context(), user.ID, user.Email, "data.delete", "data", id, appName+"/"+tableName, nil, r.RemoteAddr)
 }
 
-// appUserRequest is the JSON body for app user list params.
+// appUserListParams holds the query params for listing an app's users.
 type appUserListParams struct {
 	Search string `json:"search"`
 	Limit  int    `json:"limit"`
@@ -2242,6 +2391,165 @@ func (h *Handler) ActivateAppUser(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "user activated"})
 	h.audit(r.Context(), user.ID, user.Email, "app.user.activate", "app_user", appID, app.Name+"/"+userID, nil, r.RemoteAddr)
+}
+
+// UpdateAppUser handles PUT /dashboard/api/apps/{id}/users/{userId}. Updates
+// email, phone, and role together; email/phone are otherwise uneditable
+// fields not covered by /activate, /deactivate, or /reset-sessions.
+func (h *Handler) UpdateAppUser(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appID := chi.URLParam(r, "id")
+	app, role, err := GetApp(r.Context(), h.pool, appID, user)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "app not found"})
+		return
+	}
+	if !role.CanManage() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 4*1024)
+	var body struct {
+		Email string `json:"email"`
+		Phone string `json:"phone"`
+		Role  string `json:"role"`
+	}
+	if !h.decodeJSONBody(w, r, &body) {
+		return
+	}
+	email := normalizeEmail(body.Email)
+	if !isValidEmail(email) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid email"})
+		return
+	}
+	if !identRe.MatchString(body.Role) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "role must match ^[a-z][a-z0-9_]{0,62}$"})
+		return
+	}
+	if body.Phone != "" && !phoneE164Re.MatchString(body.Phone) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid phone number"})
+		return
+	}
+
+	userID := chi.URLParam(r, "userId")
+	schema := schemaNameForDB(app.Name)
+	h.prov.EnsureAuthUserColumns(r.Context(), schema)
+	emailChanged, err := UpdateAppUser(r.Context(), h.pool, schema, userID, email, body.Phone, body.Role)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
+			return
+		}
+		if errors.Is(err, ErrEmailConflict) {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "email already in use"})
+			return
+		}
+		h.writeError(w, r, http.StatusInternalServerError, "failed to update user", err)
+		return
+	}
+	if emailChanged {
+		if err := ResetAppUserSessions(r.Context(), h.pool, schema, userID); err != nil {
+			h.logger.Warn("failed to reset app user sessions after email change", zap.Error(err))
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "user updated"})
+	h.audit(r.Context(), user.ID, user.Email, "app.user.update", "app_user", appID, app.Name+"/"+userID, nil, r.RemoteAddr)
+}
+
+// UpdateAppEnduserRoles handles PUT /dashboard/api/apps/{id}/roles. Replaces
+// the app's full enduser_roles_config list (total replace, same semantics as
+// storage_config/rate_limit_config — not a merge). Removing a role that is
+// still assigned to at least one end user or referenced by at least one row
+// policy is blocked with 409 (spec.md "role órfã" decision: values already
+// persisted elsewhere keep working even after their role drops off this
+// list, but the list itself can't drop a role still in active use).
+func (h *Handler) UpdateAppEnduserRoles(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appID := chi.URLParam(r, "id")
+	app, appRole, err := GetApp(r.Context(), h.pool, appID, user)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "app not found"})
+		return
+	}
+	if !appRole.CanManage() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 16*1024)
+	var body struct {
+		Roles []string `json:"roles"`
+	}
+	if !h.decodeJSONBody(w, r, &body) {
+		return
+	}
+	if body.Roles == nil {
+		body.Roles = []string{}
+	}
+
+	newSet := make(map[string]bool, len(body.Roles))
+	for _, roleName := range body.Roles {
+		if !identRe.MatchString(roleName) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "role must match ^[a-z][a-z0-9_]{0,62}$"})
+			return
+		}
+		if newSet[roleName] {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "role already exists"})
+			return
+		}
+		newSet[roleName] = true
+	}
+
+	schema := schemaNameForDB(app.Name)
+	h.prov.EnsureAuthUserColumns(r.Context(), schema)
+	for _, oldRole := range app.EnduserRolesConfig {
+		if newSet[oldRole] {
+			continue
+		}
+		endUserCount, err := CountAppUsersByRole(r.Context(), h.pool, schema, oldRole)
+		if err != nil {
+			h.writeError(w, r, http.StatusInternalServerError, "failed to check role usage", err)
+			return
+		}
+		policyCount, err := CountTablePoliciesByRole(r.Context(), h.pool, app.ID, oldRole)
+		if err != nil {
+			h.writeError(w, r, http.StatusInternalServerError, "failed to check role usage", err)
+			return
+		}
+		if endUserCount+policyCount > 0 {
+			writeJSON(w, http.StatusConflict, map[string]any{
+				"error":        "role in use",
+				"role":         oldRole,
+				"endUserCount": endUserCount,
+				"policyCount":  policyCount,
+			})
+			return
+		}
+	}
+
+	if err := UpdateAppEnduserRoles(r.Context(), h.pool, app.ID, body.Roles); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "app not found"})
+			return
+		}
+		h.writeError(w, r, http.StatusInternalServerError, "failed to update enduser roles", err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"roles": body.Roles})
+	h.audit(r.Context(), user.ID, user.Email, "app.roles.update", "app", appID, app.Name, nil, r.RemoteAddr)
 }
 
 // ResetAppUserSessions handles POST /dashboard/api/apps/{id}/users/{userId}/reset-sessions

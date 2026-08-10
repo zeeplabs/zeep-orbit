@@ -101,11 +101,11 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	schema := app.SchemaName
-	var userID string
+	var userID, role string
 	err = h.pool.QueryRow(r.Context(),
-		fmt.Sprintf(`INSERT INTO %q."_auth_users" (email, phone, password_hash, name, provider) VALUES ($1, $2, $3, $4, 'email') RETURNING id`, schema),
+		fmt.Sprintf(`INSERT INTO %q."_auth_users" (email, phone, password_hash, name, provider) VALUES ($1, $2, $3, $4, 'email') RETURNING id, role`, schema),
 		body.Email, body.Phone, string(hash), body.Name,
-	).Scan(&userID)
+	).Scan(&userID, &role)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -116,7 +116,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := IssueJWT([]byte(app.Config.Auth.JWTSecret), userID, body.Email, app.Config.Name)
+	token, err := IssueJWT([]byte(app.Config.Auth.JWTSecret), userID, body.Email, app.Config.Name, role)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to issue token")
 		return
@@ -142,12 +142,12 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	schema := app.SchemaName
-	var userID, passwordHash string
+	var userID, passwordHash, role string
 	var active bool
 	err := h.pool.QueryRow(r.Context(),
-		fmt.Sprintf(`SELECT id, password_hash, active FROM %q."_auth_users" WHERE email = $1`, schema),
+		fmt.Sprintf(`SELECT id, password_hash, active, role FROM %q."_auth_users" WHERE email = $1`, schema),
 		body.Email,
-	).Scan(&userID, &passwordHash, &active)
+	).Scan(&userID, &passwordHash, &active, &role)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, http.StatusUnauthorized, "invalid credentials")
@@ -175,7 +175,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := IssueJWT([]byte(app.Config.Auth.JWTSecret), userID, body.Email, app.Config.Name)
+	token, err := IssueJWT([]byte(app.Config.Auth.JWTSecret), userID, body.Email, app.Config.Name, role)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to issue token")
 		return
@@ -238,11 +238,11 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var email string
+	var email, role string
 	if err := h.pool.QueryRow(r.Context(),
-		fmt.Sprintf(`SELECT email FROM %q."_auth_users" WHERE id = $1`, schema),
+		fmt.Sprintf(`SELECT email, role FROM %q."_auth_users" WHERE id = $1`, schema),
 		userID,
-	).Scan(&email); err != nil {
+	).Scan(&email, &role); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to query user")
 		return
 	}
@@ -262,7 +262,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := IssueJWT([]byte(app.Config.Auth.JWTSecret), userID, email, app.Config.Name)
+	token, err := IssueJWT([]byte(app.Config.Auth.JWTSecret), userID, email, app.Config.Name, role)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to issue token")
 		return

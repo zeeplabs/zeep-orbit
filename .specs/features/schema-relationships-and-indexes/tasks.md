@@ -2,7 +2,7 @@
 
 **Spec**: `.specs/features/schema-relationships-and-indexes/spec.md`
 **Design**: `.specs/features/schema-relationships-and-indexes/design.md`
-**Status**: Draft
+**Status**: Verified (T-01..T-11) — verificado 2026-08-10: `config.ReferenceConfig`/`IndexConfig` (`internal/config/types.go:46,62`), `validateReference`/`validateIndexes`/`detectReferenceCycle` (`internal/config/validate.go:135,191,218`), `topoSortTables` (`internal/provisioner/topsort.go:14`), `ensureIndexes` (`internal/provisioner/index.go:16`), FK emitida em `columnDDL` (`internal/provisioner/table.go:88-89`), `checkDependents` + guard em `DropTable` (`internal/provisioner/table.go:150,180-181`), testes em `internal/provisioner/relationships_test.go`/`topsort_test.go` e `internal/config/validate_test.go`. **T-12 obsoleta**: o fluxo `apps.yaml`/`apply` foi removido do produto (AGENTS §1) — não há exemplo de YAML para documentar; schema é gerenciado só pelo Dashboard.
 
 > Convenção de Gate: não há `TESTING.md` no repo — inferido do `Makefile` (`go test ./...`, `go vet ./...`), mesmo critério usado em `mvp-core/tasks.md` e `frontend-app-entity/tasks.md`.
 
@@ -30,7 +30,7 @@ Fase 1: Config              Fase 2: Validação           Fase 3: Provisioner
 
 ---
 
-## T-01: Adicionar `ReferenceConfig` e campo `References` em `ColumnConfig`
+## T-01: Adicionar `ReferenceConfig` e campo `References` em `ColumnConfig` [x]
 
 **Arquivo**: `internal/config/types.go`
 
@@ -41,7 +41,7 @@ Fase 1: Config              Fase 2: Validação           Fase 3: Provisioner
 
 ---
 
-## T-02: Adicionar `IndexConfig` e campo `Indexes` em `TableConfig`
+## T-02: Adicionar `IndexConfig` e campo `Indexes` em `TableConfig` [x]
 
 **Arquivo**: `internal/config/types.go`
 
@@ -54,7 +54,7 @@ Fase 1: Config              Fase 2: Validação           Fase 3: Provisioner
 
 ---
 
-## T-03: Criar `internal/config.ValidateSchema` — referência existe e coluna alvo é PK/unique
+## T-03: Criar `internal/config.ValidateSchema` — referência existe e coluna alvo é PK/unique [x]
 
 **Arquivo**: novo `internal/config/validate.go`
 
@@ -73,7 +73,7 @@ Fase 1: Config              Fase 2: Validação           Fase 3: Provisioner
 
 ---
 
-## T-04: Estender `ValidateSchema` — detecção de ciclo entre tabelas
+## T-04: Estender `ValidateSchema` — detecção de ciclo entre tabelas [x]
 
 **Arquivo**: `internal/config/validate.go`
 
@@ -86,7 +86,7 @@ Fase 1: Config              Fase 2: Validação           Fase 3: Provisioner
 
 ---
 
-## T-05: Estender `ValidateSchema` — índice: coluna existe e nome único no app
+## T-05: Estender `ValidateSchema` — índice: coluna existe e nome único no app [x]
 
 **Arquivo**: `internal/config/validate.go`
 
@@ -101,7 +101,7 @@ Fase 1: Config              Fase 2: Validação           Fase 3: Provisioner
 
 ---
 
-## T-06: Criar `internal/provisioner.topoSortTables`
+## T-06: Criar `internal/provisioner.topoSortTables` [x]
 
 **Arquivo**: novo `internal/provisioner/topsort.go`
 
@@ -115,7 +115,7 @@ Fase 1: Config              Fase 2: Validação           Fase 3: Provisioner
 
 ---
 
-## T-07: Estender `columnDDL`/`createTable`/`addMissingColumns` para emitir `REFERENCES ... ON DELETE ...`
+## T-07: Estender `columnDDL`/`createTable`/`addMissingColumns` para emitir `REFERENCES ... ON DELETE ...` [x]
 
 **Arquivo**: `internal/provisioner/table.go`
 
@@ -132,7 +132,7 @@ Teste de integração: `DELETE` em `customers` propaga `CASCADE` pra `orders` (q
 
 ---
 
-## T-08: Criar `internal/provisioner.ensureIndexes`
+## T-08: Criar `internal/provisioner.ensureIndexes` [x]
 
 **Arquivo**: novo `internal/provisioner/index.go`
 
@@ -150,7 +150,7 @@ Teste de integração: `DELETE` em `customers` propaga `CASCADE` pra `orders` (q
 
 ---
 
-## T-09: Criar `internal/provisioner.checkDependents` e integrar em `DropTable`
+## T-09: Criar `internal/provisioner.checkDependents` e integrar em `DropTable` [x]
 
 **Arquivo**: `internal/provisioner/table.go` (`DropTable`, linha atual 116-122)
 
@@ -165,7 +165,7 @@ Teste de integração: `DELETE` em `customers` propaga `CASCADE` pra `orders` (q
 
 ---
 
-## T-10: Apply incremental — ordem entre criar tabela nova e adicionar FK em tabela existente
+## T-10: Apply incremental — ordem entre criar tabela nova e adicionar FK em tabela existente [x]
 
 **Arquivo**: `internal/provisioner/provisioner.go`
 
@@ -177,7 +177,7 @@ Teste de integração: `DELETE` em `customers` propaga `CASCADE` pra `orders` (q
 
 ---
 
-## T-11: Testes de integração (Postgres real, não mock)
+## T-11: Testes de integração (Postgres real, não mock) [x]
 
 **Arquivo**: `internal/provisioner/*_test.go` (seguir padrão de teste com banco real já usado no pacote, se existir — confirmar durante implementação)
 

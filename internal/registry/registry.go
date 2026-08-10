@@ -28,14 +28,12 @@ type App struct {
 	RateLimit     *config.RateLimitConfig
 }
 
-// Table representa uma tabela dentro de um app.
 type Table struct {
 	Name    string
 	RLS     string
 	Columns []Column
 }
 
-// Column representa uma coluna de uma tabela.
 type Column struct {
 	Name       string
 	Type       string
@@ -51,7 +49,6 @@ type SystemConfig struct {
 	StatementTimeoutMs int  `json:"statement_timeout_ms"`
 }
 
-// New retorna um Registry vazio, pronto para uso.
 func New() *Registry {
 	return &Registry{
 		apps: make(map[string]*App),

@@ -2,7 +2,7 @@
 
 **Spec**: `.specs/features/dashboard-relationships-ui/spec.md`
 **Design**: `.specs/features/dashboard-relationships-ui/design.md`
-**Status**: Draft
+**Status**: Verified — T-01..T-08 implementados e mergeados (verificado 2026-08-10: `ReferenceDef`/`IndexDef` e campos `references`/`indexes` em `src/lib/api.ts:11,24,27,38`, `indexes` no payload de `useUpdateTable` (`api.ts:179`), UI de FK/índices e o dialog de relacionamentos em `src/components/TableCard.tsx`)
 
 > Convenção de Gate: sem `TESTING.md` no repo. Frontend não tem suíte de testes automatizados hoje (`internal/dashboard/ui`) — verificação é manual (rodar `npm run dev`, testar fluxo no browser), como já é o padrão do restante da UI.
 
@@ -20,7 +20,7 @@ Fase 1: Tipos              Fase 2: Formulário FK        Fase 3: Formulário ín
 
 ---
 
-## T-01: Adicionar `ReferenceDef` e campo `references` em `ColumnDef`
+## T-01: Adicionar `ReferenceDef` e campo `references` em `ColumnDef` [x]
 
 **Arquivo**: `internal/dashboard/ui/src/lib/api.ts`
 
@@ -31,7 +31,7 @@ Fase 1: Tipos              Fase 2: Formulário FK        Fase 3: Formulário ín
 
 ---
 
-## T-02: Adicionar `IndexDef` e campo `indexes` em `TableDef`
+## T-02: Adicionar `IndexDef` e campo `indexes` em `TableDef` [x]
 
 **Arquivo**: `internal/dashboard/ui/src/lib/api.ts`
 
@@ -42,7 +42,7 @@ Fase 1: Tipos              Fase 2: Formulário FK        Fase 3: Formulário ín
 
 ---
 
-## T-03: UI de referência por coluna em `TableCard.tsx`
+## T-03: UI de referência por coluna em `TableCard.tsx` [x]
 
 **Arquivo**: `internal/dashboard/ui/src/components/TableCard.tsx`
 
@@ -61,7 +61,7 @@ Fase 1: Tipos              Fase 2: Formulário FK        Fase 3: Formulário ín
 
 ---
 
-## T-04: Enviar `references`/incluir no payload de save
+## T-04: Enviar `references`/incluir no payload de save [x]
 
 **Arquivo**: `internal/dashboard/ui/src/components/TableCard.tsx`
 
@@ -74,7 +74,7 @@ Fase 1: Tipos              Fase 2: Formulário FK        Fase 3: Formulário ín
 
 ---
 
-## T-05: Estado `indexes` em `TableCard.tsx`
+## T-05: Estado `indexes` em `TableCard.tsx` [x]
 
 **Arquivo**: `internal/dashboard/ui/src/components/TableCard.tsx`
 
@@ -88,7 +88,7 @@ Fase 1: Tipos              Fase 2: Formulário FK        Fase 3: Formulário ín
 
 ---
 
-## T-06: UI de índices por tabela em `TableCard.tsx`
+## T-06: UI de índices por tabela em `TableCard.tsx` [x]
 
 **Arquivo**: `internal/dashboard/ui/src/components/TableCard.tsx`
 
@@ -105,7 +105,7 @@ Fase 1: Tipos              Fase 2: Formulário FK        Fase 3: Formulário ín
 
 ---
 
-## T-07: Exibição somente-leitura de FK/índices
+## T-07: Exibição somente-leitura de FK/índices [x]
 
 **Arquivo**: `internal/dashboard/ui/src/components/TableCard.tsx`
 
@@ -117,7 +117,7 @@ Fase 1: Tipos              Fase 2: Formulário FK        Fase 3: Formulário ín
 
 ---
 
-## T-08: Verificação manual end-to-end
+## T-08: Verificação manual end-to-end [x]
 
 Sem suíte de teste automatizado no frontend hoje — verificação via `npm run dev` (dashboard UI) contra API real:
 

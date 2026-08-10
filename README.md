@@ -75,6 +75,8 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/myapp/tasks
 | **Auth by Email**      | Built-in email/password register & login per app         |
 | **Google OAuth**       | Sign in with Google — both dashboard and per-app         |
 | **Row-Level Security** | Auto-filter data by owner (`rls: owner`), with an optional "require RLS by default" for new tables |
+| **End-User Row Policies** | Per-table/action row policies combining an end-user's business `role` with a condition on the row's own data, enforced by native Postgres RLS (`CREATE POLICY`) — not a Go-layer filter |
+| **Configurable End-User Roles** | Define your own end-user business role list per app, used by row policies and shown in app-user management |
 | **App Tokens**         | JWT management for apps without email auth (create, revoke, refresh) |
 | **Per-App Health**     | `GET /{app}/health` for monitoring and readiness probes  |
 | **Soft Delete**        | Configurable soft delete toggle (dashboard settings)     |
@@ -492,7 +494,8 @@ Full detail (per-milestone checklists, linked specs) lives in [`.specs/project/R
 | **M6 — i18n** | ✅ Done | pt-BR / English, language switcher |
 | **M7 — SDKs** | ✅ Done | TS, Go, Python, Rust, Java, PHP clients |
 | **M8 — Platform Services** | 🔵 In progress | planned: [SMTP/email integration](.specs/features/smtp-email-integration/) (invites, password reset), [observability integrations](.specs/features/observability-integrations/) (OpenTelemetry, Datadog, New Relic) |
-| **M9 — Enterprise Licensing** | 🔵 In progress | planned: [dual-license model](.specs/features/enterprise-licensing/) (MIT core + gated enterprise features) |
+| **M9 — Enterprise Licensing** | 🔵 In progress | planned: [dual-license model](.specs/features/enterprise-licensing/) (MIT core + gated enterprise features, annual subscription) |
+| **M10 — End-User Row Authorization** | ✅ Done | [End-user row policies](.specs/features/end-user-row-policies/) (business role claim + admin-configured native Postgres RLS) and [configurable end-user roles per app](.specs/features/enduser-roles-config/) |
 
 ### Planned — visible in the dashboard, not functional yet
 

@@ -477,7 +477,6 @@ AFTER CLONE
         }}
       />
 
-      {/* Create dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -553,7 +552,6 @@ AFTER CLONE
         </DialogContent>
       </Dialog>
 
-      {/* Sync dialog */}
       <Dialog
         open={!!syncModalApp}
         onOpenChange={() => {

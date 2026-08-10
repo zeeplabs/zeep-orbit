@@ -1,9 +1,9 @@
 package dashboard
 
-// app_members_store.go — read + write helpers for the app_members table.
-// T-03 (CountAppAdmins for the "≥1 admin per app" invariant) and T-06
-// (CRUD operations for the membership management API) land here. See
-// `.specs/features/rbac-per-app/{spec,design}.md` for the full model.
+// app_members_store.go holds read/write helpers for the app_members table,
+// including CountAppAdmins (used to enforce the "≥1 admin per app"
+// invariant) and CRUD operations backing the membership management API.
+// See `.specs/features/rbac-per-app/{spec,design}.md` for the full model.
 
 import (
 	"context"
@@ -36,9 +36,10 @@ var ErrLastAppAdmin = errors.New("rbac: app must have at least one admin")
 
 // ErrAlreadyMember is the sentinel returned by AddAppMember when the
 // (app, user) pair already exists in app_members. The UNIQUE partial
-// index from T-01 guarantees this is enforced at the DB level, not just
-// in the application — concurrent POSTs that race past the application
-// check will still get a UNIQUE violation that maps to this error.
+// index on (app, user) guarantees this is enforced at the DB level, not
+// just in the application — concurrent POSTs that race past the
+// application check will still get a UNIQUE violation that maps to this
+// error.
 var ErrAlreadyMember = errors.New("rbac: user is already a member of this app")
 
 // CountAppAdmins returns the number of users with role='admin' on the given
@@ -49,11 +50,10 @@ var ErrAlreadyMember = errors.New("rbac: user is already a member of this app")
 // not affected by membership counts.
 //
 // Does NOT take a lock. Callers that combine count+write (the membership
-// management API in T-06) must wrap both in a transaction with
+// management API) must wrap both in a transaction with
 // `SELECT ... FOR UPDATE` on the relevant app_members rows, so the
 // invariant is not lost to a race between two concurrent PATCH/DELETE
-// operations. Same pattern as the "≥1 superadmin" invariant in
-// dashboard-global-roles T-05.
+// operations. Same pattern as the "≥1 superadmin" invariant in users.go.
 func CountAppAdmins(ctx context.Context, pool *db.Pool, app AppRef) (int, error) {
 	if (app.BackendAppID == "" && app.FrontendAppID == "") ||
 		(app.BackendAppID != "" && app.FrontendAppID != "") {
@@ -376,8 +376,8 @@ func validAppRole(r AppRole) bool {
 }
 
 // isUniqueViolation reports whether err is a Postgres UNIQUE constraint
-// violation (SQLSTATE 23505). Used to map the partial UNIQUE indexes
-// from T-01 to ErrAlreadyMember.
+// violation (SQLSTATE 23505). Used to map the partial UNIQUE indexes on
+// app_members to ErrAlreadyMember.
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {

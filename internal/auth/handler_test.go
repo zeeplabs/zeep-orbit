@@ -57,6 +57,7 @@ func TestMain(m *testing.M) {
 			"active"             BOOLEAN     NOT NULL DEFAULT true,
 			"provider"           TEXT        NOT NULL DEFAULT 'email',
 			"google_id"          TEXT,
+			"role"               TEXT        NOT NULL DEFAULT 'member',
 			"created_at"         TIMESTAMPTZ NOT NULL DEFAULT now(),
 			"updated_at"         TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
@@ -238,6 +239,67 @@ func TestLoginReturnsTokenAndRefresh(t *testing.T) {
 	}
 	if m["refresh_token"] == "" {
 		t.Fatal("refresh_token missing")
+	}
+}
+
+// TestLoginEmbedsDBRoleInJWTClaim proves ROWPOL-02 end-to-end through the real
+// login handler: it registers a user, updates their _auth_users.role directly
+// in the database to a non-default value, logs in via POST /{app}/auth/login,
+// decodes the returned JWT with ParseJWT (not IssueJWT called directly), and
+// asserts the token's role claim equals whatever _auth_users.role holds for
+// that user — not a literal from the test itself.
+func TestLoginEmbedsDBRoleInJWTClaim(t *testing.T) {
+	router := buildAuthRouter()
+	ctx := context.Background()
+
+	regReq := httptest.NewRequest(http.MethodPost, "/"+testApp+"/auth/register", jsonBody(map[string]any{
+		"email": "rolelogin@test.com", "password": "secret",
+	}))
+	regReq.Header.Set("Content-Type", "application/json")
+	regReq.RemoteAddr = "10.0.0.55:1234" // own rate-limit bucket, isolated from other tests in this file
+	router.ServeHTTP(httptest.NewRecorder(), regReq)
+
+	if _, err := testPool.Exec(ctx,
+		`UPDATE `+testSchema+`."_auth_users" SET "role" = $1 WHERE "email" = $2`,
+		"approver", "rolelogin@test.com",
+	); err != nil {
+		t.Fatalf("failed to set custom role: %v", err)
+	}
+
+	var dbRole string
+	if err := testPool.QueryRow(ctx,
+		`SELECT "role" FROM `+testSchema+`."_auth_users" WHERE "email" = $1`,
+		"rolelogin@test.com",
+	).Scan(&dbRole); err != nil {
+		t.Fatalf("failed to read back role: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/"+testApp+"/auth/login", jsonBody(map[string]any{
+		"email": "rolelogin@test.com", "password": "secret",
+	}))
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "10.0.0.55:1234"
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	m := decodeJSON(t, rec.Body)
+	rawToken, _ := m["token"].(string)
+	if rawToken == "" {
+		t.Fatal("token missing")
+	}
+
+	claims, err := ParseJWT([]byte(testSecret), rawToken)
+	if err != nil {
+		t.Fatalf("ParseJWT failed: %v", err)
+	}
+	if claims.Role != dbRole {
+		t.Fatalf("expected JWT role claim %q to match _auth_users.role %q, got %q", dbRole, dbRole, claims.Role)
+	}
+	if dbRole != "approver" {
+		t.Fatalf("test setup invariant broken: expected dbRole 'approver', got %q", dbRole)
 	}
 }
 

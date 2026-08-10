@@ -63,8 +63,8 @@ func HasPlatformPermission(role string, action PlatformAction) bool {
 
 // CanReadAnyApp reports whether the role can read any app's
 // data/schema/logs without being a member. Used by the rbac-per-app
-// ResolveAppRole extension (T-06 of dashboard-global-roles) — defined
-// here so the spec's cross-spec integration has a single home.
+// ResolveAppRole extension — defined here so the cross-spec integration
+// has a single home.
 func CanReadAnyApp(role string) bool {
 	switch role {
 	case "superadmin", "admin", "auditor":

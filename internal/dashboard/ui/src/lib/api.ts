@@ -43,6 +43,7 @@ export interface AppDef {
   name: string
   jwt_secret: string
   auth_email_enabled: boolean
+  enduser_roles_config: string[]
   owner_id: string
   owner_email?: string
   owner_name?: string
@@ -202,6 +203,83 @@ export function useDeleteAppTable(appId: string): UseMutationResult<void, Error,
 }
 
 
+export interface PolicyClause {
+  column: string
+  operator: string
+  value_source?: string
+  value?: string
+  logic?: string
+}
+
+export interface PolicyDef {
+  name: string
+  action: string
+  roles: string[]
+  clauses: PolicyClause[]
+}
+
+export interface TablePolicyRow {
+  id: string
+  table_name: string
+  action: string
+  roles: string[]
+  clauses: PolicyClause[]
+  pg_policy_name: string
+  created_at: string
+  created_by: string
+}
+
+export function useTablePolicies(appId: string, table: string): UseQueryResult<TablePolicyRow[]> {
+  return useQuery({
+    queryKey: ['table-policies', appId, table],
+    queryFn: () =>
+      apiFetch<TablePolicyRow[]>(`/dashboard/api/apps/${appId}/tables/${table}/policies`),
+    enabled: Boolean(appId) && Boolean(table),
+  })
+}
+
+export function useCreateTablePolicy(
+  appId: string,
+  table: string,
+): UseMutationResult<TablePolicyRow, Error, PolicyDef> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (def: PolicyDef) =>
+      apiFetch<TablePolicyRow>(`/dashboard/api/apps/${appId}/tables/${table}/policies`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(def),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['table-policies', appId, table] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+export function useDeleteTablePolicy(
+  appId: string,
+  table: string,
+): UseMutationResult<{ message: string }, Error, string> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (policyId: string) =>
+      apiFetch<{ message: string }>(
+        `/dashboard/api/apps/${appId}/tables/${table}/policies/${policyId}`,
+        { method: 'DELETE' },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['table-policies', appId, table] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+
 export interface UserDef {
   id: string
   email: string
@@ -264,6 +342,7 @@ export interface AppUserSummary {
   phone: string | null
   avatar_url: string | null
   provider: string
+  role: string
   active: boolean
   last_sign_in_at: string | null
   created_at: string
@@ -337,6 +416,49 @@ export function useActivateAppUser(): UseMutationResult<
       }),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ['app-users', variables.appId] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+export function useUpdateAppUser(): UseMutationResult<
+  { message: string },
+  Error,
+  { appId: string; userId: string; email: string; phone: string; role: string }
+> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ appId, userId, email, phone, role }) =>
+      apiFetch(`/dashboard/api/apps/${appId}/users/${userId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ email, phone, role }),
+      }),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ['app-users', variables.appId] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+export function useUpdateAppEnduserRoles(): UseMutationResult<
+  { roles: string[] },
+  Error,
+  { id: string; roles: string[] }
+> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, roles }) =>
+      apiFetch<{ roles: string[] }>(`/dashboard/api/apps/${id}/roles`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roles }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['apps'] })
     },
     onError: (error) => {
       toast.error(error.message)
@@ -799,7 +921,6 @@ export interface AppMemberListResponse {
 
 export type AppAxis = 'backend' | 'frontend'
 
-/** Builds the URL prefix for the membership management API. */
 function appMembersPath(axis: AppAxis, appId: string): string {
   const base = axis === 'backend' ? 'apps' : 'frontend-apps'
   return `/dashboard/api/${base}/${appId}/members`

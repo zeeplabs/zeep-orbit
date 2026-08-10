@@ -11,10 +11,11 @@ import (
 )
 
 type perAppLimiter struct {
-	mu      sync.Mutex
-	entries map[string]*rlEntry
-	max     int
-	window  time.Duration
+	mu        sync.Mutex
+	entries   map[string]*rlEntry
+	max       int
+	window    time.Duration
+	lastSwept time.Time
 }
 
 type rlEntry struct {
@@ -62,6 +63,18 @@ func (l *perAppLimiter) allow(ip string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := time.Now()
+
+	// Sweep stale entries once per window instead of on every call — bounds
+	// map growth from distinct client IPs without a background goroutine.
+	if l.lastSwept.IsZero() || now.Sub(l.lastSwept) > l.window {
+		for k, e := range l.entries {
+			if now.Sub(e.windowStart) > l.window {
+				delete(l.entries, k)
+			}
+		}
+		l.lastSwept = now
+	}
+
 	e, ok := l.entries[ip]
 	if !ok || now.Sub(e.windowStart) > l.window {
 		l.entries[ip] = &rlEntry{count: 1, windowStart: now}

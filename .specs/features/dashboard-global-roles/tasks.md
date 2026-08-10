@@ -2,11 +2,11 @@
 
 **Spec**: `.specs/features/dashboard-global-roles/spec.md`
 **Design**: `.specs/features/dashboard-global-roles/design.md`
-**Status**: Draft
+**Status**: Verified — T-01..T-09 implementados e mergeados (verificado 2026-08-10 contra o código)
 
 > Convenção de Gate: sem `TESTING.md` no repo — inferido do `Makefile` (`go test ./...`, `go vet ./...`, `gofmt -l`, `npx tsc -b`, `npm run build`), mesmo critério das demais specs.
 
-**Pré-requisito cruzado (não bloqueante para a maior parte das tasks)**: T-06 (leitura irrestrita de apps para `admin`/`auditor`) depende de `ResolveAppRole` existir (spec `rbac-per-app`, ainda só especificada, não implementada). Todas as demais tasks (migração, matriz de permissões de plataforma, gestão de usuários) não dependem disso e podem ser implementadas primeiro.
+**Pré-requisito cruzado — resolvido**: T-06 (leitura irrestrita de apps para `admin`/`auditor`) dependia de `ResolveAppRole` existir (spec `rbac-per-app`). `rbac-per-app` foi implementada; `ResolveAppRole` vive em `internal/dashboard/rbac.go` e já chama `CanReadAnyApp` (linha 107). T-06 está entregue.
 
 ---
 
@@ -57,7 +57,7 @@ Fase 5: Frontend                          Fase 6: Docs e changelog
 
 ---
 
-### T-02: `HasPlatformPermission`
+### T-02: `HasPlatformPermission` [x]
 
 - **What**: Função central mapeando `(role, action) → bool` conforme a matriz de permissões do spec (templates/branding/usuários/integrações/infra/auditoria/apps próprios).
 - **Where**: `internal/dashboard/platform_roles.go`
@@ -72,7 +72,7 @@ Fase 5: Frontend                          Fase 6: Docs e changelog
 
 ---
 
-### T-03: `CanCreateUserWithRole` + edição de `CreateUser`
+### T-03: `CanCreateUserWithRole` + edição de `CreateUser` [x]
 
 - **What**: `CanCreateUserWithRole(actorRole, targetRole) bool` (bloqueia qualquer não-`superadmin` tentando criar `role: superadmin`). Aplicado em `CreateUser` existente antes de persistir.
 - **Where**: `internal/dashboard/platform_roles.go`, edição de `internal/dashboard/handler.go` (`CreateUser`)
@@ -87,7 +87,7 @@ Fase 5: Frontend                          Fase 6: Docs e changelog
 
 ---
 
-### T-04: `PATCH /dashboard/api/users/{id}` (mudar role)
+### T-04: `PATCH /dashboard/api/users/{id}` (mudar role) [x]
 
 - **What**: Endpoint novo para promover/rebaixar role de um usuário existente — não existe hoje (só `CreateUser`/`DeleteUser`). Aplica `CanCreateUserWithRole` (mesma regra vale pra mudança de role, não só criação) e gera `user.role_changed` no audit log.
 - **Where**: `internal/dashboard/users.go` (novo)
@@ -102,7 +102,7 @@ Fase 5: Frontend                          Fase 6: Docs e changelog
 
 ---
 
-### T-05: Invariante "≥1 superadmin"
+### T-05: Invariante "≥1 superadmin" [x]
 
 - **What**: `PATCH .../users/{id}` (mudança de role) e `DELETE .../users/{id}` (já existente) passam a checar, antes de aplicar, se a operação resultaria em zero `dashboard_users` com `role = 'superadmin'` — se sim, 400.
 - **Where**: `internal/dashboard/users.go`, edição de `DeleteUser` existente
@@ -117,7 +117,7 @@ Fase 5: Frontend                          Fase 6: Docs e changelog
 
 ---
 
-### T-06: `CanReadAnyApp` + extensão em `ResolveAppRole` (dependência de `rbac-per-app`)
+### T-06: `CanReadAnyApp` + extensão em `ResolveAppRole` (dependência de `rbac-per-app`) [x]
 
 - **What**: `CanReadAnyApp(role string) bool` (true para `superadmin`/`admin`/`auditor`). Extensão em `ResolveAppRole` (de `rbac-per-app`, implementada lá) para retornar acesso de leitura quando `CanReadAnyApp(user.Role)` é verdadeiro, antes do lookup normal em `app_members`.
 - **Where**: `internal/dashboard/platform_roles.go` (`CanReadAnyApp`), arquivo de `ResolveAppRole` (a localizar quando `rbac-per-app` for implementada)
@@ -132,7 +132,7 @@ Fase 5: Frontend                          Fase 6: Docs e changelog
 
 ---
 
-### T-07: UI condicional por role (omitir, não desabilitar)
+### T-07: UI condicional por role (omitir, não desabilitar) [x]
 
 - **What**: Navegação/telas do dashboard consultam a role do usuário logado e **omitem** (não apenas desabilitam) qualquer tela/ação fora da matriz de permissão dele — ex: `auditor` nunca vê o botão de "criar template" nem esmaecido.
 - **Where**: componente de navegação/layout do dashboard (a localizar na implementação), hook novo tipo `useHasPlatformPermission(action)`
@@ -145,7 +145,7 @@ Fase 5: Frontend                          Fase 6: Docs e changelog
 
 ---
 
-### T-08: i18n das strings novas
+### T-08: i18n das strings novas [x]
 
 - **What**: Strings novas de T-07 (mensagens de erro 403 traduzidas no frontend, labels de role na UI de usuários) em `en.json`/`pt-BR.json`.
 - **Where**: `internal/dashboard/ui/src/locales/en.json`, `pt-BR.json`
@@ -160,7 +160,7 @@ Fase 5: Frontend                          Fase 6: Docs e changelog
 
 ---
 
-### T-09: README e CHANGELOG
+### T-09: README e CHANGELOG [x]
 
 - **What**: Documentar os 4 níveis de role e a matriz de permissões no `README.md`; entrada em `CHANGELOG.md` sob `## [Unreleased]`.
 - **Where**: `README.md`, `CHANGELOG.md`

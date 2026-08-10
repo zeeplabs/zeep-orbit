@@ -183,13 +183,13 @@ func (h *AppGoogleHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, err := h.findOrCreateAppUser(r.Context(), app.SchemaName, email, googleID)
+	userID, role, err := h.findOrCreateAppUser(r.Context(), app.SchemaName, email, googleID)
 	if err != nil {
 		h.redirectOrError(w, r, frontendRedirect, "Failed to create user", http.StatusInternalServerError)
 		return
 	}
 
-	jwtToken, err := IssueJWT([]byte(app.Config.Auth.JWTSecret), userID, email, appName)
+	jwtToken, err := IssueJWT([]byte(app.Config.Auth.JWTSecret), userID, email, appName, role)
 	if err != nil {
 		h.redirectOrError(w, r, frontendRedirect, "Failed to issue token", http.StatusInternalServerError)
 		return
@@ -377,40 +377,40 @@ func (h *AppGoogleHandler) checkAllowedDomain(email string, app *registry.App) b
 	return false
 }
 
-func (h *AppGoogleHandler) findOrCreateAppUser(ctx context.Context, schema, email, googleID string) (string, error) {
+func (h *AppGoogleHandler) findOrCreateAppUser(ctx context.Context, schema, email, googleID string) (string, string, error) {
 	// Check if user already exists by google_id
-	var userID string
+	var userID, role string
 	err := h.pool.QueryRow(ctx,
-		fmt.Sprintf(`SELECT id FROM %q."_auth_users" WHERE google_id = $1`, schema),
+		fmt.Sprintf(`SELECT id, role FROM %q."_auth_users" WHERE google_id = $1`, schema),
 		googleID,
-	).Scan(&userID)
+	).Scan(&userID, &role)
 	if err == nil {
 		h.pool.Exec(ctx,
 			fmt.Sprintf(`UPDATE %q."_auth_users" SET last_sign_in_at = now() WHERE id = $1`, schema),
 			userID,
 		)
-		return userID, nil
+		return userID, role, nil
 	}
 
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return "", err
+		return "", "", err
 	}
 
 	err = h.pool.QueryRow(ctx,
-		fmt.Sprintf(`SELECT id FROM %q."_auth_users" WHERE email = $1`, schema),
+		fmt.Sprintf(`SELECT id, role FROM %q."_auth_users" WHERE email = $1`, schema),
 		email,
-	).Scan(&userID)
+	).Scan(&userID, &role)
 	if err == nil {
 		_, err = h.pool.Exec(ctx,
 			fmt.Sprintf(`UPDATE %q."_auth_users" SET google_id = $1, last_sign_in_at = now() WHERE id = $2`, schema),
 			googleID, userID,
 		)
-		return userID, err
+		return userID, role, err
 	}
 
 	err = h.pool.QueryRow(ctx,
-		fmt.Sprintf(`INSERT INTO %q."_auth_users" (email, password_hash, provider, google_id) VALUES ($1, '', 'google', $2) RETURNING id`, schema),
+		fmt.Sprintf(`INSERT INTO %q."_auth_users" (email, password_hash, provider, google_id) VALUES ($1, '', 'google', $2) RETURNING id, role`, schema),
 		email, googleID,
-	).Scan(&userID)
-	return userID, err
+	).Scan(&userID, &role)
+	return userID, role, err
 }

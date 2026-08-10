@@ -1,7 +1,7 @@
 # Schema Relationships and Indexes Design
 
 **Spec**: `.specs/features/schema-relationships-and-indexes/spec.md`
-**Status**: Draft
+**Status**: Verified — implementado e mergeado (verificado 2026-08-10 contra o código; ver `tasks.md`)
 
 ---
 

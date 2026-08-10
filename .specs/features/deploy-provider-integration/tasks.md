@@ -2,7 +2,7 @@
 
 **Spec**: `.specs/features/deploy-provider-integration/spec.md`
 **Design**: `.specs/features/deploy-provider-integration/design.md`
-**Status**: Draft
+**Status**: Verified — T-01..T-15 implementados e mergeados (verificado 2026-08-10: pacote `internal/deploy/` + `internal/deploy/render/`, `internal/dashboard/deploy_provider_config.go`, rotas `GET /api/deploy-provider/status`, `POST|PUT /api/deploy-provider/config`, `GET /api/deploy-provider/recent-deploys` em `internal/server/server.go:249-252`, `POST /api/frontend-apps/{id}/deploy/retry` em `:233`)
 
 > Convenção de Gate: sem `TESTING.md` no repo — inferido do `Makefile` (`go test ./...`, `go vet ./...`, `dashboard-build`), mesmo critério de `mvp-core/tasks.md`, `github-integration/tasks.md`, `frontend-app-entity/tasks.md` e `sync-local-repo/tasks.md`.
 
@@ -47,7 +47,7 @@ Fase 7: Retry e delete                                       ▼
 
 ---
 
-### T-01: Provisionar tabela `deploy_provider_config`
+### T-01: Provisionar tabela `deploy_provider_config` [x]
 
 - **What**: DDL da tabela singleton (`provider`, `api_key` criptografado, `connected_at`, `updated_at`) + unique index `((TRUE))`, no bloco de provisionamento existente.
 - **Where**: `internal/dashboard/provisioner.go`
@@ -62,7 +62,7 @@ Fase 7: Retry e delete                                       ▼
 
 ---
 
-### T-02: `ALTER TABLE github_templates` — colunas de deploy
+### T-02: `ALTER TABLE github_templates` — colunas de deploy [x]
 
 - **What**: Adicionar `render_service_type`, `build_command`, `publish_path`, `start_command` (conforme design.md), todas `NOT NULL DEFAULT ''`.
 - **Where**: `internal/dashboard/provisioner.go`
@@ -77,7 +77,7 @@ Fase 7: Retry e delete                                       ▼
 
 ---
 
-### T-03: `ALTER TABLE frontend_apps` — colunas de deploy e vínculo com backend app
+### T-03: `ALTER TABLE frontend_apps` — colunas de deploy e vínculo com backend app [x]
 
 - **What**: Adicionar `backend_app_id` (FK nullable pra `apps(id)`), `deploy_service_id`, `deploy_url`, `deploy_status` (default `'pending'`), `deploy_error_message`.
 - **Where**: `internal/dashboard/provisioner.go`
@@ -92,7 +92,7 @@ Fase 7: Retry e delete                                       ▼
 
 ---
 
-### T-04: Pacote `internal/deploy` — interface `DeployProvider`
+### T-04: Pacote `internal/deploy` — interface `DeployProvider` [x]
 
 - **What**: Definir `CreateServiceParams`, `ServiceInfo` e a interface `DeployProvider` exatamente conforme `design.md` (`CreateService`, `DeleteService`).
 - **Where**: `internal/deploy/provider.go` (novo pacote)
@@ -107,7 +107,7 @@ Fase 7: Retry e delete                                       ▼
 
 ---
 
-### T-05: `internal/deploy/render.RenderProvider` — `CreateService`
+### T-05: `internal/deploy/render.RenderProvider` — `CreateService` [x]
 
 - **What**: Implementar `CreateService(ctx, params) (deploy.ServiceInfo, error)` chamando `POST /v1/services` da API do Render, mapeando `params.ServiceType` pro payload correto (`static_site` vs `web_service`), incluindo `params.EnvVars`.
 - **Where**: `internal/deploy/render/render.go`, `internal/deploy/render/client.go` (novo pacote)
@@ -122,7 +122,7 @@ Fase 7: Retry e delete                                       ▼
 
 ---
 
-### T-06: `internal/deploy/render.RenderProvider` — `DeleteService` e validação de API Key
+### T-06: `internal/deploy/render.RenderProvider` — `DeleteService` e validação de API Key [x]
 
 - **What**: Implementar `DeleteService(ctx, serviceID) error` (`DELETE /v1/services/{id}`) e uma função auxiliar `ValidateAPIKey(ctx, apiKey) error` (`GET /v1/owners`, usada por T-08 antes de persistir).
 - **Where**: `internal/deploy/render/render.go`, `internal/deploy/render/client.go`
@@ -137,7 +137,7 @@ Fase 7: Retry e delete                                       ▼
 
 ---
 
-### T-07: `deployProviderConfigStore` (CRUD singleton)
+### T-07: `deployProviderConfigStore` (CRUD singleton) [x]
 
 - **What**: Implementar `Upsert(ctx, provider, apiKeyEncrypted string) error`, `Get(ctx) (*DeployProviderConfig, error)` contra `zeep_system.deploy_provider_config`.
 - **Where**: `internal/dashboard/deploy_provider_config_store.go`
@@ -152,7 +152,7 @@ Fase 7: Retry e delete                                       ▼
 
 ---
 
-### T-08: `GET /api/deploy-provider/status` e `POST /api/deploy-provider/config`
+### T-08: `GET /api/deploy-provider/status` e `POST /api/deploy-provider/config` [x]
 
 - **What**: Handler que valida a API Key via `render.ValidateAPIKey` antes de criptografar (`internal/crypto`) e persistir via `deployProviderConfigStore.Upsert`; `GET` retorna `{connected, provider}` baseado em `Get`.
 - **Where**: `internal/dashboard/deploy_provider_config.go` (novo arquivo)
@@ -167,7 +167,7 @@ Fase 7: Retry e delete                                       ▼
 
 ---
 
-### T-09: Estender store e handler de `github_templates` — campos de deploy
+### T-09: Estender store e handler de `github_templates` — campos de deploy [x]
 
 - **What**: Estender `githubTemplatesStore.Update` (ou método equivalente) e `PUT /api/github/templates/{id}` pra aceitar `render_service_type`, `build_command`, `publish_path`, `start_command`; validar conforme AC DP-10 (se `static_site`, exige `publish_path`; se `web_service`, exige `start_command`; ambos exigem `build_command`).
 - **Where**: `internal/dashboard/github_templates.go`, `internal/dashboard/github_templates_store.go`
@@ -182,7 +182,7 @@ Fase 7: Retry e delete                                       ▼
 
 ---
 
-### T-10: Estender `POST /api/frontend-apps` — criação do service na criação do frontend app
+### T-10: Estender `POST /api/frontend-apps` — criação do service na criação do frontend app [x]
 
 - **What**: Após repo + deploy key resolvidos (sub-features anteriores), como último passo síncrono: (1) checar se template tem `render_service_type` preenchido, senão rejeitar (DP-11 na criação); (2) checar se provider está conectado, senão marcar `deploy_status: failed` sem bloquear a criação (DP-25); (3) se `backend_app_id` informado, resolver URL pública do app e gerar `APP_TOKEN` via `app_tokens_store`; (4) chamar `DeployProvider.CreateService`; (5) persistir `deploy_service_id`, `deploy_url`, `deploy_status`.
 - **Where**: `internal/dashboard/frontend_apps.go` (handler existente de criação)
@@ -197,7 +197,7 @@ Fase 7: Retry e delete                                       ▼
 
 ---
 
-### T-11: `POST /api/frontend-apps/{id}/deploy/retry`
+### T-11: `POST /api/frontend-apps/{id}/deploy/retry` [x]
 
 - **What**: Handler que rejeita se `deploy_status: ready`, senão refaz a etapa de criação de service (extrair função compartilhada `attemptDeployCreate` reusada por T-10).
 - **Where**: `internal/dashboard/frontend_apps.go`
@@ -212,7 +212,7 @@ Fase 7: Retry e delete                                       ▼
 
 ---
 
-### T-12: Estender `DELETE /api/frontend-apps/{id}` — remover service
+### T-12: Estender `DELETE /api/frontend-apps/{id}` — remover service [x]
 
 - **What**: Após soft delete + archive do repo (sub-features anteriores), chamar `DeployProvider.DeleteService` (best-effort, não bloqueia se falhar) quando `deploy_status: ready`.
 - **Where**: `internal/dashboard/frontend_apps.go` (handler existente de delete)
@@ -227,7 +227,7 @@ Fase 7: Retry e delete                                       ▼
 
 ---
 
-### T-13: Audit log
+### T-13: Audit log [x]
 
 - **What**: Instrumentar `h.audit(...)` em `deploy_provider.config.update`, `frontend_app.deploy.create`, `.retry`, `.delete`.
 - **Where**: `internal/dashboard/deploy_provider_config.go`, `internal/dashboard/frontend_apps.go`
@@ -242,7 +242,7 @@ Fase 7: Retry e delete                                       ▼
 
 ---
 
-### T-14: Testes de integração end-to-end contra Render sandbox
+### T-14: Testes de integração end-to-end contra Render sandbox [x]
 
 - **What**: Suite cobrindo fluxo completo contra conta sandbox real do Render: conectar provider → configurar template → criar frontend app linkado a um backend app → confirmar service criado com env vars corretas → forçar falha (desconectar) → retry → deletar → confirmar service removido.
 - **Where**: `internal/dashboard/deploy_provider_integration_test.go`
@@ -257,7 +257,7 @@ Fase 7: Retry e delete                                       ▼
 
 ---
 
-### T-15: UI do dashboard
+### T-15: UI do dashboard [x]
 
 - **What**: (1) Seção "Integrações → Deploy" — conectar Render (campo API Key), status conectado/desconectado (superadmin only); (2) tela de edição de template — campos de config de deploy (tipo de service, build/publish/start command); (3) tela de detalhe do frontend app — seletor opcional de backend app na criação, status de deploy, URL do deploy, botão retry.
 - **Where**: `internal/dashboard/ui/` (seguir estrutura de páginas existente)

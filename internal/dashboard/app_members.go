@@ -1,7 +1,6 @@
 package dashboard
 
 // app_members.go — HTTP handlers for the membership management API.
-// T-06 of `.specs/features/rbac-per-app`.
 //
 // Four handlers cover both axes (backend apps and frontend apps) by
 // switching on the request URL path prefix:
@@ -106,7 +105,7 @@ func (h *Handler) ListAppMembers(w http.ResponseWriter, r *http.Request) {
 // AddAppMember handles POST /dashboard/api/{apps|frontend-apps}/{id}/members.
 // Body: {"user_id": "<uuid>", "role": "admin|editor|viewer"}. Returns
 // 201 with the new AppMember. Requires CanManage on the app (or
-// superadmin). The UNIQUE partial index from T-01 enforces no-duplicate
+// superadmin). The UNIQUE partial index on (app, user) enforces no-duplicate
 // at the DB level; a violation maps to ErrAlreadyMember → 400.
 func (h *Handler) AddAppMember(w http.ResponseWriter, r *http.Request) {
 	actor, ok := UserFromContext(r.Context())
@@ -152,7 +151,6 @@ func (h *Handler) AddAppMember(w http.ResponseWriter, r *http.Request) {
 	}
 	switch body.Role {
 	case "admin", "editor", "viewer":
-		// valid
 	default:
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "role must be one of: admin, editor, viewer"})
 		return
@@ -219,7 +217,6 @@ func (h *Handler) UpdateAppMember(w http.ResponseWriter, r *http.Request) {
 	}
 	switch body.Role {
 	case "admin", "editor", "viewer":
-		// valid
 	default:
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "role must be one of: admin, editor, viewer"})
 		return

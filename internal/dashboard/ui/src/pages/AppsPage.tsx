@@ -408,7 +408,7 @@ export default function AppsPage() {
 
   // Handlers
   function handleEdit(app: AppDef) { navigate(`/apps/${app.id}`); }
-  function handleUsers(app: AppDef) { navigate(`/apps/${app.id}/users`); }
+  function handleUsers(app: AppDef) { navigate(`/apps/${app.id}?tab=users`); }
 
   async function handleConfirmDelete() {
     if (!deleteTarget) return;

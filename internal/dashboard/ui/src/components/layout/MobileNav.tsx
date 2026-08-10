@@ -62,7 +62,6 @@ export function MobileNav({
 
   return (
     <>
-      {/* Bottom tab bar */}
       <nav
         className="fixed inset-x-0 bottom-0 z-40 flex items-center border-t border-[var(--border)] bg-[var(--surface)] md:hidden"
         style={{ height: 60, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
@@ -79,7 +78,6 @@ export function MobileNav({
         </button>
       </nav>
 
-      {/* Bottom sheet */}
       {sheetOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
           <div

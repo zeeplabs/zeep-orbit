@@ -6,10 +6,10 @@ zeep-orbit hoje tem uma entidade "app" que é sempre backend (schema PostgreSQL 
 
 ## Goals
 
-- [ ] Qualquer usuário autenticado do dashboard cria um frontend app (nome + template) sem precisar de acesso ao GitHub da empresa
-- [ ] Criação é síncrona: usuário recebe sucesso ou erro na mesma requisição, sem polling
-- [ ] Falha na criação não perde o registro — fica visível com erro e permite retry
-- [ ] Frontend app pode ser removido (soft delete) sem deixar repo órfão ativo na org GitHub
+- [x] Qualquer usuário autenticado do dashboard cria um frontend app (nome + template) sem precisar de acesso ao GitHub da empresa
+- [x] Criação é síncrona: usuário recebe sucesso ou erro na mesma requisição, sem polling
+- [x] Falha na criação não perde o registro — fica visível com erro e permite retry
+- [x] Frontend app pode ser removido (soft delete) sem deixar repo órfão ativo na org GitHub
 
 ## Out of Scope
 
@@ -106,32 +106,32 @@ zeep-orbit hoje tem uma entidade "app" que é sempre backend (schema PostgreSQL 
 
 | Requirement ID | Story | Phase | Status |
 |---|---|---|---|
-| FA-01 | P1: Criar app | Design | Pending |
-| FA-02 | P1: Criar app | Design | Pending |
-| FA-03 | P1: Criar app | Design | Pending |
-| FA-04 | P1: Criar app | Design | Pending |
-| FA-05 | P1: Criar app | Design | Pending |
-| FA-10 | P1: Falha e retry | Design | Pending |
-| FA-11 | P1: Falha e retry | Design | Pending |
-| FA-12 | P1: Falha e retry | Design | Pending |
-| FA-13 | P1: Falha e retry | Design | Pending |
-| FA-20 | P1: Listagem | Design | Pending |
-| FA-21 | P1: Listagem | Design | Pending |
-| FA-30 | P1: Remoção | Design | Pending |
-| FA-31 | P1: Remoção | Design | Pending |
-| FA-32 | P1: Remoção | Design | Pending |
-| FA-33 | P1: Remoção | Design | Pending |
+| FA-01 | P1: Criar app | Execute | Verified |
+| FA-02 | P1: Criar app | Execute | Verified |
+| FA-03 | P1: Criar app | Execute | Verified |
+| FA-04 | P1: Criar app | Execute | Verified |
+| FA-05 | P1: Criar app | Execute | Verified |
+| FA-10 | P1: Falha e retry | Execute | Verified |
+| FA-11 | P1: Falha e retry | Execute | Verified |
+| FA-12 | P1: Falha e retry | Execute | Verified |
+| FA-13 | P1: Falha e retry | Execute | Verified |
+| FA-20 | P1: Listagem | Execute | Verified |
+| FA-21 | P1: Listagem | Execute | Verified |
+| FA-30 | P1: Remoção | Execute | Verified |
+| FA-31 | P1: Remoção | Execute | Verified |
+| FA-32 | P1: Remoção | Execute | Verified |
+| FA-33 | P1: Remoção | Execute | Verified |
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 15 total, 0 mapped to tasks, 15 unmapped ⚠️ (mapeamento acontece na fase Tasks)
+**Coverage:** 15 total, 15 mapped to tasks (T-01..T-10), 0 unmapped — todos Verified (verificado 2026-08-10 contra o código; ver `tasks.md`)
 
 ---
 
 ## Success Criteria
 
-- [ ] Usuário não-técnico cria frontend app (nome + template) em menos de 10 segundos, chamada síncrona
-- [ ] Falha de criação nunca perde o registro — sempre visível na listagem com erro claro
-- [ ] Retry funciona corretamente para erros transitórios (rate limit) e falha de forma previsível para erros permanentes (slug duplicado)
-- [ ] Delete arquiva o repo no GitHub, não deixa repo órfão ativo na org
-- [ ] Slug nunca colide com outro frontend app não-arquivado (garantido por constraint de banco, não só validação de aplicação)
+- [x] Usuário não-técnico cria frontend app (nome + template) em menos de 10 segundos, chamada síncrona
+- [x] Falha de criação nunca perde o registro — sempre visível na listagem com erro claro
+- [x] Retry funciona corretamente para erros transitórios (rate limit) e falha de forma previsível para erros permanentes (slug duplicado)
+- [x] Delete arquiva o repo no GitHub, não deixa repo órfão ativo na org
+- [x] Slug nunca colide com outro frontend app não-arquivado (garantido por constraint de banco, não só validação de aplicação)

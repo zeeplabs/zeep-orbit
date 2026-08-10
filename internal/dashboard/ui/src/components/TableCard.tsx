@@ -20,6 +20,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import TablePoliciesTab from "@/components/TablePolicies";
 
 const COLUMN_TYPES = [
   "text",
@@ -64,6 +66,11 @@ const ON_DELETE_LABEL_KEYS: Record<string, string> = {
   set_null: "tableCard.onDeleteSetNull",
 };
 
+// Mirrors internal/dashboard/handler.go's special-cased "_auth_users" target
+// — not a real entry in app.tables (provisioned separately when email auth
+// is on), so it never shows up via the otherTables prop and needs its own UI path.
+const AUTH_USERS_TABLE = "_auth_users";
+
 const BASE_AUTO_COLUMNS = [
   { name: "id", type: "uuid", required: true, unique: true },
   { name: "created_at", type: "timestamptz", required: true, unique: false },
@@ -93,6 +100,7 @@ const emptyIndex = (): IndexDef => ({
 });
 
 interface TableCardProps {
+  appId: string;
   table: TableDef;
   otherTables: TableDef[];
   authEmailEnabled: boolean;
@@ -110,6 +118,7 @@ interface TableCardProps {
 }
 
 export default function TableCard({
+  appId,
   table,
   otherTables,
   authEmailEnabled,
@@ -166,6 +175,7 @@ export default function TableCard({
     setColumns((prev) => prev.map((c, i) => (i === ci ? { ...c, ...patch } : c)));
 
   const referenceTargetColumns = (tableName: string): string[] => {
+    if (tableName === AUTH_USERS_TABLE) return ["id"];
     const target = otherTables.find((t) => t.name === tableName);
     if (!target) return ["id"];
     return ["id", ...target.columns.filter((c) => c.unique).map((c) => c.name)];
@@ -302,6 +312,147 @@ export default function TableCard({
         </p>
       )}
 
+      {isDraft ? (
+        <SchemaEditor
+          t={t}
+          rls={rls}
+          columns={columns}
+          indexes={indexes}
+          otherTables={otherTables}
+          authEmailEnabled={authEmailEnabled}
+          isDraft={isDraft}
+          table={table}
+          deleting={deleting}
+          saving={saving}
+          error={error}
+          showRelationshipsInfo={showRelationshipsInfo}
+          setShowRelationshipsInfo={setShowRelationshipsInfo}
+          showIndexInfo={showIndexInfo}
+          setShowIndexInfo={setShowIndexInfo}
+          addColumn={addColumn}
+          removeColumn={removeColumn}
+          updateColumn={updateColumn}
+          referenceTargetColumns={referenceTargetColumns}
+          addIndex={addIndex}
+          removeIndex={removeIndex}
+          updateIndex={updateIndex}
+          toggleIndexColumn={toggleIndexColumn}
+          remove={remove}
+          cancel={cancel}
+          save={save}
+        />
+      ) : (
+        <Tabs defaultValue="schema" className="w-full">
+          <TabsList className="mx-4 mb-2 inline-flex h-auto w-auto justify-start gap-0.5 rounded-[10px] bg-[var(--sunken)] p-[3px]">
+            <TabsTrigger
+              value="schema"
+              className="rounded-[7px] px-3 py-1.5 text-[12.5px] font-semibold text-[var(--text-secondary)] data-[state=active]:bg-[var(--surface)] data-[state=active]:text-[var(--text-primary)] data-[state=active]:shadow-sm"
+            >
+              {t("tableCard.schemaTab")}
+            </TabsTrigger>
+            <TabsTrigger
+              value="policies"
+              className="rounded-[7px] px-3 py-1.5 text-[12.5px] font-semibold text-[var(--text-secondary)] data-[state=active]:bg-[var(--surface)] data-[state=active]:text-[var(--text-primary)] data-[state=active]:shadow-sm"
+            >
+              {t("tablePolicies.tab")}
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="schema" className="mt-0">
+            <SchemaEditor
+              t={t}
+              rls={rls}
+              columns={columns}
+              indexes={indexes}
+              otherTables={otherTables}
+              authEmailEnabled={authEmailEnabled}
+              isDraft={isDraft}
+              table={table}
+              deleting={deleting}
+              saving={saving}
+              error={error}
+              showRelationshipsInfo={showRelationshipsInfo}
+              setShowRelationshipsInfo={setShowRelationshipsInfo}
+              showIndexInfo={showIndexInfo}
+              setShowIndexInfo={setShowIndexInfo}
+              addColumn={addColumn}
+              removeColumn={removeColumn}
+              updateColumn={updateColumn}
+              referenceTargetColumns={referenceTargetColumns}
+              addIndex={addIndex}
+              removeIndex={removeIndex}
+              updateIndex={updateIndex}
+              toggleIndexColumn={toggleIndexColumn}
+              remove={remove}
+              cancel={cancel}
+              save={save}
+            />
+          </TabsContent>
+          <TabsContent value="policies" className="mt-0 px-4 pb-4">
+            <TablePoliciesTab appId={appId} tableName={table.name} columns={table.columns} />
+          </TabsContent>
+        </Tabs>
+      )}
+    </div>
+  );
+}
+
+function SchemaEditor({
+  t,
+  rls,
+  columns,
+  indexes,
+  otherTables,
+  authEmailEnabled,
+  isDraft,
+  table,
+  deleting,
+  saving,
+  error,
+  showRelationshipsInfo,
+  setShowRelationshipsInfo,
+  showIndexInfo,
+  setShowIndexInfo,
+  addColumn,
+  removeColumn,
+  updateColumn,
+  referenceTargetColumns,
+  addIndex,
+  removeIndex,
+  updateIndex,
+  toggleIndexColumn,
+  remove,
+  cancel,
+  save,
+}: {
+  t: (key: string, opts?: Record<string, unknown>) => string;
+  rls: string;
+  columns: ColumnDef[];
+  indexes: IndexDef[];
+  otherTables: TableDef[];
+  authEmailEnabled: boolean;
+  isDraft: boolean;
+  table: TableDef;
+  deleting: boolean;
+  saving: boolean;
+  error: string | null;
+  showRelationshipsInfo: boolean;
+  setShowRelationshipsInfo: (v: boolean) => void;
+  showIndexInfo: boolean;
+  setShowIndexInfo: (v: boolean) => void;
+  addColumn: () => void;
+  removeColumn: (ci: number) => void;
+  updateColumn: (ci: number, patch: Partial<ColumnDef>) => void;
+  referenceTargetColumns: (tableName: string) => string[];
+  addIndex: () => void;
+  removeIndex: (ii: number) => void;
+  updateIndex: (ii: number, patch: Partial<IndexDef>) => void;
+  toggleIndexColumn: (ii: number, colName: string) => void;
+  remove: () => void;
+  cancel: () => void;
+  save: () => void;
+}) {
+  return (
+    <>
       <div className="px-4 pb-4">
         <div className="flex items-center justify-between gap-2 mb-2">
           <p className="text-[11px] text-[var(--text-secondary)]">
@@ -466,13 +617,19 @@ export default function TableCard({
                   <button
                     type="button"
                     title={t("tableCard.referenceFk")}
-                    disabled={otherTables.length === 0}
+                    disabled={otherTables.length === 0 && !(authEmailEnabled && col.type === "uuid")}
                     onClick={() =>
                       updateColumn(
                         ci,
                         col.references
                           ? { references: null }
-                          : { references: { table: otherTables[0]?.name ?? "", column: "id", on_delete: "no_action" } },
+                          : {
+                              references: {
+                                table: otherTables[0]?.name ?? (authEmailEnabled && col.type === "uuid" ? AUTH_USERS_TABLE : ""),
+                                column: "id",
+                                on_delete: "no_action",
+                              },
+                            },
                       )
                     }
                     className={cn(
@@ -480,7 +637,7 @@ export default function TableCard({
                       col.references
                         ? "border-[var(--primary)]/40 bg-[var(--primary)]/10 text-[var(--primary)]"
                         : "border-[var(--border)] bg-transparent text-[var(--text-secondary)]",
-                      otherTables.length === 0 && "opacity-30 cursor-not-allowed",
+                      otherTables.length === 0 && !(authEmailEnabled && col.type === "uuid") && "opacity-30 cursor-not-allowed",
                     )}
                   >
                     <Icon name="link" size={12} />
@@ -513,6 +670,11 @@ export default function TableCard({
                       <SelectValue placeholder={t("tableCard.tablePlaceholder")} />
                     </SelectTrigger>
                     <SelectContent className="bg-[var(--surface-raised)] border-[var(--border)] text-[var(--text-primary)]">
+                      {authEmailEnabled && col.type === "uuid" && (
+                        <SelectItem value={AUTH_USERS_TABLE} className="text-[12px] focus:bg-[var(--hover-surface)] focus:text-[var(--text-primary)]">
+                          {AUTH_USERS_TABLE}
+                        </SelectItem>
+                      )}
                       {otherTables.map((ot) => (
                         <SelectItem key={ot.name} value={ot.name} className="text-[12px] focus:bg-[var(--hover-surface)] focus:text-[var(--text-primary)]">
                           {ot.name}
@@ -739,6 +901,6 @@ export default function TableCard({
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }

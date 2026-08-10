@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
   useApp,
@@ -7,11 +6,28 @@ import {
   useDeactivateAppUser,
   useActivateAppUser,
   useResetAppUserSessions,
+  useUpdateAppUser,
 } from '../lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Icon } from '@/components/ui/icon'
-import { PageHeader, EmptyState, DataTable, StatusPill } from '@/components/patterns'
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerBody,
+  DrawerFooter,
+  DrawerTitle,
+} from '@/components/ui/drawer'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { EmptyState, DataTable, StatusPill, PhoneInput } from '@/components/patterns'
 import type { Column } from '@/components/patterns'
 import { cn } from '@/lib/utils'
 
@@ -21,10 +37,91 @@ interface AppUser {
   email: string
   phone: string | null
   provider: string
+  role: string
   active: boolean
   last_sign_in_at: string | null
   created_at: string
   avatar_url: string | null
+}
+
+// Editor for an app user's email, phone, and role, opened from the Actions
+// column (ROLECFG-10..14, extended by app-user-edit-fields). Role options are
+// populated by enduser_roles_config; a role already assigned to the user but
+// outside that list (orphaned) is shown as an extra selected option instead
+// of being silently dropped. Status (active/inactive) stays a separate
+// table-row toggle, not part of this drawer.
+function EditUserDrawer({
+  appId,
+  user,
+  availableRoles,
+  onClose,
+}: {
+  appId: string
+  user: AppUser
+  availableRoles: string[]
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+  const updateUser = useUpdateAppUser()
+  const [email, setEmail] = useState(user.email)
+  const [phone, setPhone] = useState(user.phone ?? '')
+  const [role, setRole] = useState(user.role)
+
+  const options = availableRoles.includes(user.role) ? availableRoles : [...availableRoles, user.role]
+
+  const save = () => {
+    updateUser.mutate({ appId, userId: user.id, email, phone, role }, { onSuccess: onClose })
+  }
+
+  return (
+    <Drawer
+      open
+      onOpenChange={(o) => {
+        if (!o) onClose()
+      }}
+    >
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle>{t('appUsers.editUserTitle')}</DrawerTitle>
+        </DrawerHeader>
+        <DrawerBody>
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label>{t('appUsers.editUserEmailLabel')}</Label>
+              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>{t('appUsers.editUserPhoneLabel')}</Label>
+              <PhoneInput value={phone} onChange={setPhone} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>{t('appUsers.editRoleLabel')}</Label>
+              <Select value={role} onValueChange={setRole}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {options.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {r}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </DrawerBody>
+        <DrawerFooter>
+          <Button variant="outline" onClick={onClose}>
+            {t('appUsers.editRoleCancel')}
+          </Button>
+          <Button onClick={save} disabled={updateUser.isPending}>
+            {t('appUsers.editRoleSave')}
+          </Button>
+        </DrawerFooter>
+      </DrawerContent>
+    </Drawer>
+  )
 }
 
 interface ProviderCount {
@@ -76,9 +173,9 @@ function ProviderCell({ provider }: { provider: string }) {
   )
 }
 
-export default function AppUsersPage() {
+export function AppUsersTab({ appId }: { appId: string }) {
   const { t, i18n } = useTranslation()
-  const { id } = useParams<{ id: string }>()
+  const id = appId
   const { data: app } = useApp(id || '')
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -94,6 +191,7 @@ export default function AppUsersPage() {
   const deactivate = useDeactivateAppUser()
   const activate = useActivateAppUser()
   const resetSessions = useResetAppUserSessions()
+  const [editingUser, setEditingUser] = useState<AppUser | null>(null)
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -158,6 +256,15 @@ export default function AppUsersPage() {
       render: (u) => <ProviderCell provider={u.provider} />,
     },
     {
+      key: 'role',
+      header: t('appUsers.table.role'),
+      render: (u) => (
+        <span className="text-[12.5px]" style={{ color: 'var(--text-secondary)' }}>
+          {u.role}
+        </span>
+      ),
+    },
+    {
       key: 'status',
       header: t('appUsers.table.status'),
       render: (u) => (
@@ -196,6 +303,19 @@ export default function AppUsersPage() {
         const isResetting = resetSessions.isPending && resetSessions.variables?.userId === u.id
         return (
           <div className="flex items-center justify-end gap-1">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setEditingUser(u)}
+              title={t('appUsers.editRole')}
+              className="size-7 rounded-[8px]"
+              style={{
+                borderColor: 'var(--border)',
+                color: 'var(--text-tertiary)',
+              }}
+            >
+              <Icon name="edit" size={12} />
+            </Button>
             {u.active && (
               <Button
                 variant="outline"
@@ -261,18 +381,6 @@ export default function AppUsersPage() {
 
   return (
     <>
-      <Link
-        to={`/apps/${id}`}
-        className="mb-5 inline-flex items-center gap-1.5 text-[13px] font-semibold no-underline transition-colors"
-        style={{ color: 'var(--text-secondary)' }}
-      >
-        <Icon name="arrow_back" size={17} />
-        {t('appUsers.back')}
-      </Link>
-
-      <PageHeader title={t('appUsers.title')} subtitle={t('appUsers.subtitle', { app: app?.name || id })} />
-
-      {/* Toolbar: provider counts + search + refresh */}
       <div className="mb-5 flex flex-wrap items-center gap-3">
         {providerCounts.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">
@@ -361,6 +469,17 @@ export default function AppUsersPage() {
             : undefined
         }
       />
+
+      {editingUser && (
+        <EditUserDrawer
+          key={editingUser.id}
+          appId={id!}
+          user={editingUser}
+          availableRoles={app?.enduser_roles_config ?? []}
+          onClose={() => setEditingUser(null)}
+        />
+      )}
     </>
   )
 }
+

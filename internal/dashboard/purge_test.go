@@ -180,3 +180,47 @@ func TestPurgeExpiredSoftDeletesSecondReplicaSkipsWhileLocked(t *testing.T) {
 		t.Errorf("remaining rows = %d, want 1 (purge should not have run)", remaining)
 	}
 }
+
+// TestPurgeExpiredSoftDeletesUnaffectedByActiveDenyAllPolicy is a regression
+// test for end-user-row-policies T9 (spec ROWPOL-15): PurgeExpiredSoftDeletes
+// runs on the principal/owner pool and must never be filtered by a native
+// RLS policy, even a deny-all one for an unrelated role — enabling RLS on a
+// table must not silently break the retention job.
+func TestPurgeExpiredSoftDeletesUnaffectedByActiveDenyAllPolicy(t *testing.T) {
+	pool, reg := purgeTestPool(t)
+	ctx := context.Background()
+
+	if _, err := pool.Exec(ctx, `ALTER TABLE purge_test_app.items ENABLE ROW LEVEL SECURITY`); err != nil {
+		t.Fatalf("enable row level security: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`CREATE POLICY deny_all ON purge_test_app.items FOR ALL TO PUBLIC USING (false)`,
+	); err != nil {
+		t.Fatalf("create deny-all policy: %v", err)
+	}
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO purge_test_app.items (name, deleted_at) VALUES
+		 ('old-deleted', now() - interval '10 days'),
+		 ('recent-deleted', now() - interval '1 hour'),
+		 ('not-deleted', NULL)`,
+	); err != nil {
+		t.Fatalf("seed rows: %v", err)
+	}
+
+	n, err := PurgeExpiredSoftDeletes(ctx, pool, reg, 5)
+	if err != nil {
+		t.Fatalf("PurgeExpiredSoftDeletes: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("rows deleted = %d, want 1 (RLS must not filter the principal/owner role's purge query)", n)
+	}
+
+	var remaining int
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM purge_test_app.items`).Scan(&remaining); err != nil {
+		t.Fatalf("count remaining: %v", err)
+	}
+	if remaining != 2 {
+		t.Errorf("remaining rows = %d, want 2 (recent-deleted + not-deleted)", remaining)
+	}
+}

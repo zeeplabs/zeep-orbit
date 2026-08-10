@@ -37,6 +37,18 @@ func resolveOwner(ctx context.Context, table *registry.Table) (ownerID string, o
 	return user.ID, true
 }
 
+// rlsClaimsFromContext builds the claims WithRLSContext exposes as session
+// GUCs for native Postgres row policies. Zero-value claims (no authenticated
+// user in context) are safe: any policy comparing against role/sub/email
+// simply won't match, which is default-deny, not a bypass.
+func rlsClaimsFromContext(ctx context.Context) db.RLSClaims {
+	user, ok := auth.UserFromContext(ctx)
+	if !ok {
+		return db.RLSClaims{}
+	}
+	return db.RLSClaims{Role: user.Role, Sub: user.ID, Email: user.Email}
+}
+
 // Response: {"data": [...], "count": N, "limit": L, "offset": O}
 func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 	app, ok := AppFromContext(r.Context())
@@ -77,7 +89,7 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 
 	var count int
 	var data []map[string]any
-	err = h.pool.WithTimeout(ctx, h.reg.SystemConfig().StatementTimeoutMs, func(qx db.Querier) error {
+	err = h.pool.WithRLSContext(ctx, rlsClaimsFromContext(ctx), h.reg.SystemConfig().StatementTimeoutMs, func(qx db.Querier) error {
 		if err := qx.QueryRow(ctx, q.CountSQL, filterArgs...).Scan(&count); err != nil {
 			return err
 		}
@@ -111,7 +123,6 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// HandleCreate implementa POST /{app}/{table} → 201 + row criada.
 func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	app, ok := AppFromContext(r.Context())
 	if !ok {
@@ -146,7 +157,7 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var row map[string]any
-	err = h.pool.WithTimeout(r.Context(), h.reg.SystemConfig().StatementTimeoutMs, func(qx db.Querier) error {
+	err = h.pool.WithRLSContext(r.Context(), rlsClaimsFromContext(r.Context()), h.reg.SystemConfig().StatementTimeoutMs, func(qx db.Querier) error {
 		rows, err := qx.Query(r.Context(), q.SQL, q.Args...)
 		if err != nil {
 			return err
@@ -192,7 +203,7 @@ func (h *Handler) HandleGetByID(w http.ResponseWriter, r *http.Request) {
 	q := query.BuildGetByID(app.SchemaName, tableName, id, ownerID)
 
 	var row map[string]any
-	err := h.pool.WithTimeout(r.Context(), h.reg.SystemConfig().StatementTimeoutMs, func(qx db.Querier) error {
+	err := h.pool.WithRLSContext(r.Context(), rlsClaimsFromContext(r.Context()), h.reg.SystemConfig().StatementTimeoutMs, func(qx db.Querier) error {
 		rows, err := qx.Query(r.Context(), q.SQL, q.Args...)
 		if err != nil {
 			return err
@@ -252,7 +263,7 @@ func (h *Handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var row map[string]any
-	err = h.pool.WithTimeout(r.Context(), h.reg.SystemConfig().StatementTimeoutMs, func(qx db.Querier) error {
+	err = h.pool.WithRLSContext(r.Context(), rlsClaimsFromContext(r.Context()), h.reg.SystemConfig().StatementTimeoutMs, func(qx db.Querier) error {
 		rows, err := qx.Query(r.Context(), q.SQL, q.Args...)
 		if err != nil {
 			return err
@@ -302,7 +313,7 @@ func (h *Handler) HandleDelete(w http.ResponseWriter, r *http.Request) {
 	q := query.BuildDelete(app.SchemaName, tableName, id, ownerID, h.reg.SystemConfig().SoftDeleteEnabled)
 
 	var affected int64
-	err := h.pool.WithTimeout(r.Context(), h.reg.SystemConfig().StatementTimeoutMs, func(qx db.Querier) error {
+	err := h.pool.WithRLSContext(r.Context(), rlsClaimsFromContext(r.Context()), h.reg.SystemConfig().StatementTimeoutMs, func(qx db.Querier) error {
 		tag, err := qx.Exec(r.Context(), q.SQL, q.Args...)
 		if err != nil {
 			return err
@@ -336,7 +347,6 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// HandleAppHealth implementa GET /{app}/health → status do app individual.
 func (h *Handler) HandleAppHealth(w http.ResponseWriter, r *http.Request) {
 	appName := chi.URLParam(r, "app")
 

@@ -287,7 +287,6 @@ export default function DataBrowserPage() {
 
   return (
     <div className="grid h-full min-h-full items-stretch grid-cols-[240px_1fr] gap-4 max-md:flex max-md:flex-col">
-      {/* Tree panel */}
       <div className="h-full overflow-hidden rounded-[14px] bg-[var(--surface)] py-4 max-md:h-auto max-md:max-h-[220px] max-md:overflow-y-auto">
         <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
           {t("dataBrowser.appsLabel")}
@@ -341,13 +340,11 @@ export default function DataBrowserPage() {
         )}
       </div>
 
-      {/* Data panel */}
       <div className="flex min-w-0 flex-col gap-3">
         {!selectedTable ? (
           <EmptyState icon="database" title={t("dataBrowser.emptySelect")} />
         ) : (
           <>
-            {/* Toolbar */}
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-baseline gap-2 text-[var(--text-primary)]">
                 <span className="text-lg font-bold">{selectedTable.table}</span>
@@ -387,7 +384,6 @@ export default function DataBrowserPage() {
               </div>
             </div>
 
-            {/* Filter panel */}
             {showFilters && columns.length > 0 && (
               <div className="flex flex-col gap-3 rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-4">
                 <div className="flex flex-wrap items-center gap-2">
@@ -495,7 +491,6 @@ export default function DataBrowserPage() {
         )}
       </div>
 
-      {/* Edit Modal */}
       <Dialog open={modalOpen && !!selectedTable} onOpenChange={(o) => { if (!o) closeModal(); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -551,7 +546,6 @@ export default function DataBrowserPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete confirmation */}
       <ConfirmDialog
         open={!!deleteConfirmId}
         title={t("dataBrowser.deleteRecordTitle")}

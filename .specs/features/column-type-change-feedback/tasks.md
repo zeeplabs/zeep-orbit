@@ -2,7 +2,7 @@
 
 **Spec**: `.specs/features/column-type-change-feedback/spec.md`
 **Design**: `.specs/features/column-type-change-feedback/design.md`
-**Status**: Draft
+**Status**: Verified — T-01..T-06 implementados e mergeados (verificado 2026-08-10: `provisioner.TypeChangeError` + `Reason` em `internal/provisioner/errors.go`, `errors.As` nos 4 call sites de `internal/dashboard/handler.go:918,1037,1150,1234`, fallback genérico já sem `err.Error()` (`"provisioning failed — check server logs for details"`), testes em `internal/provisioner/errors_test.go`)
 
 > Convenção de Gate: não há `TESTING.md` no repo — inferido do `Makefile` (`go test ./...`, `go vet ./...`), mesmo critério usado nas outras specs deste repo.
 
@@ -22,7 +22,7 @@ Fase 1: Erro tipado                Fase 2: Handler                 Fase 3: Verif
 
 ---
 
-## T-01: Criar `provisioner.TypeChangeError`
+## T-01: Criar `provisioner.TypeChangeError` [x]
 
 **Arquivo**: novo `internal/provisioner/errors.go`
 
@@ -35,7 +35,7 @@ Fase 1: Erro tipado                Fase 2: Handler                 Fase 3: Verif
 
 ---
 
-## T-02: `applyTypeChange` retorna `*TypeChangeError` nos 3 pontos de erro
+## T-02: `applyTypeChange` retorna `*TypeChangeError` nos 3 pontos de erro [x]
 
 **Arquivo**: `internal/provisioner/migration.go` (linhas 132-136, 145-148, 154-156)
 
@@ -53,7 +53,7 @@ Fase 1: Erro tipado                Fase 2: Handler                 Fase 3: Verif
 
 ---
 
-## T-03: Handler distingue `TypeChangeError` via `errors.As` nos 4 call sites
+## T-03: Handler distingue `TypeChangeError` via `errors.As` nos 4 call sites [x]
 
 **Arquivo**: `internal/dashboard/handler.go` (linhas 813, 909, 997, 1073)
 
@@ -69,7 +69,7 @@ Fase 1: Erro tipado                Fase 2: Handler                 Fase 3: Verif
 
 ---
 
-## T-04: Erro genérico (não-`TypeChangeError`) para de concatenar `err.Error()`
+## T-04: Erro genérico (não-`TypeChangeError`) para de concatenar `err.Error()` [x]
 
 **Arquivo**: `internal/dashboard/handler.go` (mesmos 4 call sites, branch `else`)
 
@@ -83,7 +83,7 @@ Fase 1: Erro tipado                Fase 2: Handler                 Fase 3: Verif
 
 ---
 
-## T-05: Testes cobrindo os 3 `Reason` e o vazamento fechado
+## T-05: Testes cobrindo os 3 `Reason` e o vazamento fechado [x]
 
 **Arquivo**: `internal/provisioner/migration_test.go` (se já existir; senão criar) + teste de handler em `internal/dashboard/*_test.go`
 
@@ -96,7 +96,7 @@ Cobrir:
 
 ---
 
-## T-06 (P2, opcional): Revisar e documentar `safeTypeConversions`
+## T-06 (P2, opcional): Revisar e documentar `safeTypeConversions` [x]
 
 **Arquivo**: `internal/provisioner/migration.go` (linhas 13-22)
 

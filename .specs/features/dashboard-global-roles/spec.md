@@ -10,12 +10,12 @@ Esta feature reestrutura `dashboard_users.role` em 4 níveis: `superadmin`, `adm
 
 ## Goals
 
-- [ ] `dashboard_users.role` suporta 4 valores: `superadmin` (acesso irrestrito, já existente), `admin` (gestão de plataforma + apps próprios), `auditor` (leitura irrestrita de todos os apps e do audit log, sem editar nada), `member` (cria/gerencia só os próprios apps — é o `admin` de hoje, renomeado)
-- [ ] Migração de dados existentes preserva comportamento: todo `admin` atual vira `member`; `superadmin` não muda
-- [ ] `admin` e `auditor` enxergam dados/schema/logs de **todos** os apps hospedados (read-only), via bypass na resolução de role por app — mesmo mecanismo de bypass que `superadmin` já tem em `rbac-per-app`, mas sem escrita
-- [ ] `admin` não pode criar usuário com `role: superadmin` (só `superadmin` promove/cria outro `superadmin`)
-- [ ] Plataforma nunca fica sem nenhum `superadmin` (invariante garantido no código, mesma lógica do invariante "≥1 admin por app" de `rbac-per-app`)
-- [ ] Toda mudança de role é auditada (`user.role_changed`)
+- [x] `dashboard_users.role` suporta 4 valores: `superadmin` (acesso irrestrito, já existente), `admin` (gestão de plataforma + apps próprios), `auditor` (leitura irrestrita de todos os apps e do audit log, sem editar nada), `member` (cria/gerencia só os próprios apps — é o `admin` de hoje, renomeado)
+- [x] Migração de dados existentes preserva comportamento: todo `admin` atual vira `member`; `superadmin` não muda
+- [x] `admin` e `auditor` enxergam dados/schema/logs de **todos** os apps hospedados (read-only), via bypass na resolução de role por app — mesmo mecanismo de bypass que `superadmin` já tem em `rbac-per-app`, mas sem escrita
+- [x] `admin` não pode criar usuário com `role: superadmin` (só `superadmin` promove/cria outro `superadmin`)
+- [x] Plataforma nunca fica sem nenhum `superadmin` (invariante garantido no código, mesma lógica do invariante "≥1 admin por app" de `rbac-per-app`)
+- [x] Toda mudança de role é auditada (`user.role_changed`)
 
 ## Out of Scope
 
@@ -97,33 +97,33 @@ Esta feature reestrutura `dashboard_users.role` em 4 níveis: `superadmin`, `adm
 
 | Requirement ID | Story | Phase | Status |
 |---|---|---|---|
-| DGR-01 | P1: Migração | Design | Pending |
-| DGR-02 | P1: Migração | Design | Pending |
-| DGR-03 | P1: Migração | Design | Pending |
-| DGR-04 | P1: Migração | Design | Pending |
-| DGR-10 | P1: Matriz de permissões | Design | Pending |
-| DGR-11 | P1: Matriz de permissões | Design | Pending |
-| DGR-12 | P1: Matriz de permissões | Design | Pending |
-| DGR-13 | P1: Matriz de permissões | Design | Pending |
-| DGR-14 | P1: Matriz de permissões | Design | Pending |
-| DGR-15 | P1: Matriz de permissões | Design | Pending |
-| DGR-16 | P1: Matriz de permissões | Design | Pending |
-| DGR-17 | P1: Matriz de permissões | Design | Pending |
-| DGR-20 | P1: Leitura irrestrita (dependência rbac-per-app) | Design | Pending |
-| DGR-21 | P1: Leitura irrestrita (dependência rbac-per-app) | Design | Pending |
-| DGR-22 | P1: Leitura irrestrita (dependência rbac-per-app) | Design | Pending |
+| DGR-01 | P1: Migração | Execute | Verified |
+| DGR-02 | P1: Migração | Execute | Verified |
+| DGR-03 | P1: Migração | Execute | Verified |
+| DGR-04 | P1: Migração | Execute | Verified |
+| DGR-10 | P1: Matriz de permissões | Execute | Verified |
+| DGR-11 | P1: Matriz de permissões | Execute | Verified |
+| DGR-12 | P1: Matriz de permissões | Execute | Verified |
+| DGR-13 | P1: Matriz de permissões | Execute | Verified |
+| DGR-14 | P1: Matriz de permissões | Execute | Verified |
+| DGR-15 | P1: Matriz de permissões | Execute | Verified |
+| DGR-16 | P1: Matriz de permissões | Execute | Verified |
+| DGR-17 | P1: Matriz de permissões | Execute | Verified |
+| DGR-20 | P1: Leitura irrestrita (dependência rbac-per-app) | Execute | Verified |
+| DGR-21 | P1: Leitura irrestrita (dependência rbac-per-app) | Execute | Verified |
+| DGR-22 | P1: Leitura irrestrita (dependência rbac-per-app) | Execute | Verified |
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 15 total, 0 mapeados a tasks, 15 não mapeados ⚠️ (mapeamento acontece na fase Tasks)
+**Coverage:** 15 total, 15 mapeados a tasks (T-01..T-08), 0 não mapeados — todos Verified no código (verificado 2026-08-10, ver `tasks.md` para o mapeamento task→arquivo).
 
 ---
 
 ## Success Criteria
 
-- [ ] Nenhum usuário existente perde acesso que já tinha (migração `admin → member` preserva 100% do comportamento atual)
-- [ ] Plataforma nunca fica sem `superadmin` — invariante garantido no código, não só sugerido na UI
-- [ ] `admin` não consegue criar/promover ninguém para `superadmin` em nenhum caminho de código
-- [ ] `admin` e `auditor` têm leitura irrestrita de todos os apps sem precisar de vínculo manual em `app_members`, via extensão documentada de `ResolveAppRole` (`rbac-per-app`)
-- [ ] Toda ação de plataforma passa por `HasPlatformPermission`, sem checagem duplicada por endpoint
-- [ ] UI nunca expõe tela/ação que o usuário logado não tem permissão de usar, mesmo desabilitada
+- [x] Nenhum usuário existente perde acesso que já tinha (migração `admin → member` preserva 100% do comportamento atual)
+- [x] Plataforma nunca fica sem `superadmin` — invariante garantido no código, não só sugerido na UI
+- [x] `admin` não consegue criar/promover ninguém para `superadmin` em nenhum caminho de código
+- [x] `admin` e `auditor` têm leitura irrestrita de todos os apps sem precisar de vínculo manual em `app_members`, via extensão documentada de `ResolveAppRole` (`rbac-per-app`)
+- [x] Toda ação de plataforma passa por `HasPlatformPermission`, sem checagem duplicada por endpoint
+- [x] UI nunca expõe tela/ação que o usuário logado não tem permissão de usar, mesmo desabilitada

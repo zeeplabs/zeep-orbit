@@ -42,7 +42,7 @@ type fileResponse struct {
 }
 
 func (h *Handler) ensureFilesTable(ctx context.Context, app *registry.App) error {
-	schemaName := "app_" + app.Config.Name
+	schemaName := app.SchemaName
 	_, err := h.pool.Exec(ctx, fmt.Sprintf(`CREATE SCHEMA IF NOT EXISTS %q`, schemaName))
 	if err != nil {
 		return err
@@ -108,7 +108,7 @@ func (h *Handler) HandleFileUpload(w http.ResponseWriter, r *http.Request) {
 
 	ext := strings.ToLower(path.Ext(header.Filename))
 	fileID := randomID()
-	schemaName := "app_" + app.Config.Name
+	schemaName := app.SchemaName
 	key := fmt.Sprintf("%s/%s%s", schemaName, fileID, ext)
 
 	s3Client, err := h.newStorageClient(r.Context(), app)
@@ -177,7 +177,7 @@ func (h *Handler) HandleFileList(w http.ResponseWriter, r *http.Request) {
 		offset = o
 	}
 
-	schemaName := "app_" + app.Config.Name
+	schemaName := app.SchemaName
 	q := fmt.Sprintf(`SELECT id, name, size, mime_type, created_at
 		FROM %s ORDER BY created_at DESC LIMIT $1 OFFSET $2`, filesTable(schemaName))
 
@@ -225,7 +225,7 @@ func (h *Handler) HandleFileGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fileID := chi.URLParam(r, "id")
-	schemaName := "app_" + app.Config.Name
+	schemaName := app.SchemaName
 	q := fmt.Sprintf(`SELECT id, name, size, mime_type, created_at
 		FROM %s WHERE id = $1`, filesTable(schemaName))
 
@@ -264,7 +264,7 @@ func (h *Handler) HandleFileDownload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fileID := chi.URLParam(r, "id")
-	schemaName := "app_" + app.Config.Name
+	schemaName := app.SchemaName
 
 	var fileKey string
 	err := h.pool.QueryRow(r.Context(),
@@ -320,7 +320,7 @@ func (h *Handler) HandleFileDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fileID := chi.URLParam(r, "id")
-	schemaName := "app_" + app.Config.Name
+	schemaName := app.SchemaName
 
 	var key string
 	err := h.pool.QueryRow(r.Context(),
@@ -377,7 +377,7 @@ func (h *Handler) HandleFileSignedURL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fileID := chi.URLParam(r, "id")
-	schemaName := "app_" + app.Config.Name
+	schemaName := app.SchemaName
 
 	var key string
 	err := h.pool.QueryRow(r.Context(),

@@ -52,7 +52,7 @@ export default function LoginPage() {
       className="flex min-h-screen"
       style={{ background: 'var(--bg-page)' }}
     >
-      {/* Hero (left) — handoff linhas 91-103 */}
+      {/* Hero (left) */}
       <div
         className="relative hidden overflow-hidden md:flex md:flex-col md:justify-between"
         style={{
@@ -62,7 +62,7 @@ export default function LoginPage() {
           padding: '56px',
         }}
       >
-        {/* Gradient orbs decorativos (handoff linhas 92-93) */}
+        {/* Gradient orbs decorativos */}
         <div
           className="pointer-events-none absolute"
           style={{
@@ -86,12 +86,12 @@ export default function LoginPage() {
           }}
         />
 
-        {/* Logo (handoff linhas 94-97) */}
+        {/* Logo */}
         <div className="relative flex items-center gap-2.5">
           <img src={logo} alt="Zeep Orbit" className="h-[52px] object-contain" />
         </div>
 
-        {/* Headline (handoff linhas 98-101) */}
+        {/* Headline */}
         <div className="relative max-w-[420px]">
           <div
             className="mb-4 text-[38px] font-bold leading-[1.15]"
@@ -107,7 +107,7 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Footer (handoff linha 102) */}
+        {/* Footer */}
         <div className="relative text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
           {t('app.productName', { defaultValue: 'Zeep Orbit' })} · v{pkg.version}
         </div>

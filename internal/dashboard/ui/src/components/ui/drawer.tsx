@@ -31,7 +31,6 @@ DrawerOverlay.displayName = "DrawerOverlay"
 const DrawerContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
-    /** Largura do drawer (default 440px). */
     width?: number
     hideClose?: boolean
   }

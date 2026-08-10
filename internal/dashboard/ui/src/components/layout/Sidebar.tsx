@@ -47,8 +47,7 @@ interface SidebarProps {
   footer: ReactNode
 }
 
-/** Sidebar desktop — logo, nav role-aware (omite via RoleGate), banner, footer.
- *  Handoff §F1-07: o link de Changelog vive no footer (SidebarFooter), não no nav. */
+/** Sidebar desktop — logo, nav role-aware (omite via RoleGate), banner, footer. */
 export function Sidebar({ companyName, banner, footer }: SidebarProps) {
   const { t } = useTranslation()
   const role = useCurrentRole()
@@ -58,7 +57,6 @@ export function Sidebar({ companyName, banner, footer }: SidebarProps) {
       className="sticky top-0 flex h-screen flex-col border-r border-[var(--border)] bg-[var(--surface)] px-3.5 py-5 max-md:hidden"
       style={{ width: 264 }}
     >
-      {/* Logo (handoff: ícone + wordmark PNG + subtítulo) */}
       <div className="mb-4 flex items-center gap-2.5 px-2">
         <div className="flex items-start min-w-0 flex-col">
           <img src={orbitWordmark} alt="Orbit" className="mb-0.5 h-[20px] w-auto object-contain" />
@@ -66,13 +64,11 @@ export function Sidebar({ companyName, banner, footer }: SidebarProps) {
         </div>
       </div>
 
-      {/* Company name (branding white-label), separado do nav por divisória fina */}
       <div className="mb-4 truncate px-2 text-[13px] font-semibold text-[var(--text-secondary)]">
         {companyName}
       </div>
       <div className="mb-4 border-t border-[var(--border)]" />
 
-      {/* Nav */}
       <nav className="flex flex-1 flex-col gap-4">
         {NAV_SECTIONS.map((section) => {
           const visible = section.items.filter(

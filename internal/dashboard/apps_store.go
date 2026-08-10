@@ -15,18 +15,34 @@ import (
 
 // JWTSecret is omitted from JSON when empty (list responses never populate it).
 type AppRow struct {
-	ID               string                  `json:"id"`
-	Name             string                  `json:"name"`
-	JWTSecret        string                  `json:"jwt_secret,omitempty"`
-	AuthEmailEnabled bool                    `json:"auth_email_enabled"`
-	AuthProviders    json.RawMessage         `json:"auth_providers,omitempty"`
-	StorageConfig    *storage.StorageConfig  `json:"storage_config,omitempty"`
-	RateLimit        *config.RateLimitConfig `json:"rate_limit,omitempty"`
-	OwnerID          string                  `json:"owner_id"`
-	OwnerEmail       string                  `json:"owner_email,omitempty"`
-	OwnerName        string                  `json:"owner_name,omitempty"`
-	CreatedAt        time.Time               `json:"created_at"`
-	Tables           []AppTableRow           `json:"tables"`
+	ID                 string                  `json:"id"`
+	Name               string                  `json:"name"`
+	JWTSecret          string                  `json:"jwt_secret,omitempty"`
+	AuthEmailEnabled   bool                    `json:"auth_email_enabled"`
+	AuthProviders      json.RawMessage         `json:"auth_providers,omitempty"`
+	StorageConfig      *storage.StorageConfig  `json:"storage_config,omitempty"`
+	RateLimit          *config.RateLimitConfig `json:"rate_limit,omitempty"`
+	EnduserRolesConfig []string                `json:"enduser_roles_config"`
+	OwnerID            string                  `json:"owner_id"`
+	OwnerEmail         string                  `json:"owner_email,omitempty"`
+	OwnerName          string                  `json:"owner_name,omitempty"`
+	CreatedAt          time.Time               `json:"created_at"`
+	Tables             []AppTableRow           `json:"tables"`
+}
+
+// decodeEnduserRolesConfig unmarshals the enduser_roles_config JSONB column.
+// The column is NOT NULL DEFAULT '["member"]' (see ProvisionZeepSystem), so
+// raw is never empty for a provisioned row — this only guards against a
+// malformed/missing value so callers always get a non-nil slice, never null.
+func decodeEnduserRolesConfig(raw []byte) []string {
+	var roles []string
+	if len(raw) > 0 {
+		_ = json.Unmarshal(raw, &roles)
+	}
+	if roles == nil {
+		roles = []string{}
+	}
+	return roles
 }
 
 // AppTableRow represents a row from zeep_system.app_tables.
@@ -53,14 +69,14 @@ func ListApps(ctx context.Context, pool *db.Pool, user *DashboardUser) ([]*AppRo
 
 	if user.Role == "superadmin" || CanReadAnyApp(user.Role) {
 		rows, err = pool.Query(ctx,
-			`SELECT a.id, a.name, a.auth_email_enabled, COALESCE(a.auth_providers, '{}'), COALESCE(a.storage_config, '{}'), COALESCE(a.rate_limit_config, '{}'), a.owner_id, COALESCE(u.email, ''), COALESCE(u.name, ''), a.created_at
+			`SELECT a.id, a.name, a.auth_email_enabled, COALESCE(a.auth_providers, '{}'), COALESCE(a.storage_config, '{}'), COALESCE(a.rate_limit_config, '{}'), COALESCE(a.enduser_roles_config, '["member"]'), a.owner_id, COALESCE(u.email, ''), COALESCE(u.name, ''), a.created_at
 			 FROM zeep_system.apps a
 			 LEFT JOIN zeep_system.dashboard_users u ON u.id = a.owner_id
 			 ORDER BY a.created_at DESC`,
 		)
 	} else {
 		rows, err = pool.Query(ctx,
-			`SELECT a.id, a.name, a.auth_email_enabled, COALESCE(a.auth_providers, '{}'), COALESCE(a.storage_config, '{}'), COALESCE(a.rate_limit_config, '{}'), a.owner_id, COALESCE(u.email, ''), COALESCE(u.name, ''), a.created_at
+			`SELECT a.id, a.name, a.auth_email_enabled, COALESCE(a.auth_providers, '{}'), COALESCE(a.storage_config, '{}'), COALESCE(a.rate_limit_config, '{}'), COALESCE(a.enduser_roles_config, '["member"]'), a.owner_id, COALESCE(u.email, ''), COALESCE(u.name, ''), a.created_at
 			 FROM zeep_system.apps a
 			 LEFT JOIN zeep_system.dashboard_users u ON u.id = a.owner_id
 			 INNER JOIN zeep_system.app_members m ON m.backend_app_id = a.id AND m.user_id = $1
@@ -76,8 +92,8 @@ func ListApps(ctx context.Context, pool *db.Pool, user *DashboardUser) ([]*AppRo
 	var apps []*AppRow
 	for rows.Next() {
 		var a AppRow
-		var providersJSON, storageJSON, rateLimitJSON []byte
-		if err := rows.Scan(&a.ID, &a.Name, &a.AuthEmailEnabled, &providersJSON, &storageJSON, &rateLimitJSON, &a.OwnerID, &a.OwnerEmail, &a.OwnerName, &a.CreatedAt); err != nil {
+		var providersJSON, storageJSON, rateLimitJSON, enduserRolesJSON []byte
+		if err := rows.Scan(&a.ID, &a.Name, &a.AuthEmailEnabled, &providersJSON, &storageJSON, &rateLimitJSON, &enduserRolesJSON, &a.OwnerID, &a.OwnerEmail, &a.OwnerName, &a.CreatedAt); err != nil {
 			return nil, fmt.Errorf("dashboard: list apps scan: %w", err)
 		}
 		if len(providersJSON) > 0 {
@@ -95,6 +111,7 @@ func ListApps(ctx context.Context, pool *db.Pool, user *DashboardUser) ([]*AppRo
 				a.RateLimit = &rc
 			}
 		}
+		a.EnduserRolesConfig = decodeEnduserRolesConfig(enduserRolesJSON)
 		apps = append(apps, &a)
 	}
 	if err := rows.Err(); err != nil {
@@ -122,13 +139,13 @@ func CreateApp(ctx context.Context, pool *db.Pool, name, ownerID string, authEma
 	defer tx.Rollback(ctx) //nolint:errcheck
 
 	var app AppRow
-	var storageJSON, rateLimitJSONCreate []byte
+	var storageJSON, rateLimitJSONCreate, enduserRolesJSONCreate []byte
 	err = tx.QueryRow(ctx,
 		`INSERT INTO zeep_system.apps (name, owner_id, auth_email_enabled)
 		 VALUES ($1, $2, $3)
-		 RETURNING id, name, jwt_secret, auth_email_enabled, COALESCE(auth_providers, '{}'), COALESCE(storage_config, '{}'), COALESCE(rate_limit_config, '{}'), owner_id, created_at`,
+		 RETURNING id, name, jwt_secret, auth_email_enabled, COALESCE(auth_providers, '{}'), COALESCE(storage_config, '{}'), COALESCE(rate_limit_config, '{}'), COALESCE(enduser_roles_config, '["member"]'), owner_id, created_at`,
 		name, ownerID, authEmail,
-	).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.AuthProviders, &storageJSON, &rateLimitJSONCreate, &app.OwnerID, &app.CreatedAt)
+	).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.AuthProviders, &storageJSON, &rateLimitJSONCreate, &enduserRolesJSONCreate, &app.OwnerID, &app.CreatedAt)
 	if len(storageJSON) > 0 && string(storageJSON) != "{}" {
 		var sc storage.StorageConfig
 		if json.Unmarshal(storageJSON, &sc) == nil && sc.Bucket != "" {
@@ -141,15 +158,16 @@ func CreateApp(ctx context.Context, pool *db.Pool, name, ownerID string, authEma
 			app.RateLimit = &rc
 		}
 	}
+	app.EnduserRolesConfig = decodeEnduserRolesConfig(enduserRolesJSONCreate)
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: create app insert: %w", err)
 	}
 	app.Tables = make([]AppTableRow, 0)
 
-	// rbac-per-app T-08: the owner is now added directly to `app_members`
-	// as `admin`, replacing the pre-rbac `app_ownership` insert. The T-02
-	// migration in `ProvisionZeepSystem` handles existing apps; this is
-	// the path new apps take. The partial UNIQUE index on
+	// The owner is added directly to `app_members` as `admin`, replacing
+	// the pre-rbac `app_ownership` insert. The migration in
+	// `ProvisionZeepSystem` handles existing apps; this is the path new
+	// apps take. The partial UNIQUE index on
 	// (backend_app_id, user_id) WHERE backend_app_id IS NOT NULL prevents
 	// duplicates (e.g. if a future migration re-runs for some reason).
 	if _, err := tx.Exec(ctx,
@@ -183,12 +201,12 @@ func GetApp(ctx context.Context, pool *db.Pool, appID string, user *DashboardUse
 	}
 
 	var app AppRow
-	var storageJSON, rateLimitJSONGet []byte
+	var storageJSON, rateLimitJSONGet, enduserRolesJSONGet []byte
 	err = pool.QueryRow(ctx,
-		`SELECT id, name, jwt_secret, auth_email_enabled, COALESCE(auth_providers, '{}'), COALESCE(storage_config, '{}'), COALESCE(rate_limit_config, '{}'), owner_id, created_at
+		`SELECT id, name, jwt_secret, auth_email_enabled, COALESCE(auth_providers, '{}'), COALESCE(storage_config, '{}'), COALESCE(rate_limit_config, '{}'), COALESCE(enduser_roles_config, '["member"]'), owner_id, created_at
 		 FROM zeep_system.apps WHERE id = $1`,
 		appID,
-	).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.AuthProviders, &storageJSON, &rateLimitJSONGet, &app.OwnerID, &app.CreatedAt)
+	).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.AuthProviders, &storageJSON, &rateLimitJSONGet, &enduserRolesJSONGet, &app.OwnerID, &app.CreatedAt)
 	if len(storageJSON) > 0 && string(storageJSON) != "{}" {
 		var sc storage.StorageConfig
 		if json.Unmarshal(storageJSON, &sc) == nil && sc.Bucket != "" {
@@ -201,6 +219,7 @@ func GetApp(ctx context.Context, pool *db.Pool, appID string, user *DashboardUse
 			app.RateLimit = &rc
 		}
 	}
+	app.EnduserRolesConfig = decodeEnduserRolesConfig(enduserRolesJSONGet)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, "", ErrNotFound
@@ -230,14 +249,14 @@ func UpdateApp(ctx context.Context, pool *db.Pool, appID string, user *Dashboard
 	}
 
 	var app AppRow
-	var storageJSON, rateLimitJSONUpd []byte
+	var storageJSON, rateLimitJSONUpd, enduserRolesJSONUpd []byte
 	err = pool.QueryRow(ctx,
 		`UPDATE zeep_system.apps
 		 SET auth_email_enabled = $2
 		 WHERE id = $1
-		 RETURNING id, name, jwt_secret, auth_email_enabled, COALESCE(auth_providers, '{}'), COALESCE(storage_config, '{}'), COALESCE(rate_limit_config, '{}'), owner_id, created_at`,
+		 RETURNING id, name, jwt_secret, auth_email_enabled, COALESCE(auth_providers, '{}'), COALESCE(storage_config, '{}'), COALESCE(rate_limit_config, '{}'), COALESCE(enduser_roles_config, '["member"]'), owner_id, created_at`,
 		appID, authEmail,
-	).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.AuthProviders, &storageJSON, &rateLimitJSONUpd, &app.OwnerID, &app.CreatedAt)
+	).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.AuthProviders, &storageJSON, &rateLimitJSONUpd, &enduserRolesJSONUpd, &app.OwnerID, &app.CreatedAt)
 	if len(storageJSON) > 0 && string(storageJSON) != "{}" {
 		var sc storage.StorageConfig
 		if json.Unmarshal(storageJSON, &sc) == nil && sc.Bucket != "" {
@@ -250,6 +269,7 @@ func UpdateApp(ctx context.Context, pool *db.Pool, appID string, user *Dashboard
 			app.RateLimit = &rc
 		}
 	}
+	app.EnduserRolesConfig = decodeEnduserRolesConfig(enduserRolesJSONUpd)
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: update app: %w", err)
 	}
@@ -272,6 +292,66 @@ func DeleteApp(ctx context.Context, pool *db.Pool, appID string, user *Dashboard
 	tag, err := pool.Exec(ctx, `DELETE FROM zeep_system.apps WHERE id = $1`, appID)
 	if err != nil {
 		return fmt.Errorf("dashboard: delete app: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// CountAppUsersByRole counts _auth_users rows in the app's schema with the
+// given role. Used by UpdateAppEnduserRoles to block removing a role that is
+// still assigned to at least one end user. schema must be resolved via
+// schemaNameForDB — never hardcode "app_" + name (AGENTS.md).
+func CountAppUsersByRole(ctx context.Context, pool *db.Pool, schema, role string) (int, error) {
+	var count int
+	err := pool.QueryRow(ctx,
+		fmt.Sprintf(`SELECT COUNT(*) FROM %q."_auth_users" WHERE role = $1`, schema),
+		role,
+	).Scan(&count)
+	if err != nil {
+		if isPgRelationNotFound(err) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("dashboard: count app users by role: %w", err)
+	}
+	return count, nil
+}
+
+// CountTablePoliciesByRole counts zeep_system.table_policies rows for the app
+// whose roles array contains the given role. roles is a flat JSONB array of
+// strings, so the "?" existence operator (does the array contain this
+// top-level element) is the correct check — not "@>", which compares JSON
+// document containment. Used by UpdateAppEnduserRoles to block removing a
+// role still referenced by at least one row policy.
+func CountTablePoliciesByRole(ctx context.Context, pool *db.Pool, appID, role string) (int, error) {
+	var count int
+	err := pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM zeep_system.table_policies WHERE app_id = $1 AND roles ? $2`,
+		appID, role,
+	).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("dashboard: count table policies by role: %w", err)
+	}
+	return count, nil
+}
+
+// UpdateAppEnduserRoles replaces the full enduser_roles_config list for an
+// app. Pure persistence, no validation — format checks, duplicate rejection,
+// and the in-use guard against removed roles all live in the handler
+// (UpdateAppEnduserRoles in handler.go), which computes the diff and calls
+// this only once every check has passed.
+func UpdateAppEnduserRoles(ctx context.Context, pool *db.Pool, appID string, roles []string) error {
+	rolesJSON, err := json.Marshal(roles)
+	if err != nil {
+		return fmt.Errorf("dashboard: marshal enduser roles: %w", err)
+	}
+	tag, err := pool.Exec(ctx,
+		`UPDATE zeep_system.apps SET enduser_roles_config = $1 WHERE id = $2`,
+		rolesJSON, appID,
+	)
+	if err != nil {
+		return fmt.Errorf("dashboard: update enduser roles: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound
@@ -444,7 +524,11 @@ func UpdateAppTable(ctx context.Context, pool *db.Pool, appID, tableID, rls stri
 }
 
 // DeleteAppTable removes a table's metadata row and returns its name so the
-// caller can drop the physical table too.
+// caller can drop the physical table too. Also deletes any table_policies
+// rows registered for this table (end-user-row-policies spec edge case: the
+// physical DROP TABLE already removes the native Postgres policies, this
+// only cleans up Orbit's own policy metadata, which has no DB-level FK to
+// app_tables to cascade on its own).
 func DeleteAppTable(ctx context.Context, pool *db.Pool, appID, tableID string) (string, error) {
 	var name string
 	err := pool.QueryRow(ctx,
@@ -456,6 +540,9 @@ func DeleteAppTable(ctx context.Context, pool *db.Pool, appID, tableID string) (
 			return "", ErrNotFound
 		}
 		return "", fmt.Errorf("dashboard: delete app table %s: %w", tableID, err)
+	}
+	if err := deleteTablePoliciesForTable(ctx, pool, appID, name); err != nil {
+		return "", err
 	}
 	return name, nil
 }

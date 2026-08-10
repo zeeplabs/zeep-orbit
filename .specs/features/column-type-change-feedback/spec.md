@@ -11,10 +11,10 @@ Resultado: pra narrowing óbvio já existe feedback (não é o "zero feedback" h
 
 ## Goals
 
-- [ ] Usuário recebe mensagem clara e acionável (não erro cru de driver) para qualquer falha de mudança de tipo de coluna, não só as já cobertas pela allow-list
-- [ ] Erro genérico interno (`err.Error()` bruto) para de vazar na resposta HTTP dos 4 handlers afetados
-- [ ] Allow-list revisada/documentada para refletir exatamente o que o PostgreSQL suporta via `USING` cast, reduzindo o conjunto de "conversões supostamente seguras que falham em runtime"
-- [ ] Mensagem de erro (allow-list ou runtime) indica a coluna, tipo atual, tipo desejado e motivo em linguagem não-técnica
+- [x] Usuário recebe mensagem clara e acionável (não erro cru de driver) para qualquer falha de mudança de tipo de coluna, não só as já cobertas pela allow-list
+- [x] Erro genérico interno (`err.Error()` bruto) para de vazar na resposta HTTP dos 4 handlers afetados
+- [x] Allow-list revisada/documentada para refletir exatamente o que o PostgreSQL suporta via `USING` cast, reduzindo o conjunto de "conversões supostamente seguras que falham em runtime"
+- [x] Mensagem de erro (allow-list ou runtime) indica a coluna, tipo atual, tipo desejado e motivo em linguagem não-técnica
 
 ## Out of Scope
 

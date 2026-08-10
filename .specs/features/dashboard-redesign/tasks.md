@@ -50,9 +50,11 @@ Legenda status: ☐ pending · ◐ in progress · ☑ done
 
 ## Fase 1 — Backend RBAC 4 papéis (paralelo; pré-requisito do shell)
 
-- [ ] **T1.1** — Implementar/coordenar `dashboard-global-roles` (spec própria): migração 2→4 papéis, `/me` expõe role de 4 valores. **Não** re-especificar aqui; esta task é o ponto de sincronização/dependência. `[DRD-20 dep]`
+- [x] **T1.1** — Implementar/coordenar `dashboard-global-roles` (spec própria): migração 2→4 papéis, `/me` expõe role de 4 valores. **Não** re-especificar aqui; esta task é o ponto de sincronização/dependência. `[DRD-20 dep]`
 
 **Nota**: enforcement, migração e matriz de permissão são escopo de `.specs/features/dashboard-global-roles/`. Se essa spec não estiver pronta quando o shell for feito, T1.5.x degrada para modelo 2-papéis (ver `useCurrentRole`).
+
+**Resolvido (verificado 2026-08-10)**: `dashboard-global-roles` está implementada (T-01..T-09) — migração 2→4 papéis em `internal/dashboard/provisioner.go:48,72-77`, matriz central em `internal/dashboard/platform_roles.go` (`HasPlatformPermission`), espelho no frontend em `src/lib/permissions.ts`, `RequireRole` em `App.tsx` e `platformAction` por item de nav em `components/layout/nav.ts`. Sem degradação para 2 papéis.
 
 ---
 
@@ -93,7 +95,6 @@ Ordem por risco/tráfego. Cada task: substituir markup por composição de níve
 
 - [x] **T3.1** — Remover `lucide-react` **e** `framer-motion` de `package.json` (lucide dropado em `832e379`; framer-motion dropado em sessão seguinte — ChangePasswordModal migrado para `Dialog` F0.5, TableCard para `animate-in`). `[DRD-42]`
 - [x] **T3.2** — Auditoria final: token `--bg-surface` inexistente corrigido para `var(--surface)` (10 ocorrências em 6 telas — LoginPage/AppOnboarding/GitHubIntegration/SdkPage/Onboarding/GoogleSetup); código morto removido (`DeleteConfirmDialog.tsx`, `magicui/` — 0 usos); sweep de radius completado nas telas que ficaram com `rounded-lg/xl/2xl` legados (renderizavam 16/20px por causa do override `--radius-lg: 16px` — Sidebar, SidebarFooter, LogsPage, LoginPage, AppUsersPage, TableCard, DashboardShell, UsersPage, AccessDenied, DataBrowserPage, AppDetailsPage, GitHubIntegrationPage, SdkPage, BrandSettingsPage, GoogleSetupPage, ComponentsSandbox, ChangePasswordModal); ChangePasswordModal tokenizado (cores hardcoded `#F8FAFC`/`#64748B`/`#94A3B8`/`#ef4444`/`white/[0.06]` → tokens, gradiente `brand-*` → `primary`/`accent` canônicos). Cards 460px de Onboarding/GoogleSetup mantêm `rounded-2xl` (documentado intencional no CHANGELOG T2.10). `[DRD-12]`
-- [ ] **T3.2** — Auditoria final: `grep` por strings hardcoded, cores fora de token, markup de padrão duplicado inline. `[DRD-12]`
 - [ ] **T3.3** — CHANGELOG `[Unreleased]` + README feature tables (+ 3 traduções, AGENTS §6) para o que for user-facing novo (toggle tema/idioma, mobile shell). `[DRD-30]`
 - [ ] **T3.4** — Coordenar com features net-new que consomem nível 2 (licensing/observability/2FA) — confirmar que os componentes servem sem fork. `[DRD-11]`
 

@@ -124,12 +124,36 @@ func validateDefault(cPrefix string, col ColumnConfig) error {
 
 // validateReference checks a single column's References against the app's
 // own tables (cross-app references are out of scope — schema-per-app
-// isolation is an existing architectural boundary).
+// isolation is an existing architectural boundary), with one special case:
+// "_auth_users" is never one of the app's own tables (it's provisioned
+// separately, per app, outside app_tables) but is always a valid FK target
+// for a business column that wants a real, DB-enforced link to the end user
+// who owns/authored a row — the same guarantee owner_id's automatic FK
+// already has. Only "id" is exposed as a referenceable column on
+// "_auth_users" (e.g. "role" is not FK-referenceable), and the referencing
+// column must be "uuid" (matching _auth_users.id's own type).
 func validateReference(cPrefix string, col ColumnConfig, tablesByName map[string]TableConfig) error {
 	ref := col.References
 	if strings.TrimSpace(ref.Table) == "" {
 		return fmt.Errorf("%s: references.table is required", cPrefix)
 	}
+
+	if ref.Table == "_auth_users" {
+		if ref.Column != "id" {
+			return fmt.Errorf("%s: references %q.%q, but only %q's %q column can be referenced", cPrefix, ref.Table, ref.Column, ref.Table, "id")
+		}
+		if col.Type != "uuid" {
+			return fmt.Errorf("%s: references _auth_users.id but column type is %q (must be uuid)", cPrefix, col.Type)
+		}
+		if !validOnDelete[ref.OnDelete] {
+			return fmt.Errorf("%s: references.on_delete %q is invalid (must be cascade, restrict, set_null or no_action)", cPrefix, ref.OnDelete)
+		}
+		if ref.OnDelete == "set_null" && col.Required {
+			return fmt.Errorf("%s: references.on_delete=set_null is incompatible with required=true", cPrefix)
+		}
+		return nil
+	}
+
 	target, ok := tablesByName[ref.Table]
 	if !ok {
 		return fmt.Errorf("%s: references unknown table %q", cPrefix, ref.Table)

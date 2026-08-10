@@ -21,7 +21,6 @@ type WriteQuery struct {
 	Args []any
 }
 
-// columnSet retorna um conjunto (map) de nomes de colunas conhecidas para lookup O(1).
 func columnSet(table *registry.Table) map[string]struct{} {
 	set := make(map[string]struct{}, len(table.Columns)+len(systemFields))
 	for col := range systemFields {
@@ -66,7 +65,6 @@ var systemFields = map[string]string{
 	"deleted_at": "timestamptz",
 }
 
-// operatorMap mapeia prefixo de operador → SQL operator.
 var operatorMap = map[string]string{
 	"eq.":    "=",
 	"ne.":    "!=",
@@ -200,7 +198,6 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 	}, nil
 }
 
-// Campos desconhecidos retornam erro.
 func BuildInsert(schemaName, tableName string, table *registry.Table, body map[string]any, ownerID string) (*WriteQuery, error) {
 	known := columnSet(table)
 	types := columnTypes(table)
@@ -262,7 +259,6 @@ func BuildInsert(schemaName, tableName string, table *registry.Table, body map[s
 	return &WriteQuery{SQL: sql, Args: args}, nil
 }
 
-// Campos desconhecidos retornam erro.
 func BuildUpdate(schemaName, tableName string, table *registry.Table, id string, body map[string]any, ownerID string) (*WriteQuery, error) {
 	known := columnSet(table)
 	types := columnTypes(table)
