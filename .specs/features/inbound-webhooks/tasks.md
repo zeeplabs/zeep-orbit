@@ -138,15 +138,17 @@ T16 -> T17
 - Skill: NONE
 
 **Done when**:
-- [ ] Every method above implemented against a real Postgres pool
-- [ ] `SoftDeleteWebhook` sets `deleted_at`, never issues `DELETE`
-- [ ] `ActivateWebhook` on a webhook with zero mappings returns `ErrNoMappings`, no state change
-- [ ] Token is never persisted in plaintext (verified in test by asserting `token_hash` differs from the returned plaintext and re-deriving the hash matches)
-- [ ] Gate check passes: `go test ./internal/dashboard/...`
-- [ ] Test count: at least 6 tests pass (happy path create, get, list, capture-overwrite, activate-empty-mapping-error, rotate, soft-delete) — no silent deletions
+- [x] Every method above implemented against a real Postgres pool
+- [x] `SoftDeleteWebhook` sets `deleted_at`, never issues `DELETE`
+- [x] `ActivateWebhook` on a webhook with zero mappings returns `ErrNoMappings`, no state change
+- [x] Token is never persisted in plaintext (verified in test by asserting `token_hash` differs from the returned plaintext and re-deriving the hash matches)
+- [x] Gate check passes: `go test ./internal/dashboard/...`
+- [x] Test count: at least 6 tests pass (happy path create, get, list, capture-overwrite, activate-empty-mapping-error, rotate, soft-delete) — no silent deletions (7 tests, all pass)
 
 **Tests**: integration
 **Gate**: quick
+
+**Status**: ✅ Complete
 
 ---
 

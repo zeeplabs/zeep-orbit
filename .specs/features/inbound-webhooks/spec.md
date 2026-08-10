@@ -158,8 +158,8 @@ App owners today have no way to let an external system (Google Workspace, or any
 | WEBHOOK-18 | P2: Dashboard delivery log | Design | Pending |
 | WEBHOOK-19 | P2: Dashboard delivery log | Design | Pending |
 | WEBHOOK-20 | P2: Dashboard delivery log | Design | Pending |
-| WEBHOOK-21 | P3: Webhook lifecycle | Design | Pending |
-| WEBHOOK-22 | P3: Webhook lifecycle | Design | Pending |
+| WEBHOOK-21 | P3: Webhook lifecycle | Design | Implementing |
+| WEBHOOK-22 | P3: Webhook lifecycle | Design | Implementing |
 | WEBHOOK-23 | P3: Webhook lifecycle | Design | Pending |
 
 **ID format:** `WEBHOOK-[NUMBER]`
