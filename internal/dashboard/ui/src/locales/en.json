@@ -852,5 +852,22 @@
   "webhooks.dismiss": "Dismiss",
   "webhooks.statusActive": "Active",
   "webhooks.statusCapture": "Capture mode",
-  "webhooks.eventTypePathLabel": "Event type path"
+  "webhooks.eventTypePathLabel": "Event type path",
+  "webhookMapping.explainer": "Click a field on the left, then a column on the right, to link them. Activating requires at least one saved mapping.",
+  "webhookMapping.activate": "Activate",
+  "webhookMapping.activated": "Active",
+  "webhookMapping.activateSuccess": "Webhook activated",
+  "webhookMapping.noSample": "No sample captured yet",
+  "webhookMapping.noSampleDesc": "Send a real event to this webhook's URL to capture a sample payload before mapping it.",
+  "webhookMapping.sampleFields": "Sample fields",
+  "webhookMapping.tableColumns": "Table columns",
+  "webhookMapping.clickToLink": "Click to link",
+  "webhookMapping.eventTypeValuePlaceholder": "Event type value (e.g. user.created)",
+  "webhookMapping.matchKeyPlaceholder": "Match key column",
+  "webhookMapping.saveMapping": "Save mapping",
+  "webhookMapping.eventTypeValueRequired": "Event type value is required",
+  "webhookMapping.targetTableRequired": "Target table is required",
+  "webhookMapping.fieldMappingRequired": "At least one field must be linked to a column",
+  "webhookMapping.matchKeyRequired": "A match key column is required for update/delete actions",
+  "webhookMapping.saveSuccess": "Mapping saved"
 }

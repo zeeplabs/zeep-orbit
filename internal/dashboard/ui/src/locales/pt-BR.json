@@ -852,5 +852,22 @@
   "webhooks.dismiss": "Descartar",
   "webhooks.statusActive": "Ativo",
   "webhooks.statusCapture": "Modo de captura",
-  "webhooks.eventTypePathLabel": "Caminho do tipo de evento"
+  "webhooks.eventTypePathLabel": "Caminho do tipo de evento",
+  "webhookMapping.explainer": "Clique em um campo à esquerda e depois em uma coluna à direita para vinculá-los. Ativar requer pelo menos um mapeamento salvo.",
+  "webhookMapping.activate": "Ativar",
+  "webhookMapping.activated": "Ativo",
+  "webhookMapping.activateSuccess": "Webhook ativado",
+  "webhookMapping.noSample": "Nenhuma amostra capturada ainda",
+  "webhookMapping.noSampleDesc": "Envie um evento real para a URL deste webhook para capturar um payload de amostra antes de mapeá-lo.",
+  "webhookMapping.sampleFields": "Campos da amostra",
+  "webhookMapping.tableColumns": "Colunas da tabela",
+  "webhookMapping.clickToLink": "Clique para vincular",
+  "webhookMapping.eventTypeValuePlaceholder": "Valor do tipo de evento (ex: user.created)",
+  "webhookMapping.matchKeyPlaceholder": "Coluna de chave de correspondência",
+  "webhookMapping.saveMapping": "Salvar mapeamento",
+  "webhookMapping.eventTypeValueRequired": "Valor do tipo de evento é obrigatório",
+  "webhookMapping.targetTableRequired": "Tabela de destino é obrigatória",
+  "webhookMapping.fieldMappingRequired": "Pelo menos um campo deve ser vinculado a uma coluna",
+  "webhookMapping.matchKeyRequired": "Uma coluna de chave de correspondência é obrigatória para ações de update/delete",
+  "webhookMapping.saveSuccess": "Mapeamento salvo"
 }

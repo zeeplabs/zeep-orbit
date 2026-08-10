@@ -473,13 +473,15 @@ T16 -> T17
 - Skill: NONE
 
 **Done when**:
-- [ ] Activate button disabled with zero saved mappings, matching the backend's `400`
-- [ ] Match-key field only shown/required for `update`/`delete` actions
-- [ ] i18n keys added to both locale files
-- [ ] Gate check passes: `npm run build`
+- [x] Activate button disabled with zero saved mappings, matching the backend's `400`
+- [x] Match-key field only shown/required for `update`/`delete` actions
+- [x] i18n keys added to both locale files
+- [x] Gate check passes: `npm run build`
 
 **Tests**: none
 **Gate**: full
+
+**Status**: ✅ Complete
 
 ---
 
