@@ -8,6 +8,13 @@
 
 **Pré-requisito externo**: nenhum dentro do zeep-orbit. `license-server` (repo separado) não é dependência de bloqueio — as tasks T-05/T-06 assumem apenas o contrato de `GET /v1/status?ref=` fixado no `design.md`; um stub/mock local cobre os testes até o `license-server` real existir.
 
+**Nota de estado real (2026-08-10) — UI mock já mergeada, backend ainda Draft**: o `Status: Draft` acima continua correto para o escopo desta spec (backend `internal/enterprise/` não existe: `ls internal/` não lista o pacote, não há `License`/`Verify`/`HasFeature`/`GET /dashboard/api/license/status`). Porém a **UI de preview já está no repo**, entregue por `dashboard-settings-consolidation` S3.2, não por esta spec:
+
+- `internal/dashboard/ui/src/pages/BrandSettingsPage.tsx:574-614+` — `LicensePreviewState`/`LICENSE_PREVIEW_STATES` e o componente `LicenseTab()`, com plan card, feature checklist, switcher de estado (Free/Enterprise/Trial/Expired), textarea de license key e demo de badge/upgrade. Comentário no próprio código: *"License tab: UI-only preview (no `internal/enterprise` backend exists yet)"*. Todos os dados são hardcoded e as ações chamam `previewOnly()` (`toast.info`), sem persistir nada.
+- A tab está **travada atrás de um `disabled`**: `BrandSettingsPage.tsx:82-83` renderiza o `TabsTrigger` com `disabled={tb.value === "license"}` + `title={t("apps.soon")}`, então o preview é inalcançável por clique em produção.
+
+Consequência para o planejamento desta spec: **T-09 (Página "Licença" + badge de upgrade) já tem a casca visual pronta e não deve ser reescrita do zero** — a task vira "ligar o `LicenseTab` existente ao backend real (T-06 `GET /dashboard/api/license/status` + T-08 `useFeature`), substituir os dados hardcoded e remover o `disabled` do `TabsTrigger`". T-10 (i18n) também já tem parte das chaves `settings.license*` criadas em `en.json`/`pt-BR.json`. Nenhuma outra task muda.
+
 ---
 
 ## Execution Plan

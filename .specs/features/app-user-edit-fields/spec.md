@@ -91,7 +91,6 @@ The app-user edit drawer (`EditRoleDrawer`, `AppUsersPage.tsx`) only lets an adm
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| AUE-01 | P1: Edit email/phone/role | Design | Pending |
 | AUE-01 | P1: Edit email/phone/role | Verified | Verified by e2e (T5/T7) |
 | AUE-02 | P1: Edit email/phone/role | Verified | Verified by e2e (T4/T7) |
 | AUE-03 | P1: Edit email/phone/role | Verified | Verified (T1/T2 unit) |

@@ -6,11 +6,11 @@ Um frontend app criado (sub-feature 2) já existe como repositório privado no G
 
 ## Goals
 
-- [ ] Todo frontend app criado já sai com credencial de sync gerada (deploy key SSH), sem passo manual extra do usuário
-- [ ] Usuário recebe comandos git prontos (clone ou remote add) + chave privada + prompt copiável para seu agente de IA configurar tudo sozinho
-- [ ] Falha na geração/registro da credencial não impede o uso do frontend app — fica marcada e permite retry
-- [ ] Usuário pode regenerar a credencial a qualquer momento (perda, suspeita de vazamento) sem recriar o frontend app
-- [ ] Remoção do frontend app revoga a credencial de sync, não deixa chave órfã ativa no GitHub
+- [x] Todo frontend app criado já sai com credencial de sync gerada (deploy key SSH), sem passo manual extra do usuário
+- [x] Usuário recebe comandos git prontos (clone ou remote add) + chave privada + prompt copiável para seu agente de IA configurar tudo sozinho
+- [x] Falha na geração/registro da credencial não impede o uso do frontend app — fica marcada e permite retry
+- [x] Usuário pode regenerar a credencial a qualquer momento (perda, suspeita de vazamento) sem recriar o frontend app
+- [x] Remoção do frontend app revoga a credencial de sync, não deixa chave órfã ativa no GitHub
 
 ## Out of Scope
 
@@ -121,32 +121,32 @@ Um frontend app criado (sub-feature 2) já existe como repositório privado no G
 
 | Requirement ID | Story | Phase | Status |
 |---|---|---|---|
-| SY-01 | P1: Geração na criação | Design | Pending |
-| SY-02 | P1: Geração na criação | Design | Pending |
-| SY-03 | P1: Geração na criação | Design | Pending |
-| SY-10 | P1: Reveal + prompt | Design | Pending |
-| SY-11 | P1: Reveal + prompt | Design | Pending |
-| SY-12 | P1: Reveal + prompt | Design | Pending |
-| SY-13 | P1: Reveal + prompt | Design | Pending |
-| SY-20 | P1: Retry | Design | Pending |
-| SY-21 | P1: Retry | Design | Pending |
-| SY-22 | P1: Retry | Design | Pending |
-| SY-30 | P1: Regenerate | Design | Pending |
-| SY-31 | P1: Regenerate | Design | Pending |
-| SY-32 | P1: Regenerate | Design | Pending |
-| SY-40 | P1: Delete revoga | Design | Pending |
-| SY-41 | P1: Delete revoga | Design | Pending |
+| SY-01 | P1: Geração na criação | Execute | Verified |
+| SY-02 | P1: Geração na criação | Execute | Verified |
+| SY-03 | P1: Geração na criação | Execute | Verified |
+| SY-10 | P1: Reveal + prompt | Execute | Verified |
+| SY-11 | P1: Reveal + prompt | Execute | Verified |
+| SY-12 | P1: Reveal + prompt | Execute | Verified |
+| SY-13 | P1: Reveal + prompt | Execute | Verified |
+| SY-20 | P1: Retry | Execute | Verified |
+| SY-21 | P1: Retry | Execute | Verified |
+| SY-22 | P1: Retry | Execute | Verified |
+| SY-30 | P1: Regenerate | Execute | Verified |
+| SY-31 | P1: Regenerate | Execute | Verified |
+| SY-32 | P1: Regenerate | Execute | Verified |
+| SY-40 | P1: Delete revoga | Execute | Verified |
+| SY-41 | P1: Delete revoga | Execute | Verified |
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 15 total, 0 mapped to tasks, 15 unmapped ⚠️ (mapeamento acontece na fase Tasks)
+**Coverage:** 15 total, 15 mapped to tasks (T-01..T-13), 0 unmapped — todos Verified (verificado 2026-08-10 contra o código; ver `tasks.md`)
 
 ---
 
 ## Success Criteria
 
-- [ ] Todo frontend app criado com sucesso já sai com deploy key gerada e registrada (ou `sync_status: pending` se falhar, nunca bloqueando a criação do app)
-- [ ] Usuário revela a chave privada e copia o prompt pro agente sem nunca precisar acessar o GitHub diretamente
-- [ ] Retry e regenerate funcionam sem exigir recriação do frontend app
-- [ ] Regenerate segue best-effort na revogação da chave antiga — nunca bloqueia a emissão da nova
-- [ ] Delete do frontend app tenta revogar a credencial de sync, best-effort, sem bloquear a remoção local
+- [x] Todo frontend app criado com sucesso já sai com deploy key gerada e registrada (ou `sync_status: pending` se falhar, nunca bloqueando a criação do app)
+- [x] Usuário revela a chave privada e copia o prompt pro agente sem nunca precisar acessar o GitHub diretamente
+- [x] Retry e regenerate funcionam sem exigir recriação do frontend app
+- [x] Regenerate segue best-effort na revogação da chave antiga — nunca bloqueia a emissão da nova
+- [x] Delete do frontend app tenta revogar a credencial de sync, best-effort, sem bloquear a remoção local

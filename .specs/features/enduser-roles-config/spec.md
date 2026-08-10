@@ -6,11 +6,11 @@ O `role` de negócio do end-user (claim JWT usado por `_auth_users.role` e por `
 
 ## Goals
 
-- [ ] Admin do app cadastra, por app, a lista de roles de negócio válidas (`enduser_roles_config`, array de strings), persistida em `zeep_system.apps`.
-- [ ] `RoleCell` (edição de role do end-user) passa de `Input` livre para `Select` populado por essa lista.
-- [ ] Campo de roles em `TablePolicies` passa de `Input` CSV livre para multi-select (chips) populado pela mesma lista.
-- [ ] Apps novos e apps existentes (via migração) nunca ficam com lista vazia — seed automático `["member"]`, mesmo default hoje de `_auth_users.role`.
-- [ ] Remoção de uma role da lista é bloqueada pelo backend se ela estiver em uso (por ao menos um `_auth_users.role` ou por ao menos uma `table_policies.roles`).
+- [x] Admin do app cadastra, por app, a lista de roles de negócio válidas (`enduser_roles_config`, array de strings), persistida em `zeep_system.apps`.
+- [x] `RoleCell` (edição de role do end-user) passa de `Input` livre para `Select` populado por essa lista.
+- [x] Campo de roles em `TablePolicies` passa de `Input` CSV livre para multi-select (chips) populado pela mesma lista.
+- [x] Apps novos e apps existentes (via migração) nunca ficam com lista vazia — seed automático `["member"]`, mesmo default hoje de `_auth_users.role`.
+- [x] Remoção de uma role da lista é bloqueada pelo backend se ela estiver em uso (por ao menos um `_auth_users.role` ou por ao menos uma `table_policies.roles`).
 
 ## Out of Scope
 
@@ -116,34 +116,34 @@ Toda ambiguidade está resolvida ou registrada aqui — nada fica silenciosament
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| ROLECFG-01 | P1: Admin cadastra lista de roles | Design | Pending |
-| ROLECFG-02 | P1: Admin cadastra lista de roles | Design | Pending |
-| ROLECFG-03 | P1: Admin cadastra lista de roles | Design | Pending |
-| ROLECFG-04 | P1: Admin cadastra lista de roles | Design | Pending |
-| ROLECFG-05 | P1: Admin cadastra lista de roles | Design | Pending |
-| ROLECFG-06 | P1: Admin cadastra lista de roles | Design | Pending |
-| ROLECFG-07 | P1: Admin cadastra lista de roles | Design | Pending |
-| ROLECFG-08 | P1: Admin cadastra lista de roles | Design | Pending |
-| ROLECFG-09 | P2: Edição de role via drawer de ações | Design | Pending |
-| ROLECFG-10 | P2: Edição de role via drawer de ações | Design | Pending |
-| ROLECFG-11 | P2: Edição de role via drawer de ações | Design | Pending |
-| ROLECFG-12 | P2: Edição de role via drawer de ações | Design | Pending |
-| ROLECFG-13 | P2: Edição de role via drawer de ações | Design | Pending |
-| ROLECFG-14 | P2: Edição de role via drawer de ações | Design | Pending |
-| ROLECFG-15 | P3: TablePolicies usa multi-select | Design | Pending |
-| ROLECFG-16 | P3: TablePolicies usa multi-select | Design | Pending |
-| ROLECFG-17 | P3: TablePolicies usa multi-select | Design | Pending |
+| ROLECFG-01 | P1: Admin cadastra lista de roles | Execute | Verified |
+| ROLECFG-02 | P1: Admin cadastra lista de roles | Execute | Verified |
+| ROLECFG-03 | P1: Admin cadastra lista de roles | Execute | Verified |
+| ROLECFG-04 | P1: Admin cadastra lista de roles | Execute | Verified |
+| ROLECFG-05 | P1: Admin cadastra lista de roles | Execute | Verified |
+| ROLECFG-06 | P1: Admin cadastra lista de roles | Execute | Verified |
+| ROLECFG-07 | P1: Admin cadastra lista de roles | Execute | Verified |
+| ROLECFG-08 | P1: Admin cadastra lista de roles | Execute | Verified |
+| ROLECFG-09 | P2: Edição de role via drawer de ações | Execute | Verified |
+| ROLECFG-10 | P2: Edição de role via drawer de ações | Execute | Verified |
+| ROLECFG-11 | P2: Edição de role via drawer de ações | Execute | Verified |
+| ROLECFG-12 | P2: Edição de role via drawer de ações | Execute | Verified |
+| ROLECFG-13 | P2: Edição de role via drawer de ações | Execute | Verified |
+| ROLECFG-14 | P2: Edição de role via drawer de ações | Execute | Verified |
+| ROLECFG-15 | P3: TablePolicies usa multi-select | Execute | Verified |
+| ROLECFG-16 | P3: TablePolicies usa multi-select | Execute | Verified |
+| ROLECFG-17 | P3: TablePolicies usa multi-select | Execute | Verified |
 
 **ID format:** `ROLECFG-[NUMBER]`
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 17 total, 0 mapped to tasks, 17 unmapped ⚠️ (mapeamento ocorre na fase Design/Tasks)
+**Coverage:** 17 total, 17 mapped to tasks, 0 unmapped — todos Verified (`tasks.md`: 63/63 tasks concluídas; `validation.md`: PASS iteração 3, 2026-08-08). Código: `internal/dashboard/apps_store.go` (`UpdateAppEnduserRoles`, `decodeEnduserRolesConfig`, guards de role em uso), `internal/dashboard/handler.go:2466+` (`UpdateAppEnduserRoles`), rota `PUT /api/apps/{id}/roles` em `internal/server/server.go:189`. Feature já publicada no `CHANGELOG.md` v1.1.0.
 
 ---
 
 ## Success Criteria
 
-- [ ] Nenhum dos dois pontos de UI (`RoleCell`, `TablePolicies`) aceita mais texto livre pra role quando `enduser_roles_config` não está vazio.
-- [ ] Nenhum app existente perde acesso/funcionalidade após a migração (roles órfãs continuam funcionando, seed automático garante lista não-vazia).
-- [ ] Tentativa de remover role em uso retorna erro claro (contagem de usos), nunca falha silenciosa.
+- [x] Nenhum dos dois pontos de UI (`RoleCell`, `TablePolicies`) aceita mais texto livre pra role quando `enduser_roles_config` não está vazio.
+- [x] Nenhum app existente perde acesso/funcionalidade após a migração (roles órfãs continuam funcionando, seed automático garante lista não-vazia).
+- [x] Tentativa de remover role em uso retorna erro claro (contagem de usos), nunca falha silenciosa.

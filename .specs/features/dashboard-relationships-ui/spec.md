@@ -10,11 +10,11 @@ Resultado: um usuário só consegue declarar FK ou índice via chamada HTTP dire
 
 ## Goals
 
-- [ ] `ColumnDef`/`TableDef` (TypeScript) ganham os campos `references`/`indexes`, espelhando `config.ReferenceConfig`/`config.IndexConfig` do backend
-- [ ] `TableCard.tsx` permite declarar, por coluna, uma referência (tabela alvo, coluna alvo, `on_delete`) usando as tabelas já existentes do mesmo app
-- [ ] `TableCard.tsx` permite declarar, por tabela, uma lista de índices (nome, colunas, `unique`)
-- [ ] Erros de validação retornados pelo backend (referência a tabela/coluna inexistente, ciclo, índice em coluna inexistente, nome de índice duplicado) aparecem de forma legível no formulário, reaproveitando o padrão de erro já existente (`setError`, linha 73/172/298 de `TableCard.tsx`)
-- [ ] Visualização somente-leitura (tabela não em edição) mostra as FKs e índices existentes, não só nome/RLS
+- [x] `ColumnDef`/`TableDef` (TypeScript) ganham os campos `references`/`indexes`, espelhando `config.ReferenceConfig`/`config.IndexConfig` do backend
+- [x] `TableCard.tsx` permite declarar, por coluna, uma referência (tabela alvo, coluna alvo, `on_delete`) usando as tabelas já existentes do mesmo app
+- [x] `TableCard.tsx` permite declarar, por tabela, uma lista de índices (nome, colunas, `unique`)
+- [x] Erros de validação retornados pelo backend (referência a tabela/coluna inexistente, ciclo, índice em coluna inexistente, nome de índice duplicado) aparecem de forma legível no formulário, reaproveitando o padrão de erro já existente (`setError`, linha 73/172/298 de `TableCard.tsx`)
+- [x] Visualização somente-leitura (tabela não em edição) mostra as FKs e índices existentes, não só nome/RLS
 
 ## Out of Scope
 

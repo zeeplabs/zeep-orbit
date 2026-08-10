@@ -1,7 +1,7 @@
 # End-User Row Policies Design
 
 **Spec**: `.specs/features/end-user-row-policies/spec.md`
-**Status**: Draft
+**Status**: Verified — implementado e validado (`validation.md`, PASS rodada 2, 2026-08-08)
 
 ---
 

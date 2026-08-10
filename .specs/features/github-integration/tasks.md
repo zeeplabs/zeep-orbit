@@ -1,7 +1,7 @@
 # GitHub Integration Tasks
 
 **Design**: `.specs/features/github-integration/design.md`
-**Status**: Draft
+**Status**: Verified — T-01..T-12 implementados e mergeados (verificado 2026-08-10 contra o código: `internal/github/client.go` — `VerifyTemplateRepo`/`CreateRepoFromTemplate`/`ArchiveRepo`/`AddDeployKey`/`RevokeDeployKey`, `internal/github/token.go` — `generateAppJWT`/`InstallationTokenCache`; stores/handlers em `internal/dashboard/github_config*.go` e `github_templates*.go`; 10 rotas `/api/github/*` + `install/callback` público em `internal/server/server.go:214-223,261`; nav `integrations` gated por `platformAction` em `src/components/layout/nav.ts:53`)
 
 **Nota sobre gates**: não existe `.specs/codebase/TESTING.md` neste repo. Gates abaixo foram inferidos dos comandos reais do `Makefile` (`go test ./...`, `go vet ./...`, `dashboard-build`) e do padrão já usado em `.specs/features/mvp-core/tasks.md` (gate por pacote: `go test ./internal/{pkg}/...`). Nada inventado — confirmado no `Makefile` do repo.
 
@@ -66,7 +66,7 @@ T-10, T-11 ──→ T-12
 
 ## Task Breakdown
 
-### T-01: Provisionar tabelas `github_app_config` e `github_templates`
+### T-01: Provisionar tabelas `github_app_config` e `github_templates` [x]
 
 **What**: Adicionar DDL das duas tabelas novas em `internal/dashboard/provisioner.go`, seguindo o bloco de migrações existente (mesmo padrão de `system_config`, incluindo unique index `((TRUE))` pro singleton).
 **Where**: `internal/dashboard/provisioner.go`
@@ -77,16 +77,16 @@ T-10, T-11 ──→ T-12
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `github_app_config` criada com unique index singleton `((TRUE))`
-- [ ] `github_templates` criada com PK UUID, `active BOOLEAN DEFAULT true`
-- [ ] Gate check passa: `go build ./...`
+- [x] `github_app_config` criada com unique index singleton `((TRUE))`
+- [x] `github_templates` criada com PK UUID, `active BOOLEAN DEFAULT true`
+- [x] Gate check passa: `go build ./...`
 
 **Tests**: none (schema puro; coberto indiretamente pelos testes de integração de T-07/T-08 que dependem das tabelas existirem)
 **Gate**: build
 
 ---
 
-### T-02: Installation token cache + assinatura JWT do App [P]
+### T-02: Installation token cache + assinatura JWT do App [P] [x]
 
 **What**: Implementar `internal/github/token.go` — gera JWT RS256 do App (App ID + private key), troca por installation token via `POST /app/installations/{id}/access_tokens`, cacheia até expirar (~1h) com mutex.
 **Where**: `internal/github/token.go`
@@ -97,18 +97,18 @@ T-10, T-11 ──→ T-12
 **Tools**: MCP: `context7` (resolver formato exato do JWT de App exigido pelo GitHub — `iss`/`iat`/`exp`, algoritmo RS256, endpoint de troca — antes de codar) · Skill: NONE
 
 **Done when**:
-- [ ] JWT RS256 gerado corretamente (`iss=app_id`, `exp` ~10min conforme spec do GitHub)
-- [ ] Installation token obtido e cacheado, renovado só quando expira
-- [ ] Unit tests: geração de JWT, cache hit, cache expirado força renovação (mock HTTP)
-- [ ] Gate check passa: `go test ./internal/github/...`
-- [ ] Test count: mínimo 4 testes passam (JWT válido, JWT com private key inválida, cache hit, cache miss/renovação)
+- [x] JWT RS256 gerado corretamente (`iss=app_id`, `exp` ~10min conforme spec do GitHub)
+- [x] Installation token obtido e cacheado, renovado só quando expira
+- [x] Unit tests: geração de JWT, cache hit, cache expirado força renovação (mock HTTP)
+- [x] Gate check passa: `go test ./internal/github/...`
+- [x] Test count: mínimo 4 testes passam (JWT válido, JWT com private key inválida, cache hit, cache miss/renovação)
 
 **Tests**: unit
 **Gate**: quick
 
 ---
 
-### T-03: Cliente GitHub API — `VerifyTemplateRepo` + `CreateRepoFromTemplate`
+### T-03: Cliente GitHub API — `VerifyTemplateRepo` + `CreateRepoFromTemplate` [x]
 
 **What**: Implementar `internal/github/client.go` com `NewClient(cfg AppConfig)`, `VerifyTemplateRepo(ctx, owner, repo) error` (`GET /repos/{owner}/{repo}`, checa `is_template`), `CreateRepoFromTemplate(ctx, templateOwner, templateRepo, newRepoSlug) (repoURL string, err error)` (`POST /repos/{owner}/{repo}/generate`, `private: true`), `Status(ctx) (StatusResult, error)`.
 **Where**: `internal/github/client.go`
@@ -119,20 +119,20 @@ T-10, T-11 ──→ T-12
 **Tools**: MCP: `context7` (confirmar payload/resposta exatos de `GET /repos/{owner}/{repo}` e `POST /repos/{owner}/{repo}/generate`, e headers de rate limit) · Skill: NONE
 
 **Done when**:
-- [ ] `VerifyTemplateRepo` retorna erro claro quando repo não existe (404) ou `is_template: false`
-- [ ] `CreateRepoFromTemplate` retorna URL do repo criado; propaga erro 422 (slug já existe) sem retry silencioso
-- [ ] `CreateRepoFromTemplate` propaga erro 403 (permissão insuficiente) com mensagem específica
-- [ ] Rate limit (429/403 com header `X-RateLimit-Remaining: 0`) tratado como `ErrRateLimited` com tempo de espera
-- [ ] Unit tests com mock HTTP cobrindo todos os casos acima
-- [ ] Gate check passa: `go test ./internal/github/...`
-- [ ] Test count: mínimo 6 testes passam (verify ok, verify not-template, verify 404, create ok, create conflict, create rate-limited)
+- [x] `VerifyTemplateRepo` retorna erro claro quando repo não existe (404) ou `is_template: false`
+- [x] `CreateRepoFromTemplate` retorna URL do repo criado; propaga erro 422 (slug já existe) sem retry silencioso
+- [x] `CreateRepoFromTemplate` propaga erro 403 (permissão insuficiente) com mensagem específica
+- [x] Rate limit (429/403 com header `X-RateLimit-Remaining: 0`) tratado como `ErrRateLimited` com tempo de espera
+- [x] Unit tests com mock HTTP cobrindo todos os casos acima
+- [x] Gate check passa: `go test ./internal/github/...`
+- [x] Test count: mínimo 6 testes passam (verify ok, verify not-template, verify 404, create ok, create conflict, create rate-limited)
 
 **Tests**: unit
 **Gate**: quick
 
 ---
 
-### T-04: Spike de validação — installation ganha acesso automático ao repo gerado
+### T-04: Spike de validação — installation ganha acesso automático ao repo gerado [x]
 
 **What**: Teste de integração contra org GitHub de sandbox: instalar App com `repository_selection: selected`, chamar `CreateRepoFromTemplate`, e imediatamente usar o MESMO installation token pra chamar `GET /repos/{org}/{new_repo}/contents` — confirmar 200 sem precisar de re-autorização manual. Documentar resultado (confirma ou refuta a suposição `[Provável]` do design.md).
 **Where**: `internal/github/client_integration_test.go` (build tag `integration`, mesmo padrão de `internal/db/client_test.go` contra Postgres real)
@@ -143,9 +143,9 @@ T-10, T-11 ──→ T-12
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Teste roda contra org GitHub de sandbox real (não mock)
-- [ ] Resultado documentado: instalação ganha acesso automático (confirma design) OU não ganha (design precisa de ajuste — reportar antes de prosseguir pra T-08)
-- [ ] Gate check passa: `go test -tags=integration ./internal/github/...`
+- [x] Teste roda contra org GitHub de sandbox real (não mock)
+- [x] Resultado documentado: instalação ganha acesso automático (confirma design) OU não ganha (design precisa de ajuste — reportar antes de prosseguir pra T-08)
+- [x] Gate check passa: `go test -tags=integration ./internal/github/...`
 
 **Tests**: integration
 **Gate**: full
@@ -154,7 +154,7 @@ T-10, T-11 ──→ T-12
 
 ---
 
-### T-05: Store `github_app_config` (CRUD criptografado) [P]
+### T-05: Store `github_app_config` (CRUD criptografado) [P] [x]
 
 **What**: Implementar `internal/dashboard/github_config_store.go` — `GetGitHubConfig(ctx, pool)`, `UpsertGitHubConfig(ctx, pool, input)` (criptografa `client_secret`/`private_key`/`webhook_secret` com `crypto.Encrypt`, preserva valor existente quando campo vem vazio no update).
 **Where**: `internal/dashboard/github_config_store.go`
@@ -165,18 +165,18 @@ T-10, T-11 ──→ T-12
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `UpsertGitHubConfig` criptografa os 3 campos sensíveis antes de persistir
-- [ ] Update parcial preserva `private_key` existente quando não reenviada
-- [ ] Unit tests: insert, update parcial, decrypt round-trip
-- [ ] Gate check passa: `go test ./internal/dashboard/...`
-- [ ] Test count: mínimo 3 testes passam
+- [x] `UpsertGitHubConfig` criptografa os 3 campos sensíveis antes de persistir
+- [x] Update parcial preserva `private_key` existente quando não reenviada
+- [x] Unit tests: insert, update parcial, decrypt round-trip
+- [x] Gate check passa: `go test ./internal/dashboard/...`
+- [x] Test count: mínimo 3 testes passam
 
 **Tests**: unit
 **Gate**: quick
 
 ---
 
-### T-06: Store `github_templates` (CRUD) [P]
+### T-06: Store `github_templates` (CRUD) [P] [x]
 
 **What**: Implementar `internal/dashboard/github_templates_store.go` — `ListGitHubTemplates`, `CreateGitHubTemplate`, `UpdateGitHubTemplate`, `SetGitHubTemplateActive`.
 **Where**: `internal/dashboard/github_templates_store.go`
@@ -187,17 +187,17 @@ T-10, T-11 ──→ T-12
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] CRUD completo contra `github_templates`, soft toggle via `active`
-- [ ] Unit tests: create, list (só ativos vs todos), update, desativar
-- [ ] Gate check passa: `go test ./internal/dashboard/...`
-- [ ] Test count: mínimo 4 testes passam
+- [x] CRUD completo contra `github_templates`, soft toggle via `active`
+- [x] Unit tests: create, list (só ativos vs todos), update, desativar
+- [x] Gate check passa: `go test ./internal/dashboard/...`
+- [x] Test count: mínimo 4 testes passam
 
 **Tests**: unit
 **Gate**: quick
 
 ---
 
-### T-07: Handlers `github_config` (config, status, install callback, disconnect) [P]
+### T-07: Handlers `github_config` (config, status, install callback, disconnect) [P] [x]
 
 **What**: Implementar `internal/dashboard/github_config.go` — `POST /api/github/config`, `GET /api/github/status`, `GET /api/github/install/callback`, `DELETE /api/github/config`. Valida credenciais chamando `internal/github.Client.Status` antes de persistir. Chama `h.audit(...)` em toda mutação.
 **Where**: `internal/dashboard/github_config.go`
@@ -208,14 +208,14 @@ T-10, T-11 ──→ T-12
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `POST /api/github/config` rejeita credenciais inválidas (400) sem persistir
-- [ ] `POST /api/github/config` válido persiste criptografado e retorna 200
-- [ ] `GET /api/github/status` retorna `connected: false` quando installation revogada (401/404 do GitHub)
-- [ ] `GET /api/github/install/callback` persiste `installation_id`, `org_login`, `installed_at`
-- [ ] Todas as mutações geram entrada em `audit_log` (`github.config.update`, `github.install`)
-- [ ] Integration tests contra PostgreSQL real cobrindo os 4 endpoints (padrão de `handler_test.go`)
-- [ ] Gate check passa: `go test ./internal/dashboard/... && go vet ./...`
-- [ ] Test count: mínimo 6 testes passam
+- [x] `POST /api/github/config` rejeita credenciais inválidas (400) sem persistir
+- [x] `POST /api/github/config` válido persiste criptografado e retorna 200
+- [x] `GET /api/github/status` retorna `connected: false` quando installation revogada (401/404 do GitHub)
+- [x] `GET /api/github/install/callback` persiste `installation_id`, `org_login`, `installed_at`
+- [x] Todas as mutações geram entrada em `audit_log` (`github.config.update`, `github.install`)
+- [x] Integration tests contra PostgreSQL real cobrindo os 4 endpoints (padrão de `handler_test.go`)
+- [x] Gate check passa: `go test ./internal/dashboard/... && go vet ./...`
+- [x] Test count: mínimo 6 testes passam
 
 **Tests**: integration
 **Gate**: full
@@ -224,7 +224,7 @@ T-10, T-11 ──→ T-12
 
 ---
 
-### T-08: Handlers `github_templates` (CRUD + validação de template) [P]
+### T-08: Handlers `github_templates` (CRUD + validação de template) [P] [x]
 
 **What**: Implementar `internal/dashboard/github_templates.go` — `GET/POST/PUT/DELETE /api/github/templates`. `POST`/`PUT` chamam `internal/github.Client.VerifyTemplateRepo` antes de persistir.
 **Where**: `internal/dashboard/github_templates.go`
@@ -235,13 +235,13 @@ T-10, T-11 ──→ T-12
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] `POST /api/github/templates` rejeita repo inexistente ou não-template com mensagem clara
-- [ ] `POST /api/github/templates` válido persiste com `active: true`
-- [ ] `DELETE` (ou toggle) marca `active: false` sem apagar registro
-- [ ] Todas as mutações geram entrada em `audit_log` (`github.template.create/update/delete`)
-- [ ] Integration tests contra PostgreSQL real + mock/sandbox do GitHub
-- [ ] Gate check passa: `go test ./internal/dashboard/... && go vet ./...`
-- [ ] Test count: mínimo 5 testes passam
+- [x] `POST /api/github/templates` rejeita repo inexistente ou não-template com mensagem clara
+- [x] `POST /api/github/templates` válido persiste com `active: true`
+- [x] `DELETE` (ou toggle) marca `active: false` sem apagar registro
+- [x] Todas as mutações geram entrada em `audit_log` (`github.template.create/update/delete`)
+- [x] Integration tests contra PostgreSQL real + mock/sandbox do GitHub
+- [x] Gate check passa: `go test ./internal/dashboard/... && go vet ./...`
+- [x] Test count: mínimo 5 testes passam
 
 **Tests**: integration
 **Gate**: full
@@ -250,7 +250,7 @@ T-10, T-11 ──→ T-12
 
 ---
 
-### T-09: Wire rotas + middleware superadmin
+### T-09: Wire rotas + middleware superadmin [x]
 
 **What**: Registrar as 8 rotas novas (`/api/github/config`, `/api/github/status`, `/api/github/install/callback`, `/api/github/templates*`) no router do dashboard, todas atrás de `middleware.RequireSuperadmin` exceto o callback de instalação (que vem do redirect do GitHub, sem sessão — validar via `state` param assinado, mesmo padrão do Google OAuth callback).
 **Where**: `internal/dashboard/server.go` (ou arquivo de rotas equivalente)
@@ -261,17 +261,17 @@ T-10, T-11 ──→ T-12
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Todas as 8 rotas respondem no smoke test manual
-- [ ] Callback de instalação não exige sessão, mas valida `state` assinado (anti-CSRF)
-- [ ] Demais rotas retornam 403 sem sessão superadmin
-- [ ] Gate check passa: `go build ./... && go test ./... && go vet ./...`
+- [x] Todas as 8 rotas respondem no smoke test manual
+- [x] Callback de instalação não exige sessão, mas valida `state` assinado (anti-CSRF)
+- [x] Demais rotas retornam 403 sem sessão superadmin
+- [x] Gate check passa: `go build ./... && go test ./... && go vet ./...`
 
 **Tests**: none (wiring puro; lógica já testada em T-07/T-08)
 **Gate**: full
 
 ---
 
-### T-10: UI — página "Integrações → GitHub" [P]
+### T-10: UI — página "Integrações → GitHub" [P] [x]
 
 **What**: Criar `GitHubIntegrationPage.tsx` — formulário de credenciais, botão "Instalar na Org", badge de status conectado/desconectado, botão desconectar.
 **Where**: `internal/dashboard/ui/src/pages/GitHubIntegrationPage.tsx`
@@ -282,17 +282,17 @@ T-10, T-11 ──→ T-12
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Form salva credenciais via `POST /api/github/config`
-- [ ] Botão "Instalar na Org" redireciona pro fluxo do GitHub
-- [ ] Badge reflete `GET /api/github/status` em tempo real
-- [ ] Gate check passa: `npm run build` (ver Makefile `dashboard-build`)
+- [x] Form salva credenciais via `POST /api/github/config`
+- [x] Botão "Instalar na Org" redireciona pro fluxo do GitHub
+- [x] Badge reflete `GET /api/github/status` em tempo real
+- [x] Gate check passa: `npm run build` (ver Makefile `dashboard-build`)
 
 **Tests**: none (sem TESTING.md definindo e2e obrigatório pra esta página; `test-e2e`/Playwright existente cobre outras páginas — adicionar e2e é decisão de produto, não bloqueante aqui)
 **Gate**: ui-build
 
 ---
 
-### T-11: UI — página/seção "Templates" [P]
+### T-11: UI — página/seção "Templates" [P] [x]
 
 **What**: Criar seção de gestão de templates (lista, criar, editar, desativar) dentro da mesma tela de Integrações ou página própria `GitHubTemplatesPage.tsx`.
 **Where**: `internal/dashboard/ui/src/pages/GitHubTemplatesPage.tsx`
@@ -303,17 +303,17 @@ T-10, T-11 ──→ T-12
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Lista templates com nome, framework, status ativo
-- [ ] Modal de criação valida erro do backend (repo não é template) e exibe mensagem clara
-- [ ] Toggle ativar/desativar funcional
-- [ ] Gate check passa: `npm run build`
+- [x] Lista templates com nome, framework, status ativo
+- [x] Modal de criação valida erro do backend (repo não é template) e exibe mensagem clara
+- [x] Toggle ativar/desativar funcional
+- [x] Gate check passa: `npm run build`
 
 **Tests**: none (mesma justificativa de T-10)
 **Gate**: ui-build
 
 ---
 
-### T-12: Sidebar nav "Integrações" (superadmin only)
+### T-12: Sidebar nav "Integrações" (superadmin only) [x]
 
 **What**: Adicionar item de navegação no sidebar apontando pras páginas de T-10/T-11, visível só para superadmin (mesmo padrão de "Auditoria"/"Usuários").
 **Where**: `internal/dashboard/ui/src/components/DashboardShell.tsx` (ou `Sidebar.tsx` equivalente)
@@ -324,9 +324,9 @@ T-10, T-11 ──→ T-12
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [ ] Item "Integrações" visível só pra superadmin
-- [ ] Navega corretamente pras duas páginas novas
-- [ ] Gate check passa: `npm run build`
+- [x] Item "Integrações" visível só pra superadmin
+- [x] Navega corretamente pras duas páginas novas
+- [x] Gate check passa: `npm run build`
 
 **Tests**: none
 **Gate**: ui-build

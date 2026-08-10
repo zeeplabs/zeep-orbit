@@ -181,41 +181,46 @@ Toda ambiguidade está resolvida ou registrada aqui — nada fica silenciosament
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| ROWPOL-01 | P1: Papel no JWT | Tasks | Implementing |
-| ROWPOL-02 | P1: Papel no JWT | Tasks | Implementing |
-| ROWPOL-03 | P1: Papel no JWT | Tasks | Implementing |
-| ROWPOL-04 | P1: Papel no JWT | Tasks | Implementing |
-| ROWPOL-05 | P1: Policy nativa | Tasks | Implementing |
-| ROWPOL-06 | P1: Policy nativa | Tasks | Verified |
-| ROWPOL-07 | P1: Policy nativa | Tasks | Implementing |
-| ROWPOL-08 | P1: Policy nativa | Tasks | Implementing |
-| ROWPOL-09 | P1: Policy nativa | Tasks | Implementing |
-| ROWPOL-10 | P1: Policy nativa | Tasks | Verified |
-| ROWPOL-11 | P1: Policy nativa | Tasks | Verified |
-| ROWPOL-12 | P1: Policy nativa | Tasks | Implementing |
-| ROWPOL-13 | P1: Bypass interno | Tasks | Verified |
-| ROWPOL-14 | P1: Bypass interno | Tasks | Verified |
-| ROWPOL-15 | P1: Bypass interno | Tasks | Verified |
-| ROWPOL-16 | P1: UI dashboard | Tasks | Implementing |
-| ROWPOL-17 | P1: UI dashboard | Tasks | Implementing |
-| ROWPOL-18 | P1: UI dashboard | Tasks | Implementing |
-| ROWPOL-19 | P1: UI dashboard | Tasks | Implementing |
-| ROWPOL-20 | P1: UI dashboard | Tasks | Implementing |
-| ROWPOL-21 | P2: FK explícito para `_auth_users` | Tasks | Implementing |
-| ROWPOL-22 | P2: FK explícito para `_auth_users` | Tasks | Implementing |
-| ROWPOL-23 | P2: FK explícito para `_auth_users` | Tasks | Implementing |
-| ROWPOL-24 | P2: FK explícito para `_auth_users` | Tasks | Implementing |
-| ROWPOL-25 | P2: FK explícito para `_auth_users` | Design | Pending |
-| ROWPOL-26 | P2: Auditoria | - | Pending |
+| ROWPOL-01 | P1: Papel no JWT | Execute | Verified |
+| ROWPOL-02 | P1: Papel no JWT | Execute | Verified |
+| ROWPOL-03 | P1: Papel no JWT | Execute | Verified |
+| ROWPOL-04 | P1: Papel no JWT | Execute | Verified |
+| ROWPOL-05 | P1: Policy nativa | Execute | Verified |
+| ROWPOL-06 | P1: Policy nativa | Execute | Verified |
+| ROWPOL-07 | P1: Policy nativa | Execute | Verified |
+| ROWPOL-08 | P1: Policy nativa | Execute | Verified |
+| ROWPOL-09 | P1: Policy nativa | Execute | Verified |
+| ROWPOL-10 | P1: Policy nativa | Execute | Verified |
+| ROWPOL-11 | P1: Policy nativa | Execute | Verified |
+| ROWPOL-12 | P1: Policy nativa | Execute | Verified |
+| ROWPOL-13 | P1: Bypass interno | Execute | Verified |
+| ROWPOL-14 | P1: Bypass interno | Execute | Verified |
+| ROWPOL-15 | P1: Bypass interno | Execute | Verified |
+| ROWPOL-16 | P1: UI dashboard | Execute | Verified |
+| ROWPOL-17 | P1: UI dashboard | Execute | Verified |
+| ROWPOL-18 | P1: UI dashboard | Execute | Verified |
+| ROWPOL-19 | P1: UI dashboard | Execute | Verified |
+| ROWPOL-20 | P1: UI dashboard | Execute | Verified |
+| ROWPOL-21 | P2: FK explícito para `_auth_users` | Execute | Verified |
+| ROWPOL-22 | P2: FK explícito para `_auth_users` | Execute | Verified |
+| ROWPOL-23 | P2: FK explícito para `_auth_users` | Execute | Verified |
+| ROWPOL-24 | P2: FK explícito para `_auth_users` | Execute | Verified |
+| ROWPOL-25 | P2: FK explícito para `_auth_users` | Execute | Verified ⚠️ |
+| ROWPOL-26 | P2: Auditoria | Execute | Verified |
 | ROWPOL-27 | P3: Preview | - | Pending |
-| ROWPOL-28 | P1: Policy nativa — operadores estendidos (`>`,`<`,`>=`,`<=`,`IS NULL`,`IS NOT NULL`) | Tasks | Implementing |
-| ROWPOL-29 | P1: Policy nativa — composição `AND`/`OR` flat (fold left-to-right) | Tasks | Implementing |
+| ROWPOL-28 | P1: Policy nativa — operadores estendidos (`>`,`<`,`>=`,`<=`,`IS NULL`,`IS NOT NULL`) | Execute | Verified |
+| ROWPOL-29 | P1: Policy nativa — composição `AND`/`OR` flat (fold left-to-right) | Execute | Verified |
 
 **ID format:** `ROWPOL-[NUMBER]`
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 29 total, 17 mapped to tasks (T1–T11 done: ROWPOL-01/02/03/04/05/06/07/08/09/10/11/12/13/14/15/28/29), 12 unmapped (ROWPOL-16 through ROWPOL-27 — Phase 5 UI, Phase 6 docs, and the standalone T17 phase, none of which have run yet)
+**Coverage (atualizado 2026-08-10 contra o código e `validation.md`):** 29 total, 28 Verified, 1 Pending (ROWPOL-27, P3 Preview — nunca implementado, sem preview em `TablePolicies.tsx`).
+
+- ROWPOL-01..24, 28, 29: Verified — `validation.md` rodada 2, veredito **PASS** (2026-08-08). Código: `internal/provisioner/policy.go` (`BuildPolicySQL`/`translateClause`/`foldClauses`), `internal/db/client.go:116` (`WithRLSContext`, `SET LOCAL ROLE` + GUCs), `internal/dashboard/table_policies_store.go` (`CreateTablePolicy`/`ListTablePolicies`/`DeleteTablePolicy`), `internal/dashboard/ui/src/components/TablePolicies.tsx`.
+- ROWPOL-25: Verified com ressalva Minor — comportamento apoiado por inspeção de código, sem observação interativa independente (Achado 3 da `validation.md`, explicitamente não-bloqueante do PASS).
+- ROWPOL-26 (auditoria): Verified — `h.audit(...)` é chamado em ambos os handlers: `internal/dashboard/handler.go:1423` (`app.table_policy.create`) e `:1465` (`app.table_policy.delete`).
+- ROWPOL-27 (P3 Preview): Pending — fora de escopo até hoje, sem código correspondente.
 
 ---
 

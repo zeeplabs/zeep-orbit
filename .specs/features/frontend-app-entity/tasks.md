@@ -2,7 +2,7 @@
 
 **Spec**: `.specs/features/frontend-app-entity/spec.md`
 **Design**: `.specs/features/frontend-app-entity/design.md`
-**Status**: Draft
+**Status**: Verified — T-01..T-10 implementados e mergeados (verificado 2026-08-10: `internal/dashboard/frontend_apps.go` + `frontend_apps_store.go`; rotas `GET/POST /api/frontend-apps`, `GET/DELETE /api/frontend-apps/{id}`, `POST /api/frontend-apps/{id}/retry` em `internal/server/server.go:224-228`; UI `src/pages/FrontendAppsPage.tsx`)
 
 > Convenção de Gate: não há `TESTING.md` no repo — inferido do `Makefile` (`go test ./...`, `go vet ./...`, `dashboard-build`), mesmo critério usado em `mvp-core/tasks.md` e `github-integration/tasks.md`.
 
@@ -36,7 +36,7 @@ Fase 6: Observabilidade                            Fase 7: UI e verificação
 
 ---
 
-### T-01: Provisionar tabela `frontend_apps`
+### T-01: Provisionar tabela `frontend_apps` [x]
 
 - **What**: Adicionar DDL de `zeep_system.frontend_apps` (colunas conforme design.md, FK pra `github_templates`, unique index parcial em `slug`) ao bloco de provisionamento existente.
 - **Where**: `internal/dashboard/provisioner.go`
@@ -51,7 +51,7 @@ Fase 6: Observabilidade                            Fase 7: UI e verificação
 
 ---
 
-### T-02: Helper de slugify
+### T-02: Helper de slugify [x]
 
 - **What**: Função `slugify(name string) string` — lowercase, espaço/underscore → hífen, remove caracteres fora de `[a-z0-9-]`, colapsa hífens repetidos, trim.
 - **Where**: `internal/dashboard/frontend_apps.go`
@@ -66,7 +66,7 @@ Fase 6: Observabilidade                            Fase 7: UI e verificação
 
 ---
 
-### T-03: `frontendAppsStore` (CRUD)
+### T-03: `frontendAppsStore` (CRUD) [x]
 
 - **What**: Implementar `Create`, `Get`, `List`, `UpdateStatus`, `Archive`, `SlugExists` contra `zeep_system.frontend_apps`.
 - **Where**: `internal/dashboard/frontend_apps_store.go`
@@ -81,7 +81,7 @@ Fase 6: Observabilidade                            Fase 7: UI e verificação
 
 ---
 
-### T-04: `POST /api/frontend-apps` (criação)
+### T-04: `POST /api/frontend-apps` (criação) [x]
 
 - **What**: Handler que recebe `{name, template_id}`, valida template ativo, checa GitHub conectado, slugifica, checa `SlugExists`, chama `CreateRepoFromTemplate`, persiste resultado (`ready` ou `failed`).
 - **Where**: `internal/dashboard/frontend_apps.go`
@@ -96,7 +96,7 @@ Fase 6: Observabilidade                            Fase 7: UI e verificação
 
 ---
 
-### T-05: `GET /api/frontend-apps` e `GET /api/frontend-apps/{id}`
+### T-05: `GET /api/frontend-apps` e `GET /api/frontend-apps/{id}` [x]
 
 - **What**: Handlers de listagem (não-arquivados) e detalhe.
 - **Where**: `internal/dashboard/frontend_apps.go`
@@ -111,7 +111,7 @@ Fase 6: Observabilidade                            Fase 7: UI e verificação
 
 ---
 
-### T-06: `POST /api/frontend-apps/{id}/retry`
+### T-06: `POST /api/frontend-apps/{id}/retry` [x]
 
 - **What**: Handler que rejeita se status ≠ `failed`, senão refaz o mesmo fluxo de criação (checagem de template ativo + `SlugExists` + `CreateRepoFromTemplate`) sobre o registro existente.
 - **Where**: `internal/dashboard/frontend_apps.go`
@@ -126,7 +126,7 @@ Fase 6: Observabilidade                            Fase 7: UI e verificação
 
 ---
 
-### T-07: `DELETE /api/frontend-apps/{id}`
+### T-07: `DELETE /api/frontend-apps/{id}` [x]
 
 - **What**: Handler que aplica soft delete (`Archive`) e então chama arquivamento do repo no GitHub (`archived: true`); se o arquivamento remoto falhar, loga erro mas não reverte o soft delete local.
 - **Where**: `internal/dashboard/frontend_apps.go`
@@ -142,7 +142,7 @@ Fase 6: Observabilidade                            Fase 7: UI e verificação
 
 ---
 
-### T-08: Audit log
+### T-08: Audit log [x]
 
 - **What**: Instrumentar `h.audit(...)` nos 3 fluxos mutantes: `frontend_app.create`, `frontend_app.retry`, `frontend_app.delete`.
 - **Where**: `internal/dashboard/frontend_apps.go`
@@ -157,7 +157,7 @@ Fase 6: Observabilidade                            Fase 7: UI e verificação
 
 ---
 
-### T-09: Testes de integração end-to-end
+### T-09: Testes de integração end-to-end [x]
 
 - **What**: Suite cobrindo o fluxo completo contra org GitHub de sandbox: criar → listar → forçar falha → retry → deletar → confirmar arquivamento.
 - **Where**: `internal/dashboard/frontend_apps_integration_test.go` (ou equivalente, seguindo convenção de testes de integração já usada em github-integration)
@@ -172,7 +172,7 @@ Fase 6: Observabilidade                            Fase 7: UI e verificação
 
 ---
 
-### T-10: UI do dashboard
+### T-10: UI do dashboard [x]
 
 - **What**: Tela "Frontend Apps" — formulário de criação (nome + select de template ativo), listagem com status/badge (ready/failed), botão retry em falhos, botão delete.
 - **Where**: `internal/dashboard/ui/` (seguir estrutura de páginas existente do dashboard React)

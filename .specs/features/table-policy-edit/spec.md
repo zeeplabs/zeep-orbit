@@ -89,7 +89,9 @@ Toda ambiguidade está resolvida ou registrada aqui — nada fica silenciosament
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 8 total, 0 mapped to tasks, 8 unmapped ⚠️ (mapeamento ocorre na fase Design/Tasks)
+**Coverage:** 8 total, 8 mapped to tasks (T1–T7 em `tasks.md`), 0 unmapped. Mapeamento: TPEDIT-01 → T1/T2/T3/T4/T5; TPEDIT-02..05 → T2/T3; TPEDIT-06/07 → T6/T7; TPEDIT-08 → T2/T5.
+
+**Implementação: ainda não iniciada** — o mapeamento existe, mas nenhuma task foi executada (nenhum `UpdateTablePolicy` no código: `internal/dashboard/table_policies_store.go` tem só `CreateTablePolicy`/`ListTablePolicies`/`DeleteTablePolicy`). Status dos requisitos segue `Pending` corretamente; só a linha de coverage estava factualmente errada (corrigida 2026-08-10).
 
 ---
 

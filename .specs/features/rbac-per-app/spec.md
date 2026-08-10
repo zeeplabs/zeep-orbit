@@ -130,7 +130,7 @@ zeep-orbit hoje tem só dois níveis de acesso globais (`admin`, `superadmin` em
 ## Success Criteria
 
 - [ ] Nenhum usuário perde acesso administrativo ao próprio app na migração (donos/co-donos atuais de backend apps, criadores resolvíveis de frontend apps)
-- [ ] `admin` global deixa de ver apps de outros usuários onde não é membro — gap de visibilidade documentado em 3 specs anteriores fechado
+- [ ] ~~`admin` global deixa de ver apps de outros usuários onde não é membro~~ — **superado pela mesma decisão cross-spec do Goal correspondente** (`dashboard-global-roles` T-06): `admin`/`auditor` global recebem acesso **viewer** (leitura) a qualquer app via `CanReadAnyApp` (`internal/dashboard/platform_roles.go:68`), aplicado em `ResolveAppRole` (`internal/dashboard/rbac.go:107`) e nas listagens (`internal/dashboard/apps_store.go:70,417`, `internal/dashboard/frontend_apps_store.go:157`). O critério real é: **nenhum usuário sem role global de leitura irrestrita vê app onde não é membro**, e nenhum `admin`/`auditor` global consegue **escrever** em app onde não é membro (bloqueado por `CanWrite()`)
 - [ ] Toda ação de escrita/gestão em qualquer app passa pela função central de resolução de role, sem checagem duplicada por endpoint
 - [ ] Nenhum app pode ficar sem `admin` por ação de outro membro (invariante garantido, não só sugerido na UI)
 - [ ] `app_ownership` removida do schema sem nenhum código remanescente que a referencie

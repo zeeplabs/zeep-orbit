@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: `.specs/features/end-user-row-policies/design.md`
-**Status**: Draft
+**Status**: Verified — `validation.md` rodada 2 PASS (2026-08-08). Aberto: ROWPOL-27 (P3 Preview, nunca implementado).
 
 ---
 

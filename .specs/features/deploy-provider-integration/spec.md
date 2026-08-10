@@ -13,12 +13,12 @@ O sistema precisa: (1) permitir que o superadmin conecte um provider de deploy (
 
 ## Goals
 
-- [ ] Superadmin conecta um provider de deploy (Render) via API Key, sem expor a chave a admins
-- [ ] Superadmin configura, por template de repositório já cadastrado (GitHub Integration), o tipo de service e comandos de build/start do provider
-- [ ] Ao admin criar um frontend app, o sistema cria automaticamente o service no provider conectado, na mesma chamada síncrona já usada pelas sub-features anteriores
-- [ ] Push subsequente do admin no repo (via Sync Local↔Repo) dispara auto-deploy no provider sem qualquer chamada do zeep-orbit
-- [ ] Admin pode, opcionalmente, linkar o frontend app a um backend app já existente, e o sistema injeta a URL da API e um App Token como env vars no service criado
-- [ ] Arquitetura de provider é uma interface (`DeployProvider`), não acoplada a detalhes do Render — Vercel e outros entram depois implementando a mesma interface
+- [x] Superadmin conecta um provider de deploy (Render) via API Key, sem expor a chave a admins
+- [x] Superadmin configura, por template de repositório já cadastrado (GitHub Integration), o tipo de service e comandos de build/start do provider
+- [x] Ao admin criar um frontend app, o sistema cria automaticamente o service no provider conectado, na mesma chamada síncrona já usada pelas sub-features anteriores
+- [x] Push subsequente do admin no repo (via Sync Local↔Repo) dispara auto-deploy no provider sem qualquer chamada do zeep-orbit
+- [x] Admin pode, opcionalmente, linkar o frontend app a um backend app já existente, e o sistema injeta a URL da API e um App Token como env vars no service criado
+- [x] Arquitetura de provider é uma interface (`DeployProvider`), não acoplada a detalhes do Render — Vercel e outros entram depois implementando a mesma interface
 
 ## Out of Scope
 
@@ -136,34 +136,34 @@ Render precisa da **própria GitHub App** (não a do zeep-orbit) instalada na or
 
 | Requirement ID | Story | Phase | Status |
 |---|---|---|---|
-| DP-01 | P1: Conectar provider | Design | Pending |
-| DP-02 | P1: Conectar provider | Design | Pending |
-| DP-03 | P1: Conectar provider | Design | Pending |
-| DP-04 | P1: Conectar provider | Design | Pending |
-| DP-10 | P1: Config por template | Design | Pending |
-| DP-11 | P1: Config por template | Design | Pending |
-| DP-12 | P1: Config por template | Design | Pending |
-| DP-20 | P1: Criação de service | Design | Pending |
-| DP-21 | P1: Criação de service | Design | Pending |
-| DP-22 | P1: Criação de service | Design | Pending |
-| DP-23 | P1: Criação de service | Design | Pending |
-| DP-24 | P1: Criação de service | Design | Pending |
-| DP-25 | P1: Criação de service | Design | Pending |
-| DP-30 | P1: Retry | Design | Pending |
-| DP-31 | P1: Retry | Design | Pending |
-| DP-40 | P1: Delete | Design | Pending |
-| DP-41 | P1: Delete | Design | Pending |
+| DP-01 | P1: Conectar provider | Execute | Verified |
+| DP-02 | P1: Conectar provider | Execute | Verified |
+| DP-03 | P1: Conectar provider | Execute | Verified |
+| DP-04 | P1: Conectar provider | Execute | Verified |
+| DP-10 | P1: Config por template | Execute | Verified |
+| DP-11 | P1: Config por template | Execute | Verified |
+| DP-12 | P1: Config por template | Execute | Verified |
+| DP-20 | P1: Criação de service | Execute | Verified |
+| DP-21 | P1: Criação de service | Execute | Verified |
+| DP-22 | P1: Criação de service | Execute | Verified |
+| DP-23 | P1: Criação de service | Execute | Verified |
+| DP-24 | P1: Criação de service | Execute | Verified |
+| DP-25 | P1: Criação de service | Execute | Verified |
+| DP-30 | P1: Retry | Execute | Verified |
+| DP-31 | P1: Retry | Execute | Verified |
+| DP-40 | P1: Delete | Execute | Verified |
+| DP-41 | P1: Delete | Execute | Verified |
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 17 total, 0 mapped to tasks, 17 unmapped ⚠️ (mapeamento acontece na fase Tasks)
+**Coverage:** 17 total, 17 mapped to tasks (T-01..T-15), 0 unmapped — todos Verified (verificado 2026-08-10 contra o código; ver `tasks.md`)
 
 ---
 
 ## Success Criteria
 
-- [ ] Superadmin conecta o Render em menos de 5 minutos, sem suporte técnico externo
-- [ ] Admin cria um frontend app linkado a um backend app e recebe uma URL de deploy funcional sem tocar no console do Render
-- [ ] Push subsequente no repo aparece automaticamente como novo deploy no Render, sem qualquer chamada do zeep-orbit
-- [ ] Falha em qualquer etapa da criação do service não derruba repo, deploy key ou o frontend app já criados
-- [ ] Nenhuma credencial do provider trafega ou é exibida em texto plano fora do momento de cadastro
+- [x] Superadmin conecta o Render em menos de 5 minutos, sem suporte técnico externo
+- [x] Admin cria um frontend app linkado a um backend app e recebe uma URL de deploy funcional sem tocar no console do Render
+- [x] Push subsequente no repo aparece automaticamente como novo deploy no Render, sem qualquer chamada do zeep-orbit
+- [x] Falha em qualquer etapa da criação do service não derruba repo, deploy key ou o frontend app já criados
+- [x] Nenhuma credencial do provider trafega ou é exibida em texto plano fora do momento de cadastro

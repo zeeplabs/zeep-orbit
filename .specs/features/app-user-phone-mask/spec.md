@@ -102,7 +102,7 @@ Explicitly excluded. Documented to prevent scope creep.
 | AUT-08 | P2: Backend rejects malformed phone | Execute | Verified |
 | AUT-09 | P2: Backend rejects malformed phone | Execute | Verified |
 
-**ID format:** `AUT-[NUMBER]` (reusing the `AUT` prefix already established for this app-users surface in `app-users-tab` and `app-user-edit-fields`).
+**ID format:** `AUT-[NUMBER]` — this spec is the sole owner of the `AUT-NN` namespace. The prefix was originally reused from `app-users-tab`, which caused a hard ID collision (both specs defined `AUT-01..AUT-09` for unrelated requirements). Resolved 2026-08-10: `app-users-tab` was renamed to `AUTAB-NN`; `app-user-edit-fields` already uses its own `AUE-NN`.
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 

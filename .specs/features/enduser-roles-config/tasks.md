@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: `.specs/features/enduser-roles-config/design.md`
-**Status**: Draft
+**Status**: Verified — implementado e validado (`validation.md`, PASS 2026-08-08)
 
 ---
 

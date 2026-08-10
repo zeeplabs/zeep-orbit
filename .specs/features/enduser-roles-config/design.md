@@ -1,7 +1,7 @@
 # End-User Roles Configuration Design
 
 **Spec**: `.specs/features/enduser-roles-config/spec.md`
-**Status**: Draft
+**Status**: Verified — implementado e validado (`validation.md`, PASS 2026-08-08)
 
 ---
 

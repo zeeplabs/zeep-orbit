@@ -1,7 +1,7 @@
 # Frontend App Entity Design
 
 **Spec**: `.specs/features/frontend-app-entity/spec.md`
-**Status**: Draft
+**Status**: Verified — implementado e mergeado (verificado 2026-08-10 contra o código; ver `tasks.md`)
 
 ---
 

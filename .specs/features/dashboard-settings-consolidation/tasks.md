@@ -33,6 +33,7 @@ Origem: T4.5 do `dashboard-redesign` (Fase 4 — fidelidade ao handoff). Cada ta
 - [ ] **S3.1** — **Require 2FA for all admins**: toggle que liga a policy quando `two-factor-auth` entregar o backend. Coordenar contrato com aquela spec; até lá, oculto ou desabilitado com nota.
 - [ ] **S3.2** — **Tab License**: slot da 5ª tab lendo o estado de licença que `enterprise-licensing` expõe. Sem reimplementar licensing aqui.
   - **Parcial (2026-08-05)**: UI mock completa implementada (plan card, feature checklist, preview state switcher Free/Enterprise/Trial/Expired, license-key textarea, demo do `EnterpriseBadge`/`UpgradeModal`) batendo com o handoff. Dados 100% hardcoded, nenhum botão persiste — segue bloqueado no backend real (`internal/enterprise`, verificação de license key, resolução de plano) até `enterprise-licensing` abrir.
+  - **Travada depois (verificado 2026-08-10)**: a tab está **desabilitada** na UI. `BrandSettingsPage.tsx:82-83` renderiza o `TabsTrigger` com `disabled={tb.value === "license"}` e `title={t("apps.soon")}`; o `LicenseTab` (`BrandSettingsPage.tsx:574-614+`, comentário no código: "UI-only preview — no `internal/enterprise` backend exists yet") ainda existe e é montado em `TabsContent value="license"` (linha 111-112), mas é inalcançável por clique. Estado real da task: **UI mock implementada e depois travada (`disabled`) até existir backend real** — não "mock completa disponível". Destravar o `disabled` faz parte do fechamento desta task quando `enterprise-licensing` entregar o backend.
 
 ## Fase 4 — Fechamento
 

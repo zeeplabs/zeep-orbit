@@ -6,12 +6,12 @@ Hoje o schema builder do app-backend (`internal/config.TableConfig`/`ColumnConfi
 
 ## Goals
 
-- [ ] Usuário declara FK de uma coluna para outra tabela do mesmo app via `apps.yaml`, com `on_delete` explícito
-- [ ] Usuário declara índice (simples ou composto, único ou não) em uma tabela via `apps.yaml`
-- [ ] `zeep apply` cria tabelas na ordem de dependência correta quando há FK entre elas (topological sort)
-- [ ] `zeep apply` cria/atualiza índices de forma idempotente, igual já acontece com colunas
-- [ ] Remover uma tabela referenciada por FK de outra falha com erro claro, em vez de quebrar a integridade do banco silenciosamente
-- [ ] Erros de validação de schema (referência inexistente, dependência circular) são pega antes de qualquer DDL rodar
+- [x] Usuário declara FK de uma coluna para outra tabela do mesmo app via `apps.yaml`, com `on_delete` explícito
+- [x] Usuário declara índice (simples ou composto, único ou não) em uma tabela via `apps.yaml`
+- [x] `zeep apply` cria tabelas na ordem de dependência correta quando há FK entre elas (topological sort)
+- [x] `zeep apply` cria/atualiza índices de forma idempotente, igual já acontece com colunas
+- [x] Remover uma tabela referenciada por FK de outra falha com erro claro, em vez de quebrar a integridade do banco silenciosamente
+- [x] Erros de validação de schema (referência inexistente, dependência circular) são pega antes de qualquer DDL rodar
 
 ## Out of Scope
 

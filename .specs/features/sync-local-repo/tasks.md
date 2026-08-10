@@ -2,7 +2,7 @@
 
 **Spec**: `.specs/features/sync-local-repo/spec.md`
 **Design**: `.specs/features/sync-local-repo/design.md`
-**Status**: Draft
+**Status**: Verified — T-01..T-13 implementados e mergeados (verificado 2026-08-10: pacote `internal/sshkey/`, `internal/github.Client.AddDeployKey`/`RevokeDeployKey` (`client.go:312,342`), rotas `GET /api/frontend-apps/{id}/sync`, `POST .../reveal-key`, `POST .../sync/retry`, `POST .../sync/regenerate` em `internal/server/server.go:229-232`)
 
 > Convenção de Gate: sem `TESTING.md` no repo — inferido do `Makefile` (`go test ./...`, `go vet ./...`, `dashboard-build`), mesmo critério de `mvp-core/tasks.md`, `github-integration/tasks.md` e `frontend-app-entity/tasks.md`.
 
@@ -42,7 +42,7 @@ Fase 6: Retry, regenerate e delete            Fase 7: Observabilidade
 
 ---
 
-### T-01: Provisionar tabela `frontend_app_sync_credentials`
+### T-01: Provisionar tabela `frontend_app_sync_credentials` [x]
 
 - **What**: DDL da tabela (colunas conforme design.md, FK `UNIQUE` pra `frontend_apps`) no bloco de provisionamento existente.
 - **Where**: `internal/dashboard/provisioner.go`
@@ -57,7 +57,7 @@ Fase 6: Retry, regenerate e delete            Fase 7: Observabilidade
 
 ---
 
-### T-02: Pacote `internal/sshkey`
+### T-02: Pacote `internal/sshkey` [x]
 
 - **What**: Função `GenerateKeyPair() (publicKey, privateKey string, err error)` — gera par ed25519, serializa chave pública em formato OpenSSH (`authorized_keys`), chave privada em PEM.
 - **Where**: `internal/sshkey/sshkey.go` (novo pacote)
@@ -72,7 +72,7 @@ Fase 6: Retry, regenerate e delete            Fase 7: Observabilidade
 
 ---
 
-### T-03: `internal/github.Client` — `AddDeployKey` e `RevokeDeployKey`
+### T-03: `internal/github.Client` — `AddDeployKey` e `RevokeDeployKey` [x]
 
 - **What**: `(c *Client) AddDeployKey(ctx, owner, repo, title, publicKey string) (keyID int64, err error)` e `(c *Client) RevokeDeployKey(ctx, owner, repo string, keyID int64) error`.
 - **Where**: `internal/github/client.go`
@@ -87,7 +87,7 @@ Fase 6: Retry, regenerate e delete            Fase 7: Observabilidade
 
 ---
 
-### T-04: `frontendAppSyncCredentialsStore` (CRUD)
+### T-04: `frontendAppSyncCredentialsStore` (CRUD) [x]
 
 - **What**: Implementar `Create`, `Get`, `UpdateSuccess`, `UpdateFailure` contra `zeep_system.frontend_app_sync_credentials`.
 - **Where**: `internal/dashboard/frontend_app_sync_credentials_store.go`
@@ -102,7 +102,7 @@ Fase 6: Retry, regenerate e delete            Fase 7: Observabilidade
 
 ---
 
-### T-05: Estender `POST /api/frontend-apps` — geração de credencial na criação
+### T-05: Estender `POST /api/frontend-apps` — geração de credencial na criação [x]
 
 - **What**: Após `CreateRepoFromTemplate` bem-sucedido, chamar `sshkey.GenerateKeyPair`, `AddDeployKey`, persistir credencial (`sync_status: ready`) ou falha (`sync_status: pending` + `error_message`), sem afetar o `status` do frontend app.
 - **Where**: `internal/dashboard/frontend_apps.go` (handler existente de criação, sub-feature 2)
@@ -117,7 +117,7 @@ Fase 6: Retry, regenerate e delete            Fase 7: Observabilidade
 
 ---
 
-### T-06: `GET /api/frontend-apps/{id}/sync`
+### T-06: `GET /api/frontend-apps/{id}/sync` [x]
 
 - **What**: Handler retornando `sync_status`, `public_key`, `error_message` (nunca a chave privada).
 - **Where**: `internal/dashboard/frontend_apps.go`
@@ -132,7 +132,7 @@ Fase 6: Retry, regenerate e delete            Fase 7: Observabilidade
 
 ---
 
-### T-07: `POST /api/frontend-apps/{id}/reveal-key`
+### T-07: `POST /api/frontend-apps/{id}/reveal-key` [x]
 
 - **What**: Handler que descriptografa e retorna a chave privada uma vez, rejeitando se `sync_status` ≠ `ready`; registra audit log.
 - **Where**: `internal/dashboard/frontend_apps.go`
@@ -147,7 +147,7 @@ Fase 6: Retry, regenerate e delete            Fase 7: Observabilidade
 
 ---
 
-### T-08: `POST /api/frontend-apps/{id}/sync/retry`
+### T-08: `POST /api/frontend-apps/{id}/sync/retry` [x]
 
 - **What**: Handler que rejeita se `sync_status: ready`, senão refaz geração de chave + registro no GitHub sobre o registro existente.
 - **Where**: `internal/dashboard/frontend_apps.go`
@@ -162,7 +162,7 @@ Fase 6: Retry, regenerate e delete            Fase 7: Observabilidade
 
 ---
 
-### T-09: `POST /api/frontend-apps/{id}/sync/regenerate`
+### T-09: `POST /api/frontend-apps/{id}/sync/regenerate` [x]
 
 - **What**: Handler que tenta `RevokeDeployKey` na chave atual (best-effort, ignora falha), gera novo par via `sshkey`, registra nova chave, atualiza mesmo registro; se não havia chave anterior (`pending`/`failed`), comporta-se como retry.
 - **Where**: `internal/dashboard/frontend_apps.go`
@@ -177,7 +177,7 @@ Fase 6: Retry, regenerate e delete            Fase 7: Observabilidade
 
 ---
 
-### T-10: Estender `DELETE /api/frontend-apps/{id}` — revogar credencial
+### T-10: Estender `DELETE /api/frontend-apps/{id}` — revogar credencial [x]
 
 - **What**: Após soft delete + archive do repo (sub-feature 2), chamar `RevokeDeployKey` (best-effort, não bloqueia se falhar).
 - **Where**: `internal/dashboard/frontend_apps.go` (handler existente de delete)
@@ -192,7 +192,7 @@ Fase 6: Retry, regenerate e delete            Fase 7: Observabilidade
 
 ---
 
-### T-11: Audit log
+### T-11: Audit log [x]
 
 - **What**: Instrumentar `h.audit(...)` em `frontend_app.sync.reveal`, `.retry`, `.regenerate`.
 - **Where**: `internal/dashboard/frontend_apps.go`
@@ -207,7 +207,7 @@ Fase 6: Retry, regenerate e delete            Fase 7: Observabilidade
 
 ---
 
-### T-12: Testes de integração end-to-end
+### T-12: Testes de integração end-to-end [x]
 
 - **What**: Suite cobrindo fluxo completo contra org GitHub de sandbox: criar frontend app → confirmar deploy key registrada → revelar → forçar falha → retry → regenerar → deletar → confirmar revogação.
 - **Where**: `internal/dashboard/frontend_apps_sync_integration_test.go`
@@ -222,7 +222,7 @@ Fase 6: Retry, regenerate e delete            Fase 7: Observabilidade
 
 ---
 
-### T-13: UI do dashboard
+### T-13: UI do dashboard [x]
 
 - **What**: Seção "Sync" na tela de detalhe do frontend app — comandos git (clone/remote add), botão revelar chave, prompt copiável pro agente de IA (template estático com placeholders), botões retry/regenerate.
 - **Where**: `internal/dashboard/ui/` (seguir estrutura de páginas existente, mesma tela de detalhe da sub-feature 2)

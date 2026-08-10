@@ -82,15 +82,17 @@ App-user management lives on a standalone page (`/apps/:id/users`), reached only
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| AUT-01 | P1 | Execute | Verified |
-| AUT-02 | P1 | Execute | Verified |
-| AUT-03 | P1 | Execute | Verified |
-| AUT-04 | P1 | Execute | Verified |
-| AUT-05 | P1 | Execute | Verified |
-| AUT-06 | P1 | Execute | Verified |
-| AUT-07 | P2 | Execute | Verified |
-| AUT-08 | P2 | Execute | Verified |
-| AUT-09 | P2 | Execute | Verified |
+| AUTAB-01 | P1 | Execute | Verified |
+| AUTAB-02 | P1 | Execute | Verified |
+| AUTAB-03 | P1 | Execute | Verified |
+| AUTAB-04 | P1 | Execute | Verified |
+| AUTAB-05 | P1 | Execute | Verified |
+| AUTAB-06 | P1 | Execute | Verified |
+| AUTAB-07 | P2 | Execute | Verified |
+| AUTAB-08 | P2 | Execute | Verified |
+| AUTAB-09 | P2 | Execute | Verified |
+
+**ID format:** `AUTAB-[NUMBER]` — renomeado de `AUT-NN` em 2026-08-10 para eliminar a colisão de namespace com `.specs/features/app-user-phone-mask/`, que usa `AUT-01..AUT-09` para requisitos completamente diferentes (máscara de telefone). `app-user-phone-mask` mantém `AUT-NN`; esta spec passa a usar `AUTAB-NN`.
 
 **Coverage:** 9 total, 9 mapped to Execute (Medium scope — no formal tasks.md), 0 unmapped.
 
