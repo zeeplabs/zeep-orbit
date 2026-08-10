@@ -31,6 +31,17 @@ func isDuplicatePolicyName(err error) bool {
 // HTTP 409 (spec Edge Cases: duplicate policy name on the same table/action).
 var ErrPolicyAlreadyExists = errors.New("dashboard: policy already exists")
 
+// ErrPolicyNotFound is returned by UpdateTablePolicy when policyID does not
+// exist or does not belong to appID — mapped by the handler to HTTP 404
+// (spec table-policy-edit AC3).
+var ErrPolicyNotFound = errors.New("dashboard: policy not found")
+
+// ErrPolicyConflict is returned by UpdateTablePolicy when the edited
+// (action, pg_policy_name) collides with another existing policy on the
+// same table — mapped by the handler to HTTP 409 (spec table-policy-edit
+// AC4).
+var ErrPolicyConflict = errors.New("dashboard: policy conflict")
+
 // PolicyClause is the persisted, JSON-serializable form of one structured
 // row-policy condition. Same field-for-field shape as provisioner.PolicyClause
 // (which does the actual SQL translation) but kept as a separate type here:
@@ -67,6 +78,8 @@ type TablePolicyRow struct {
 	PgPolicyName string         `json:"pg_policy_name"`
 	CreatedAt    time.Time      `json:"created_at"`
 	CreatedBy    string         `json:"created_by"`
+	UpdatedAt    *time.Time     `json:"updated_at"`
+	UpdatedBy    *string        `json:"updated_by"`
 }
 
 // toProvisionerClauses converts the persisted clause shape into the shape
@@ -232,6 +245,87 @@ func DeleteTablePolicy(ctx context.Context, pool *db.Pool, appID, schemaName, po
 	}
 
 	return tx.Commit(ctx)
+}
+
+// UpdateTablePolicy replaces an existing policy's native Postgres policy
+// (DROP the current pg_policy_name + CREATE the one built from def) and
+// updates the catalog row (roles, clauses, action, pg_policy_name,
+// updated_at, updated_by) inside one transaction — either both the native
+// policy and the catalog change, or neither does (spec table-policy-edit
+// AC1/AC5). def is validated via provisioner.BuildPolicySQL before any
+// DROP/CREATE runs (AC2: no partial mutation on an invalid payload).
+func UpdateTablePolicy(ctx context.Context, pool *db.Pool, appID, schemaName, tableName, policyID string, tableColumns []config.ColumnConfig, def PolicyDef, updatedBy string) (TablePolicyRow, error) {
+	ddl, err := provisioner.BuildPolicySQL(schemaName, tableName, provisioner.PolicyDef{
+		Name:    def.Name,
+		Action:  def.Action,
+		Roles:   def.Roles,
+		Clauses: toProvisionerClauses(def.Clauses),
+	}, tableColumns)
+	if err != nil {
+		return TablePolicyRow{}, err
+	}
+
+	rolesJSON, err := json.Marshal(def.Roles)
+	if err != nil {
+		return TablePolicyRow{}, fmt.Errorf("dashboard: marshal policy roles: %w", err)
+	}
+	clausesJSON, err := json.Marshal(def.Clauses)
+	if err != nil {
+		return TablePolicyRow{}, fmt.Errorf("dashboard: marshal policy clauses: %w", err)
+	}
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return TablePolicyRow{}, fmt.Errorf("dashboard: update policy begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	var currentPgPolicyName string
+	err = tx.QueryRow(ctx,
+		`SELECT pg_policy_name FROM zeep_system.table_policies WHERE id = $1 AND app_id = $2 FOR UPDATE`,
+		policyID, appID,
+	).Scan(&currentPgPolicyName)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return TablePolicyRow{}, ErrPolicyNotFound
+		}
+		return TablePolicyRow{}, fmt.Errorf("dashboard: update policy lookup %s: %w", policyID, err)
+	}
+
+	if _, err := tx.Exec(ctx,
+		fmt.Sprintf(`DROP POLICY IF EXISTS %q ON %q.%q`, currentPgPolicyName, schemaName, tableName),
+	); err != nil {
+		return TablePolicyRow{}, fmt.Errorf("dashboard: drop policy %q on %q.%q: %w", currentPgPolicyName, schemaName, tableName, err)
+	}
+
+	if _, err := tx.Exec(ctx, ddl); err != nil {
+		if isDuplicatePolicyName(err) {
+			return TablePolicyRow{}, ErrPolicyConflict
+		}
+		return TablePolicyRow{}, fmt.Errorf("dashboard: update policy DDL: %w", err)
+	}
+
+	var row TablePolicyRow
+	err = tx.QueryRow(ctx,
+		`UPDATE zeep_system.table_policies
+		 SET action = $1, roles = $2, clauses = $3, pg_policy_name = $4, updated_at = now(), updated_by = $5
+		 WHERE id = $6 AND app_id = $7
+		 RETURNING id, table_name, action, pg_policy_name, created_at, created_by, updated_at, updated_by`,
+		def.Action, rolesJSON, clausesJSON, def.Name, updatedBy, policyID, appID,
+	).Scan(&row.ID, &row.TableName, &row.Action, &row.PgPolicyName, &row.CreatedAt, &row.CreatedBy, &row.UpdatedAt, &row.UpdatedBy)
+	if err != nil {
+		if isUniqueViolation(err) {
+			return TablePolicyRow{}, ErrPolicyConflict
+		}
+		return TablePolicyRow{}, fmt.Errorf("dashboard: update table policy %s: %w", policyID, err)
+	}
+	row.Roles = def.Roles
+	row.Clauses = def.Clauses
+
+	if err := tx.Commit(ctx); err != nil {
+		return TablePolicyRow{}, fmt.Errorf("dashboard: update policy commit: %w", err)
+	}
+	return row, nil
 }
 
 // deleteTablePoliciesForTable deletes every table_policies row for one

@@ -3,6 +3,7 @@ package dashboard
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -246,6 +247,251 @@ func TestDeleteTablePolicy_NotFound(t *testing.T) {
 	err := DeleteTablePolicy(ctx, pool, appID, "tp_test", "00000000-0000-0000-0000-000000000000")
 	if err != ErrNotFound {
 		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}
+
+// pgPolicyQual returns the native policy's USING expression (qual). App
+// roles are enforced inside this expression via current_setting(...) = ANY
+// (ARRAY[...]) — the native pg_policies.roles column is always the single
+// shared zeep_app_enduser Postgres role (provisioner.BuildPolicySQL), so
+// asserting on the app-level role names means checking qual, not roles.
+func pgPolicyQual(t *testing.T, pool *db.Pool, schema, table, policyName string) string {
+	t.Helper()
+	var qual string
+	err := pool.QueryRow(context.Background(),
+		`SELECT qual FROM pg_policies WHERE schemaname = $1 AND tablename = $2 AND policyname = $3`,
+		schema, table, policyName,
+	).Scan(&qual)
+	if err != nil {
+		t.Fatalf("query pg_policies qual for %q: %v", policyName, err)
+	}
+	return qual
+}
+
+func pgPolicyExists(t *testing.T, pool *db.Pool, schema, table, policyName string) bool {
+	t.Helper()
+	var count int
+	err := pool.QueryRow(context.Background(),
+		`SELECT COUNT(*) FROM pg_policies WHERE schemaname = $1 AND tablename = $2 AND policyname = $3`,
+		schema, table, policyName,
+	).Scan(&count)
+	if err != nil {
+		t.Fatalf("count pg_policies for %q: %v", policyName, err)
+	}
+	return count > 0
+}
+
+func TestUpdateTablePolicy_HappyPathReflectsNewRolesAndTimestamps(t *testing.T) {
+	pool := tablePoliciesTestPool(t)
+	appID, userID := tablePoliciesTestApp(t, pool)
+	ctx := context.Background()
+
+	created, err := CreateTablePolicy(ctx, pool, appID, "tp_test", "requests", requestsColumns(), PolicyDef{
+		Name:   "editable_policy",
+		Action: "select",
+		Roles:  []string{"member"},
+		Clauses: []PolicyClause{
+			{Column: "status", Operator: "IS NOT NULL"},
+		},
+	}, userID)
+	if err != nil {
+		t.Fatalf("CreateTablePolicy: %v", err)
+	}
+	if created.UpdatedAt != nil {
+		t.Fatalf("expected nil UpdatedAt on creation, got %v", created.UpdatedAt)
+	}
+
+	updated, err := UpdateTablePolicy(ctx, pool, appID, "tp_test", "requests", created.ID, requestsColumns(), PolicyDef{
+		Name:   "editable_policy",
+		Action: "select",
+		Roles:  []string{"member", "admin"},
+		Clauses: []PolicyClause{
+			{Column: "status", Operator: "IS NOT NULL"},
+		},
+	}, userID)
+	if err != nil {
+		t.Fatalf("UpdateTablePolicy: %v", err)
+	}
+
+	if len(updated.Roles) != 2 || updated.Roles[0] != "member" || updated.Roles[1] != "admin" {
+		t.Fatalf("expected catalog roles [member admin], got %v", updated.Roles)
+	}
+	if updated.UpdatedAt == nil {
+		t.Fatal("expected UpdatedAt to be set after edit")
+	}
+	if updated.UpdatedBy == nil || *updated.UpdatedBy != userID {
+		t.Fatalf("expected UpdatedBy=%q, got %v", userID, updated.UpdatedBy)
+	}
+
+	qual := pgPolicyQual(t, pool, "tp_test", "requests", "editable_policy")
+	if !strings.Contains(qual, "'admin'") {
+		t.Fatalf("expected pg_policies USING clause to include the new 'admin' role, got %q", qual)
+	}
+}
+
+func TestUpdateTablePolicy_NotFoundReturnsErrPolicyNotFound(t *testing.T) {
+	pool := tablePoliciesTestPool(t)
+	appID, userID := tablePoliciesTestApp(t, pool)
+	ctx := context.Background()
+
+	def := PolicyDef{
+		Name:   "unrelated_policy",
+		Action: "select",
+		Roles:  []string{"member"},
+		Clauses: []PolicyClause{
+			{Column: "status", Operator: "IS NOT NULL"},
+		},
+	}
+
+	_, err := UpdateTablePolicy(ctx, pool, appID, "tp_test", "requests", "00000000-0000-0000-0000-000000000000", requestsColumns(), def, userID)
+	if err != ErrPolicyNotFound {
+		t.Fatalf("expected ErrPolicyNotFound for missing policyID, got %v", err)
+	}
+
+	var otherAppID string
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO zeep_system.apps (name, owner_id) VALUES ($1, $2) RETURNING id`,
+		"policy-test-app-2", userID,
+	).Scan(&otherAppID); err != nil {
+		t.Fatalf("create second test app: %v", err)
+	}
+	created, err := CreateTablePolicy(ctx, pool, otherAppID, "tp_test", "requests", requestsColumns(), def, userID)
+	if err != nil {
+		t.Fatalf("CreateTablePolicy: %v", err)
+	}
+	if _, err := UpdateTablePolicy(ctx, pool, appID, "tp_test", "requests", created.ID, requestsColumns(), def, userID); err != ErrPolicyNotFound {
+		t.Fatalf("expected ErrPolicyNotFound for policy owned by another app, got %v", err)
+	}
+}
+
+func TestUpdateTablePolicy_InvalidClauseRejectedNoMutation(t *testing.T) {
+	pool := tablePoliciesTestPool(t)
+	appID, userID := tablePoliciesTestApp(t, pool)
+	ctx := context.Background()
+
+	created, err := CreateTablePolicy(ctx, pool, appID, "tp_test", "requests", requestsColumns(), PolicyDef{
+		Name:   "stays_intact",
+		Action: "select",
+		Roles:  []string{"member"},
+		Clauses: []PolicyClause{
+			{Column: "status", Operator: "IS NOT NULL"},
+		},
+	}, userID)
+	if err != nil {
+		t.Fatalf("CreateTablePolicy: %v", err)
+	}
+
+	badDef := PolicyDef{
+		Name:   "stays_intact",
+		Action: "select",
+		Roles:  []string{"member"},
+		Clauses: []PolicyClause{
+			{Column: "does_not_exist", Operator: "=", ValueSource: "literal", Value: "x"},
+		},
+	}
+	if _, err := UpdateTablePolicy(ctx, pool, appID, "tp_test", "requests", created.ID, requestsColumns(), badDef, userID); err == nil {
+		t.Fatal("expected error for invalid clause, got nil")
+	}
+
+	qual := pgPolicyQual(t, pool, "tp_test", "requests", "stays_intact")
+	if !strings.Contains(qual, "'member'") || strings.Contains(qual, "'admin'") {
+		t.Fatalf("expected native policy unchanged after rejected edit, got qual %q", qual)
+	}
+	policies, err := ListTablePolicies(ctx, pool, appID, "requests")
+	if err != nil {
+		t.Fatalf("ListTablePolicies: %v", err)
+	}
+	if len(policies) != 1 || policies[0].UpdatedAt != nil {
+		t.Fatalf("expected catalog row unchanged (no updated_at) after rejected edit, got %+v", policies)
+	}
+}
+
+func TestUpdateTablePolicy_ConflictReturnsErrPolicyConflict(t *testing.T) {
+	pool := tablePoliciesTestPool(t)
+	appID, userID := tablePoliciesTestApp(t, pool)
+	ctx := context.Background()
+
+	if _, err := CreateTablePolicy(ctx, pool, appID, "tp_test", "requests", requestsColumns(), PolicyDef{
+		Name:   "taken_name",
+		Action: "select",
+		Roles:  []string{"member"},
+		Clauses: []PolicyClause{
+			{Column: "status", Operator: "IS NOT NULL"},
+		},
+	}, userID); err != nil {
+		t.Fatalf("CreateTablePolicy (taken_name): %v", err)
+	}
+
+	toEdit, err := CreateTablePolicy(ctx, pool, appID, "tp_test", "requests", requestsColumns(), PolicyDef{
+		Name:   "movable_name",
+		Action: "select",
+		Roles:  []string{"member"},
+		Clauses: []PolicyClause{
+			{Column: "status", Operator: "IS NOT NULL"},
+		},
+	}, userID)
+	if err != nil {
+		t.Fatalf("CreateTablePolicy (movable_name): %v", err)
+	}
+
+	_, err = UpdateTablePolicy(ctx, pool, appID, "tp_test", "requests", toEdit.ID, requestsColumns(), PolicyDef{
+		Name:   "taken_name",
+		Action: "select",
+		Roles:  []string{"admin"},
+		Clauses: []PolicyClause{
+			{Column: "status", Operator: "IS NOT NULL"},
+		},
+	}, userID)
+	if err != ErrPolicyConflict {
+		t.Fatalf("expected ErrPolicyConflict, got %v", err)
+	}
+
+	qual := pgPolicyQual(t, pool, "tp_test", "requests", "movable_name")
+	if !strings.Contains(qual, "'member'") || strings.Contains(qual, "'admin'") {
+		t.Fatalf("expected movable_name policy unchanged after rejected conflicting edit, got qual %q", qual)
+	}
+}
+
+func TestUpdateTablePolicy_RenameDropsOldNativePolicy(t *testing.T) {
+	pool := tablePoliciesTestPool(t)
+	appID, userID := tablePoliciesTestApp(t, pool)
+	ctx := context.Background()
+
+	created, err := CreateTablePolicy(ctx, pool, appID, "tp_test", "requests", requestsColumns(), PolicyDef{
+		Name:   "old_name",
+		Action: "select",
+		Roles:  []string{"member"},
+		Clauses: []PolicyClause{
+			{Column: "status", Operator: "IS NOT NULL"},
+		},
+	}, userID)
+	if err != nil {
+		t.Fatalf("CreateTablePolicy: %v", err)
+	}
+
+	if _, err := UpdateTablePolicy(ctx, pool, appID, "tp_test", "requests", created.ID, requestsColumns(), PolicyDef{
+		Name:   "new_name",
+		Action: "select",
+		Roles:  []string{"member"},
+		Clauses: []PolicyClause{
+			{Column: "status", Operator: "IS NOT NULL"},
+		},
+	}, userID); err != nil {
+		t.Fatalf("UpdateTablePolicy (rename): %v", err)
+	}
+
+	var count int
+	if err := pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM pg_policies WHERE schemaname = 'tp_test' AND tablename = 'requests' AND policyname = 'old_name'`,
+	).Scan(&count); err != nil {
+		t.Fatalf("count pg_policies for old_name: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected old_name native policy dropped, still has %d rows", count)
+	}
+
+	if !pgPolicyExists(t, pool, "tp_test", "requests", "new_name") {
+		t.Fatal("expected new_name native policy to be present after rename")
 	}
 }
 
