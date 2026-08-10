@@ -1,6 +1,31 @@
 {
   "entries": [
     {
+      "version": "v1.1.0",
+      "release_date": "2026-08-10",
+      "title": {"en": "End-User Row Policies (native RLS) & App User Management", "pt-BR": "Row Policies para End Users (RLS nativo) e Gestão de Usuários do App"},
+      "summary": {"en": "Table-level row policies enforced by native Postgres RLS, configurable end-user business roles per app, richer app-user editing (email/phone/role with a country-aware phone mask), and a round of pre-release hardening (upgrade-safety, rate limiting, CI coverage).", "pt-BR": "Row policies por tabela aplicadas por RLS nativo do Postgres, papéis de negócio configuráveis por app para usuários finais, edição mais completa de usuários do app (email/telefone/papel com máscara de telefone por país), e uma rodada de hardening pré-release (segurança de upgrade, rate limiting, cobertura de CI)."},
+      "sections": [
+        {
+          "type": "features",
+          "items": [
+            {"description": {"en": "End-user row policies: define row-level access rules per table/action combining an end-user's business role with a condition on the row's own data, enforced natively by Postgres (CREATE POLICY / ROW LEVEL SECURITY) — not a Go-layer filter.", "pt-BR": "Row policies para usuários finais: defina regras de acesso por linha, por tabela/ação, combinando o papel de negócio do usuário com uma condição sobre os dados da própria linha, aplicadas nativamente pelo Postgres (CREATE POLICY / ROW LEVEL SECURITY) — não um filtro na camada Go."}},
+            {"description": {"en": "Configurable end-user business roles per app, with a role picker (chips) replacing the old free-text CSV input, and a 409 guard preventing removal of a role still in use.", "pt-BR": "Papéis de negócio configuráveis por app para usuários finais, com seletor por chips substituindo o antigo input CSV livre, e uma trava 409 impedindo remover um papel ainda em uso."}},
+            {"description": {"en": "App-user editing now covers email and phone, not just role, with a country-aware phone mask (235 countries) and E.164 validation.", "pt-BR": "Edição de usuário do app agora cobre email e telefone, não só papel, com máscara de telefone por país (235 países) e validação E.164."}},
+            {"description": {"en": "App-user management moved from a standalone page to a \"Users\" tab on the app details screen (old links redirect automatically).", "pt-BR": "Gestão de usuários do app deixou de ser uma página isolada e passou a ser uma aba \"Usuários\" na tela de detalhes do app (links antigos redirecionam automaticamente)."}}
+          ]
+        },
+        {
+          "type": "security",
+          "items": [
+            {"description": {"en": "Fixed: apps provisioned before this release would have lost end-user data access after upgrading, since end-user requests now always run under a dedicated restricted Postgres role — a boot-time backfill grants every existing app before any request is served.", "pt-BR": "Corrigido: apps provisionados antes desta versão perderiam acesso a dados de usuários finais após o upgrade, já que requisições de usuário final agora sempre rodam sob um papel Postgres restrito dedicado — um backfill no boot concede acesso a todo app existente antes de qualquer requisição ser atendida."}},
+            {"description": {"en": "Fixed: login rate limiting was not actually throttling anything (bucketed by host+port instead of host), letting brute-force attempts through unlimited.", "pt-BR": "Corrigido: o rate limiting de login não estava de fato limitando nada (bucket por host+porta em vez de host), deixando tentativas de força bruta passarem sem limite."}},
+            {"description": {"en": "Fixed: a transient database read failure while updating global system settings could silently wipe global storage credentials and reset retention/timeout settings instead of failing the request.", "pt-BR": "Corrigido: uma falha transitória de leitura no banco ao atualizar configurações globais do sistema podia zerar silenciosamente as credenciais globais de storage e resetar configurações de retenção/timeout em vez de falhar a requisição."}}
+          ]
+        }
+      ]
+    },
+    {
       "version": "v1.0.0",
       "release_date": "2026-08-06",
       "title": {"en": "Per-App Roles, 4-Tier Platform Roles & Dashboard Redesign", "pt-BR": "Papéis por App, 4 Níveis de Papel de Plataforma e Redesign do Dashboard"},
