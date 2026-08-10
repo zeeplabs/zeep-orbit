@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -36,8 +37,13 @@ func (rl *rateLimiter) allow(key string) bool {
 		}
 	}
 
-	if len(fresh) >= rl.limit {
+	if len(fresh) == 0 {
+		delete(rl.windows, key)
+	} else {
 		rl.windows[key] = fresh
+	}
+
+	if len(fresh) >= rl.limit {
 		return false
 	}
 
@@ -45,9 +51,20 @@ func (rl *rateLimiter) allow(key string) bool {
 	return true
 }
 
+// remoteHost strips the port from r.RemoteAddr so the limiter buckets by
+// client host, not by client host+ephemeral-port (which would give every
+// new TCP connection its own bucket, making the limiter a no-op).
+func remoteHost(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
 func (rl *rateLimiter) middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !rl.allow(r.RemoteAddr) {
+		if !rl.allow(remoteHost(r)) {
 			writeError(w, http.StatusTooManyRequests, "too many requests")
 			return
 		}
