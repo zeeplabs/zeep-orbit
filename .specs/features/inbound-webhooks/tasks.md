@@ -325,14 +325,16 @@ T16 -> T17
 - Skill: NONE
 
 **Done when**:
-- [ ] Create returns the plaintext token exactly once in the response body, never again on subsequent `Get`/`List`
-- [ ] Rotate and delete each produce one `audit_log` entry with the correct action name
-- [ ] Delete is a soft-delete visible in the store but the webhook's URL now 404s (verified via T6's route)
-- [ ] Gate check passes: `go test ./internal/dashboard/...`
-- [ ] Test count: at least 5 tests (create, list, rotate invalidates old token, delete soft-deletes, unauthorized rejected)
+- [x] Create returns the plaintext token exactly once in the response body, never again on subsequent `Get`/`List`
+- [x] Rotate and delete each produce one `audit_log` entry with the correct action name
+- [x] Delete is a soft-delete visible in the store but the webhook's URL now 404s (verified via T6's route)
+- [x] Gate check passes: `go test ./internal/dashboard/...`
+- [x] Test count: at least 5 tests (create, list, rotate invalidates old token, delete soft-deletes, unauthorized rejected) (5 tests, all pass)
 
 **Tests**: integration
 **Gate**: quick
+
+**Status**: ✅ Complete
 
 ---
 
