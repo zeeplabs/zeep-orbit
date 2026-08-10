@@ -517,7 +517,13 @@ func TestListWebhookDeliveriesHandler_NewestFirstWithPayloadAndError(t *testing.
 	if w.Code != http.StatusOK {
 		t.Fatalf("list deliveries: status = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
-	var rows []DeliveryRow
+	// Decoded into deliveryResponse (the actual wire DTO, snake_case json
+	// tags), not the internal DeliveryRow store type -- DeliveryRow has no
+	// json tags at all, so decoding the handler's real response into it
+	// would silently pass via Go's case-insensitive-only field matching
+	// while masking a real wire-format bug (PascalCase keys reaching a
+	// frontend that reads snake_case; see toDeliveryResponse).
+	var rows []deliveryResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &rows); err != nil {
 		t.Fatalf("decode deliveries response: %v", err)
 	}
@@ -554,7 +560,7 @@ func TestListWebhookDeliveriesHandler_EmptyForFreshWebhook(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("list deliveries: status = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
-	var rows []DeliveryRow
+	var rows []deliveryResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &rows); err != nil {
 		t.Fatalf("decode deliveries response: %v", err)
 	}

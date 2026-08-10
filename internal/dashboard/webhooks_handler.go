@@ -394,10 +394,46 @@ const (
 	maxDeliveryPageSize     = 200
 )
 
+// deliveryResponse is the dashboard-facing shape of a DeliveryRow. DeliveryRow
+// itself carries no json tags (it's an internal store type), so marshaling it
+// directly would emit Go's default PascalCase field names (ReceivedAt,
+// EventTypeValue, ...) instead of the snake_case shape design.md's
+// WebhookDelivery model documents and the frontend (WebhookDelivery in
+// src/lib/api.ts, Webhooks.tsx's WebhookDeliveryLog) actually reads — mirrors
+// the same webhookResponse/toWebhookResponse translation already done for
+// WebhookRow above.
+type deliveryResponse struct {
+	ID             string         `json:"id"`
+	WebhookID      string         `json:"webhook_id"`
+	ReceivedAt     time.Time      `json:"received_at"`
+	HTTPStatus     int            `json:"http_status"`
+	Outcome        string         `json:"outcome"`
+	EventTypeValue *string        `json:"event_type_value"`
+	EventID        *string        `json:"event_id"`
+	RawPayload     map[string]any `json:"raw_payload"`
+	TargetRowID    *string        `json:"target_row_id"`
+	ErrorDetail    *string        `json:"error_detail"`
+}
+
+func toDeliveryResponse(d DeliveryRow) deliveryResponse {
+	return deliveryResponse{
+		ID:             d.ID,
+		WebhookID:      d.WebhookID,
+		ReceivedAt:     d.ReceivedAt,
+		HTTPStatus:     d.HTTPStatus,
+		Outcome:        d.Outcome,
+		EventTypeValue: d.EventTypeValue,
+		EventID:        d.EventID,
+		RawPayload:     d.RawPayload,
+		TargetRowID:    d.TargetRowID,
+		ErrorDetail:    d.ErrorDetail,
+	}
+}
+
 // ListWebhookDeliveries handles GET /dashboard/api/apps/{id}/webhooks/{webhookId}/deliveries.
 // Returns newest-first, raw payload and error detail included per entry
 // (spec P2 dashboard-delivery-log AC1/AC2) — reuses WebhookDeliveryStore.ListDeliveries
-// exactly, no extra filtering/shaping at the handler layer.
+// for the data, translated through deliveryResponse for the wire shape.
 func (h *Handler) ListWebhookDeliveries(w http.ResponseWriter, r *http.Request) {
 	appID := chi.URLParam(r, "id")
 	if _, ok := h.webhookRBACGate(w, r, appID); !ok {
@@ -427,5 +463,9 @@ func (h *Handler) ListWebhookDeliveries(w http.ResponseWriter, r *http.Request) 
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
-	writeJSON(w, http.StatusOK, rows)
+	resp := make([]deliveryResponse, len(rows))
+	for i, row := range rows {
+		resp[i] = toDeliveryResponse(row)
+	}
+	writeJSON(w, http.StatusOK, resp)
 }

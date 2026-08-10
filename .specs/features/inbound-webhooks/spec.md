@@ -138,35 +138,35 @@ App owners today have no way to let an external system (Google Workspace, or any
 
 | Requirement ID | Story | Phase | Status |
 |---|---|---|---|
-| WEBHOOK-01 | P1: Create webhook + capture sample | Design | Implementing |
-| WEBHOOK-02 | P1: Create webhook + capture sample | Design | Implementing |
-| WEBHOOK-03 | P1: Create webhook + capture sample | Design | Implementing |
-| WEBHOOK-04 | P1: Create webhook + capture sample | Design | Implementing |
-| WEBHOOK-05 | P1: Create webhook + capture sample | Design | Implementing |
-| WEBHOOK-06 | P1: Create webhook + capture sample | Design | Implementing |
-| WEBHOOK-07 | P2: Map + activate for inserts | Design | Implementing |
-| WEBHOOK-08 | P2: Map + activate for inserts | Design | Implementing |
-| WEBHOOK-09 | P2: Map + activate for inserts | Design | Implementing |
-| WEBHOOK-10 | P2: Map + activate for inserts | Design | Implementing |
-| WEBHOOK-11 | P2: Map + activate for inserts | Design | Implementing |
-| WEBHOOK-12 | P2: Map + activate for inserts | Design | Implementing |
-| WEBHOOK-13 | P2: Update/delete with match key | Design | Implementing |
-| WEBHOOK-14 | P2: Update/delete with match key | Design | Implementing |
-| WEBHOOK-15 | P2: Update/delete with match key | Design | Implementing |
-| WEBHOOK-16 | P2: Update/delete with match key | Design | Implementing |
-| WEBHOOK-17 | P2: Update/delete with match key | Design | Implementing |
-| WEBHOOK-18 | P2: Dashboard delivery log | Design | Implementing |
-| WEBHOOK-19 | P2: Dashboard delivery log | Design | Implementing |
-| WEBHOOK-20 | P2: Dashboard delivery log | Design | Implementing |
-| WEBHOOK-21 | P3: Webhook lifecycle | Design | Implementing |
-| WEBHOOK-22 | P3: Webhook lifecycle | Design | Implementing |
-| WEBHOOK-23 | P3: Webhook lifecycle | Design | Pending |
+| WEBHOOK-01 | P1 AC1: create webhook, unique URL + token | Tasks | Verified (e2e: `webhooks.spec.ts` — URL/token asserted non-empty after creation) |
+| WEBHOOK-02 | P1 AC2: unmapped webhook is capture-only, no write | Tasks | Verified (e2e: row count asserted 0 after two capture-mode calls) |
+| WEBHOOK-03 | P1 AC3: second capture call overwrites the sample | Tasks | Verified (e2e: mapping editor shows the 2nd payload's field, not the 1st's) |
+| WEBHOOK-04 | P1 AC4: method mismatch rejects with 404 | Tasks | Verified (e2e: GET against a POST-configured webhook → 404) |
+| WEBHOOK-05 | P1 AC5: missing/invalid token rejects with 401, attempt logged | Tasks | Verified (e2e: wrong-token call → 401; confirmed in delivery log) |
+| WEBHOOK-06 | P1 AC6: every call recorded in the delivery log | Tasks | Verified (e2e: delivery log lists captured/invalid_token/unmapped/write_error/inserted/duplicate_skipped entries) |
+| WEBHOOK-07 | P2 (map+activate) AC1: save an insert mapping via click-linked fields | Tasks | Verified (e2e: field→column link + save mapping via UI) |
+| WEBHOOK-08 | P2 (map+activate) AC2: activate switches capture→active | Tasks | Verified (e2e: Activate button, status becomes Active) |
+| WEBHOOK-09 | P2 (map+activate) AC3: matching event creates a row | Tasks | Verified (e2e: real POST creates exactly one row with mapped values) |
+| WEBHOOK-10 | P2 (map+activate) AC4: duplicate event id is skipped | Tasks | Verified (e2e: repeated event id → `duplicate_skipped`, row count unchanged) |
+| WEBHOOK-11 | P2 (map+activate) AC5: unmapped event-type value is a no-op | Tasks | Verified (e2e: unmapped event-type → 200/`unmapped`, no write) |
+| WEBHOOK-12 | P2 (map+activate) AC6: field-resolution/write failure → 500, no partial write | Tasks | Verified (e2e: payload missing the mapped field → 500/`write_error`, row count unchanged) |
+| WEBHOOK-13 | P2 update/delete AC1: match key required for update/delete | Tasks | Not covered by e2e — out of T17's scope by design (P2 update/delete story excluded per task instructions); covered by backend integration tests (`webhook_event_mappings_store_test.go`) |
+| WEBHOOK-14 | P2 update/delete AC2: update locates row by match key, overwrites | Tasks | Not covered by e2e (same scope note as WEBHOOK-13); covered by `internal/server/webhook_active_update_delete_test.go` |
+| WEBHOOK-15 | P2 update/delete AC3: delete locates row by match key, soft-deletes | Tasks | Not covered by e2e (same scope note); covered by `webhook_active_update_delete_test.go` |
+| WEBHOOK-16 | P2 update/delete AC4: no match → row_not_found, no write | Tasks | Not covered by e2e (same scope note); covered by `webhook_active_update_delete_test.go` |
+| WEBHOOK-17 | P2 update/delete AC5: one webhook holds mappings for multiple event types/actions | Tasks | Not covered by e2e (same scope note); covered by `webhook_active_update_delete_test.go`'s full-lifecycle case |
+| WEBHOOK-18 | P2 delivery log AC1: dashboard lists deliveries reverse-chronological | Tasks | Verified (e2e: delivery log view opened, entries visible with outcome) |
+| WEBHOOK-19 | P2 delivery log AC2: opening an entry shows raw payload/error detail | Tasks | Not directly asserted by the e2e (delivery entries are visible but the test doesn't expand one to check raw payload/error text); covered by `TestListWebhookDeliveriesHandler_NewestFirstWithPayloadAndError` |
+| WEBHOOK-20 | P2 delivery log AC3: 30-day purge | Tasks | Not covered by e2e (time-based, impractical at this layer); covered by `webhook_deliveries_store_test.go` purge tests and the ticker wiring (T12) |
+| WEBHOOK-21 | P3: rotate token | Tasks | Not covered by e2e (P3, out of T17's scope); covered by `TestRotateWebhookTokenHandler_InvalidatesOldTokenAndAudits` |
+| WEBHOOK-22 | P3: delete webhook, retain delivery log | Tasks | Not covered by e2e (P3, out of T17's scope); covered by `TestDeleteWebhookHandler_SoftDeletesAndAudits` / `TestSoftDeleteWebhook_NeverHardDeletes` |
+| WEBHOOK-23 | P3: audit log entry per lifecycle action | Tasks | Not covered by e2e (P3, out of T17's scope); covered by the create/rotate/delete/activate handler tests' audit assertions |
 
 **ID format:** `WEBHOOK-[NUMBER]`
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 23 total, 0 mapped to tasks, 23 unmapped ⚠️ (expected — Design/Tasks not yet run)
+**Coverage:** 23 total, 23 mapped to tasks (T1-T17), 12 Verified end-to-end by `webhooks.spec.ts` (P1 full story + P2 map+activate-for-inserts full story), 11 covered only by backend integration tests (P2 update/delete story + P3 lifecycle story + delivery-log AC2/AC3), 0 unmapped.
 
 ---
 

@@ -522,14 +522,34 @@ T16 -> T17
 - Skill: NONE
 
 **Done when**:
-- [ ] Full lifecycle passes against a real ephemeral Postgres + test server, same setup convention as `enduser-roles.spec.ts`
-- [ ] Test asserts zero rows written during capture mode
-- [ ] Test asserts exactly one row written after activation
-- [ ] Gate check passes: `cd internal/dashboard/ui && npx playwright test webhooks`
-- [ ] Test count: 1 e2e test (full lifecycle) passes
+- [x] Full lifecycle passes against a real ephemeral Postgres + test server, same setup convention as `enduser-roles.spec.ts`
+- [x] Test asserts zero rows written during capture mode
+- [x] Test asserts exactly one row written after activation
+- [x] Gate check passes: `cd internal/dashboard/ui && npx playwright test webhooks`
+- [x] Test count: 1 e2e test (full lifecycle) passes
 
 **Tests**: e2e
 **Gate**: build
+
+**Status**: ✅ Complete
+
+**Deviation**: While building this task, the delivery-log dashboard endpoint
+(`ListWebhookDeliveries`, T11) turned out to serialize `DeliveryRow` directly
+— that store type carries no `json` tags, so the wire response used Go's
+default PascalCase field names (`ReceivedAt`, `EventTypeValue`, ...) instead
+of the snake_case shape `design.md`'s `WebhookDelivery` model documents and
+the frontend (`WebhookDeliveryLog` in `Webhooks.tsx`) reads. T11's own test
+masked this because it decoded the response back into the same untagged
+`DeliveryRow` struct (Go's case-insensitive matching hid the mismatch); it
+was only caught once T17 read the rendered delivery log through a real
+browser. Fixed with a `deliveryResponse` DTO in `webhooks_handler.go`
+(mirrors the existing `webhookResponse`/`toWebhookResponse` pattern) and
+updated `TestListWebhookDeliveriesHandler_NewestFirstWithPayloadAndError` /
+`TestListWebhookDeliveriesHandler_EmptyForFreshWebhook` to decode into that
+DTO instead of the raw store type, so the test actually exercises the wire
+contract. This is a one-line-pattern fix to already-committed T11 code, not
+a scope change to T17's own deliverable — included in this commit because
+T17 cannot pass its own gate (delivery log must render correctly) without it.
 
 ---
 
