@@ -199,12 +199,12 @@ T5 → T6 → T7
 - Skill: `react-composition-patterns`
 
 **Done when**:
-- [ ] Botão "Editar" aparece por policy, ao lado do delete
-- [ ] Abrir edição pré-popula todos os campos com os dados atuais da policy, incluindo role órfã como chip selecionado
-- [ ] Salvar chama `PUT` (não `POST`) e a lista reflete os dados novos sem reload manual
-- [ ] Fechar/cancelar sem salvar não chama nenhuma mutation
-- [ ] `npm run build` limpo
-- [ ] Gate check passa: full gate
+- [x] Botão "Editar" aparece por policy, ao lado do delete
+- [x] Abrir edição pré-popula todos os campos com os dados atuais da policy, incluindo role órfã como chip selecionado
+- [x] Salvar chama `PUT` (não `POST`) e a lista reflete os dados novos sem reload manual
+- [x] Fechar/cancelar sem salvar não chama nenhuma mutation
+- [x] `npm run build` limpo
+- [x] Gate check passa: full gate
 
 **Tests**: none (cobertura funcional no e2e de T7)
 **Gate**: full

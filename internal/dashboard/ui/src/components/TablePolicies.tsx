@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { ColumnDef, PolicyClause, TablePolicyRow, useApp, useCreateTablePolicy, useDeleteTablePolicy, useTablePolicies } from "../lib/api";
+import { ColumnDef, PolicyClause, TablePolicyRow, useApp, useCreateTablePolicy, useDeleteTablePolicy, useTablePolicies, useUpdateTablePolicy } from "../lib/api";
 import { Icon } from "@/components/ui/icon";
 import { EmptyState } from "@/components/patterns";
 import { Input } from "@/components/ui/input";
@@ -63,8 +63,10 @@ export default function TablePoliciesTab({ appId, tableName, columns }: TablePol
   const { data: policies, isLoading } = useTablePolicies(appId, tableName);
   const deletePolicy = useDeleteTablePolicy(appId, tableName);
   const createPolicy = useCreateTablePolicy(appId, tableName);
+  const updatePolicy = useUpdateTablePolicy(appId, tableName);
 
   const [showForm, setShowForm] = useState(false);
+  const [editingPolicy, setEditingPolicy] = useState<TablePolicyRow | null>(null);
   const firstColumn = columns[0]?.name ?? "";
   const [name, setName] = useState("");
   const [action, setAction] = useState("select");
@@ -95,6 +97,28 @@ export default function TablePoliciesTab({ appId, tableName, columns }: TablePol
 
   const openForm = () => {
     resetForm();
+    setEditingPolicy(null);
+    setShowForm(true);
+  };
+
+  // Pre-populates the form from an existing policy — including any role no
+  // longer in enduser_roles_config, which chipRoles already keeps visible
+  // as a selected chip (ROLECFG-16, now exercised via edit).
+  const openEditForm = (policy: TablePolicyRow) => {
+    setName(policy.pg_policy_name);
+    setAction(policy.action);
+    setSelectedRoles(policy.roles);
+    setClauses(
+      policy.clauses.map((c, i) => ({
+        column: c.column,
+        operator: c.operator,
+        value_source: c.value_source === "literal" ? "literal" : "claim",
+        value: c.value ?? "",
+        logic: i > 0 ? c.logic ?? "AND" : "AND",
+      })),
+    );
+    setFormError(null);
+    setEditingPolicy(policy);
     setShowForm(true);
   };
 
@@ -129,15 +153,25 @@ export default function TablePoliciesTab({ appId, tableName, columns }: TablePol
       return base;
     });
 
+    const def = { name: name.trim(), action, roles: selectedRoles, clauses: payloadClauses };
+
     try {
-      await createPolicy.mutateAsync({ name: name.trim(), action, roles: selectedRoles, clauses: payloadClauses });
-      toast.success(t("tablePolicies.createSuccess"));
+      if (editingPolicy) {
+        await updatePolicy.mutateAsync({ policyId: editingPolicy.id, def });
+        toast.success(t("tablePolicies.updateSuccess"));
+      } else {
+        await createPolicy.mutateAsync(def);
+        toast.success(t("tablePolicies.createSuccess"));
+      }
       setShowForm(false);
+      setEditingPolicy(null);
       resetForm();
     } catch {
-      // useCreateTablePolicy's onError already shows toast.error(error.message)
+      // useCreateTablePolicy/useUpdateTablePolicy's onError already shows toast.error(error.message)
     }
   };
+
+  const isSaving = createPolicy.isPending || updatePolicy.isPending;
 
   return (
     <div className="flex flex-col gap-4">
@@ -320,8 +354,11 @@ export default function TablePoliciesTab({ appId, tableName, columns }: TablePol
           <div className="flex items-center justify-end gap-2 border-t border-[var(--border)] pt-3">
             <button
               type="button"
-              onClick={() => setShowForm(false)}
-              disabled={createPolicy.isPending}
+              onClick={() => {
+                setShowForm(false);
+                setEditingPolicy(null);
+              }}
+              disabled={isSaving}
               className="text-[12px] font-medium px-4 py-1.5 rounded-full border border-[var(--border)] bg-transparent text-[var(--text-secondary)] cursor-pointer hover:bg-[var(--hover-surface)]"
             >
               {t("tablePolicies.cancel")}
@@ -329,11 +366,11 @@ export default function TablePoliciesTab({ appId, tableName, columns }: TablePol
             <button
               type="button"
               onClick={submit}
-              disabled={createPolicy.isPending}
+              disabled={isSaving}
               className="text-[12px] font-semibold px-4 py-1.5 rounded-full text-white cursor-pointer disabled:opacity-50"
               style={{ background: "var(--primary)" }}
             >
-              {createPolicy.isPending ? t("tablePolicies.saving") : t("tablePolicies.save")}
+              {isSaving ? t("tablePolicies.saving") : t("tablePolicies.save")}
             </button>
           </div>
         </div>
@@ -371,6 +408,14 @@ export default function TablePoliciesTab({ appId, tableName, columns }: TablePol
                   </span>
                 ))}
               </span>
+              <button
+                type="button"
+                title={t("tablePolicies.edit")}
+                onClick={() => openEditForm(policy)}
+                className="w-7 h-7 flex items-center justify-center rounded-md border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] cursor-pointer hover:bg-[var(--hover-surface)] transition-colors"
+              >
+                <Icon name="edit" size={12} />
+              </button>
               <button
                 type="button"
                 title={t("tablePolicies.delete")}
