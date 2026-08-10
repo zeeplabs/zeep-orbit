@@ -7,6 +7,22 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: zeep_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/zeep_test?sslmode=disable
     steps:
       - uses: actions/checkout@v4
 
@@ -44,4 +60,9 @@ jobs:
           fi
 
       - name: Go test
-        run: go test ./...
+        # -p 1: several packages (internal/dashboard, internal/server, ...)
+        # share the one TEST_DATABASE_URL and some tests drop+recreate the
+        # zeep_system schema for isolation — running packages in parallel
+        # races on that schema and flakes. Sequential package execution
+        # avoids it; tests within a package still run concurrently.
+        run: go test -p 1 ./...
