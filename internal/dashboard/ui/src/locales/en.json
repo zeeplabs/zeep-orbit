@@ -831,6 +831,7 @@
   "login.formSubtitle": "Sign in to manage your apps.",
   "login.showPassword": "Show password",
   "login.hidePassword": "Hide password",
+  "webhooks.tabLabel": "Webhooks",
   "webhooks.explainer": "Webhooks receive events pushed by an external provider (like Google Workspace) and write them into a table -- no code required. A new webhook starts in capture mode: it records the first real payload it receives so you can map it, without writing to any table yet.",
   "webhooks.addWebhook": "Add webhook",
   "webhooks.empty": "No webhooks yet",
@@ -872,6 +873,8 @@
   "webhookMapping.saveSuccess": "Mapping saved",
   "webhooks.viewDeliveries": "View deliveries",
   "webhooks.hideDeliveries": "Hide deliveries",
+  "webhooks.mapWebhook": "Map",
+  "webhooks.hideMapping": "Hide mapping",
   "webhooks.deliveriesEmpty": "No deliveries recorded yet",
   "webhooks.rawPayload": "Raw payload",
   "webhooks.errorDetail": "Error detail"

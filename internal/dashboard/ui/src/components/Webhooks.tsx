@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
+  ColumnDef,
   CreateWebhookInput,
   CreatedWebhook,
   WebhookDelivery,
@@ -23,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import WebhookMappingEditor from "@/components/WebhookMappingEditor";
 
 // Every HTTP method the dashboard's create form offers matches exactly what
 // the backend's CreateWebhook handler accepts (internal/dashboard/webhooks_handler.go).
@@ -46,9 +48,10 @@ async function copyToClipboard(value: string, successMessage: string) {
 
 interface WebhooksProps {
   appId: string;
+  tables: { name: string; columns: ColumnDef[] }[];
 }
 
-export default function Webhooks({ appId }: WebhooksProps) {
+export default function Webhooks({ appId, tables }: WebhooksProps) {
   const { t } = useTranslation();
   const { data: webhooks, isLoading } = useWebhooks(appId);
   const createWebhook = useCreateWebhook(appId);
@@ -63,6 +66,7 @@ export default function Webhooks({ appId }: WebhooksProps) {
   const [formError, setFormError] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<CreatedWebhook | null>(null);
   const [expandedWebhookId, setExpandedWebhookId] = useState<string | null>(null);
+  const [mappingWebhookId, setMappingWebhookId] = useState<string | null>(null);
 
   const resetForm = () => {
     setName("");
@@ -232,6 +236,13 @@ export default function Webhooks({ appId }: WebhooksProps) {
                   <Button
                     variant="ghost"
                     size="sm"
+                    onClick={() => setMappingWebhookId(mappingWebhookId === webhook.id ? null : webhook.id)}
+                  >
+                    {mappingWebhookId === webhook.id ? t("webhooks.hideMapping") : t("webhooks.mapWebhook")}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setExpandedWebhookId(expandedWebhookId === webhook.id ? null : webhook.id)}
                   >
                     {expandedWebhookId === webhook.id
@@ -247,6 +258,9 @@ export default function Webhooks({ appId }: WebhooksProps) {
                 </div>
               </div>
               <p className="text-[11px] text-[var(--text-tertiary)]">{t("webhooks.eventTypePathLabel")}: {webhook.event_type_path}</p>
+              {mappingWebhookId === webhook.id && (
+                <WebhookMappingEditor appId={appId} webhook={webhook} tables={tables} />
+              )}
               {expandedWebhookId === webhook.id && (
                 <WebhookDeliveryLog appId={appId} webhookId={webhook.id} />
               )}

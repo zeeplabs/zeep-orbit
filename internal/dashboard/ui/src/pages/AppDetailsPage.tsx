@@ -40,6 +40,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import TableCard from "@/components/TableCard";
+import Webhooks from "@/components/Webhooks";
 import { AppMembersList } from "@/components/patterns/AppMembersList";
 import { AppUsersTab } from "./AppUsersPage";
 import {
@@ -52,7 +53,7 @@ import {
   type StatusTone,
 } from "@/components/patterns";
 
-const TABS = ["database", "auth", "users", "storage", "api", "tokens", "members", "observability"] as const;
+const TABS = ["database", "auth", "users", "storage", "api", "webhooks", "tokens", "members", "observability"] as const;
 
 export default function AppDetailsPage() {
   const { t } = useTranslation();
@@ -78,6 +79,7 @@ export default function AppDetailsPage() {
     { v: "users", label: t("appDetails.tabUsers") },
     { v: "storage", label: t("appForm.tabStorage") },
     { v: "api", label: t("appForm.tabApi") },
+    { v: "webhooks", label: t("webhooks.tabLabel") },
     { v: "tokens", label: t("appDetails.tabTokens") },
     { v: "members", label: t("appDetails.tabMembers"), badge: true },
     { v: "observability", label: t("appDetails.tabObservability"), badge: true },
@@ -137,6 +139,9 @@ export default function AppDetailsPage() {
         </TabsContent>
         <TabsContent value="api" className="mt-0">
           <ApiTab app={app} />
+        </TabsContent>
+        <TabsContent value="webhooks" className="mt-0">
+          <Webhooks appId={app.id} tables={app.tables} />
         </TabsContent>
         <TabsContent value="tokens" className="mt-0">
           <TokensTab app={app} />
