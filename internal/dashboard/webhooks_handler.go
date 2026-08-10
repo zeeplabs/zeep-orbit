@@ -1,10 +1,10 @@
 package dashboard
 
 // webhooks_handler.go — dashboard-session-authenticated CRUD for webhook
-// subscriptions (T9). Mirrors the table_policies handler pattern in
-// handler.go: RBAC check (GetApp + role.CanManage()) → validate → store call
-// → h.audit(...) on mutation → JSON response (design.md, Dashboard Webhook
-// Handler component).
+// subscriptions (T9) and their event mappings + activation (T10). Mirrors
+// the table_policies handler pattern in handler.go: RBAC check (GetApp +
+// role.CanManage()) → validate → store call → h.audit(...) on mutation →
+// JSON response (design.md, Dashboard Webhook Handler component).
 
 import (
 	"errors"
@@ -240,4 +240,145 @@ func (h *Handler) DeleteWebhook(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"message": "webhook deleted"})
 	user, _ := UserFromContext(r.Context())
 	h.audit(r.Context(), user.ID, user.Email, "webhook.delete", "webhook", wh.ID, app.Name+"/"+wh.Name, nil, r.RemoteAddr)
+}
+
+// ----------------------------------------------------------------------------
+// Event mapping CRUD + activation (T10)
+// ----------------------------------------------------------------------------
+
+type saveEventMappingRequest struct {
+	EventTypeValue string            `json:"event_type_value"`
+	Action         string            `json:"action"`
+	TargetTable    string            `json:"target_table"`
+	MatchKeyColumn string            `json:"match_key_column"`
+	FieldMappings  []FieldMappingDef `json:"field_mappings"`
+}
+
+// SaveEventMapping handles POST /dashboard/api/apps/{id}/webhooks/{webhookId}/mappings.
+func (h *Handler) SaveEventMapping(w http.ResponseWriter, r *http.Request) {
+	appID := chi.URLParam(r, "id")
+	app, ok := h.webhookRBACGate(w, r, appID)
+	if !ok {
+		return
+	}
+	webhookID := chi.URLParam(r, "webhookId")
+	wh, ok := h.getScopedWebhook(w, r, appID, webhookID)
+	if !ok {
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
+	var body saveEventMappingRequest
+	if !h.decodeJSONBody(w, r, &body) {
+		return
+	}
+
+	def := EventMappingDef{
+		EventTypeValue: body.EventTypeValue,
+		Action:         body.Action,
+		TargetTable:    body.TargetTable,
+		MatchKeyColumn: body.MatchKeyColumn,
+		FieldMappings:  body.FieldMappings,
+	}
+	row, err := SaveEventMapping(r.Context(), h.pool, h.reg, app.Name, wh.ID, def)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidAction),
+			errors.Is(err, ErrMatchKeyRequired),
+			errors.Is(err, ErrUnknownTargetTable),
+			errors.Is(err, ErrUnknownTargetColumn):
+			// Safe to expose: fixed, non-dynamic sentinel messages, never raw
+			// DB detail (AGENTS.md §4's typed-error exception).
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		case errors.Is(err, ErrMappingConflict):
+			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		default:
+			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, row)
+	user, _ := UserFromContext(r.Context())
+	h.audit(r.Context(), user.ID, user.Email, "webhook.mapping.save", "webhook_event_mapping", row.ID, app.Name+"/"+wh.Name+"/"+row.EventTypeValue, nil, r.RemoteAddr)
+}
+
+// ListEventMappings handles GET /dashboard/api/apps/{id}/webhooks/{webhookId}/mappings.
+func (h *Handler) ListEventMappings(w http.ResponseWriter, r *http.Request) {
+	appID := chi.URLParam(r, "id")
+	if _, ok := h.webhookRBACGate(w, r, appID); !ok {
+		return
+	}
+	webhookID := chi.URLParam(r, "webhookId")
+	wh, ok := h.getScopedWebhook(w, r, appID, webhookID)
+	if !ok {
+		return
+	}
+
+	rows, err := ListEventMappings(r.Context(), h.pool, wh.ID)
+	if err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, rows)
+}
+
+// DeleteEventMapping handles DELETE /dashboard/api/apps/{id}/webhooks/{webhookId}/mappings/{mappingId}.
+func (h *Handler) DeleteEventMapping(w http.ResponseWriter, r *http.Request) {
+	appID := chi.URLParam(r, "id")
+	app, ok := h.webhookRBACGate(w, r, appID)
+	if !ok {
+		return
+	}
+	webhookID := chi.URLParam(r, "webhookId")
+	wh, ok := h.getScopedWebhook(w, r, appID, webhookID)
+	if !ok {
+		return
+	}
+	mappingID := chi.URLParam(r, "mappingId")
+
+	if err := DeleteEventMapping(r.Context(), h.pool, mappingID); err != nil {
+		if errors.Is(err, ErrMappingNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "mapping not found"})
+			return
+		}
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "mapping deleted"})
+	user, _ := UserFromContext(r.Context())
+	h.audit(r.Context(), user.ID, user.Email, "webhook.mapping.delete", "webhook_event_mapping", mappingID, app.Name+"/"+wh.Name, nil, r.RemoteAddr)
+}
+
+// ActivateWebhook handles POST /dashboard/api/apps/{id}/webhooks/{webhookId}/activate.
+// Rejects activation with zero saved mappings (spec Edge Cases) as a 400
+// validation error, never a silent no-op.
+func (h *Handler) ActivateWebhook(w http.ResponseWriter, r *http.Request) {
+	appID := chi.URLParam(r, "id")
+	app, ok := h.webhookRBACGate(w, r, appID)
+	if !ok {
+		return
+	}
+	webhookID := chi.URLParam(r, "webhookId")
+	wh, ok := h.getScopedWebhook(w, r, appID, webhookID)
+	if !ok {
+		return
+	}
+
+	if err := ActivateWebhook(r.Context(), h.pool, wh.ID); err != nil {
+		switch {
+		case errors.Is(err, ErrNoMappings):
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "cannot activate a webhook with zero saved mappings"})
+		case errors.Is(err, ErrWebhookNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "webhook not found"})
+		default:
+			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "active"})
+	user, _ := UserFromContext(r.Context())
+	h.audit(r.Context(), user.ID, user.Email, "webhook.activate", "webhook", wh.ID, app.Name+"/"+wh.Name, nil, r.RemoteAddr)
 }

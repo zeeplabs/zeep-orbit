@@ -1,10 +1,10 @@
 package dashboard
 
-// webhooks_handler_test.go — T9 (subscription CRUD), T10 (mapping CRUD +
-// activation) and T11 (delivery listing) of inbound-webhooks. Exercises the
-// dashboard-session-authenticated endpoints via the real HTTP handlers, same
-// depth/shape as table_policies_handler_test.go: RBAC gate, validation-error
-// mapping, and the audit_log side effect on every mutation.
+// webhooks_handler_test.go — T9 (subscription CRUD) and T10 (mapping CRUD +
+// activation) of inbound-webhooks. Exercises the dashboard-session-
+// authenticated endpoints via the real HTTP handlers, same depth/shape as
+// table_policies_handler_test.go: RBAC gate, validation-error mapping, and
+// the audit_log side effect on every mutation.
 //
 // Skips if TEST_DATABASE_URL is not set.
 
@@ -306,5 +306,180 @@ func TestDeleteWebhookHandler_SoftDeletesAndAudits(t *testing.T) {
 	}
 	if auditCount != 1 {
 		t.Errorf("audit_log rows for webhook.delete = %d, want 1", auditCount)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// T10: mapping CRUD + activation
+// ----------------------------------------------------------------------------
+
+func saveTestMapping(t *testing.T, h *Handler, appID, webhookID string, admin *DashboardUser, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/dashboard/api/apps/%s/webhooks/%s/mappings", appID, webhookID), bytes.NewReader([]byte(body)))
+	req.Header.Set("Content-Type", "application/json")
+	req = withUser(req, admin)
+	req = withChiParams(req, map[string]string{"id": appID, "webhookId": webhookID})
+	w := httptest.NewRecorder()
+	h.SaveEventMapping(w, req)
+	return w
+}
+
+// TestSaveEventMappingHandler_HappyPathAudits: T10 Done-when "Every mutation
+// produces an audit_log entry".
+func TestSaveEventMappingHandler_HappyPathAudits(t *testing.T) {
+	pool, h, actors, appID, _ := webhooksHandlerTestPool(t)
+	defer pool.Close()
+
+	created := createTestWebhook(t, h, appID, actors["appadmin"])
+	body := `{"event_type_value":"employee.created","action":"insert","target_table":"employees","field_mappings":[{"source_path":"id","column":"external_id"},{"source_path":"name","column":"full_name"}]}`
+	w := saveTestMapping(t, h, appID, created.ID, actors["appadmin"], body)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("save mapping: status = %d, want 201, body=%s", w.Code, w.Body.String())
+	}
+	var row EventMappingRow
+	if err := json.Unmarshal(w.Body.Bytes(), &row); err != nil {
+		t.Fatalf("decode save mapping response: %v", err)
+	}
+	if row.Action != "insert" || row.TargetTable != "employees" {
+		t.Errorf("saved mapping = %+v, want action=insert target_table=employees", row)
+	}
+
+	var auditCount int
+	if err := pool.QueryRow(context.Background(),
+		`SELECT COUNT(*) FROM zeep_system.audit_log WHERE action = 'webhook.mapping.save'`,
+	).Scan(&auditCount); err != nil {
+		t.Fatalf("count audit rows: %v", err)
+	}
+	if auditCount != 1 {
+		t.Errorf("audit_log rows for webhook.mapping.save = %d, want 1", auditCount)
+	}
+}
+
+// TestSaveEventMappingHandler_UnknownTableReturns400: T10 Done-when "Save
+// mapping surfaces the store's validation errors (unknown table/column ...)
+// as 400, not 500".
+func TestSaveEventMappingHandler_UnknownTableReturns400(t *testing.T) {
+	pool, h, actors, appID, _ := webhooksHandlerTestPool(t)
+	defer pool.Close()
+
+	created := createTestWebhook(t, h, appID, actors["appadmin"])
+	body := `{"event_type_value":"employee.created","action":"insert","target_table":"does_not_exist","field_mappings":[{"source_path":"id","column":"external_id"}]}`
+	w := saveTestMapping(t, h, appID, created.ID, actors["appadmin"], body)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400, body=%s", w.Code, w.Body.String())
+	}
+	var resp map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if resp["error"] == "" || resp["error"] == "internal error" {
+		t.Errorf("expected a descriptive validation error, got %q", resp["error"])
+	}
+}
+
+// TestActivateWebhookHandler_ZeroMappingsReturns400: T10 Done-when "Activate
+// on a webhook with zero mappings returns 400 with a clear message, not a
+// silent no-op" (spec Edge Cases).
+func TestActivateWebhookHandler_ZeroMappingsReturns400(t *testing.T) {
+	pool, h, actors, appID, _ := webhooksHandlerTestPool(t)
+	defer pool.Close()
+
+	created := createTestWebhook(t, h, appID, actors["appadmin"])
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/dashboard/api/apps/%s/webhooks/%s/activate", appID, created.ID), nil)
+	req = withUser(req, actors["appadmin"])
+	req = withChiParams(req, map[string]string{"id": appID, "webhookId": created.ID})
+	w := httptest.NewRecorder()
+	h.ActivateWebhook(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400, body=%s", w.Code, w.Body.String())
+	}
+	var resp map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if resp["error"] == "" {
+		t.Error("expected a clear validation error message")
+	}
+
+	wh, err := GetWebhookByID(context.Background(), pool, appID, created.ID)
+	if err != nil {
+		t.Fatalf("get webhook: %v", err)
+	}
+	if wh.Status != "capture" {
+		t.Errorf("status = %q, want %q (rejected activation must not change state)", wh.Status, "capture")
+	}
+}
+
+// TestActivateWebhookHandler_SuccessAudits: T10 activate-success case,
+// spec P2 AC2 "webhook that has at least one saved mapping" flips to active.
+func TestActivateWebhookHandler_SuccessAudits(t *testing.T) {
+	pool, h, actors, appID, _ := webhooksHandlerTestPool(t)
+	defer pool.Close()
+
+	created := createTestWebhook(t, h, appID, actors["appadmin"])
+	mapBody := `{"event_type_value":"employee.created","action":"insert","target_table":"employees","field_mappings":[{"source_path":"id","column":"external_id"}]}`
+	if w := saveTestMapping(t, h, appID, created.ID, actors["appadmin"], mapBody); w.Code != http.StatusCreated {
+		t.Fatalf("save mapping precondition: status = %d, body=%s", w.Code, w.Body.String())
+	}
+
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/dashboard/api/apps/%s/webhooks/%s/activate", appID, created.ID), nil)
+	req = withUser(req, actors["appadmin"])
+	req = withChiParams(req, map[string]string{"id": appID, "webhookId": created.ID})
+	w := httptest.NewRecorder()
+	h.ActivateWebhook(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("activate: status = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+
+	wh, err := GetWebhookByID(context.Background(), pool, appID, created.ID)
+	if err != nil {
+		t.Fatalf("get webhook: %v", err)
+	}
+	if wh.Status != "active" {
+		t.Errorf("status = %q, want %q", wh.Status, "active")
+	}
+
+	var auditCount int
+	if err := pool.QueryRow(context.Background(),
+		`SELECT COUNT(*) FROM zeep_system.audit_log WHERE action = 'webhook.activate'`,
+	).Scan(&auditCount); err != nil {
+		t.Fatalf("count audit rows: %v", err)
+	}
+	if auditCount != 1 {
+		t.Errorf("audit_log rows for webhook.activate = %d, want 1", auditCount)
+	}
+}
+
+// TestDeleteEventMappingHandler: T10 delete mapping case.
+func TestDeleteEventMappingHandler(t *testing.T) {
+	pool, h, actors, appID, _ := webhooksHandlerTestPool(t)
+	defer pool.Close()
+
+	created := createTestWebhook(t, h, appID, actors["appadmin"])
+	mapBody := `{"event_type_value":"employee.created","action":"insert","target_table":"employees","field_mappings":[{"source_path":"id","column":"external_id"}]}`
+	wCreate := saveTestMapping(t, h, appID, created.ID, actors["appadmin"], mapBody)
+	if wCreate.Code != http.StatusCreated {
+		t.Fatalf("save mapping precondition: status = %d, body=%s", wCreate.Code, wCreate.Body.String())
+	}
+	var mapping EventMappingRow
+	if err := json.Unmarshal(wCreate.Body.Bytes(), &mapping); err != nil {
+		t.Fatalf("decode mapping: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/dashboard/api/apps/%s/webhooks/%s/mappings/%s", appID, created.ID, mapping.ID), nil)
+	req = withUser(req, actors["appadmin"])
+	req = withChiParams(req, map[string]string{"id": appID, "webhookId": created.ID, "mappingId": mapping.ID})
+	w := httptest.NewRecorder()
+	h.DeleteEventMapping(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("delete mapping: status = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+
+	mappings, err := ListEventMappings(context.Background(), pool, created.ID)
+	if err != nil {
+		t.Fatalf("list mappings after delete: %v", err)
+	}
+	if len(mappings) != 0 {
+		t.Errorf("expected 0 mappings after delete, got %d", len(mappings))
 	}
 }

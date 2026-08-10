@@ -351,14 +351,16 @@ T16 -> T17
 - Skill: NONE
 
 **Done when**:
-- [ ] Save mapping surfaces the store's validation errors (unknown table/column, missing match key) as `400`, not `500`
-- [ ] Activate on a webhook with zero mappings returns `400` with a clear message, not a silent no-op
-- [ ] Every mutation produces an `audit_log` entry
-- [ ] Gate check passes: `go test ./internal/dashboard/...`
-- [ ] Test count: at least 5 new tests (save mapping happy path, unknown table 400, activate-empty 400, activate-success, delete mapping)
+- [x] Save mapping surfaces the store's validation errors (unknown table/column, missing match key) as `400`, not `500`
+- [x] Activate on a webhook with zero mappings returns `400` with a clear message, not a silent no-op
+- [x] Every mutation produces an `audit_log` entry
+- [x] Gate check passes: `go test ./internal/dashboard/...`
+- [x] Test count: at least 5 new tests (save mapping happy path, unknown table 400, activate-empty 400, activate-success, delete mapping) (5 tests, all pass)
 
 **Tests**: integration
 **Gate**: quick
+
+**Status**: ✅ Complete
 
 ---
 
