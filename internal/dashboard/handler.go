@@ -1423,6 +1423,66 @@ func (h *Handler) CreateTablePolicy(w http.ResponseWriter, r *http.Request) {
 	h.audit(r.Context(), user.ID, user.Email, "app.table_policy.create", "table_policy", row.ID, app.Name+"/"+tableName+"/"+row.PgPolicyName, nil, r.RemoteAddr)
 }
 
+// UpdateTablePolicy handles PUT /dashboard/api/apps/{id}/tables/{table}/policies/{policyId}.
+func (h *Handler) UpdateTablePolicy(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appID := chi.URLParam(r, "id")
+	tableName := chi.URLParam(r, "table")
+	policyID := chi.URLParam(r, "policyId")
+	app, role, err := GetApp(r.Context(), h.pool, appID, user)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+	if !role.CanManage() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+	table := findAppTableByName(app, tableName)
+	if table == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
+	var body PolicyDef
+	if !h.decodeJSONBody(w, r, &body) {
+		return
+	}
+
+	schemaName := schemaNameForDB(app.Name)
+	row, err := UpdateTablePolicy(r.Context(), h.pool, appID, schemaName, tableName, policyID, table.Columns, body, user.ID)
+	if err != nil {
+		var valErr *provisioner.ValidationError
+		switch {
+		case errors.As(err, &valErr):
+			// Safe to expose: same exception as CreateTablePolicy above
+			// (AGENTS.md §4 — provisioner.ValidationError never leaks
+			// internal detail, only which clause/field failed).
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": valErr.Error()})
+		case errors.Is(err, ErrPolicyNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "policy not found"})
+		case errors.Is(err, ErrPolicyConflict):
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "a policy with this name already exists on this table"})
+		default:
+			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, row)
+	h.audit(r.Context(), user.ID, user.Email, "app.table_policy.update", "table_policy", row.ID, app.Name+"/"+tableName+"/"+row.PgPolicyName, nil, r.RemoteAddr)
+}
+
 // DeleteTablePolicy handles DELETE /dashboard/api/apps/{id}/tables/{table}/policies/{policyId}.
 func (h *Handler) DeleteTablePolicy(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
