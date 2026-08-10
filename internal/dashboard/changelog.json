@@ -1,6 +1,42 @@
 {
   "entries": [
     {
+      "version": "v1.0.0",
+      "release_date": "2026-08-06",
+      "title": {"en": "Per-App Roles, 4-Tier Platform Roles & Dashboard Redesign", "pt-BR": "Papéis por App, 4 Níveis de Papel de Plataforma e Redesign do Dashboard"},
+      "summary": {"en": "Fine-grained access control at both the platform and per-app level, table relationships and indexes in the schema builder, retention/purge and query-timeout controls, a full dashboard visual redesign, and a round of security and stability fixes found in a pre-release audit.", "pt-BR": "Controle de acesso granular no nível de plataforma e por app, relacionamentos e índices no schema builder, controles de retenção/purge e timeout de query, um redesign visual completo do dashboard, e uma rodada de correções de segurança e estabilidade encontradas numa auditoria pré-release."},
+      "sections": [
+        {
+          "type": "features",
+          "items": [
+            {"description": {"en": "Per-app roles (admin / editor / viewer) — every app now has per-user membership with a role that gates reads, writes, and management actions.", "pt-BR": "Papéis por app (admin / editor / viewer) — cada app agora tem membership por usuário com um papel que controla leitura, escrita e ações de gerenciamento."}},
+            {"description": {"en": "4-tier platform roles (superadmin / admin / auditor / member), replacing the old 2-tier model, with a single permission matrix driving both backend enforcement and the dashboard UI.", "pt-BR": "4 níveis de papel de plataforma (superadmin / admin / auditor / member), substituindo o modelo antigo de 2 níveis, com uma matriz de permissão única controlando tanto o backend quanto a UI do dashboard."}},
+            {"description": {"en": "Table relationships (foreign keys) and indexes in the schema builder, with validation, topological ordering, and idempotent provisioning.", "pt-BR": "Relacionamentos entre tabelas (foreign keys) e índices no schema builder, com validação, ordenação topológica e provisionamento idempotente."}},
+            {"description": {"en": "Retention period + soft-delete purge, configurable query statement timeout, and a configurable CSV export row cap (Settings → Database).", "pt-BR": "Período de retenção + purge de soft-delete, timeout de query configurável, e limite de linhas de exportação CSV configurável (Configurações → Database)."}},
+            {"description": {"en": "Render deploy provider: Environment ID field and a live \"Recent Deploys\" list.", "pt-BR": "Provedor de deploy Render: campo Environment ID e uma lista viva de \"Deploys Recentes\"."}},
+            {"description": {"en": "Full dashboard visual redesign — every screen re-skinned to the new design system, with framer-motion and lucide-react fully removed.", "pt-BR": "Redesign visual completo do dashboard — todas as telas com a nova identidade visual, com framer-motion e lucide-react totalmente removidos."}}
+          ]
+        },
+        {
+          "type": "security",
+          "items": [
+            {"description": {"en": "Fixed: a platform-wide admin/auditor with explicit per-app membership was incorrectly downgraded to viewer on that app instead of keeping their real role.", "pt-BR": "Corrigido: um admin/auditor de plataforma com membership explícita num app era incorretamente rebaixado a viewer nesse app em vez de manter seu papel real."}},
+            {"description": {"en": "Fixed: an app's JWT secret was exposed to any role with read access via GET /apps/{id}, instead of only to admins.", "pt-BR": "Corrigido: o JWT secret de um app era exposto a qualquer papel com acesso de leitura via GET /apps/{id}, em vez de só a admins."}},
+            {"description": {"en": "Fixed: several per-app actions (deactivate/reset user sessions, token issuance, table changes) and the Data Browser's write endpoints had no role gate, letting read-only roles perform writes.", "pt-BR": "Corrigido: várias ações por app (desativar/resetar sessões de usuário, emissão de token, mudanças de tabela) e os endpoints de escrita do Data Browser não tinham verificação de papel, permitindo que papéis read-only escrevessem."}},
+            {"description": {"en": "Fixed: the \"at least one admin per app\" invariant never actually ran due to an invalid Postgres query, and the two-admin concurrent-demotion path could deadlock — both are now correct under concurrency.", "pt-BR": "Corrigido: a invariante de \"pelo menos um admin por app\" nunca de fato rodava por uma query inválida no Postgres, e a demoção concorrente de dois admins podia causar deadlock — ambos agora funcionam corretamente sob concorrência."}}
+          ]
+        },
+        {
+          "type": "fixes",
+          "items": [
+            {"description": {"en": "Fixed: deleting an app without permission returned a 500 error instead of a clean 403.", "pt-BR": "Corrigido: apagar um app sem permissão retornava erro 500 em vez de um 403 limpo."}},
+            {"description": {"en": "Fixed: the role migration that introduced the 4-tier model could re-run and silently re-demote admins on every server restart.", "pt-BR": "Corrigido: a migração de papéis que introduziu o modelo de 4 níveis podia rodar de novo e rebaixar admins silenciosamente a cada restart do servidor."}},
+            {"description": {"en": "Hardened the soft-delete purge job against multi-replica races, partial failures, and a fragile date-interval query.", "pt-BR": "Robustez do job de purge de soft-delete contra corridas entre réplicas, falhas parciais, e uma query de intervalo de data fragilizada."}}
+          ]
+        }
+      ]
+    },
+    {
       "version": "v0.5.1",
       "release_date": "2026-07-31",
       "title": {"en": "Render Deploy Reliability & GitHub Integration Access Control", "pt-BR": "Confiabilidade do Deploy Render e Controle de Acesso da Integração GitHub"},

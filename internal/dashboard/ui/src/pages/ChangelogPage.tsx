@@ -143,6 +143,13 @@ function ChangelogEntryView({ entry }: { entry: ChangelogEntry }) {
   )
 }
 
+/**
+ * Tela de Changelog (T2.9 do spec dashboard-redesign).
+ * Handoff §F3-11: timeline com versão+data à esquerda, conteúdo com border-left
+ * à direita. Badges coloridos por tipo (success/primary/warning/danger/accent).
+ * Drop lucide-react (Megaphone) e tokens hardcoded; usa PageHeader, EmptyState,
+ * LoadingState, design tokens canônicos.
+ */
 export default function ChangelogPage() {
   const { t } = useTranslation()
   const [offset, setOffset] = useState(0)

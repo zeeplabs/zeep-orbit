@@ -134,6 +134,12 @@ function CopyButton({ value, label }: { value: string; label: string }) {
   )
 }
 
+/**
+ * Tela de SDK clients (T2.8 do spec dashboard-redesign).
+ * Handoff §F3-10: grid 2-col, cards com nome + pkg + install + code snippet
+ * com syntax highlighting, ícone de copy em cada bloco.
+ * Drop framer-motion + lucide-react (icons agora via <Icon>), tokens canônicos.
+ */
 export default function SdkPage() {
   const { t } = useTranslation()
 
