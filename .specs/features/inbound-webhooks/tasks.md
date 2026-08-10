@@ -191,14 +191,16 @@ T16 -> T17
 - Skill: NONE
 
 **Done when**:
-- [ ] `InsertDelivery` accepts every `outcome` value from `design.md`'s Data Models
-- [ ] `ListDeliveries` returns newest-first
-- [ ] `PurgeExpiredDeliveries` removes only rows older than the cutoff, leaves newer rows and rows from other webhooks untouched
-- [ ] Gate check passes: `go test ./internal/dashboard/...`
-- [ ] Test count: at least 4 tests (insert+list happy path, list ordering, purge removes old only, purge no-op when nothing expired)
+- [x] `InsertDelivery` accepts every `outcome` value from `design.md`'s Data Models
+- [x] `ListDeliveries` returns newest-first
+- [x] `PurgeExpiredDeliveries` removes only rows older than the cutoff, leaves newer rows and rows from other webhooks untouched
+- [x] Gate check passes: `go test ./internal/dashboard/...`
+- [x] Test count: at least 4 tests (insert+list happy path, list ordering, purge removes old only, purge no-op when nothing expired) (5 tests, all pass)
 
 **Tests**: integration
 **Gate**: quick
+
+**Status**: ✅ Complete
 
 ---
 

@@ -143,7 +143,7 @@ App owners today have no way to let an external system (Google Workspace, or any
 | WEBHOOK-03 | P1: Create webhook + capture sample | Design | Pending |
 | WEBHOOK-04 | P1: Create webhook + capture sample | Design | Pending |
 | WEBHOOK-05 | P1: Create webhook + capture sample | Design | Pending |
-| WEBHOOK-06 | P1: Create webhook + capture sample | Design | Pending |
+| WEBHOOK-06 | P1: Create webhook + capture sample | Design | Implementing |
 | WEBHOOK-07 | P2: Map + activate for inserts | Design | Implementing |
 | WEBHOOK-08 | P2: Map + activate for inserts | Design | Pending |
 | WEBHOOK-09 | P2: Map + activate for inserts | Design | Pending |
@@ -155,9 +155,9 @@ App owners today have no way to let an external system (Google Workspace, or any
 | WEBHOOK-15 | P2: Update/delete with match key | Design | Pending |
 | WEBHOOK-16 | P2: Update/delete with match key | Design | Pending |
 | WEBHOOK-17 | P2: Update/delete with match key | Design | Implementing |
-| WEBHOOK-18 | P2: Dashboard delivery log | Design | Pending |
-| WEBHOOK-19 | P2: Dashboard delivery log | Design | Pending |
-| WEBHOOK-20 | P2: Dashboard delivery log | Design | Pending |
+| WEBHOOK-18 | P2: Dashboard delivery log | Design | Implementing |
+| WEBHOOK-19 | P2: Dashboard delivery log | Design | Implementing |
+| WEBHOOK-20 | P2: Dashboard delivery log | Design | Implementing |
 | WEBHOOK-21 | P3: Webhook lifecycle | Design | Implementing |
 | WEBHOOK-22 | P3: Webhook lifecycle | Design | Implementing |
 | WEBHOOK-23 | P3: Webhook lifecycle | Design | Pending |
