@@ -1,6 +1,20 @@
 {
   "entries": [
     {
+      "version": "v1.2.0",
+      "release_date": "2026-08-10",
+      "title": {"en": "Table Policy Editing", "pt-BR": "Edição de Table Policies"},
+      "summary": {"en": "Row policies (RLS) can now be edited in place instead of deleted and recreated, closing the last gap in the policy management flow.", "pt-BR": "Row policies (RLS) agora podem ser editadas diretamente, sem precisar deletar e recriar — fecha a última lacuna do fluxo de gerenciamento de policies."},
+      "sections": [
+        {
+          "type": "features",
+          "items": [
+            {"description": {"en": "Edit an existing table policy's roles, clauses, and action from the Policies tab — the form opens pre-populated with the policy's current data, including any role no longer in the app's configured role list, still shown as a selected chip.", "pt-BR": "Edite os papéis, cláusulas e ação de uma table policy existente direto na aba Policies — o formulário abre pré-populado com os dados atuais da policy, incluindo qualquer papel que não esteja mais na lista configurada do app, ainda exibido como chip selecionado."}}
+          ]
+        }
+      ]
+    },
+    {
       "version": "v1.1.0",
       "release_date": "2026-08-10",
       "title": {"en": "End-User Row Policies (native RLS) & App User Management", "pt-BR": "Row Policies para End Users (RLS nativo) e Gestão de Usuários do App"},
