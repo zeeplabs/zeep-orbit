@@ -71,9 +71,9 @@ T5 → T6 → T7
 - Skill: `security-best-practices`
 
 **Done when**:
-- [ ] Duas colunas adicionadas na mesma lista de `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`
-- [ ] `go build ./...` limpo
-- [ ] Idempotência confirmada (rodar a migração 2x não erra)
+- [x] Duas colunas adicionadas na mesma lista de `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`
+- [x] `go build ./...` limpo
+- [x] Idempotência confirmada (rodar a migração 2x não erra)
 
 **Tests**: none
 **Gate**: quick
