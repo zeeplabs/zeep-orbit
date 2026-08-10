@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 9,
+  "next_id": 11,
   "lessons": [
     {
       "id": "L-001",
@@ -148,6 +148,42 @@
       ],
       "created": "2026-08-08T20:08:15Z",
       "last_seen": "2026-08-08T20:08:15Z"
+    },
+    {
+      "id": "L-009",
+      "key": "spec_precision_gap::when an ac requires transactional abort or unconditional write behavior with no observable side effect difference add a test that directly forces the exact scenario mid tx failure injection resubmit identical payload instead of relying on the code structurally can t do otherwise",
+      "text": "When an AC requires transactional-abort or unconditional-write behavior with no observable side effect difference, add a test that directly forces the exact scenario (mid-tx failure injection; resubmit-identical-payload) instead of relying on 'the code structurally can't do otherwise'.",
+      "signal": "spec_precision_gap",
+      "scope": "",
+      "status": "candidate",
+      "features": [
+        "table-policy-edit"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "AC5/AC8"
+      ],
+      "created": "2026-08-10T17:26:16Z",
+      "last_seen": "2026-08-10T17:26:16Z"
+    },
+    {
+      "id": "L-010",
+      "key": "gate_fail::when a task s done when checklist lists fewer scenarios than the test coverage matrix row above it treat the matrix as authoritative and add the missing scenario to done when before implementing not after",
+      "text": "When a task's Done-when checklist lists fewer scenarios than the Test Coverage Matrix row above it, treat the matrix as authoritative and add the missing scenario to Done-when before implementing, not after.",
+      "signal": "gate_fail",
+      "scope": "",
+      "status": "candidate",
+      "features": [
+        "table-policy-edit"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "tasks.md Test Coverage Matrix line 23 vs T2 Done-when"
+      ],
+      "created": "2026-08-10T17:26:16Z",
+      "last_seen": "2026-08-10T17:26:16Z"
     }
   ]
 }

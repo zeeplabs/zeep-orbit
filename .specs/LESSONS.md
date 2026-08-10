@@ -62,6 +62,18 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: AUT-05 (internal/dashboard/ui/src/components/patterns/PhoneInput.tsx)
 - last seen: 2026-08-08T20:08:15Z
 
+### L-009 - When an AC requires transactional-abort or unconditional-write behavior with no observable side effect difference, add a test that directly forces the exact scenario (mid-tx failure injection; resubmit-identical-payload) instead of relying on 'the code structurally can't do otherwise'.
+- signal: `spec_precision_gap` · recurrence: 1 feature(s) · harmful: 0
+- features: table-policy-edit
+- evidence: AC5/AC8
+- last seen: 2026-08-10T17:26:16Z
+
+### L-010 - When a task's Done-when checklist lists fewer scenarios than the Test Coverage Matrix row above it, treat the matrix as authoritative and add the missing scenario to Done-when before implementing, not after.
+- signal: `gate_fail` · recurrence: 1 feature(s) · harmful: 0
+- features: table-policy-edit
+- evidence: tasks.md Test Coverage Matrix line 23 vs T2 Done-when
+- last seen: 2026-08-10T17:26:16Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.
