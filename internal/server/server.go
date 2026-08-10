@@ -192,6 +192,7 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Post("/api/apps/{id}/webhooks/{webhookId}/mappings", dashH.SaveEventMapping)
 		r.With(dashboard.RequireAuth(pool)).Delete("/api/apps/{id}/webhooks/{webhookId}/mappings/{mappingId}", dashH.DeleteEventMapping)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/apps/{id}/webhooks/{webhookId}/activate", dashH.ActivateWebhook)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/apps/{id}/webhooks/{webhookId}/deliveries", dashH.ListWebhookDeliveries)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/apps/{id}/tables/{table}/policies", dashH.ListTablePolicies)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/apps/{id}/tables/{table}/policies", dashH.CreateTablePolicy)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/apps/{id}/tables/{table}/policies/{policyId}", dashH.UpdateTablePolicy)

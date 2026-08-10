@@ -1,10 +1,10 @@
 package dashboard
 
-// webhooks_handler_test.go — T9 (subscription CRUD) and T10 (mapping CRUD +
-// activation) of inbound-webhooks. Exercises the dashboard-session-
-// authenticated endpoints via the real HTTP handlers, same depth/shape as
-// table_policies_handler_test.go: RBAC gate, validation-error mapping, and
-// the audit_log side effect on every mutation.
+// webhooks_handler_test.go — T9 (subscription CRUD), T10 (mapping CRUD +
+// activation) and T11 (delivery listing) of inbound-webhooks. Exercises the
+// dashboard-session-authenticated endpoints via the real HTTP handlers, same
+// depth/shape as table_policies_handler_test.go: RBAC gate, validation-error
+// mapping, and the audit_log side effect on every mutation.
 //
 // Skips if TEST_DATABASE_URL is not set.
 
@@ -481,5 +481,84 @@ func TestDeleteEventMappingHandler(t *testing.T) {
 	}
 	if len(mappings) != 0 {
 		t.Errorf("expected 0 mappings after delete, got %d", len(mappings))
+	}
+}
+
+// ----------------------------------------------------------------------------
+// T11: delivery log listing
+// ----------------------------------------------------------------------------
+
+// TestListWebhookDeliveriesHandler_NewestFirstWithPayloadAndError: T11
+// Done-when "Endpoint returns deliveries newest-first with raw payload and
+// error detail included per entry" (spec P2 dashboard-delivery-log AC1/AC2).
+func TestListWebhookDeliveriesHandler_NewestFirstWithPayloadAndError(t *testing.T) {
+	pool, h, actors, appID, _ := webhooksHandlerTestPool(t)
+	defer pool.Close()
+
+	created := createTestWebhook(t, h, appID, actors["appadmin"])
+
+	if err := InsertDelivery(context.Background(), pool, DeliveryEntry{
+		WebhookID: created.ID, HTTPStatus: 200, Outcome: "captured", RawPayload: []byte(`{"a":1}`),
+	}); err != nil {
+		t.Fatalf("insert delivery 1: %v", err)
+	}
+	time.Sleep(5 * time.Millisecond)
+	if err := InsertDelivery(context.Background(), pool, DeliveryEntry{
+		WebhookID: created.ID, HTTPStatus: 500, Outcome: "write_error", RawPayload: []byte(`{"b":2}`), ErrorDetail: "boom",
+	}); err != nil {
+		t.Fatalf("insert delivery 2: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/dashboard/api/apps/%s/webhooks/%s/deliveries", appID, created.ID), nil)
+	req = withUser(req, actors["appadmin"])
+	req = withChiParams(req, map[string]string{"id": appID, "webhookId": created.ID})
+	w := httptest.NewRecorder()
+	h.ListWebhookDeliveries(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("list deliveries: status = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+	var rows []DeliveryRow
+	if err := json.Unmarshal(w.Body.Bytes(), &rows); err != nil {
+		t.Fatalf("decode deliveries response: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 deliveries, got %d", len(rows))
+	}
+	if rows[0].Outcome != "write_error" {
+		t.Errorf("rows[0].Outcome = %q, want %q (newest first)", rows[0].Outcome, "write_error")
+	}
+	if rows[0].ErrorDetail == nil || *rows[0].ErrorDetail != "boom" {
+		t.Errorf("rows[0].ErrorDetail = %v, want %q", rows[0].ErrorDetail, "boom")
+	}
+	if rows[0].RawPayload["b"] != float64(2) {
+		t.Errorf("rows[0].RawPayload = %v, want raw payload preserved", rows[0].RawPayload)
+	}
+	if rows[1].Outcome != "captured" {
+		t.Errorf("rows[1].Outcome = %q, want %q", rows[1].Outcome, "captured")
+	}
+}
+
+// TestListWebhookDeliveriesHandler_EmptyForFreshWebhook: T11 Done-when
+// "empty list for a fresh webhook".
+func TestListWebhookDeliveriesHandler_EmptyForFreshWebhook(t *testing.T) {
+	pool, h, actors, appID, _ := webhooksHandlerTestPool(t)
+	defer pool.Close()
+
+	created := createTestWebhook(t, h, appID, actors["appadmin"])
+
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/dashboard/api/apps/%s/webhooks/%s/deliveries", appID, created.ID), nil)
+	req = withUser(req, actors["appadmin"])
+	req = withChiParams(req, map[string]string{"id": appID, "webhookId": created.ID})
+	w := httptest.NewRecorder()
+	h.ListWebhookDeliveries(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("list deliveries: status = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+	var rows []DeliveryRow
+	if err := json.Unmarshal(w.Body.Bytes(), &rows); err != nil {
+		t.Fatalf("decode deliveries response: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("expected 0 deliveries for a fresh webhook, got %d", len(rows))
 	}
 }

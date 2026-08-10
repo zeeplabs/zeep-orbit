@@ -377,12 +377,14 @@ T16 -> T17
 - Skill: NONE
 
 **Done when**:
-- [ ] Endpoint returns deliveries newest-first with raw payload and error detail included per entry
-- [ ] Gate check passes: `go test ./internal/dashboard/...`
-- [ ] Test count: at least 2 new tests (happy path listing, empty list for a fresh webhook)
+- [x] Endpoint returns deliveries newest-first with raw payload and error detail included per entry
+- [x] Gate check passes: `go test ./internal/dashboard/...`
+- [x] Test count: at least 2 new tests (happy path listing, empty list for a fresh webhook) (2 tests, all pass)
 
 **Tests**: integration
 **Gate**: quick
+
+**Status**: ✅ Complete
 
 ---
 

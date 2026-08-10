@@ -1,14 +1,16 @@
 package dashboard
 
 // webhooks_handler.go — dashboard-session-authenticated CRUD for webhook
-// subscriptions (T9) and their event mappings + activation (T10). Mirrors
-// the table_policies handler pattern in handler.go: RBAC check (GetApp +
-// role.CanManage()) → validate → store call → h.audit(...) on mutation →
-// JSON response (design.md, Dashboard Webhook Handler component).
+// subscriptions (T9), their event mappings + activation (T10), and delivery
+// log listing (T11). Mirrors the table_policies handler pattern in
+// handler.go: RBAC check (GetApp + role.CanManage()) → validate → store call
+// → h.audit(...) on mutation → JSON response (design.md, Dashboard Webhook
+// Handler component).
 
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -381,4 +383,49 @@ func (h *Handler) ActivateWebhook(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "active"})
 	user, _ := UserFromContext(r.Context())
 	h.audit(r.Context(), user.ID, user.Email, "webhook.activate", "webhook", wh.ID, app.Name+"/"+wh.Name, nil, r.RemoteAddr)
+}
+
+// ----------------------------------------------------------------------------
+// Delivery log listing (T11)
+// ----------------------------------------------------------------------------
+
+const (
+	defaultDeliveryPageSize = 50
+	maxDeliveryPageSize     = 200
+)
+
+// ListWebhookDeliveries handles GET /dashboard/api/apps/{id}/webhooks/{webhookId}/deliveries.
+// Returns newest-first, raw payload and error detail included per entry
+// (spec P2 dashboard-delivery-log AC1/AC2) — reuses WebhookDeliveryStore.ListDeliveries
+// exactly, no extra filtering/shaping at the handler layer.
+func (h *Handler) ListWebhookDeliveries(w http.ResponseWriter, r *http.Request) {
+	appID := chi.URLParam(r, "id")
+	if _, ok := h.webhookRBACGate(w, r, appID); !ok {
+		return
+	}
+	webhookID := chi.URLParam(r, "webhookId")
+	wh, ok := h.getScopedWebhook(w, r, appID, webhookID)
+	if !ok {
+		return
+	}
+
+	limit := defaultDeliveryPageSize
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= maxDeliveryPageSize {
+			limit = n
+		}
+	}
+	offset := 0
+	if v := r.URL.Query().Get("offset"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			offset = n
+		}
+	}
+
+	rows, err := ListDeliveries(r.Context(), h.pool, wh.ID, limit, offset)
+	if err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, rows)
 }
