@@ -449,12 +449,14 @@ T16 -> T17
 - Skill: NONE
 
 **Done when**:
-- [ ] Every user-facing string routed through `t()`, present in both locale files
-- [ ] Create form's method field offers the same options as the backend accepts (GET/POST/PUT/PATCH)
-- [ ] Gate check passes: `npm run build`
+- [x] Every user-facing string routed through `t()`, present in both locale files
+- [x] Create form's method field offers the same options as the backend accepts (GET/POST/PUT/PATCH)
+- [x] Gate check passes: `npm run build`
 
 **Tests**: none
 **Gate**: full
+
+**Status**: ✅ Complete
 
 ---
 
