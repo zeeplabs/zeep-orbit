@@ -76,14 +76,14 @@ Toda ambiguidade está resolvida ou registrada aqui — nada fica silenciosament
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| TPEDIT-01 | P1: Admin edita policy existente | Design | Pending |
-| TPEDIT-02 | P1: Admin edita policy existente | Design | Pending |
-| TPEDIT-03 | P1: Admin edita policy existente | Design | Pending |
-| TPEDIT-04 | P1: Admin edita policy existente | Design | Pending |
-| TPEDIT-05 | P1: Admin edita policy existente | Design | Pending |
-| TPEDIT-06 | P1: Admin edita policy existente | Design | Pending |
-| TPEDIT-07 | P1: Admin edita policy existente | Design | Pending |
-| TPEDIT-08 | P1: Admin edita policy existente | Design | Pending |
+| TPEDIT-01 | P1: Admin edita policy existente | Execute | Verified |
+| TPEDIT-02 | P1: Admin edita policy existente | Execute | Verified |
+| TPEDIT-03 | P1: Admin edita policy existente | Execute | Verified |
+| TPEDIT-04 | P1: Admin edita policy existente | Execute | Verified |
+| TPEDIT-05 | P1: Admin edita policy existente | Execute | Verified |
+| TPEDIT-06 | P1: Admin edita policy existente | Execute | Verified |
+| TPEDIT-07 | P1: Admin edita policy existente | Execute | Verified |
+| TPEDIT-08 | P1: Admin edita policy existente | Execute | Verified |
 
 **ID format:** `TPEDIT-[NUMBER]`
 
@@ -91,7 +91,7 @@ Toda ambiguidade está resolvida ou registrada aqui — nada fica silenciosament
 
 **Coverage:** 8 total, 8 mapped to tasks (T1–T7 em `tasks.md`), 0 unmapped. Mapeamento: TPEDIT-01 → T1/T2/T3/T4/T5; TPEDIT-02..05 → T2/T3; TPEDIT-06/07 → T6/T7; TPEDIT-08 → T2/T5.
 
-**Implementação: ainda não iniciada** — o mapeamento existe, mas nenhuma task foi executada (nenhum `UpdateTablePolicy` no código: `internal/dashboard/table_policies_store.go` tem só `CreateTablePolicy`/`ListTablePolicies`/`DeleteTablePolicy`). Status dos requisitos segue `Pending` corretamente; só a linha de coverage estava factualmente errada (corrigida 2026-08-10).
+**Implementação: concluída e verificada (2026-08-10)** — T1–T7 implementados (commits `16650bf`..`df86f21`), gate independente rodado contra Postgres real (não só `go build`/skip): `go test ./internal/dashboard/...` com `TEST_DATABASE_URL` apontando pra um Postgres 16 descartável passou as 9 novas suites de `UpdateTablePolicy`. Ver `.specs/features/table-policy-edit/validation.md` para o relatório completo.
 
 ---
 
