@@ -1039,3 +1039,240 @@ export function useRemoveAppMember(
     },
   })
 }
+
+
+// ----------------------------------------------------------------------------
+// Inbound webhooks (T13) — types + hooks match the dashboard handler
+// responses from T9-T11 (internal/dashboard/webhooks_handler.go) exactly.
+// ----------------------------------------------------------------------------
+
+export interface WebhookSubscription {
+  id: string
+  app_id: string
+  name: string
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH'
+  event_type_path: string
+  event_id_path: string | null
+  status: 'capture' | 'active'
+  captured_sample: Record<string, unknown> | null
+  deleted_at: string | null
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateWebhookInput {
+  name: string
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH'
+  event_type_path: string
+  event_id_path?: string
+}
+
+export interface CreatedWebhook extends WebhookSubscription {
+  /** Plaintext token, returned exactly once by the create endpoint. */
+  token: string
+}
+
+export interface WebhookFieldMapping {
+  source_path: string
+  column: string
+}
+
+export interface WebhookEventMapping {
+  id: string
+  webhook_id: string
+  event_type_value: string
+  action: 'insert' | 'update' | 'delete'
+  target_table: string
+  match_key_column: string | null
+  field_mappings: WebhookFieldMapping[]
+  created_at: string
+  updated_at: string
+}
+
+export interface SaveEventMappingInput {
+  event_type_value: string
+  action: 'insert' | 'update' | 'delete'
+  target_table: string
+  match_key_column?: string
+  field_mappings: WebhookFieldMapping[]
+}
+
+export interface WebhookDelivery {
+  id: string
+  webhook_id: string
+  received_at: string
+  http_status: number
+  outcome:
+    | 'captured'
+    | 'inserted'
+    | 'updated'
+    | 'deleted'
+    | 'unmapped'
+    | 'duplicate_skipped'
+    | 'row_not_found'
+    | 'invalid_token'
+    | 'malformed'
+    | 'write_error'
+  event_type_value: string | null
+  event_id: string | null
+  raw_payload: Record<string, unknown>
+  target_row_id: string | null
+  error_detail: string | null
+}
+
+export function useWebhooks(appId: string): UseQueryResult<WebhookSubscription[]> {
+  return useQuery({
+    queryKey: ['webhooks', appId],
+    queryFn: () => apiFetch<WebhookSubscription[]>(`/dashboard/api/apps/${appId}/webhooks`),
+    enabled: Boolean(appId),
+  })
+}
+
+export function useCreateWebhook(
+  appId: string,
+): UseMutationResult<CreatedWebhook, Error, CreateWebhookInput> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: CreateWebhookInput) =>
+      apiFetch<CreatedWebhook>(`/dashboard/api/apps/${appId}/webhooks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['webhooks', appId] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+export function useRotateWebhookToken(
+  appId: string,
+): UseMutationResult<{ token: string }, Error, string> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (webhookId: string) =>
+      apiFetch<{ token: string }>(
+        `/dashboard/api/apps/${appId}/webhooks/${webhookId}/rotate-token`,
+        { method: 'POST' },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['webhooks', appId] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+export function useDeleteWebhook(
+  appId: string,
+): UseMutationResult<{ message: string }, Error, string> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (webhookId: string) =>
+      apiFetch<{ message: string }>(`/dashboard/api/apps/${appId}/webhooks/${webhookId}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['webhooks', appId] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+export function useEventMappings(
+  appId: string,
+  webhookId: string,
+): UseQueryResult<WebhookEventMapping[]> {
+  return useQuery({
+    queryKey: ['webhook-mappings', appId, webhookId],
+    queryFn: () =>
+      apiFetch<WebhookEventMapping[]>(
+        `/dashboard/api/apps/${appId}/webhooks/${webhookId}/mappings`,
+      ),
+    enabled: Boolean(appId) && Boolean(webhookId),
+  })
+}
+
+export function useSaveEventMapping(
+  appId: string,
+  webhookId: string,
+): UseMutationResult<WebhookEventMapping, Error, SaveEventMappingInput> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: SaveEventMappingInput) =>
+      apiFetch<WebhookEventMapping>(
+        `/dashboard/api/apps/${appId}/webhooks/${webhookId}/mappings`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(input),
+        },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['webhook-mappings', appId, webhookId] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+export function useDeleteEventMapping(
+  appId: string,
+  webhookId: string,
+): UseMutationResult<{ message: string }, Error, string> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (mappingId: string) =>
+      apiFetch<{ message: string }>(
+        `/dashboard/api/apps/${appId}/webhooks/${webhookId}/mappings/${mappingId}`,
+        { method: 'DELETE' },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['webhook-mappings', appId, webhookId] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+export function useActivateWebhook(
+  appId: string,
+): UseMutationResult<{ status: string }, Error, string> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (webhookId: string) =>
+      apiFetch<{ status: string }>(
+        `/dashboard/api/apps/${appId}/webhooks/${webhookId}/activate`,
+        { method: 'POST' },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['webhooks', appId] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+export function useWebhookDeliveries(
+  appId: string,
+  webhookId: string,
+): UseQueryResult<WebhookDelivery[]> {
+  return useQuery({
+    queryKey: ['webhook-deliveries', appId, webhookId],
+    queryFn: () =>
+      apiFetch<WebhookDelivery[]>(
+        `/dashboard/api/apps/${appId}/webhooks/${webhookId}/deliveries`,
+      ),
+    enabled: Boolean(appId) && Boolean(webhookId),
+  })
+}

@@ -425,12 +425,14 @@ T16 -> T17
 - Skill: NONE
 
 **Done when**:
-- [ ] Types match the backend response shapes from T9-T11 exactly
-- [ ] Every mutation hook invalidates the correct query key and has `onError: toast.error`
-- [ ] Gate check passes: `npm run build`
+- [x] Types match the backend response shapes from T9-T11 exactly
+- [x] Every mutation hook invalidates the correct query key and has `onError: toast.error`
+- [x] Gate check passes: `npm run build`
 
 **Tests**: none
 **Gate**: full
+
+**Status**: ✅ Complete
 
 ---
 
