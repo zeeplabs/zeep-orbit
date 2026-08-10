@@ -149,6 +149,15 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 	r.Get("/health", h.HandleHealth)
 	r.Handle("/metrics", promhttp.Handler())
 
+	// Public, unauthenticated inbound webhook route — same tier as /health:
+	// no dashboard session, no end-user JWT, no {app} prefix. The token
+	// lives in the URL itself (see design.md); registered with HandleFunc
+	// (not a verb-specific method) since the webhook's configured HTTP
+	// method is a per-webhook setting the handler itself checks, not a
+	// routing-level constraint.
+	webhookH := NewWebhookHandler(pool, reg)
+	r.HandleFunc("/hooks/{webhookId}/{token}", webhookH.HandleWebhookDelivery)
+
 	dh := docs.NewHandler(reg)
 	r.Get("/docs/", dh.HandleIndex)
 	r.Get("/docs/{app}", dh.HandleUI)

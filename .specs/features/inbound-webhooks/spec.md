@@ -139,10 +139,10 @@ App owners today have no way to let an external system (Google Workspace, or any
 | Requirement ID | Story | Phase | Status |
 |---|---|---|---|
 | WEBHOOK-01 | P1: Create webhook + capture sample | Design | Implementing |
-| WEBHOOK-02 | P1: Create webhook + capture sample | Design | Pending |
-| WEBHOOK-03 | P1: Create webhook + capture sample | Design | Pending |
-| WEBHOOK-04 | P1: Create webhook + capture sample | Design | Pending |
-| WEBHOOK-05 | P1: Create webhook + capture sample | Design | Pending |
+| WEBHOOK-02 | P1: Create webhook + capture sample | Design | Implementing |
+| WEBHOOK-03 | P1: Create webhook + capture sample | Design | Implementing |
+| WEBHOOK-04 | P1: Create webhook + capture sample | Design | Implementing |
+| WEBHOOK-05 | P1: Create webhook + capture sample | Design | Implementing |
 | WEBHOOK-06 | P1: Create webhook + capture sample | Design | Implementing |
 | WEBHOOK-07 | P2: Map + activate for inserts | Design | Implementing |
 | WEBHOOK-08 | P2: Map + activate for inserts | Design | Pending |

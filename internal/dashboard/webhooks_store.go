@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -66,6 +67,20 @@ func generateWebhookToken() (string, error) {
 func hashWebhookToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
+}
+
+// VerifyWebhookToken reports whether a plaintext token presented on an
+// inbound call matches the webhook's stored hash — constant-time so a
+// timing side-channel can't leak the hash byte-by-byte (the token itself is
+// a 256-bit random secret; SHA-256 + constant-time compare is the intended
+// pattern, see design.md Tech Decisions). Used by the public delivery
+// handler (T6), which only has the plaintext token from the URL.
+func VerifyWebhookToken(tokenHash, presentedToken string) bool {
+	if presentedToken == "" {
+		return false
+	}
+	presentedHash := hashWebhookToken(presentedToken)
+	return subtle.ConstantTimeCompare([]byte(tokenHash), []byte(presentedHash)) == 1
 }
 
 // CreateWebhook generates a random token, persists only its SHA-256 hash,

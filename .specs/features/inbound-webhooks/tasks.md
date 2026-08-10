@@ -243,16 +243,18 @@ T16 -> T17
 - Skill: NONE
 
 **Done when**:
-- [ ] Route resolves for any HTTP method; handler itself 404s on a method mismatch against the stored config
-- [ ] Invalid/missing token rejected with `401`, delivery row written with `outcome = invalid_token`
-- [ ] Malformed JSON body rejected with `400`, delivery row written with `outcome = malformed`
-- [ ] A second capture-mode call overwrites the first `captured_sample`
-- [ ] Every branch above writes exactly one delivery row (except the 404 method-mismatch, per design)
-- [ ] Gate check passes: `go test ./internal/server/...`
-- [ ] Test count: at least 6 tests (method mismatch, missing token, wrong token, malformed body, first capture, overwrite capture)
+- [x] Route resolves for any HTTP method; handler itself 404s on a method mismatch against the stored config
+- [x] Invalid/missing token rejected with `401`, delivery row written with `outcome = invalid_token`
+- [x] Malformed JSON body rejected with `400`, delivery row written with `outcome = malformed`
+- [x] A second capture-mode call overwrites the first `captured_sample`
+- [x] Every branch above writes exactly one delivery row (except the 404 method-mismatch, per design)
+- [x] Gate check passes: `go test ./internal/server/...`
+- [x] Test count: at least 6 tests (method mismatch, missing token, wrong token, malformed body, first capture, overwrite capture) (8 tests, all pass)
 
 **Tests**: integration
 **Gate**: quick
+
+**Status**: ✅ Complete
 
 ---
 
