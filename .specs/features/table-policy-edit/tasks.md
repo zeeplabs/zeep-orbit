@@ -150,9 +150,9 @@ T5 → T6 → T7
 - Skill: `security-best-practices`
 
 **Done when**:
-- [ ] `r.With(dashboard.RequireAuth(pool)).Put(".../policies/{policyId}", dashH.UpdateTablePolicy)` registrado
-- [ ] Teste de integração confirma a rota responde via HTTP real (pode estender o de T3)
-- [ ] Gate check passa: `go build ./... && go test ./... && go vet ./...` (gate completo de backend, fecha a Phase 1)
+- [x] `r.With(dashboard.RequireAuth(pool)).Put(".../policies/{policyId}", dashH.UpdateTablePolicy)` registrado
+- [x] Teste de integração confirma a rota responde via HTTP real (pode estender o de T3)
+- [x] Gate check passa: `go build ./... && go test ./... && go vet ./...` (gate completo de backend, fecha a Phase 1)
 
 **Tests**: integration
 **Gate**: full
