@@ -73,7 +73,7 @@ export default function AppDetailsPage() {
     return <ErrorState title={t("appForm.notFound")} />;
   }
 
-  const tabDefs: { v: (typeof TABS)[number]; label: string; badge?: boolean }[] = [
+  const tabDefs: { v: (typeof TABS)[number]; label: string; badge?: "new" | "soon" }[] = [
     { v: "database", label: t("appForm.tabDatabase") },
     { v: "auth", label: t("appForm.tabAuth") },
     { v: "users", label: t("appDetails.tabUsers") },
@@ -81,8 +81,8 @@ export default function AppDetailsPage() {
     { v: "api", label: t("appForm.tabApi") },
     { v: "webhooks", label: t("webhooks.tabLabel") },
     { v: "tokens", label: t("appDetails.tabTokens") },
-    { v: "members", label: t("appDetails.tabMembers"), badge: true },
-    { v: "observability", label: t("appDetails.tabObservability"), badge: true },
+    { v: "members", label: t("appDetails.tabMembers") },
+    { v: "observability", label: t("appDetails.tabObservability"), badge: "soon" },
   ];
 
   return (
@@ -118,7 +118,7 @@ export default function AppDetailsPage() {
               {badge && (
                 <span className="rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide"
                   style={{ background: "var(--accent-tint)", color: "var(--accent)" }}>
-                  {t("appDetails.badgeNew")}
+                  {badge === "new" ? t("appDetails.badgeNew") : t("appDetails.badgeSoon")}
                 </span>
               )}
             </TabsTrigger>

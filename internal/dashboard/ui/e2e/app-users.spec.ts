@@ -170,7 +170,7 @@ test.describe('App user edit fields', () => {
 
     // AUT-02: clicking another tab trigger and back updates the URL and
     // content without a full page navigation (SPA route stays mounted).
-    await page.click('[role="tab"]:has-text("Login providers")')
+    await page.click('[role="tab"]:has-text("Login")')
     await page.waitForURL(/tab=auth$/)
     await page.click('[role="tab"]:has-text("Users")')
     await page.waitForURL(/tab=users$/)
