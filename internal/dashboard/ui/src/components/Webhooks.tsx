@@ -109,14 +109,14 @@ export default function Webhooks({ appId, tables }: WebhooksProps) {
           name: name.trim(),
           method,
           event_type_path: eventTypePath.trim(),
-          ...(eventIdPath.trim() ? { event_id_path: eventIdPath.trim() } : {}),
+          event_id_path: eventIdPath.trim(),
         });
       } else {
         await createWebhook.mutateAsync({
           name: name.trim(),
           method,
           event_type_path: eventTypePath.trim(),
-          ...(eventIdPath.trim() ? { event_id_path: eventIdPath.trim() } : {}),
+          event_id_path: eventIdPath.trim(),
         });
       }
       setShowForm(false);

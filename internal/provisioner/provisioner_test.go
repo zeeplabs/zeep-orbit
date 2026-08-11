@@ -723,3 +723,140 @@ func TestAddColumnWithRowLevelSecurityEnabled(t *testing.T) {
 		t.Fatal("expected RLS to still be enabled on products")
 	}
 }
+
+// TestBuildPolicySQL_GeneratedDDLExecutesForEveryAction: F19 (independent
+// Verifier, inbound-webhooks review) — BuildPolicySQL always emitted a
+// USING clause regardless of action, but Postgres rejects a USING clause on
+// an INSERT policy ("only WITH CHECK expression allowed for INSERT"). No
+// existing test executed the generated SQL against a real Postgres, so this
+// went undetected: creating a table's first insert-action policy through
+// the dashboard would 500 with a raw Postgres syntax/semantics error.
+// Executes the real DDL for all four actions against a live table.
+func TestBuildPolicySQL_GeneratedDDLExecutesForEveryAction(t *testing.T) {
+	pool := testPool(t)
+	defer pool.Close()
+
+	schema := uniqueSchema("test_prov_policy_ddl")
+	t.Cleanup(func() { dropSchema(t, pool, schema) })
+
+	prov := provisioner.New(pool)
+	cfg := &config.Config{
+		Apps: []config.AppConfig{
+			{
+				Name: schema,
+				Tables: []config.TableConfig{
+					{
+						Name: "orders",
+						Columns: []config.ColumnConfig{
+							{Name: "status", Type: "text"},
+						},
+					},
+				},
+			},
+		},
+	}
+	if _, err := prov.Apply(context.Background(), cfg); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`ALTER TABLE %q.orders ENABLE ROW LEVEL SECURITY`, schema)); err != nil {
+		t.Fatalf("enable row level security: %v", err)
+	}
+
+	for _, action := range []string{"select", "insert", "update", "delete"} {
+		def := provisioner.PolicyDef{
+			Name:   action + "_policy",
+			Action: action,
+			Roles:  []string{"member"},
+			Clauses: []provisioner.PolicyClause{
+				{Column: "status", Operator: "=", ValueSource: "literal", Value: "active"},
+			},
+		}
+		sql, err := provisioner.BuildPolicySQL(schema, "orders", def, cfg.Apps[0].Tables[0].Columns)
+		if err != nil {
+			t.Fatalf("BuildPolicySQL(%s): %v", action, err)
+		}
+		if _, err := pool.Exec(ctx, sql); err != nil {
+			t.Fatalf("exec generated DDL for action=%s failed (sql=%q): %v", action, sql, err)
+		}
+	}
+}
+
+// TestBuildPolicySQL_InsertOnlyPolicyRejectsInsertReturning: proves the
+// concrete failure mode F13 (WebhookMappingEditor.tsx) exists to warn
+// about — Postgres evaluates SELECT policies against RETURNING on an
+// INSERT, so a table with only an insert-action policy for a role still
+// rejects `INSERT ... RETURNING *` for that role, even though a plain
+// `INSERT` without RETURNING succeeds.
+func TestBuildPolicySQL_InsertOnlyPolicyRejectsInsertReturning(t *testing.T) {
+	pool := testPool(t)
+	defer pool.Close()
+
+	schema := uniqueSchema("test_prov_policy_insert_ret")
+	t.Cleanup(func() { dropSchema(t, pool, schema) })
+
+	prov := provisioner.New(pool)
+	cfg := &config.Config{
+		Apps: []config.AppConfig{
+			{
+				Name: schema,
+				Tables: []config.TableConfig{
+					{Name: "orders", Columns: []config.ColumnConfig{{Name: "status", Type: "text"}}},
+				},
+			},
+		},
+	}
+	if _, err := prov.Apply(context.Background(), cfg); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`ALTER TABLE %q.orders ENABLE ROW LEVEL SECURITY`, schema)); err != nil {
+		t.Fatalf("enable row level security: %v", err)
+	}
+
+	insertDef := provisioner.PolicyDef{
+		Name:    "insert_only_policy",
+		Action:  "insert",
+		Roles:   []string{"webhook"},
+		Clauses: []provisioner.PolicyClause{{Column: "status", Operator: "=", ValueSource: "literal", Value: "active"}},
+	}
+	insertSQL, err := provisioner.BuildPolicySQL(schema, "orders", insertDef, cfg.Apps[0].Tables[0].Columns)
+	if err != nil {
+		t.Fatalf("BuildPolicySQL(insert): %v", err)
+	}
+	if _, err := pool.Exec(ctx, insertSQL); err != nil {
+		t.Fatalf("exec insert policy DDL: %v", err)
+	}
+
+	// Plain INSERT (no RETURNING) succeeds on the insert-only policy — its
+	// own transaction, committed normally.
+	if err := pool.WithRLSContext(ctx, db.RLSClaims{Role: "webhook"}, 5000, func(q db.Querier) error {
+		_, execErr := q.Exec(ctx, fmt.Sprintf(`INSERT INTO %q.orders (status) VALUES ('active')`, schema))
+		return execErr
+	}); err != nil {
+		t.Fatalf("plain INSERT (no RETURNING) should succeed with only an insert policy: %v", err)
+	}
+
+	// INSERT ... RETURNING must fail: Postgres evaluates SELECT policies
+	// against RETURNING, and there is no select policy for "webhook". This
+	// transaction aborts on the failing statement, so its error must be
+	// returned (not swallowed) so WithRLSContext skips Commit — attempting
+	// to commit an already-aborted transaction surfaces an unrelated
+	// "commit unexpectedly resulted in rollback" error instead.
+	err = pool.WithRLSContext(ctx, db.RLSClaims{Role: "webhook"}, 5000, func(q db.Querier) error {
+		var status string
+		scanErr := q.QueryRow(ctx, fmt.Sprintf(`INSERT INTO %q.orders (status) VALUES ('active') RETURNING status`, schema)).Scan(&status)
+		if scanErr == nil {
+			return fmt.Errorf("expected INSERT ... RETURNING to be rejected without a select policy, but it succeeded")
+		}
+		return scanErr
+	})
+	if err == nil {
+		t.Fatal("expected an error from INSERT ... RETURNING without a select policy, got nil")
+	}
+	if !strings.Contains(err.Error(), "row-level security") {
+		t.Fatalf("expected a row-level-security rejection, got a different error: %v", err)
+	}
+}

@@ -88,7 +88,7 @@ export default function WebhookMappingEditor({ appId, webhook, tables }: Webhook
   const selectedTable = tables.find((tb) => tb.name === targetTable);
   const requiresMatchKey = action !== "insert";
 
-  const { data: targetTablePolicies } = useTablePolicies(appId, targetTable);
+  const { data: targetTablePolicies, isError: targetTablePoliciesFailed } = useTablePolicies(appId, targetTable);
   const { data: systemConfig } = useSystemConfig();
 
   // Every Postgres command the delivery path actually issues for this
@@ -102,7 +102,11 @@ export default function WebhookMappingEditor({ appId, webhook, tables }: Webhook
   const requiredPolicyActions = useMemo((): string[] => {
     switch (action) {
       case "insert":
-        return ["insert"];
+        // dispatchInsert runs `INSERT ... RETURNING *` (query.BuildInsert) —
+        // Postgres evaluates SELECT row-security policies against RETURNING
+        // too, not just INSERT ones, so a table with an insert-only policy
+        // for "webhook" still 500s on every real delivery.
+        return ["insert", "select"];
       case "update":
         return ["select", "update"];
       case "delete":
@@ -112,16 +116,21 @@ export default function WebhookMappingEditor({ appId, webhook, tables }: Webhook
     }
   }, [action, systemConfig?.soft_delete_enabled]);
 
-  // Native RLS only turns on for a table once it has at least one policy
-  // (table_policies_store.go) — with zero policies the webhook role's write
-  // is unrestricted, so there's nothing to warn about there. With at least
-  // one policy, the webhook role needs its own matching policy for every
-  // command above, or the delivery will 500 at that step.
-  const missingPolicyActions = (targetTablePolicies?.length ?? 0) > 0
+  // DeleteTablePolicy never disables RLS once a table has had it turned on
+  // (table_policies_store.go: "default-deny must remain explicit"), so a
+  // table currently showing zero policies isn't necessarily unrestricted —
+  // it may have had every policy deleted after RLS was enabled, which is
+  // now a hard default-deny for every role including "webhook". There is no
+  // signal here to tell the two zero-policy cases apart (this form has no
+  // RLS-enabled probe, only the policy list), so this always checks for a
+  // matching policy rather than skipping the check at zero policies: a
+  // spurious warning on a table that genuinely never had RLS is harmless,
+  // silently missing one on a table with RLS re-enabled-by-history is not.
+  const missingPolicyActions = targetTablePolicies
     ? requiredPolicyActions.filter(
-        (need) => !targetTablePolicies?.some((p) => p.action === need && p.roles.includes("webhook")),
+        (need) => !targetTablePolicies.some((p) => p.action === need && p.roles.includes("webhook")),
       )
-    : [];
+    : []; // still loading -- don't flash a warning before the policy list has arrived
   const webhookRoleMissingPolicy = missingPolicyActions.length > 0;
 
   const pickField = (path: string) => setPendingPath(path);
@@ -301,10 +310,14 @@ export default function WebhookMappingEditor({ appId, webhook, tables }: Webhook
             </Select>
           )}
         </div>
-        {webhookRoleMissingPolicy && (
-          <p className="text-[12px] text-[var(--warning)]">
-            {t("webhookMapping.policyWarning", { table: targetTable, action: missingPolicyActions.join(", ") })}
-          </p>
+        {targetTablePoliciesFailed ? (
+          <p className="text-[12px] text-[var(--danger)]">{t("webhookMapping.policyCheckFailed")}</p>
+        ) : (
+          webhookRoleMissingPolicy && (
+            <p className="text-[12px] text-[var(--warning)]">
+              {t("webhookMapping.policyWarning", { table: targetTable, action: missingPolicyActions.join(", ") })}
+            </p>
+          )
         )}
         {formError && <p className="text-[12px] text-[var(--danger)]">{formError}</p>}
         <div>

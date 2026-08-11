@@ -78,6 +78,82 @@ func TestBuildPolicySQL_InsertHasWithCheck(t *testing.T) {
 	}
 }
 
+// TestBuildPolicySQL_InsertHasNoUsingClause: Postgres rejects a USING clause
+// on an INSERT policy outright ("only WITH CHECK expression allowed for
+// INSERT") — this generated DDL never executed against real Postgres before
+// this test existed, so a table's first insert policy would fail at
+// CREATE POLICY time with a raw Postgres error surfacing wherever the
+// caller didn't already catch it (see provisioner_test.go's
+// TestBuildPolicySQL_GeneratedDDLExecutesForEveryAction for the actual
+// execution proof against real Postgres).
+func TestBuildPolicySQL_InsertHasNoUsingClause(t *testing.T) {
+	def := PolicyDef{
+		Name:   "insert_policy",
+		Action: "insert",
+		Roles:  []string{"member"},
+		Clauses: []PolicyClause{
+			{Column: "status", Operator: "=", ValueSource: "literal", Value: "active"},
+		},
+	}
+	sql, err := BuildPolicySQL("app_schema", "requests", def, testColumns())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(sql, "USING") {
+		t.Fatalf("insert policy must not include USING (Postgres rejects it), got %q", sql)
+	}
+}
+
+// TestBuildPolicySQL_DeleteHasUsingAndNoWithCheck: F20 (independent Verifier
+// addendum) — the DDL-execution test only proves the generated SQL executes,
+// not that the delete branch actually still emits its USING clause; a
+// mutant dropping USING for "delete" would produce a fully-permissive
+// delete policy (`CREATE POLICY ... FOR DELETE TO role` with no condition)
+// that still executes without error, silently passing the suite.
+func TestBuildPolicySQL_DeleteHasUsingAndNoWithCheck(t *testing.T) {
+	def := PolicyDef{
+		Name:   "delete_policy",
+		Action: "delete",
+		Roles:  []string{"member"},
+		Clauses: []PolicyClause{
+			{Column: "status", Operator: "=", ValueSource: "literal", Value: "active"},
+		},
+	}
+	sql, err := BuildPolicySQL("app_schema", "requests", def, testColumns())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(sql, "USING (") {
+		t.Fatalf("delete policy must include USING, got %q", sql)
+	}
+	if strings.Contains(sql, "WITH CHECK") {
+		t.Fatalf("delete policy must not include WITH CHECK, got %q", sql)
+	}
+}
+
+// TestBuildPolicySQL_UpdateHasBothUsingAndWithCheck: same coverage gap as
+// above, for the one action that legitimately needs both clauses.
+func TestBuildPolicySQL_UpdateHasBothUsingAndWithCheck(t *testing.T) {
+	def := PolicyDef{
+		Name:   "update_policy",
+		Action: "update",
+		Roles:  []string{"member"},
+		Clauses: []PolicyClause{
+			{Column: "status", Operator: "=", ValueSource: "literal", Value: "active"},
+		},
+	}
+	sql, err := BuildPolicySQL("app_schema", "requests", def, testColumns())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(sql, "USING (") {
+		t.Fatalf("update policy must include USING, got %q", sql)
+	}
+	if !strings.Contains(sql, "WITH CHECK (") {
+		t.Fatalf("update policy must include WITH CHECK, got %q", sql)
+	}
+}
+
 func TestBuildPolicySQL_RejectsUnknownColumn(t *testing.T) {
 	def := PolicyDef{
 		Name:   "p",

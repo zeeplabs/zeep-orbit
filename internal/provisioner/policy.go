@@ -100,8 +100,11 @@ type ValidationError struct{ msg string }
 func (e *ValidationError) Error() string { return e.msg }
 
 // BuildPolicySQL validates def against tableColumns and translates it into a
-// complete `CREATE POLICY ... TO zeep_app_enduser USING (...) [WITH CHECK
-// (...)]` statement. It never executes DDL itself and never concatenates raw
+// complete `CREATE POLICY ... TO zeep_app_enduser` statement, with `USING
+// (...)` and/or `WITH CHECK (...)` clauses selected per def.Action to match
+// what Postgres actually allows for that command kind (select/delete: USING
+// only; insert: WITH CHECK only; update: both). It never executes DDL itself
+// and never concatenates raw
 // user input into the returned SQL without going through quoteLiteral or the
 // fixed identRe/operator/claim allowlists — every rejection happens before
 // any SQL is assembled (spec ROWPOL-07/08/09), and is returned as a
@@ -159,9 +162,18 @@ func buildPolicySQL(schema, table string, def PolicyDef, tableColumns []config.C
 	roleCheck := fmt.Sprintf("current_setting('%s', true) = ANY (ARRAY[%s])", claimGUC["role"], strings.Join(roleLiterals, ", "))
 	expr := fmt.Sprintf("(%s) AND (%s)", roleCheck, clauseExpr)
 
+	// Postgres only allows a USING clause on SELECT/UPDATE/DELETE policies
+	// and only a WITH CHECK clause on INSERT policies — "CREATE POLICY ...
+	// FOR INSERT USING (...)" is rejected outright ("only WITH CHECK
+	// expression allowed for INSERT"). UPDATE gets both: USING gates which
+	// existing rows are visible/matchable, WITH CHECK gates what the
+	// resulting row is allowed to look like after the write.
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "CREATE POLICY %q ON %q.%q FOR %s TO %s USING (%s)",
-		def.Name, schema, table, strings.ToUpper(def.Action), db.EnduserRole, expr)
+	fmt.Fprintf(&sb, "CREATE POLICY %q ON %q.%q FOR %s TO %s",
+		def.Name, schema, table, strings.ToUpper(def.Action), db.EnduserRole)
+	if def.Action != "insert" {
+		fmt.Fprintf(&sb, " USING (%s)", expr)
+	}
 	if def.Action == "insert" || def.Action == "update" {
 		fmt.Fprintf(&sb, " WITH CHECK (%s)", expr)
 	}

@@ -206,13 +206,14 @@ func TestLogMiddleware_ExcludesWebhookTokenPathsFromBodyCapture(t *testing.T) {
 		name           string
 		path           string
 		wantBodyLogged bool
+		wantLoggedPath string // "" means "same as path" (no redaction expected)
 	}{
-		{"public hooks route", "/hooks/wh1/plaintext-token-in-url", false},
-		{"dashboard webhook list/create", "/dashboard/api/apps/app1/webhooks", false},
-		{"dashboard webhook get/update/delete", "/dashboard/api/apps/app1/webhooks/wh1", false},
-		{"dashboard webhook rotate-token", "/dashboard/api/apps/app1/webhooks/wh1/rotate-token", false},
-		{"dashboard webhook mappings (no token in response)", "/dashboard/api/apps/app1/webhooks/wh1/mappings", true},
-		{"unrelated dashboard endpoint", "/dashboard/api/apps/app1", true},
+		{"public hooks route", "/hooks/wh1/plaintext-token-in-url", false, "/hooks/wh1/***"},
+		{"dashboard webhook list/create", "/dashboard/api/apps/app1/webhooks", false, ""},
+		{"dashboard webhook get/update/delete", "/dashboard/api/apps/app1/webhooks/wh1", false, ""},
+		{"dashboard webhook rotate-token", "/dashboard/api/apps/app1/webhooks/wh1/rotate-token", false, ""},
+		{"dashboard webhook mappings (no token in response)", "/dashboard/api/apps/app1/webhooks/wh1/mappings", true, ""},
+		{"unrelated dashboard endpoint", "/dashboard/api/apps/app1", true, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -228,6 +229,14 @@ func TestLogMiddleware_ExcludesWebhookTokenPathsFromBodyCapture(t *testing.T) {
 			gotBodyLogged := last.ResBody != ""
 			if gotBodyLogged != c.wantBodyLogged {
 				t.Errorf("path %q: response body logged = %v, want %v (entry: %+v)", c.path, gotBodyLogged, c.wantBodyLogged, last)
+			}
+
+			wantPath := c.wantLoggedPath
+			if wantPath == "" {
+				wantPath = c.path
+			}
+			if last.Path != wantPath {
+				t.Errorf("path %q: logged Path = %q, want %q (the plaintext token/id must not appear unredacted)", c.path, last.Path, wantPath)
 			}
 		})
 	}

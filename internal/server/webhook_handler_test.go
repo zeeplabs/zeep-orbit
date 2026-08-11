@@ -316,7 +316,13 @@ func TestWebhookDelivery_OversizedBodyRejectedAsMalformed(t *testing.T) {
 	h := NewWebhookHandler(testPool, testReg)
 	router := buildWebhookRouter(h)
 
-	oversized := make([]byte, maxWebhookBodyBytes+1)
+	// Must be VALID JSON, not just an oversized byte slice: an invalid body
+	// already 400s as "malformed" regardless of size, which would let a
+	// mutant removing MaxBytesReader entirely still pass this test (the
+	// independent Verifier's F12 finding). A well-formed payload over the
+	// cap only fails if the cap itself is enforced -- without it, the
+	// handler would happily parse and capture it (200).
+	oversized := []byte(`{"eventType":"x","eventId":"y","padding":"` + strings.Repeat("a", maxWebhookBodyBytes+1024) + `"}`)
 	req := httptest.NewRequest(http.MethodPost, "/hooks/"+wh.ID+"/"+token, bytes.NewReader(oversized))
 	req.Header.Set("Content-Type", "application/json")
 	req.ContentLength = int64(len(oversized))
