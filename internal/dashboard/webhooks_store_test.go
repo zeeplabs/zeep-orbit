@@ -70,11 +70,15 @@ func TestCreateWebhook_HappyPath(t *testing.T) {
 	if token == "" {
 		t.Fatal("expected a non-empty plaintext token")
 	}
-	if row.TokenHash == token {
-		t.Fatal("token_hash must never equal the plaintext token")
+	if row.TokenSecret == token {
+		t.Fatal("token_secret must never equal the plaintext token (it must be encrypted)")
 	}
-	if hashWebhookToken(token) != row.TokenHash {
-		t.Fatalf("re-derived hash %q does not match stored token_hash %q", hashWebhookToken(token), row.TokenHash)
+	decrypted, err := DecryptWebhookToken(row)
+	if err != nil {
+		t.Fatalf("DecryptWebhookToken: %v", err)
+	}
+	if decrypted != token {
+		t.Fatalf("decrypted token %q does not round-trip to the original plaintext %q", decrypted, token)
 	}
 	if row.Status != "capture" {
 		t.Fatalf("expected new webhook to start in capture mode, got %q", row.Status)
@@ -267,11 +271,11 @@ func TestRotateToken_InvalidatesOldToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetWebhookByID: %v", err)
 	}
-	if got.TokenHash == hashWebhookToken(oldToken) {
-		t.Fatal("expected old token's hash to no longer match after rotation")
+	if !VerifyWebhookToken(got.TokenSecret, newToken) {
+		t.Fatal("expected the new token to verify against the stored secret after rotation")
 	}
-	if got.TokenHash != hashWebhookToken(newToken) {
-		t.Fatal("expected new token's hash to match after rotation")
+	if VerifyWebhookToken(got.TokenSecret, oldToken) {
+		t.Fatal("expected the old token to no longer verify after rotation")
 	}
 }
 

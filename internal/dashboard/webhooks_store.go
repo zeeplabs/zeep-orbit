@@ -3,7 +3,6 @@ package dashboard
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/zeeplabs/zeep-orbit/internal/crypto"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 	"github.com/zeeplabs/zeep-orbit/internal/registry"
 )
@@ -31,7 +31,7 @@ type WebhookRow struct {
 	AppID          string
 	Name           string
 	Method         string
-	TokenHash      string
+	TokenSecret    string // AES-256-GCM ciphertext, base64-encoded — decrypt with DecryptWebhookToken
 	EventTypePath  string
 	EventIDPath    *string
 	Status         string
@@ -53,9 +53,9 @@ type CreateWebhookInput struct {
 }
 
 // generateWebhookToken mirrors handler.go's generateToken (32-byte
-// crypto/rand, hex-encoded) — same entropy budget, but hashed before
-// persisting instead of stored verbatim (see design.md Tech Decisions: a
-// 256-bit random secret doesn't need a slow password hash).
+// crypto/rand, hex-encoded) — same entropy budget as the original
+// hash-based design; only how it's persisted changed (see
+// DecryptWebhookToken).
 func generateWebhookToken() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
@@ -64,28 +64,37 @@ func generateWebhookToken() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-func hashWebhookToken(token string) string {
-	sum := sha256.Sum256([]byte(token))
-	return hex.EncodeToString(sum[:])
+// DecryptWebhookToken recovers the plaintext token from a webhook's stored
+// ciphertext — the dashboard needs this on every list/get call so it can
+// always show the full callback URL, not just once at creation/rotation
+// (unlike the original SHA-256-hash design). A webhook created before the
+// token_hash -> token_secret migration has an un-decryptable legacy hash in
+// this column; the caller must treat a decrypt error as "rotate the token"
+// rather than a hard failure.
+func DecryptWebhookToken(w WebhookRow) (string, error) {
+	return crypto.Decrypt(w.TokenSecret)
 }
 
 // VerifyWebhookToken reports whether a plaintext token presented on an
-// inbound call matches the webhook's stored hash — constant-time so a
-// timing side-channel can't leak the hash byte-by-byte (the token itself is
-// a 256-bit random secret; SHA-256 + constant-time compare is the intended
-// pattern, see design.md Tech Decisions). Used by the public delivery
-// handler (T6), which only has the plaintext token from the URL.
-func VerifyWebhookToken(tokenHash, presentedToken string) bool {
+// inbound call matches the webhook's stored (encrypted) token —
+// constant-time so a timing side-channel can't leak it byte-by-byte. A
+// tokenSecret that fails to decrypt (e.g. a pre-migration legacy hash) never
+// matches. Used by the public delivery handler (T6), which only has the
+// plaintext token from the URL.
+func VerifyWebhookToken(tokenSecret, presentedToken string) bool {
 	if presentedToken == "" {
 		return false
 	}
-	presentedHash := hashWebhookToken(presentedToken)
-	return subtle.ConstantTimeCompare([]byte(tokenHash), []byte(presentedHash)) == 1
+	stored, err := crypto.Decrypt(tokenSecret)
+	if err != nil {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(stored), []byte(presentedToken)) == 1
 }
 
-// CreateWebhook generates a random token, persists only its SHA-256 hash,
-// and returns the plaintext token exactly once (the caller/handler is the
-// only place it is ever exposed again).
+// CreateWebhook generates a random token, persists it encrypted
+// (AES-256-GCM, recoverable — see DecryptWebhookToken), and returns the
+// plaintext token for immediate display.
 func CreateWebhook(ctx context.Context, pool *db.Pool, input CreateWebhookInput) (WebhookRow, string, error) {
 	switch input.Method {
 	case "GET", "POST", "PUT", "PATCH":
@@ -97,7 +106,10 @@ func CreateWebhook(ctx context.Context, pool *db.Pool, input CreateWebhookInput)
 	if err != nil {
 		return WebhookRow{}, "", fmt.Errorf("dashboard: generate webhook token: %w", err)
 	}
-	tokenHash := hashWebhookToken(token)
+	tokenSecret, err := crypto.Encrypt(token)
+	if err != nil {
+		return WebhookRow{}, "", fmt.Errorf("dashboard: encrypt webhook token: %w", err)
+	}
 
 	var eventIDPath *string
 	if input.EventIDPath != "" {
@@ -107,12 +119,12 @@ func CreateWebhook(ctx context.Context, pool *db.Pool, input CreateWebhookInput)
 	var row WebhookRow
 	err = pool.QueryRow(ctx,
 		`INSERT INTO zeep_system.webhook_subscriptions
-		 (app_id, name, method, token_hash, event_type_path, event_id_path, created_by)
+		 (app_id, name, method, token_secret, event_type_path, event_id_path, created_by)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)
-		 RETURNING id, app_id, name, method, token_hash, event_type_path, event_id_path,
+		 RETURNING id, app_id, name, method, token_secret, event_type_path, event_id_path,
 		           status, created_by, created_at, updated_at`,
-		input.AppID, input.Name, input.Method, tokenHash, input.EventTypePath, eventIDPath, input.CreatedBy,
-	).Scan(&row.ID, &row.AppID, &row.Name, &row.Method, &row.TokenHash, &row.EventTypePath, &row.EventIDPath,
+		input.AppID, input.Name, input.Method, tokenSecret, input.EventTypePath, eventIDPath, input.CreatedBy,
+	).Scan(&row.ID, &row.AppID, &row.Name, &row.Method, &row.TokenSecret, &row.EventTypePath, &row.EventIDPath,
 		&row.Status, &row.CreatedBy, &row.CreatedAt, &row.UpdatedAt)
 	if err != nil {
 		return WebhookRow{}, "", fmt.Errorf("dashboard: create webhook: %w", err)
@@ -123,7 +135,7 @@ func CreateWebhook(ctx context.Context, pool *db.Pool, input CreateWebhookInput)
 func scanWebhookRow(row pgx.Row) (WebhookRow, error) {
 	var w WebhookRow
 	var capturedJSON []byte
-	err := row.Scan(&w.ID, &w.AppID, &w.Name, &w.Method, &w.TokenHash, &w.EventTypePath, &w.EventIDPath,
+	err := row.Scan(&w.ID, &w.AppID, &w.Name, &w.Method, &w.TokenSecret, &w.EventTypePath, &w.EventIDPath,
 		&w.Status, &capturedJSON, &w.DeletedAt, &w.CreatedBy, &w.CreatedAt, &w.UpdatedAt)
 	if err != nil {
 		return WebhookRow{}, err
@@ -136,7 +148,7 @@ func scanWebhookRow(row pgx.Row) (WebhookRow, error) {
 	return w, nil
 }
 
-const webhookRowColumns = `id, app_id, name, method, token_hash, event_type_path, event_id_path,
+const webhookRowColumns = `id, app_id, name, method, token_secret, event_type_path, event_id_path,
 	           status, captured_sample, deleted_at, created_by, created_at, updated_at`
 
 // GetWebhookByID resolves a single non-soft-deleted webhook by id. When
@@ -256,20 +268,25 @@ func ActivateWebhook(ctx context.Context, pool *db.Pool, webhookID string) error
 	return tx.Commit(ctx)
 }
 
-// RotateToken generates a new token, persists only its hash (immediately
-// invalidating the old one), and returns the new plaintext once (spec P3
-// AC1: mappings are untouched by rotation).
+// RotateToken generates a new token, persists it encrypted (immediately
+// invalidating the old one), and returns the new plaintext (spec P3 AC1:
+// mappings are untouched by rotation). This is also the recovery path for a
+// webhook whose token_secret predates the hash -> encryption migration and
+// can no longer be decrypted.
 func RotateToken(ctx context.Context, pool *db.Pool, webhookID string) (string, error) {
 	token, err := generateWebhookToken()
 	if err != nil {
 		return "", fmt.Errorf("dashboard: generate webhook token: %w", err)
 	}
-	tokenHash := hashWebhookToken(token)
+	tokenSecret, err := crypto.Encrypt(token)
+	if err != nil {
+		return "", fmt.Errorf("dashboard: encrypt webhook token: %w", err)
+	}
 
 	tag, err := pool.Exec(ctx,
-		`UPDATE zeep_system.webhook_subscriptions SET token_hash = $1, updated_at = now()
+		`UPDATE zeep_system.webhook_subscriptions SET token_secret = $1, updated_at = now()
 		 WHERE id = $2 AND deleted_at IS NULL`,
-		tokenHash, webhookID,
+		tokenSecret, webhookID,
 	)
 	if err != nil {
 		return "", fmt.Errorf("dashboard: rotate token for webhook %s: %w", webhookID, err)

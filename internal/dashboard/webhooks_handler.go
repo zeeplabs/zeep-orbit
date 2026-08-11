@@ -16,15 +16,19 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// webhookResponse is the dashboard-facing shape of a WebhookRow — never
-// includes TokenHash (AGENTS.md: never leak secrets in API responses; the
-// plaintext token itself is returned exactly once, only from CreateWebhook
-// and RotateWebhookToken, via createWebhookResponse/rotateTokenResponse).
+// webhookResponse is the dashboard-facing shape of a WebhookRow. Token is
+// the decrypted plaintext token, included on every response (list/get,
+// not just create/rotate) so the dashboard can always render the full
+// callback URL — the token is recoverable AES-256-GCM ciphertext, not a
+// one-way hash, precisely to support that. Empty when decryption fails
+// (a legacy webhook whose token predates the hash -> encryption
+// migration): the frontend must prompt the owner to rotate it.
 type webhookResponse struct {
 	ID             string         `json:"id"`
 	AppID          string         `json:"app_id"`
 	Name           string         `json:"name"`
 	Method         string         `json:"method"`
+	Token          string         `json:"token"`
 	EventTypePath  string         `json:"event_type_path"`
 	EventIDPath    *string        `json:"event_id_path"`
 	Status         string         `json:"status"`
@@ -36,11 +40,13 @@ type webhookResponse struct {
 }
 
 func toWebhookResponse(w WebhookRow) webhookResponse {
+	token, _ := DecryptWebhookToken(w) // "" on legacy/undecryptable token — frontend prompts rotation
 	return webhookResponse{
 		ID:             w.ID,
 		AppID:          w.AppID,
 		Name:           w.Name,
 		Method:         w.Method,
+		Token:          token,
 		EventTypePath:  w.EventTypePath,
 		EventIDPath:    w.EventIDPath,
 		Status:         w.Status,
@@ -57,11 +63,6 @@ type createWebhookRequest struct {
 	Method        string `json:"method"`
 	EventTypePath string `json:"event_type_path"`
 	EventIDPath   string `json:"event_id_path"`
-}
-
-type createWebhookResponse struct {
-	webhookResponse
-	Token string `json:"token"`
 }
 
 // webhookRBACGate resolves the app and enforces the access control this
@@ -134,7 +135,7 @@ func (h *Handler) CreateWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	row, token, err := CreateWebhook(r.Context(), h.pool, CreateWebhookInput{
+	row, _, err := CreateWebhook(r.Context(), h.pool, CreateWebhookInput{
 		AppID:         appID,
 		Name:          body.Name,
 		Method:        body.Method,
@@ -147,7 +148,7 @@ func (h *Handler) CreateWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, createWebhookResponse{webhookResponse: toWebhookResponse(row), Token: token})
+	writeJSON(w, http.StatusCreated, toWebhookResponse(row))
 	h.audit(r.Context(), user.ID, user.Email, "webhook.create", "webhook", row.ID, app.Name+"/"+row.Name, nil, r.RemoteAddr)
 }
 
@@ -199,8 +200,7 @@ func (h *Handler) RotateWebhookToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := RotateToken(r.Context(), h.pool, wh.ID)
-	if err != nil {
+	if _, err := RotateToken(r.Context(), h.pool, wh.ID); err != nil {
 		if errors.Is(err, ErrWebhookNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "webhook not found"})
 			return
@@ -209,7 +209,11 @@ func (h *Handler) RotateWebhookToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"token": token})
+	rotated, ok := h.getScopedWebhook(w, r, appID, webhookID)
+	if !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, toWebhookResponse(rotated))
 	user, _ := UserFromContext(r.Context())
 	h.audit(r.Context(), user.ID, user.Email, "webhook.rotate_token", "webhook", wh.ID, app.Name+"/"+wh.Name, nil, r.RemoteAddr)
 }

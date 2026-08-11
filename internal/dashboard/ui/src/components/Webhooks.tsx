@@ -4,7 +4,6 @@ import { toast } from "sonner";
 import {
   ColumnDef,
   CreateWebhookInput,
-  CreatedWebhook,
   WebhookDelivery,
   WebhookSubscription,
   useCreateWebhook,
@@ -66,7 +65,6 @@ export default function Webhooks({ appId, tables }: WebhooksProps) {
   const [eventTypePath, setEventTypePath] = useState("");
   const [eventIdPath, setEventIdPath] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
-  const [revealed, setRevealed] = useState<CreatedWebhook | null>(null);
   const [expandedWebhookId, setExpandedWebhookId] = useState<string | null>(null);
   const [mappingWebhookId, setMappingWebhookId] = useState<string | null>(null);
 
@@ -89,13 +87,12 @@ export default function Webhooks({ appId, tables }: WebhooksProps) {
       return;
     }
     try {
-      const created = await createWebhook.mutateAsync({
+      await createWebhook.mutateAsync({
         name: name.trim(),
         method,
         event_type_path: eventTypePath.trim(),
         ...(eventIdPath.trim() ? { event_id_path: eventIdPath.trim() } : {}),
       });
-      setRevealed(created);
       setShowForm(false);
       resetForm();
     } catch {
@@ -106,8 +103,8 @@ export default function Webhooks({ appId, tables }: WebhooksProps) {
   const rotate = async (webhook: WebhookSubscription) => {
     if (!confirm(t("webhooks.rotateConfirm", { name: webhook.name }))) return;
     try {
-      const { token } = await rotateToken.mutateAsync(webhook.id);
-      setRevealed({ ...webhook, token });
+      await rotateToken.mutateAsync(webhook.id);
+      toast.success(t("webhooks.rotateSuccess"));
     } catch {
       // onError already toasts
     }
@@ -129,30 +126,6 @@ export default function Webhooks({ appId, tables }: WebhooksProps) {
           {t("webhooks.addWebhook")}
         </Button>
       </div>
-
-      {revealed && (
-        <div className="flex flex-col gap-2 rounded-[10px] border border-[var(--border)] bg-[var(--sunken)] p-3">
-          <p className="text-[12px] font-medium text-[var(--text-primary)]">
-            {t("webhooks.tokenRevealTitle")}
-          </p>
-          <p className="text-[11px] text-[var(--text-secondary)]">{t("webhooks.tokenRevealHint")}</p>
-          <div className="flex items-center gap-2">
-            <code className="flex-1 overflow-x-auto rounded-md border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-[12px]">
-              {webhookUrl(revealed.id, revealed.token)}
-            </code>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => copyToClipboard(webhookUrl(revealed.id, revealed.token), t("webhooks.copySuccess"))}
-            >
-              <Icon name="content_copy" size={15} />
-            </Button>
-          </div>
-          <Button variant="outline" size="sm" className="self-start" onClick={() => setRevealed(null)}>
-            {t("webhooks.dismiss")}
-          </Button>
-        </div>
-      )}
 
       <FormDrawer
         open={showForm}
@@ -283,6 +256,22 @@ export default function Webhooks({ appId, tables }: WebhooksProps) {
                 </div>
               </div>
               <p className="text-[11px] text-[var(--text-tertiary)]">{t("webhooks.eventTypePathLabel")}: {webhook.event_type_path}</p>
+              {webhook.token ? (
+                <div className="mt-1 flex items-center gap-2">
+                  <code className="flex-1 overflow-x-auto rounded-md border border-[var(--border)] bg-[var(--sunken)] px-2.5 py-1.5 text-[11px]">
+                    {webhookUrl(webhook.id, webhook.token)}
+                  </code>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => copyToClipboard(webhookUrl(webhook.id, webhook.token), t("webhooks.copySuccess"))}
+                  >
+                    <Icon name="content_copy" size={15} />
+                  </Button>
+                </div>
+              ) : (
+                <p className="mt-1 text-[11px] text-[var(--danger)]">{t("webhooks.tokenUnavailable")}</p>
+              )}
               {mappingWebhookId === webhook.id && (
                 <WebhookMappingEditor appId={appId} webhook={webhook} tables={tables} />
               )}

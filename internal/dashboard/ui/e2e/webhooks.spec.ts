@@ -102,14 +102,18 @@ test.describe('Inbound webhooks — full lifecycle', () => {
     await page.fill('input[placeholder="Event id path (optional, for dedup)"]', 'eventId')
     await page.getByRole('button', { name: 'Save', exact: true }).click()
 
-    await expect(page.locator('text=Webhook URL')).toBeVisible()
+    // The URL is shown permanently on the webhook's own card, not just once
+    // at creation — confirms it survives a reload, not only the create response.
+    await expect(page.locator('code')).toBeVisible()
     const webhookUrl = (await page.locator('code').innerText()).trim()
     const urlMatch = webhookUrl.match(/\/hooks\/([^/]+)\/([^/]+)$/)
     expect(urlMatch).not.toBeNull()
     const [, webhookId, token] = urlMatch!
     expect(webhookId.length).toBeGreaterThan(0)
     expect(token.length).toBeGreaterThan(0)
-    await page.click('button:has-text("Dismiss")')
+    await page.reload()
+    await page.click('[role="tab"]:has-text("Webhooks")')
+    await expect(page.locator('code')).toHaveText(webhookUrl)
 
     // --- P1 AC2: while unmapped, every call is capture-only, no write ---
     const captureDecoy = await page.request.post(webhookUrl, {

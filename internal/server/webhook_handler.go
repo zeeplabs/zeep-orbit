@@ -56,7 +56,7 @@ func (h *WebhookHandler) HandleWebhookDelivery(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	if !dashboard.VerifyWebhookToken(wh.TokenHash, token) {
+	if !dashboard.VerifyWebhookToken(wh.TokenSecret, token) {
 		h.logDelivery(ctx, wh.ID, http.StatusUnauthorized, "invalid_token", nil, "", "", "")
 		writeError(w, http.StatusUnauthorized, "invalid or missing token")
 		return

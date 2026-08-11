@@ -114,7 +114,7 @@ func webhooksHandlerTestPool(t *testing.T) (*db.Pool, *Handler, map[string]*Dash
 	return pool, h, actors, appID, appName
 }
 
-func createTestWebhook(t *testing.T, h *Handler, appID string, admin *DashboardUser) createWebhookResponse {
+func createTestWebhook(t *testing.T, h *Handler, appID string, admin *DashboardUser) webhookResponse {
 	t.Helper()
 	body := `{"name":"employees sync","method":"POST","event_type_path":"eventType"}`
 	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/dashboard/api/apps/%s/webhooks", appID), bytes.NewReader([]byte(body)))
@@ -126,17 +126,18 @@ func createTestWebhook(t *testing.T, h *Handler, appID string, admin *DashboardU
 	if w.Code != http.StatusCreated {
 		t.Fatalf("create webhook: status = %d, want 201, body=%s", w.Code, w.Body.String())
 	}
-	var resp createWebhookResponse
+	var resp webhookResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode create response: %v", err)
 	}
 	return resp
 }
 
-// TestCreateWebhookHandler_HappyPathReturnsTokenOnceAndAudits: T9 Done-when
-// "Create returns the plaintext token exactly once ... never again on
-// subsequent Get/List" and "produce one audit_log entry".
-func TestCreateWebhookHandler_HappyPathReturnsTokenOnceAndAudits(t *testing.T) {
+// TestCreateWebhookHandler_HappyPathAlwaysReturnsTokenAndAudits: the token
+// is encrypted (recoverable), not hashed, precisely so the dashboard can
+// always show the full callback URL — Create, Get, and List must all return
+// the same plaintext token, not just Create once.
+func TestCreateWebhookHandler_HappyPathAlwaysReturnsTokenAndAudits(t *testing.T) {
 	pool, h, actors, appID, _ := webhooksHandlerTestPool(t)
 	defer pool.Close()
 
@@ -158,7 +159,8 @@ func TestCreateWebhookHandler_HappyPathReturnsTokenOnceAndAudits(t *testing.T) {
 		t.Errorf("audit_log rows for webhook.create = %d, want 1", auditCount)
 	}
 
-	// Get never echoes the token again.
+	// Get echoes the same token again — this is the whole point of storing
+	// it encrypted instead of hashed.
 	getReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/dashboard/api/apps/%s/webhooks/%s", appID, created.ID), nil)
 	getReq = withUser(getReq, actors["appadmin"])
 	getReq = withChiParams(getReq, map[string]string{"id": appID, "webhookId": created.ID})
@@ -167,11 +169,15 @@ func TestCreateWebhookHandler_HappyPathReturnsTokenOnceAndAudits(t *testing.T) {
 	if wGet.Code != http.StatusOK {
 		t.Fatalf("get webhook: status = %d, want 200, body=%s", wGet.Code, wGet.Body.String())
 	}
-	if bytes.Contains(wGet.Body.Bytes(), []byte(created.Token)) {
-		t.Error("GET response leaked the plaintext token")
+	var getResp webhookResponse
+	if err := json.Unmarshal(wGet.Body.Bytes(), &getResp); err != nil {
+		t.Fatalf("decode get response: %v", err)
 	}
-	if bytes.Contains(wGet.Body.Bytes(), []byte("token_hash")) {
-		t.Error("GET response leaked token_hash field")
+	if getResp.Token != created.Token {
+		t.Errorf("GET token = %q, want it to match the token from Create (%q)", getResp.Token, created.Token)
+	}
+	if bytes.Contains(wGet.Body.Bytes(), []byte("token_secret")) {
+		t.Error("GET response leaked the raw token_secret field")
 	}
 }
 
@@ -235,22 +241,22 @@ func TestRotateWebhookTokenHandler_InvalidatesOldTokenAndAudits(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("rotate: status = %d, want 200, body=%s", w.Code, w.Body.String())
 	}
-	var resp map[string]string
+	var resp webhookResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode rotate response: %v", err)
 	}
-	if resp["token"] == "" || resp["token"] == created.Token {
-		t.Fatalf("expected a new, different token, got %q (old %q)", resp["token"], created.Token)
+	if resp.Token == "" || resp.Token == created.Token {
+		t.Fatalf("expected a new, different token, got %q (old %q)", resp.Token, created.Token)
 	}
-	if !VerifyWebhookToken(hashWebhookToken(resp["token"]), resp["token"]) {
-		t.Fatal("new token does not verify against its own hash")
-	}
-	// Old token must no longer verify against the stored (now rotated) hash.
+	// Old token must no longer verify against the stored (now rotated) secret.
 	wh, err := GetWebhookByID(context.Background(), pool, appID, created.ID)
 	if err != nil {
 		t.Fatalf("get webhook after rotate: %v", err)
 	}
-	if VerifyWebhookToken(wh.TokenHash, created.Token) {
+	if !VerifyWebhookToken(wh.TokenSecret, resp.Token) {
+		t.Fatal("new token does not verify against the rotated secret")
+	}
+	if VerifyWebhookToken(wh.TokenSecret, created.Token) {
 		t.Fatal("old token still verifies after rotation — expected immediate invalidation")
 	}
 

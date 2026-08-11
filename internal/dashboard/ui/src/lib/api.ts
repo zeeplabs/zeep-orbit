@@ -1051,6 +1051,13 @@ export interface WebhookSubscription {
   app_id: string
   name: string
   method: 'GET' | 'POST' | 'PUT' | 'PATCH'
+  /**
+   * Plaintext token, decrypted server-side on every response (the secret is
+   * stored encrypted, not hashed, precisely so the dashboard can always
+   * render the full callback URL). Empty for a webhook created before the
+   * hash -> encryption migration — rotate it once to get a working token.
+   */
+  token: string
   event_type_path: string
   event_id_path: string | null
   status: 'capture' | 'active'
@@ -1066,11 +1073,6 @@ export interface CreateWebhookInput {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH'
   event_type_path: string
   event_id_path?: string
-}
-
-export interface CreatedWebhook extends WebhookSubscription {
-  /** Plaintext token, returned exactly once by the create endpoint. */
-  token: string
 }
 
 export interface WebhookFieldMapping {
@@ -1132,11 +1134,11 @@ export function useWebhooks(appId: string): UseQueryResult<WebhookSubscription[]
 
 export function useCreateWebhook(
   appId: string,
-): UseMutationResult<CreatedWebhook, Error, CreateWebhookInput> {
+): UseMutationResult<WebhookSubscription, Error, CreateWebhookInput> {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (input: CreateWebhookInput) =>
-      apiFetch<CreatedWebhook>(`/dashboard/api/apps/${appId}/webhooks`, {
+      apiFetch<WebhookSubscription>(`/dashboard/api/apps/${appId}/webhooks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
@@ -1152,11 +1154,11 @@ export function useCreateWebhook(
 
 export function useRotateWebhookToken(
   appId: string,
-): UseMutationResult<{ token: string }, Error, string> {
+): UseMutationResult<WebhookSubscription, Error, string> {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (webhookId: string) =>
-      apiFetch<{ token: string }>(
+      apiFetch<WebhookSubscription>(
         `/dashboard/api/apps/${appId}/webhooks/${webhookId}/rotate-token`,
         { method: 'POST' },
       ),

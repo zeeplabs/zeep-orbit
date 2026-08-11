@@ -357,7 +357,7 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			app_id           UUID        NOT NULL REFERENCES zeep_system.apps(id) ON DELETE CASCADE,
 			name             TEXT        NOT NULL,
 			method           TEXT        NOT NULL CHECK (method IN ('GET','POST','PUT','PATCH')),
-			token_hash       TEXT        NOT NULL,
+			token_secret     TEXT        NOT NULL,
 			event_type_path  TEXT        NOT NULL,
 			event_id_path    TEXT,
 			status           TEXT        NOT NULL DEFAULT 'capture' CHECK (status IN ('capture','active')),
@@ -367,6 +367,23 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
 			updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
+		// Renames token_hash -> token_secret for schemas provisioned before the
+		// token switched from a one-way SHA-256 hash to reversible AES-256-GCM
+		// encryption (the dashboard needs to display a webhook's full URL at
+		// any time, not just once at creation/rotation) — a stored SHA-256
+		// hash can never be decrypted, so any webhook created before this
+		// migration must have its token rotated once to keep working.
+		`DO $do$
+		 BEGIN
+		   IF EXISTS (
+		     SELECT 1 FROM information_schema.columns
+		     WHERE table_schema = 'zeep_system' AND table_name = 'webhook_subscriptions'
+		       AND column_name = 'token_hash'
+		   ) THEN
+		     ALTER TABLE zeep_system.webhook_subscriptions RENAME COLUMN token_hash TO token_secret;
+		   END IF;
+		 END
+		 $do$`,
 		`CREATE INDEX IF NOT EXISTS idx_webhook_subscriptions_app_id
 		 ON zeep_system.webhook_subscriptions(app_id)`,
 		// webhook_id has no ON DELETE CASCADE from webhook_deliveries (below)
