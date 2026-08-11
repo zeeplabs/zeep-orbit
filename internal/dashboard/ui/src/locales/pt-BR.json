@@ -835,6 +835,8 @@
   "webhooks.tabLabel": "Webhooks",
   "webhooks.explainer": "Webhooks recebem eventos enviados por um provedor externo e os gravam em uma tabela -- sem escrever código. Um novo webhook começa em modo de captura: ele registra o primeiro payload real recebido para que você possa mapeá-lo, sem gravar em nenhuma tabela ainda.",
   "webhooks.addWebhook": "Adicionar webhook",
+  "webhooks.editWebhook": "Editar webhook",
+  "webhooks.edit": "Editar webhook",
   "webhooks.empty": "Nenhum webhook ainda",
   "webhooks.emptyDesc": "Crie um webhook para obter uma URL única que seu provedor externo pode chamar.",
   "webhooks.nameLabel": "Nome",

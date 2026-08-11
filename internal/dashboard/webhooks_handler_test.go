@@ -181,6 +181,29 @@ func TestCreateWebhookHandler_HappyPathAlwaysReturnsTokenAndAudits(t *testing.T)
 	}
 }
 
+// TestCreateWebhookHandler_MissingRequiredFieldsReturns400: F6 (independent
+// Verifier addendum) — CreateWebhook's name/event_type_path guard had no
+// direct test, so a mutant deleting the check still passed the full suite.
+func TestCreateWebhookHandler_MissingRequiredFieldsReturns400(t *testing.T) {
+	pool, h, actors, appID, _ := webhooksHandlerTestPool(t)
+	defer pool.Close()
+
+	for _, body := range []string{
+		`{"name":"","method":"POST","event_type_path":"eventType"}`,
+		`{"name":"x","method":"POST","event_type_path":""}`,
+	} {
+		req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/dashboard/api/apps/%s/webhooks", appID), bytes.NewReader([]byte(body)))
+		req.Header.Set("Content-Type", "application/json")
+		req = withUser(req, actors["appadmin"])
+		req = withChiParams(req, map[string]string{"id": appID})
+		w := httptest.NewRecorder()
+		h.CreateWebhook(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("body=%s: status = %d, want 400", body, w.Code)
+		}
+	}
+}
+
 // TestCreateWebhookHandler_NonAdminForbidden mirrors the table_policies RBAC
 // test: an app member below CanManage (editor) resolves the app but is
 // rejected by role.CanManage() → 403.
@@ -268,6 +291,126 @@ func TestRotateWebhookTokenHandler_InvalidatesOldTokenAndAudits(t *testing.T) {
 	}
 	if auditCount != 1 {
 		t.Errorf("audit_log rows for webhook.rotate_token = %d, want 1", auditCount)
+	}
+}
+
+// TestUpdateWebhookHandler_ChangesFieldsPreservesTokenAndAudits: M3 gap fix
+// (Opus pre-release review) — name/method/paths were previously immutable
+// after creation. Token must survive an edit untouched (this is not a
+// recreate).
+func TestUpdateWebhookHandler_ChangesFieldsPreservesTokenAndAudits(t *testing.T) {
+	pool, h, actors, appID, _ := webhooksHandlerTestPool(t)
+	defer pool.Close()
+
+	created := createTestWebhook(t, h, appID, actors["appadmin"])
+
+	// Seed a captured sample first, mirroring a real capture-mode webhook
+	// before its owner edits it (spec P3 AC3: edit must not touch status or
+	// captured_sample, only name/method/event-shape paths).
+	if err := StoreCapturedSample(context.Background(), pool, created.ID, []byte(`{"a":1}`)); err != nil {
+		t.Fatalf("StoreCapturedSample precondition: %v", err)
+	}
+
+	body := `{"name":"renamed hook","method":"PUT","event_type_path":"type","event_id_path":"id"}`
+	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/dashboard/api/apps/%s/webhooks/%s", appID, created.ID), bytes.NewReader([]byte(body)))
+	req.Header.Set("Content-Type", "application/json")
+	req = withUser(req, actors["appadmin"])
+	req = withChiParams(req, map[string]string{"id": appID, "webhookId": created.ID})
+	w := httptest.NewRecorder()
+	h.UpdateWebhook(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("update: status = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+	var resp webhookResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode update response: %v", err)
+	}
+	if resp.Name != "renamed hook" || resp.Method != "PUT" || resp.EventTypePath != "type" {
+		t.Fatalf("update response = %+v, want name=renamed hook method=PUT event_type_path=type", resp)
+	}
+	if resp.EventIDPath == nil || *resp.EventIDPath != "id" {
+		t.Errorf("EventIDPath = %v, want %q", resp.EventIDPath, "id")
+	}
+	if resp.Token != created.Token {
+		t.Errorf("Token = %q, want unchanged %q (edit must not rotate the token)", resp.Token, created.Token)
+	}
+	if resp.Status != "capture" {
+		t.Errorf("Status = %q, want unchanged %q (edit must not touch lifecycle status)", resp.Status, "capture")
+	}
+	if resp.CapturedSample["a"] != float64(1) {
+		t.Errorf("CapturedSample = %v, want the pre-edit sample preserved", resp.CapturedSample)
+	}
+
+	var auditCount int
+	if err := pool.QueryRow(context.Background(),
+		`SELECT COUNT(*) FROM zeep_system.audit_log WHERE action = 'webhook.update'`,
+	).Scan(&auditCount); err != nil {
+		t.Fatalf("count audit rows: %v", err)
+	}
+	if auditCount != 1 {
+		t.Errorf("audit_log rows for webhook.update = %d, want 1", auditCount)
+	}
+}
+
+// TestUpdateWebhookHandler_InvalidMethodReturns400.
+func TestUpdateWebhookHandler_InvalidMethodReturns400(t *testing.T) {
+	pool, h, actors, appID, _ := webhooksHandlerTestPool(t)
+	defer pool.Close()
+
+	created := createTestWebhook(t, h, appID, actors["appadmin"])
+
+	body := `{"name":"hook","method":"DELETE","event_type_path":"eventType"}`
+	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/dashboard/api/apps/%s/webhooks/%s", appID, created.ID), bytes.NewReader([]byte(body)))
+	req.Header.Set("Content-Type", "application/json")
+	req = withUser(req, actors["appadmin"])
+	req = withChiParams(req, map[string]string{"id": appID, "webhookId": created.ID})
+	w := httptest.NewRecorder()
+	h.UpdateWebhook(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("update with invalid method: status = %d, want 400, body=%s", w.Code, w.Body.String())
+	}
+}
+
+// TestUpdateWebhookHandler_MissingRequiredFieldsReturns400: F6 (independent
+// Verifier addendum) — same gap as CreateWebhook's, on the Update path.
+func TestUpdateWebhookHandler_MissingRequiredFieldsReturns400(t *testing.T) {
+	pool, h, actors, appID, _ := webhooksHandlerTestPool(t)
+	defer pool.Close()
+
+	created := createTestWebhook(t, h, appID, actors["appadmin"])
+
+	for _, body := range []string{
+		`{"name":"","method":"POST","event_type_path":"eventType"}`,
+		`{"name":"x","method":"POST","event_type_path":""}`,
+	} {
+		req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/dashboard/api/apps/%s/webhooks/%s", appID, created.ID), bytes.NewReader([]byte(body)))
+		req.Header.Set("Content-Type", "application/json")
+		req = withUser(req, actors["appadmin"])
+		req = withChiParams(req, map[string]string{"id": appID, "webhookId": created.ID})
+		w := httptest.NewRecorder()
+		h.UpdateWebhook(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("body=%s: status = %d, want 400", body, w.Code)
+		}
+	}
+}
+
+// TestUpdateWebhookHandler_NonAdminForbidden mirrors the create/delete RBAC tests.
+func TestUpdateWebhookHandler_NonAdminForbidden(t *testing.T) {
+	pool, h, actors, appID, _ := webhooksHandlerTestPool(t)
+	defer pool.Close()
+
+	created := createTestWebhook(t, h, appID, actors["appadmin"])
+
+	body := `{"name":"hook","method":"POST","event_type_path":"eventType"}`
+	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/dashboard/api/apps/%s/webhooks/%s", appID, created.ID), bytes.NewReader([]byte(body)))
+	req.Header.Set("Content-Type", "application/json")
+	req = withUser(req, actors["appeditor"])
+	req = withChiParams(req, map[string]string{"id": appID, "webhookId": created.ID})
+	w := httptest.NewRecorder()
+	h.UpdateWebhook(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Errorf("appeditor update: status = %d, want 403", w.Code)
 	}
 }
 

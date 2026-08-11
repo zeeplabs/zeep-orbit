@@ -835,6 +835,8 @@
   "webhooks.tabLabel": "Webhooks",
   "webhooks.explainer": "Webhooks receive events pushed by an external provider and write them into a table -- no code required. A new webhook starts in capture mode: it records the first real payload it receives so you can map it, without writing to any table yet.",
   "webhooks.addWebhook": "Add webhook",
+  "webhooks.editWebhook": "Edit webhook",
+  "webhooks.edit": "Edit webhook",
   "webhooks.empty": "No webhooks yet",
   "webhooks.emptyDesc": "Create a webhook to get a unique URL your external provider can call.",
   "webhooks.nameLabel": "Name",

@@ -204,3 +204,148 @@ Everything below landed after the PASS, driven either by real Slack integration 
 - **M9**: `internal/query`'s cast helper exported as `query.PgCast`; `matchColumnCast` in `internal/server/webhook_handler.go` now calls it instead of duplicating the switch.
 
 Gate re-run after M1-M9: `go build`/`go vet`/`gofmt` clean, full `go test ./...` green (disposable Postgres), `tsc -b`/`npm run build` clean, i18n key parity clean.
+
+---
+
+# Addendum 2 — Independent Verifier pass over `cf58718..HEAD` + uncommitted `UpdateWebhook`
+
+**Date**: 2026-08-11
+**Diff range**: `cf58718..e2224be` (13 commits on `develop`) **plus** the uncommitted working-tree diff implementing `UpdateWebhook` (PATCH), 11 modified files
+**Verifier**: independent sub-agent — did not author any of the code under review (the range above was previously *self*-verified by its implementer; Addendum 1's "not re-run" caveat is what this pass closes)
+**Method**: diff read → spec anchoring → real mutation testing in an isolated `git worktree` (`/tmp/verifier-scratch-webhooks`, branch `verifier-scratch-webhooks`, with the uncommitted diff applied via `git apply`) against a disposable `postgres:16-alpine` container. Worktree, branch and container were removed afterward; the real working tree's uncommitted `UpdateWebhook` diff was never touched (`git status --porcelain` before == after: the same 11 `M` entries, nothing added or lost).
+
+## Verdict by area
+
+| Area | Verdict | Basis |
+| --- | --- | --- |
+| B3 (dedup outcome allowlist) | ✅ PASS | Mutant killed; test asserts the spec outcome (retry after `write_error` writes exactly 1 row, `[inserted, write_error]` newest-first) |
+| I1 (ambiguous match key → 409 `ambiguous_match`) | ✅ PASS | Mutant killed; test asserts 409 + neither row mutated + `outcome=ambiguous_match` |
+| I3 (dedicated `WEBHOOK_TOKEN_ENCRYPTION_KEY`) | ✅ PASS | 4 tests incl. key-independence and loud failure when both vars unset (`internal/crypto/aes_test.go:42,69`); documented in `README.md:469` + all 3 translations + `.env.example:18` |
+| I5 (empty `event_type_value`/`field_mappings`) | ✅ PASS | Both mutants killed |
+| M7 (minimal challenge persistence) | ✅ PASS | Mutant killed (persisting `rawPayload` fails the "provider token not stored" assertion) |
+| M5 (i18n for delivery outcomes) | ✅ PASS | All 12 `webhooks.outcome.*` keys exist in both locales and match the DB `webhook_deliveries_outcome_check` list exactly; en/pt-BR key parity 901/901 |
+| M9 (`query.PgCast` dedup) | ✅ PASS | Behaviour-preserving; covered indirectly by existing uuid-match-key update/delete tests |
+| `UpdateWebhook` — store + handler behaviour | ✅ PASS | 4 of 5 mutants killed (method validation, token preservation, audit entry); see gaps F5-F8 for what isn't covered |
+| **B1 (token must not reach logs)** | ❌ **FAIL** | Regression on the dashboard side (F1) **and** zero test coverage — both mutants survived (F2) |
+| **B2 (rate limit + body cap on public route)** | ❌ **FAIL (coverage)** | Implementation is present and correct by inspection, but has no test at all — both mutants survived (F3) |
+| I2 (mapping-editor RLS-policy warning) | ❌ **FAIL (correctness)** | Warns on the wrong policy action under soft-delete, and ignores the `select` the match-key lookup needs (F4); no test |
+| I4 (capture-sample polling) | ⚠️ PASS with note | Works as designed; polls indefinitely (F10) |
+| I6 / M1-M4, M6, M8 (docs, spec sync, responsive grid) | ✅ PASS | READMEs synced in all 4 languages; `spec.md` P3 AC3 + WEBHOOK-23 traceability now match the shipped `UpdateWebhook`; `CHANGELOG.md` entry present under `[Unreleased]` |
+
+## Discrimination sensor (mutation testing) — results
+
+Baseline before mutating: `go build ./...` clean, `go vet ./internal/...` clean, `gofmt -l` clean on all changed Go files, `go test -p 1 ./...` fully green (webhook tests confirmed *running*, not skipping — 20 `--- PASS` lines under `-run TestWebhook` in `internal/server`), `npx tsc -b` + `npm run build` clean.
+
+| # | Mutant (behaviour-level fault injected) | Target | Result |
+| --- | --- | --- | --- |
+| 1 | B1a: `logPath := r.URL.Path` (revert token redaction) | `internal/server/server.go:358` | ❌ **SURVIVED** |
+| 2 | B1b: drop `&& !isWebhookPath(...)` (log req/res bodies for `/hooks/`) | `internal/server/server.go:380` | ❌ **SURVIVED** |
+| 3 | B2a: unregister the per-IP rate limiter on `/hooks/{webhookId}/{token}` | `internal/server/server.go:160-161` | ❌ **SURVIVED** |
+| 4 | B2b: remove `http.MaxBytesReader(..., maxWebhookBodyBytes)` | `internal/server/webhook_handler.go:45` | ❌ **SURVIVED** |
+| 5 | B3: add `write_error`,`row_not_found` back into `processedOutcomes` | `internal/dashboard/webhook_deliveries_store.go:119` | ✅ KILLED — `TestWebhookActive_RetryAfterWriteErrorIsNotDeduped` |
+| 6 | I1: delete the `len(matchedIDs) > 1 → errWebhookAmbiguousMatch` branch | `internal/server/webhook_handler.go:316-318` | ✅ KILLED — `TestWebhookActive_UpdateWithAmbiguousMatchKeyIsRejected` |
+| 7 | I1b: remove `LIMIT 2` only (keep the Go-side check) | `internal/server/webhook_handler.go:296` | ⚪ SURVIVED **correctly** — `LIMIT 2` is a query-cost bound, not the safety mechanism; ambiguity is detected in Go via `pgx.CollectRows`. Not a finding. |
+| 8 | M7: log `rawPayload` instead of `minimal` on the challenge path | `internal/server/webhook_handler.go:~100` | ✅ KILLED — `TestWebhookDelivery_VerificationChallengeEchoedBeforeCapture` |
+| 9 | I5: remove `len(def.FieldMappings) == 0` rejection | `internal/dashboard/webhooks_store.go:466` | ✅ KILLED — `TestSaveEventMapping_EmptyFieldMappingsRejected` |
+| 10 | I5b: neuter the blank-`event_type_value` rejection | `internal/dashboard/webhooks_store.go:455` | ✅ KILLED — `TestSaveEventMapping_EmptyEventTypeValueRejected` |
+| 11 | UW-a: remove `isValidWebhookMethod` from `UpdateWebhook` | `internal/dashboard/webhooks_store.go` (`UpdateWebhook`) | ✅ KILLED — `TestUpdateWebhook_InvalidMethodRejected` + `TestUpdateWebhookHandler_InvalidMethodReturns400` |
+| 12 | UW-b: edit also overwrites `token_secret` | `internal/dashboard/webhooks_store.go` (UPDATE statement) | ✅ KILLED — `TestUpdateWebhook_ChangesNameMethodAndPaths` + `TestUpdateWebhookHandler_ChangesFieldsPreservesTokenAndAudits` |
+| 13 | UW-c: `RowsAffected() == 0` guard never fires | `internal/dashboard/webhooks_store.go` | ⚪ SURVIVED — behaviourally equivalent (the follow-up `GetWebhookByID` also returns `ErrWebhookNotFound`), so the guard is redundant rather than untested. See F8. |
+| 14 | UW-d: drop the `webhook.update` audit call | `internal/dashboard/webhooks_handler.go` | ✅ KILLED — `TestUpdateWebhookHandler_ChangesFieldsPreservesTokenAndAudits` |
+| 15 | UW-e: neuter the `name`/`event_type_path` required check (line 183, `UpdateWebhook`) | `internal/dashboard/webhooks_handler.go:183` | ❌ **SURVIVED** |
+| 16 | UW-e2: same mutant on `CreateWebhook`'s identical guard (line 133) | `internal/dashboard/webhooks_handler.go:133` | ❌ **SURVIVED** (pre-existing gap, same bug class) |
+| 17 | UW-f: PATCH route unregistered / wrong verb | `internal/server/server.go:189` | ❌ **SURVIVED** |
+
+**Score: 8 killed / 6 survived-as-findings / 3 survived-benignly.**
+
+## Findings (ranked)
+
+### F1 — ❌ Blocker-class regression: B1's token leak is reopened through the dashboard API response body
+
+`internal/dashboard/webhooks_handler.go:43` now puts the decrypted plaintext `token` on **every** webhook response (list/get/create/rotate/update) — an intentional design change (commit `399b006`), but `logMiddleware` captures dashboard-API response bodies into the same `RingBuffer` that B1 was about:
+
+- `internal/server/server.go:380` excludes body capture only for paths starting with `/hooks/` (`isWebhookPath`), so `GET /dashboard/api/apps/{id}/webhooks` **is** captured (`isTextContent("")` returns `true` for a GET with no `Content-Type` — `internal/server/server.go:419-421`).
+- `internal/dashboard/logs.go:139-146` — `ExtractApp("/dashboard/api/...")` yields `"dashboard"`, and `internal/dashboard/apps_store.go:417-419` returns a `nil` (= unfiltered) allow-list for `superadmin` **and any `CanReadAnyApp` role, which includes global `auditor`**. So `GET /dashboard/api/logs` serves those entries verbatim.
+- Meanwhile `webhookRBACGate` (`internal/dashboard/webhooks_handler.go`, `CanManage`) denies `auditor` any direct read of webhooks. Net effect: a role explicitly forbidden from reading webhooks can read live webhook tokens out of the request log — the exact scenario B1 was filed for.
+
+**Suggested fix**: widen the body-capture exclusion to the webhook dashboard endpoints (e.g. skip `ResBody` when the path matches `/dashboard/api/apps/*/webhooks*`), or redact a `"token":"…"` value in captured bodies, or stop returning the token on list/get and add an explicit reveal endpoint. Whichever is chosen, add the test F2 asks for.
+
+### F2 — ❌ B1 has no test at all (mutants 1 & 2 survived)
+
+`redactWebhookToken` / `isWebhookPath` (`internal/server/server.go:398-411`) are referenced only by production code — no test file mentions either. Both reverts pass the whole suite.
+**Suggested fix**: a table test for `redactWebhookToken` (`/hooks/abc/tok` → `/hooks/abc/***`, non-webhook paths unchanged, short paths unchanged) plus a `logMiddleware` test asserting the pushed `LogEntry` for a `/hooks/…` request has a redacted `Path`, empty `ReqBody` and empty `ResBody`.
+
+### F3 — ❌ B2 has no test at all (mutants 3 & 4 survived)
+
+Neither the 120 req/min per-IP limiter (`internal/server/server.go:160-161`) nor the 1 MiB cap (`internal/server/webhook_handler.go:41-46`) is exercised. `TestServerHooksRouteRegistered` only checks the route resolves.
+**Suggested fix**: a `newRouter`-level test firing 121 requests at `/hooks/{id}/{token}` from one `RemoteAddr` and asserting the last one is `429`; and a delivery test posting >1 MiB and asserting a `4xx` (plus that no oversized payload lands in `webhook_deliveries`).
+
+### F4 — ❌ I2's RLS-policy warning targets the wrong policy action
+
+`WebhookMappingEditor.tsx` warns when no `table_policies` row has `p.action === action && p.roles.includes("webhook")`. Two inaccuracies:
+
+1. With soft delete enabled, a `delete` mapping issues an **UPDATE** (`internal/query/builder.go:336-346` via `query.BuildDelete`), so the policy actually required is `update`. The editor therefore shows "OK" for a webhook that will still `500` at delivery time (false negative), or nags for a `delete` policy that Postgres never consults (false positive).
+2. Both `update` and `delete` mappings first run a `SELECT` for the match-key lookup under `RLSClaims{Role: "webhook"}` (`internal/server/webhook_handler.go:292-305`), which needs a `select` policy for the `webhook` role; the warning never mentions it. Note the same RLS scoping means an invisible duplicate row degrades `ambiguous_match` to `row_not_found` — worth documenting in `design.md`.
+
+There is no test (unit or e2e) for this warning at all.
+**Suggested fix**: derive the required action from the system's soft-delete setting (`delete` → `update` when soft delete is on) and also require a `select` policy for non-insert mappings; add an e2e or component test.
+
+### F5 — ❌ The new `PATCH` route registration is untested (mutant 17 survived)
+
+`internal/server/server.go:189` is the only thing wiring `UpdateWebhook` into the app; renaming the pattern or switching the verb passes every test. The repo already has this pattern — `internal/server/server_test.go:79` `TestServerUpdateTablePolicyRouteRegistered`.
+**Suggested fix**: mirror that test for `PATCH /dashboard/api/apps/{id}/webhooks/{webhookId}`.
+
+### F6 — ❌ Required-field validation is untested on both `UpdateWebhook` and `CreateWebhook` (mutants 15 & 16 survived)
+
+`internal/dashboard/webhooks_handler.go:133` and `:183` (`body.Name == "" || body.EventTypePath == ""` → 400) can both be neutered with a green suite. The frontend validates client-side, so the server-side guard is the only defence for direct API callers.
+**Suggested fix**: two handler tests asserting `400` for `{"method":"POST","event_type_path":"eventType"}` (no name) and for a blank `event_type_path`.
+
+### F7 — ⚠️ Spec-precision gap on P3 AC3: `status` and `captured_sample` preservation isn't asserted
+
+`spec.md:122` states an edit touches "name, method, and event-shape paths only — token, status, and captured_sample are untouched." `TestUpdateWebhookHandler_ChangesFieldsPreservesTokenAndAudits` asserts the token (mutant 12 confirms that assertion bites) but nothing asserts `status`/`captured_sample`. The UPDATE statement doesn't name those columns, so risk is low today; a future `SET status = …` slip would go unnoticed.
+**Suggested fix**: activate the webhook (or store a sample) before the PATCH and assert both survive.
+
+### F8 — ℹ️ `TestUpdateWebhook_UnknownIDReturnsNotFound` doesn't discriminate the `RowsAffected` guard
+
+Mutant 13 shows the test passes with the guard disabled, because `GetWebhookByID(ctx, pool, "", webhookID)` returns `ErrWebhookNotFound` anyway. Behaviour is equivalent, so this is not a defect — recorded so the guard isn't mistaken for verified logic.
+
+### F9 — ℹ️ `WEBHOOK_TOKEN_ENCRYPTION_KEY` is documented but unreachable via the Helm chart
+
+`charts/zeep-orbit/templates/secret.yaml` builds `stringData` from a fixed key list (`DATABASE_URL`, `DASHBOARD_BOOTSTRAP_SECRET`, `GOOGLE_*`) and `deployment.yaml:56-58` mounts it with `envFrom.secretRef`, so a Helm-deployed install cannot set the new var (it silently falls back to `DASHBOARD_BOOTSTRAP_SECRET`). Same pre-existing gap as `GOOGLE_OAUTH_ENCRYPTION_KEY`, which I3 also documented in the same table.
+**Suggested fix**: add both keys to `secret.yaml` + `values.yaml` (guarded by `{{- if }}`), or note in the README table that they're only settable outside the chart.
+
+### F10 — ℹ️ `useWebhooks` polling has no stop condition
+
+`refetchInterval` returns `3000` for as long as *any* webhook is `status === 'capture' && !captured_sample` (`internal/dashboard/ui/src/lib/api.ts`), so one abandoned capture-mode webhook makes the Webhooks tab poll every 3s indefinitely. Consider a bounded window or backoff.
+
+## Gate check (run by this Verifier, in the scratch worktree, with the uncommitted diff applied)
+
+| Gate | Result |
+| --- | --- |
+| `go build ./...` | ✅ clean |
+| `go vet ./internal/...` | ✅ clean |
+| `gofmt -l` on all changed Go files | ✅ clean |
+| `go test -p 1 -count=1 ./...` (disposable Postgres 16, `TEST_DATABASE_URL` + `DASHBOARD_BOOTSTRAP_SECRET` set) | ✅ fully green |
+| `npx tsc -b` | ✅ clean |
+| `npm run build` | ✅ clean |
+| `en.json`/`pt-BR.json` JSON-valid + key parity | ✅ 901/901, no orphans; every `t()` key used in `Webhooks.tsx`/`WebhookMappingEditor.tsx` resolves |
+| Real working tree untouched by the scratch work | ✅ `git status --porcelain` identical before/after (11 `M` entries, the `UpdateWebhook` diff intact) |
+| Playwright e2e against a live server | ⚪ not run (no live stack in this environment) — `webhooks.spec.ts` changes reviewed statically only |
+
+**Overall verdict: ❌ FAIL** — one blocker-class regression (F1), one correctness bug in a shipped fix (F4), and four real coverage gaps where a reintroduced bug goes undetected (F2, F3, F5, F6). Everything else in `cf58718..HEAD` plus the `UpdateWebhook` work verifies clean, with tests that demonstrably bite.
+
+## Addendum 3 (2026-08-11, same day, self-fixed — not re-verified by an independent pass)
+
+All findings F1-F7 from Addendum 2 above were fixed on top of the same uncommitted `UpdateWebhook` diff, by the agent that had implemented `UpdateWebhook` (i.e. self-fixed, not by a fresh Verifier — F1-F7's own fixes have the same author-equals-verifier limitation this feature has been trying to close):
+
+- **F1 (blocker, fixed)**: added `isDashboardWebhookTokenPath` (`internal/server/server.go`) matching the dashboard's webhook list/create/get/update/delete/rotate-token endpoints (never mappings/deliveries, which carry no token), and excluded it from `logMiddleware`'s body-capture condition alongside the existing `isWebhookPath` check. Covered by `TestLogMiddleware_ExcludesWebhookTokenPathsFromBodyCapture` (table test, 6 cases) and `TestIsDashboardWebhookTokenPath` (`internal/server/server_test.go`).
+- **F2/F3 (fixed)**: added direct tests — `TestIsWebhookPath`, `TestRedactWebhookToken` (`server_test.go`); `TestRateLimiter_AllowsUpToMaxThenBlocks`/`TestRateLimiter_SeparateIPsHaveIndependentBudgets` (`internal/dashboard/middleware_test.go`, new file); `TestWebhookDelivery_RateLimitedAfter120RequestsPerMinute` (hits the real router via `New()`, 121 sequential requests, asserts 429 only on the 121st) and `TestWebhookDelivery_OversizedBodyRejectedAsMalformed` (`internal/server/webhook_handler_test.go`).
+- **F4 (fixed)**: `WebhookMappingEditor.tsx`'s policy-warning check now derives the actual Postgres commands the delivery path issues (`select` for update/delete's lookup; `insert`/`update`/`delete` for the write, with delete mapping to `update` when `useSystemConfig().soft_delete_enabled`, `delete` otherwise) instead of comparing against the mapping's action label directly. Not covered by an automated test in this pass — no existing test harness renders this component with mocked `useTablePolicies`/`useSystemConfig`; flagging as a residual gap rather than claiming coverage that doesn't exist.
+- **F5 (fixed)**: `TestServerUpdateWebhookRouteRegistered` (`server_test.go`), same 401-proves-registered pattern as the sibling table-policy test.
+- **F6 (fixed)**: `TestCreateWebhookHandler_MissingRequiredFieldsReturns400` and `TestUpdateWebhookHandler_MissingRequiredFieldsReturns400` (`internal/dashboard/webhooks_handler_test.go`).
+- **F7 (fixed)**: `TestUpdateWebhookHandler_ChangesFieldsPreservesTokenAndAudits` now seeds a captured sample before the PATCH and asserts both `Status` and `CapturedSample` survive unchanged.
+- **F8, F9, F10**: left open (F8 is informational/no-defect; F9 and F10 are pre-existing/out of scope for this fix pass).
+
+Gates re-run after these fixes (real working tree, disposable Postgres 16, `TEST_DATABASE_URL` + `DASHBOARD_BOOTSTRAP_SECRET` set): `go build ./...`, `go vet ./...`, `gofmt -l` on all changed files, `go test -p 1 -count=1 ./...` (all packages, including every new test above), `npx tsc -b`, `npm run build` — all clean.
+
+**This addendum does not upgrade the overall verdict to PASS.** These fixes were not adversarially verified by an independent agent (no fresh mutation-testing pass confirming the new tests actually kill the F1-F7 mutants, and F4 has zero automated coverage). A genuine independent Verifier pass over the full `cf58718..HEAD` + uncommitted diff, post-fix, is still the recommended gate before this ships — carrying forward the same open item Addendum 1 already flagged for the B1-M9 range.

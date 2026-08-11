@@ -119,7 +119,7 @@ App owners today have no way to let an external system (Google Workspace, or any
 
 1. WHEN an app owner rotates a webhook's token THEN the system SHALL invalidate the old token immediately and SHALL generate a new one, without affecting the webhook's saved mappings.
 2. WHEN an app owner deletes a webhook THEN the system SHALL stop accepting calls at its URL and SHALL retain its delivery log until the standard 30-day purge (not deleted immediately alongside the webhook).
-3. Every webhook create, ~~edit,~~ delete, and token-rotation action SHALL be recorded in the existing dashboard `audit_log`. **Gap, not covered**: there is no webhook-edit endpoint (name/method/paths are set at creation and never mutable afterward) — "edit" was listed here before that was noticed; either build the edit endpoint (+ its own audit entry) or strike it from this AC. Flagged by the Verifier (`validation.md`, L-011) and not yet resolved.
+3. Every webhook create, edit, delete, and token-rotation action SHALL be recorded in the existing dashboard `audit_log`. Edit changes name, method, and event-shape paths only — token, status, and captured_sample are untouched (see design's Dashboard Webhook Handler component, `UpdateWebhook`). **Resolved 2026-08-11**: the edit endpoint gap flagged by the Verifier (`validation.md`, L-011) is now built — `PATCH /dashboard/api/apps/{id}/webhooks/{webhookId}`, `internal/dashboard/webhooks_handler.go`'s `UpdateWebhook`, audited as `webhook.update`.
 
 **Independent Test**: Rotate a webhook's token, confirm the old token is rejected and the new one works with the mapping intact; delete a different webhook and confirm its URL now rejects all calls.
 
@@ -160,14 +160,14 @@ App owners today have no way to let an external system (Google Workspace, or any
 | WEBHOOK-20 | P2 delivery log AC3: 30-day purge | Tasks | Not covered by e2e (time-based, impractical at this layer); covered by `webhook_deliveries_store_test.go` purge tests and the ticker wiring (T12) |
 | WEBHOOK-21 | P3: rotate token | Tasks | Not covered by e2e (P3, out of T17's scope); covered by `TestRotateWebhookTokenHandler_InvalidatesOldTokenAndAudits` |
 | WEBHOOK-22 | P3: delete webhook, retain delivery log | Tasks | Not covered by e2e (P3, out of T17's scope); covered by `TestDeleteWebhookHandler_SoftDeletesAndAudits` / `TestSoftDeleteWebhook_NeverHardDeletes` |
-| WEBHOOK-23 | P3: audit log entry per lifecycle action | Tasks | ❌ Partial: create/rotate/delete/activate handler tests cover their own audit assertions, but "edit" has no implementation to test at all — see the gap noted directly on P3 AC3 above. Not covered by e2e (P3, out of T17's scope) |
+| WEBHOOK-23 | P3: audit log entry per lifecycle action | Tasks | Verified — create/rotate/delete/activate/update handler tests each assert their own `audit_log` row (`webhook.update` added 2026-08-11 alongside `UpdateWebhook`, resolving the prior partial-coverage gap). Not covered by e2e (P3, out of T17's scope) |
 | WEBHOOK-24 | Provider verification handshake: a payload carrying a top-level non-empty `challenge` string is echoed back verbatim, bypassing capture/mapping | Design (Error Handling Strategy) | Covered by `TestWebhookDelivery_VerificationChallengeEchoedBeforeCapture` (`internal/server/webhook_handler_test.go`). **Added post-launch** (found during real-world Slack integration testing, after the original Verifier PASS) — never had its own AC until now; retrofitted per M2 finding in the Opus review. |
 
 **ID format:** `WEBHOOK-[NUMBER]`
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 24 total (WEBHOOK-24 added post-launch, M2), 23 mapped to tasks (T1-T17) + 1 mapped to design's Error Handling Strategy directly, 12 Verified end-to-end by `webhooks.spec.ts` (P1 full story + P2 map+activate-for-inserts full story), 1 Verified by a dedicated handler test (WEBHOOK-24), 10 covered only by backend integration tests (P2 update/delete story + delivery-log AC2/AC3), 1 ❌ partial (WEBHOOK-23 — no edit endpoint exists, see P3 AC3), 0 fully unmapped.
+**Coverage:** 24 total (WEBHOOK-24 added post-launch, M2), 23 mapped to tasks (T1-T17) + 1 mapped to design's Error Handling Strategy directly, 12 Verified end-to-end by `webhooks.spec.ts` (P1 full story + P2 map+activate-for-inserts full story), 2 Verified by dedicated handler tests (WEBHOOK-23, WEBHOOK-24), 10 covered only by backend integration tests (P2 update/delete story + delivery-log AC2/AC3), 0 partial, 0 fully unmapped.
 
 ---
 

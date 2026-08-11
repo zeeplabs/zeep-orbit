@@ -10,6 +10,7 @@ import {
   useDeleteEventMapping,
   useEventMappings,
   useSaveEventMapping,
+  useSystemConfig,
   useTablePolicies,
 } from "../lib/api";
 import { Icon } from "@/components/ui/icon";
@@ -88,14 +89,40 @@ export default function WebhookMappingEditor({ appId, webhook, tables }: Webhook
   const requiresMatchKey = action !== "insert";
 
   const { data: targetTablePolicies } = useTablePolicies(appId, targetTable);
+  const { data: systemConfig } = useSystemConfig();
+
+  // Every Postgres command the delivery path actually issues for this
+  // mapping's action, under the "webhook" role — not just the action label
+  // shown in the UI. update/delete both start with the match-key lookup
+  // (a SELECT, internal/server/webhook_handler.go dispatchUpdateOrDelete),
+  // and "delete" itself is a soft-delete UPDATE, not a hard DELETE, whenever
+  // the app has soft delete enabled (query.BuildDelete) — so the policy that
+  // actually needs to exist for "delete" is "update" in that case, "delete"
+  // otherwise.
+  const requiredPolicyActions = useMemo((): string[] => {
+    switch (action) {
+      case "insert":
+        return ["insert"];
+      case "update":
+        return ["select", "update"];
+      case "delete":
+        return ["select", systemConfig?.soft_delete_enabled ? "update" : "delete"];
+      default:
+        return [action];
+    }
+  }, [action, systemConfig?.soft_delete_enabled]);
+
   // Native RLS only turns on for a table once it has at least one policy
   // (table_policies_store.go) — with zero policies the webhook role's write
   // is unrestricted, so there's nothing to warn about there. With at least
-  // one policy, the webhook role needs its own matching policy for this
-  // mapping's action, or its writes will 500 at delivery time.
-  const webhookRoleMissingPolicy =
-    (targetTablePolicies?.length ?? 0) > 0 &&
-    !targetTablePolicies?.some((p) => p.action === action && p.roles.includes("webhook"));
+  // one policy, the webhook role needs its own matching policy for every
+  // command above, or the delivery will 500 at that step.
+  const missingPolicyActions = (targetTablePolicies?.length ?? 0) > 0
+    ? requiredPolicyActions.filter(
+        (need) => !targetTablePolicies?.some((p) => p.action === need && p.roles.includes("webhook")),
+      )
+    : [];
+  const webhookRoleMissingPolicy = missingPolicyActions.length > 0;
 
   const pickField = (path: string) => setPendingPath(path);
 
@@ -276,7 +303,7 @@ export default function WebhookMappingEditor({ appId, webhook, tables }: Webhook
         </div>
         {webhookRoleMissingPolicy && (
           <p className="text-[12px] text-[var(--warning)]">
-            {t("webhookMapping.policyWarning", { table: targetTable, action })}
+            {t("webhookMapping.policyWarning", { table: targetTable, action: missingPolicyActions.join(", ") })}
           </p>
         )}
         {formError && <p className="text-[12px] text-[var(--danger)]">{formError}</p>}

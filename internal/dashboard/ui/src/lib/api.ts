@@ -1075,6 +1075,13 @@ export interface CreateWebhookInput {
   event_id_path?: string
 }
 
+export interface UpdateWebhookInput {
+  name: string
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH'
+  event_type_path: string
+  event_id_path?: string
+}
+
 export interface WebhookFieldMapping {
   source_path: string
   column: string
@@ -1173,6 +1180,26 @@ export function useRotateWebhookToken(
         `/dashboard/api/apps/${appId}/webhooks/${webhookId}/rotate-token`,
         { method: 'POST' },
       ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['webhooks', appId] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+export function useUpdateWebhook(
+  appId: string,
+): UseMutationResult<WebhookSubscription, Error, { webhookId: string } & UpdateWebhookInput> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ webhookId, ...input }) =>
+      apiFetch<WebhookSubscription>(`/dashboard/api/apps/${appId}/webhooks/${webhookId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['webhooks', appId] })
     },
