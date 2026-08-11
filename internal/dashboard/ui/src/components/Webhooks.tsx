@@ -16,6 +16,7 @@ import {
 import { Icon } from "@/components/ui/icon";
 import { EmptyState, LoadingState } from "@/components/patterns/states";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -24,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { FormDrawer } from "@/components/patterns/FormDrawer";
 import WebhookMappingEditor from "@/components/WebhookMappingEditor";
 
 // Every HTTP method the dashboard's create form offers matches exactly what
@@ -122,12 +124,10 @@ export default function Webhooks({ appId, tables }: WebhooksProps) {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
         <p className="text-[11px] text-[var(--text-secondary)]">{t("webhooks.explainer")}</p>
-        {!showForm && (
-          <Button className="shrink-0 gap-1.5" size="sm" onClick={() => setShowForm(true)}>
-            <Icon name="add" size={15} />
-            {t("webhooks.addWebhook")}
-          </Button>
-        )}
+        <Button className="shrink-0 gap-1.5" size="sm" onClick={() => setShowForm(true)}>
+          <Icon name="add" size={15} />
+          {t("webhooks.addWebhook")}
+        </Button>
       </div>
 
       {revealed && (
@@ -154,17 +154,50 @@ export default function Webhooks({ appId, tables }: WebhooksProps) {
         </div>
       )}
 
-      {showForm && (
-        <div className="flex flex-col gap-3 rounded-[10px] border border-[var(--border)] bg-[var(--sunken)] p-3">
-          <div className="flex flex-wrap items-center gap-2">
+      <FormDrawer
+        open={showForm}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) {
+            setShowForm(false);
+            resetForm();
+          }
+        }}
+        title={t("webhooks.addWebhook")}
+        description={t("webhooks.explainer")}
+        footer={
+          <div className="flex w-full gap-2.5">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => {
+                setShowForm(false);
+                resetForm();
+              }}
+              disabled={createWebhook.isPending}
+            >
+              {t("webhooks.cancel")}
+            </Button>
+            <Button className="flex-1" disabled={createWebhook.isPending} onClick={submit}>
+              {t("webhooks.save")}
+            </Button>
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="webhook-name">{t("webhooks.nameLabel")}</Label>
             <Input
+              id="webhook-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={t("webhooks.namePlaceholder")}
-              className="h-8 w-[200px] px-2.5 text-[13px] bg-[var(--surface)] border-[var(--border)] rounded-md brand-focus"
             />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="webhook-method">{t("webhooks.methodLabel")}</Label>
             <Select value={method} onValueChange={(v) => setMethod(v as CreateWebhookInput["method"])}>
-              <SelectTrigger className="h-8 w-[110px] text-[12px] bg-[var(--surface)] border-[var(--border)] rounded-md px-2 brand-focus">
+              <SelectTrigger id="webhook-method">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -176,38 +209,30 @@ export default function Webhooks({ appId, tables }: WebhooksProps) {
               </SelectContent>
             </Select>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="webhook-event-type-path">{t("webhooks.eventTypePathLabel")}</Label>
             <Input
+              id="webhook-event-type-path"
               value={eventTypePath}
               onChange={(e) => setEventTypePath(e.target.value)}
               placeholder={t("webhooks.eventTypePathPlaceholder")}
-              className="h-8 w-[220px] px-2.5 text-[13px] bg-[var(--surface)] border-[var(--border)] rounded-md brand-focus"
             />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="webhook-event-id-path">{t("webhooks.eventIdPathLabel")}</Label>
             <Input
+              id="webhook-event-id-path"
               value={eventIdPath}
               onChange={(e) => setEventIdPath(e.target.value)}
               placeholder={t("webhooks.eventIdPathPlaceholder")}
-              className="h-8 w-[220px] px-2.5 text-[13px] bg-[var(--surface)] border-[var(--border)] rounded-md brand-focus"
             />
           </div>
+
           {formError && <p className="text-[12px] text-[var(--danger)]">{formError}</p>}
-          <div className="flex items-center gap-2">
-            <Button size="sm" disabled={createWebhook.isPending} onClick={submit}>
-              {t("webhooks.save")}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setShowForm(false);
-                resetForm();
-              }}
-            >
-              {t("webhooks.cancel")}
-            </Button>
-          </div>
         </div>
-      )}
+      </FormDrawer>
 
       {!webhooks?.length ? (
         <EmptyState title={t("webhooks.empty")} description={t("webhooks.emptyDesc")} />
