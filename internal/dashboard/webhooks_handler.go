@@ -252,6 +252,39 @@ func (h *Handler) DeleteWebhook(w http.ResponseWriter, r *http.Request) {
 // Event mapping CRUD + activation (T10)
 // ----------------------------------------------------------------------------
 
+// mappingResponse is the dashboard-facing shape of an EventMappingRow.
+// EventMappingRow itself has no json tags (same reasoning as WebhookRow: it
+// stays a plain internal store type), so writing it directly to the
+// response would marshal PascalCase Go field names instead of the
+// snake_case shape the frontend decodes — exactly the bug T17 already found
+// and fixed once for webhook_deliveries; this is the same bug class in the
+// event-mappings endpoints.
+type mappingResponse struct {
+	ID             string            `json:"id"`
+	WebhookID      string            `json:"webhook_id"`
+	EventTypeValue string            `json:"event_type_value"`
+	Action         string            `json:"action"`
+	TargetTable    string            `json:"target_table"`
+	MatchKeyColumn *string           `json:"match_key_column"`
+	FieldMappings  []FieldMappingDef `json:"field_mappings"`
+	CreatedAt      time.Time         `json:"created_at"`
+	UpdatedAt      time.Time         `json:"updated_at"`
+}
+
+func toMappingResponse(m EventMappingRow) mappingResponse {
+	return mappingResponse{
+		ID:             m.ID,
+		WebhookID:      m.WebhookID,
+		EventTypeValue: m.EventTypeValue,
+		Action:         m.Action,
+		TargetTable:    m.TargetTable,
+		MatchKeyColumn: m.MatchKeyColumn,
+		FieldMappings:  m.FieldMappings,
+		CreatedAt:      m.CreatedAt,
+		UpdatedAt:      m.UpdatedAt,
+	}
+}
+
 type saveEventMappingRequest struct {
 	EventTypeValue string            `json:"event_type_value"`
 	Action         string            `json:"action"`
@@ -304,7 +337,7 @@ func (h *Handler) SaveEventMapping(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, row)
+	writeJSON(w, http.StatusCreated, toMappingResponse(row))
 	user, _ := UserFromContext(r.Context())
 	h.audit(r.Context(), user.ID, user.Email, "webhook.mapping.save", "webhook_event_mapping", row.ID, app.Name+"/"+wh.Name+"/"+row.EventTypeValue, nil, r.RemoteAddr)
 }
@@ -326,7 +359,11 @@ func (h *Handler) ListEventMappings(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
-	writeJSON(w, http.StatusOK, rows)
+	resp := make([]mappingResponse, 0, len(rows))
+	for _, row := range rows {
+		resp = append(resp, toMappingResponse(row))
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // DeleteEventMapping handles DELETE /dashboard/api/apps/{id}/webhooks/{webhookId}/mappings/{mappingId}.

@@ -86,6 +86,12 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: spec.md P2 delivery-log AC2 / validation.md WEBHOOK-19 (test-coverage)
 - last seen: 2026-08-10T21:51:25Z
 
+### L-013 - When a store Row type has no json tags, never writeJSON it directly (or a slice of it) -- always map through a response DTO with explicit snake_case tags, and decode handler tests into that same DTO, not the internal Row type, or the test self-masks the exact PascalCase-vs-snake_case bug it should catch.
+- signal: `gate_fail` · recurrence: 1 feature(s) · scope: `json-serialization` · harmful: 0
+- features: inbound-webhooks
+- evidence: internal/dashboard/webhooks_handler.go SaveEventMapping/ListEventMappings (json-serialization)
+- last seen: 2026-08-11T12:16:01Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

@@ -342,12 +342,22 @@ func TestSaveEventMappingHandler_HappyPathAudits(t *testing.T) {
 	if w.Code != http.StatusCreated {
 		t.Fatalf("save mapping: status = %d, want 201, body=%s", w.Code, w.Body.String())
 	}
-	var row EventMappingRow
+	var row mappingResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &row); err != nil {
 		t.Fatalf("decode save mapping response: %v", err)
 	}
+	// mappingResponse's json tags are the wire contract the frontend
+	// actually decodes (snake_case) — EventMappingRow has none, so
+	// decoding into it here would silently mask a casing regression the
+	// same way the pre-fix webhook_deliveries response did (see T17).
+	if row.EventTypeValue != "employee.created" {
+		t.Errorf("EventTypeValue = %q, want %q", row.EventTypeValue, "employee.created")
+	}
 	if row.Action != "insert" || row.TargetTable != "employees" {
 		t.Errorf("saved mapping = %+v, want action=insert target_table=employees", row)
+	}
+	if len(row.FieldMappings) != 2 || row.FieldMappings[0].Column != "external_id" {
+		t.Errorf("FieldMappings = %+v, want 2 entries starting with column=external_id", row.FieldMappings)
 	}
 
 	var auditCount int
@@ -456,6 +466,46 @@ func TestActivateWebhookHandler_SuccessAudits(t *testing.T) {
 	}
 }
 
+// TestListEventMappingsHandler_ReturnsSnakeCaseFields: guards the exact bug
+// class T17 already found once for webhook_deliveries — EventMappingRow has
+// no json tags, so writing it (or a slice of it) directly to the response
+// marshals PascalCase keys the frontend's snake_case-decoding never reads,
+// silently reaching the UI as blank/undefined fields.
+func TestListEventMappingsHandler_ReturnsSnakeCaseFields(t *testing.T) {
+	pool, h, actors, appID, _ := webhooksHandlerTestPool(t)
+	defer pool.Close()
+
+	created := createTestWebhook(t, h, appID, actors["appadmin"])
+	mapBody := `{"event_type_value":"employee.created","action":"insert","target_table":"employees","field_mappings":[{"source_path":"id","column":"external_id"}]}`
+	if w := saveTestMapping(t, h, appID, created.ID, actors["appadmin"], mapBody); w.Code != http.StatusCreated {
+		t.Fatalf("save mapping precondition: status = %d, body=%s", w.Code, w.Body.String())
+	}
+
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/dashboard/api/apps/%s/webhooks/%s/mappings", appID, created.ID), nil)
+	req = withUser(req, actors["appadmin"])
+	req = withChiParams(req, map[string]string{"id": appID, "webhookId": created.ID})
+	w := httptest.NewRecorder()
+	h.ListEventMappings(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("list mappings: status = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+
+	if !bytes.Contains(w.Body.Bytes(), []byte(`"event_type_value"`)) {
+		t.Errorf("response is missing the snake_case key \"event_type_value\" the frontend decodes -- body=%s", w.Body.String())
+	}
+
+	var rows []mappingResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &rows); err != nil {
+		t.Fatalf("decode list mappings response: %v", err)
+	}
+	if len(rows) != 1 || rows[0].EventTypeValue != "employee.created" || rows[0].Action != "insert" || rows[0].TargetTable != "employees" {
+		t.Fatalf("mappings = %+v, want 1 entry with event_type_value=employee.created action=insert target_table=employees", rows)
+	}
+	if len(rows[0].FieldMappings) != 1 || rows[0].FieldMappings[0].SourcePath != "id" || rows[0].FieldMappings[0].Column != "external_id" {
+		t.Errorf("FieldMappings = %+v, want [{source_path:id column:external_id}]", rows[0].FieldMappings)
+	}
+}
+
 // TestDeleteEventMappingHandler: T10 delete mapping case.
 func TestDeleteEventMappingHandler(t *testing.T) {
 	pool, h, actors, appID, _ := webhooksHandlerTestPool(t)
@@ -467,7 +517,7 @@ func TestDeleteEventMappingHandler(t *testing.T) {
 	if wCreate.Code != http.StatusCreated {
 		t.Fatalf("save mapping precondition: status = %d, body=%s", wCreate.Code, wCreate.Body.String())
 	}
-	var mapping EventMappingRow
+	var mapping mappingResponse
 	if err := json.Unmarshal(wCreate.Body.Bytes(), &mapping); err != nil {
 		t.Fatalf("decode mapping: %v", err)
 	}
