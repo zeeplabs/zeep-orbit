@@ -397,7 +397,8 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			outcome           TEXT        NOT NULL CHECK (outcome IN (
 			                    'captured','inserted','updated','deleted',
 			                    'unmapped','duplicate_skipped','row_not_found',
-			                    'invalid_token','malformed','write_error'
+			                    'invalid_token','malformed','write_error',
+			                    'verification_challenge'
 			                  )),
 			event_type_value  TEXT,
 			event_id          TEXT,
@@ -405,6 +406,30 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			target_row_id     TEXT,
 			error_detail      TEXT
 		)`,
+		// Widens the outcome CHECK for schemas already provisioned before
+		// 'verification_challenge' existed — same guarded-DO pattern as the
+		// dashboard_users_role_check widen above, so it's a no-op once applied.
+		`DO $do$
+		 BEGIN
+		   IF EXISTS (
+		     SELECT 1 FROM pg_constraint c
+		     JOIN pg_class t ON t.oid = c.conrelid
+		     JOIN pg_namespace n ON n.oid = t.relnamespace
+		     WHERE n.nspname = 'zeep_system' AND t.relname = 'webhook_deliveries'
+		       AND c.conname = 'webhook_deliveries_outcome_check'
+		       AND pg_get_constraintdef(c.oid) NOT LIKE '%verification_challenge%'
+		   ) THEN
+		     ALTER TABLE zeep_system.webhook_deliveries DROP CONSTRAINT webhook_deliveries_outcome_check;
+		     ALTER TABLE zeep_system.webhook_deliveries ADD CONSTRAINT webhook_deliveries_outcome_check
+		       CHECK (outcome IN (
+		         'captured','inserted','updated','deleted',
+		         'unmapped','duplicate_skipped','row_not_found',
+		         'invalid_token','malformed','write_error',
+		         'verification_challenge'
+		       ));
+		   END IF;
+		 END
+		 $do$`,
 		`CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_webhook_id_received_at
 		 ON zeep_system.webhook_deliveries(webhook_id, received_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_dedup

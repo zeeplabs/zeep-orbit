@@ -1114,6 +1114,7 @@ export interface WebhookDelivery {
     | 'invalid_token'
     | 'malformed'
     | 'write_error'
+    | 'verification_challenge'
   event_type_value: string | null
   event_id: string | null
   raw_payload: Record<string, unknown>

@@ -78,6 +78,17 @@ func (h *WebhookHandler) HandleWebhookDelivery(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// Provider verification handshake (Slack Events API, and others that
+	// follow the same convention): a subscription-time POST carrying a
+	// top-level "challenge" string must be echoed back verbatim as
+	// {"challenge": "..."} — not treated as a real event, so it bypasses
+	// capture/mapping entirely regardless of the webhook's current status.
+	if challenge, ok := verificationChallenge(payload); ok {
+		h.logDelivery(ctx, wh.ID, http.StatusOK, "verification_challenge", rawPayload, "", "", "")
+		writeJSON(w, http.StatusOK, map[string]string{"challenge": challenge})
+		return
+	}
+
 	if wh.Status == "capture" {
 		if err := dashboard.StoreCapturedSample(ctx, h.pool, wh.ID, rawPayload); err != nil {
 			h.logDelivery(ctx, wh.ID, http.StatusInternalServerError, "write_error", rawPayload, "", "", err.Error())
@@ -90,6 +101,22 @@ func (h *WebhookHandler) HandleWebhookDelivery(w http.ResponseWriter, r *http.Re
 	}
 
 	h.handleActiveDelivery(ctx, w, wh, payload, rawPayload)
+}
+
+// verificationChallenge reports whether payload carries a non-empty
+// top-level "challenge" string — the field name used by Slack's Events API
+// (and other providers following the same convention) for the one-time URL
+// verification handshake sent when a webhook URL is first subscribed.
+func verificationChallenge(payload map[string]any) (string, bool) {
+	v, ok := payload["challenge"]
+	if !ok {
+		return "", false
+	}
+	s, ok := v.(string)
+	if !ok || s == "" {
+		return "", false
+	}
+	return s, true
 }
 
 // stringifyPathValue renders a resolved payload value (any JSON scalar) as

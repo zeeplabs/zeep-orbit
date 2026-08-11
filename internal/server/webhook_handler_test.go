@@ -234,6 +234,49 @@ func TestWebhookDelivery_SecondCaptureOverwritesSample(t *testing.T) {
 	}
 }
 
+func TestWebhookDelivery_VerificationChallengeEchoedBeforeCapture(t *testing.T) {
+	wh, appID, token := webhookTestSetup(t, "POST")
+	h := NewWebhookHandler(testPool, testReg)
+	router := buildWebhookRouter(h)
+
+	req := httptest.NewRequest(http.MethodPost, "/hooks/"+wh.ID+"/"+token,
+		bytes.NewBufferString(`{"type":"url_verification","token":"slack-verification-token","challenge":"3eZbrw1aBm2rZgRNFdxV2595E9CY3gmdALWMmHkvFXO7tYXAYM8P"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for verification challenge, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Challenge string `json:"challenge"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response body: %v", err)
+	}
+	if body.Challenge != "3eZbrw1aBm2rZgRNFdxV2595E9CY3gmdALWMmHkvFXO7tYXAYM8P" {
+		t.Fatalf("expected the challenge value echoed back verbatim, got %q", body.Challenge)
+	}
+
+	// Still in capture mode with no sample stored — the handshake must not
+	// be mistaken for a real event to capture.
+	got, err := dashboard.GetWebhookByID(context.Background(), testPool, appID, wh.ID)
+	if err != nil {
+		t.Fatalf("GetWebhookByID: %v", err)
+	}
+	if got.CapturedSample != nil {
+		t.Fatalf("expected no captured sample from a verification challenge, got %v", got.CapturedSample)
+	}
+
+	list, err := dashboard.ListDeliveries(context.Background(), testPool, wh.ID, 50, 0)
+	if err != nil {
+		t.Fatalf("ListDeliveries: %v", err)
+	}
+	if len(list) != 1 || list[0].Outcome != "verification_challenge" {
+		t.Fatalf("expected 1 delivery logged with outcome=verification_challenge, got %+v", list)
+	}
+}
+
 func TestWebhookDelivery_UnknownWebhookIDReturns404(t *testing.T) {
 	if os.Getenv("TEST_DATABASE_URL") == "" {
 		t.Skip("TEST_DATABASE_URL não configurado")

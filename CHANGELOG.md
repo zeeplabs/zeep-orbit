@@ -12,6 +12,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ### Added
 
 - **Inbound webhooks** — an app owner can now create a webhook that receives events pushed by an external provider (e.g. Google Workspace) and writes them into an app table, no code required. Each webhook gets a unique URL with a per-webhook token (`/hooks/{webhookId}/{token}`); a new webhook starts in capture mode, recording the first real payload it receives without writing to any table. From the captured sample, the owner picks a target table and click-links fields to columns per event-type value (insert/update/delete, with a match-key column for update/delete), then activates the webhook so subsequent real calls apply the mapping. Every call — success, unmapped event, invalid token, duplicate, write failure — is recorded in a delivery log visible from the app's new "Webhooks" tab, retained for 30 days. Writes run under a dedicated RLS role (`webhook`, via `table_policies`), so an app owner must grant it a policy on the target table. Outbound webhooks (Orbit firing events on row changes) remain a separate, not-yet-built feature.
+- **Inbound webhooks: provider verification handshake support** — a call carrying a top-level `challenge` string (the convention Slack's Events API and similar providers use to verify a new webhook URL) is now echoed back verbatim as `{"challenge": "..."}` with a `200`, bypassing capture/mapping entirely and logged as `verification_challenge` in the delivery log — instead of failing the provider's "challenge_failed" check.
 
 ## [1.2.0] — 2026-08-10
 

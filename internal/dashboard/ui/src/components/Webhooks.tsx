@@ -301,7 +301,7 @@ export default function Webhooks({ appId, tables }: WebhooksProps) {
 // requires between success and error deliveries (spec P2
 // dashboard-delivery-log AC1). "unmapped"/"duplicate_skipped"/"row_not_found"
 // are deliberate no-ops, not failures, so they get a neutral tone.
-const SUCCESS_OUTCOMES = new Set<WebhookDelivery["outcome"]>(["captured", "inserted", "updated", "deleted"]);
+const SUCCESS_OUTCOMES = new Set<WebhookDelivery["outcome"]>(["captured", "inserted", "updated", "deleted", "verification_challenge"]);
 const ERROR_OUTCOMES = new Set<WebhookDelivery["outcome"]>(["invalid_token", "malformed", "write_error"]);
 
 function outcomeBadgeClass(outcome: WebhookDelivery["outcome"]): string {
