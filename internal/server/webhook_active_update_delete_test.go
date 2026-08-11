@@ -97,6 +97,47 @@ func TestWebhookActive_UpdateHappyPathOverwritesLinkedColumns(t *testing.T) {
 	}
 }
 
+func TestWebhookActive_UpdateWithAmbiguousMatchKeyIsRejected(t *testing.T) {
+	f := setupWebhookActiveFixture(t)
+	f.activateWithFullLifecycleMappings(t)
+
+	// external_id has no unique constraint at the schema level — two rows
+	// deliberately share the same value the update mapping's match key
+	// resolves to ("u-dup"), so the lookup can't tell them apart.
+	ctx := context.Background()
+	for i := 0; i < 2; i++ {
+		if _, err := testPool.Exec(ctx,
+			`INSERT INTO `+f.schema+`.employees (external_id, full_name) VALUES ('u-dup', $1)`, "Original "+string(rune('A'+i)),
+		); err != nil {
+			t.Fatalf("seed duplicate row %d: %v", i, err)
+		}
+	}
+
+	h := NewWebhookHandler(testPool, testReg)
+	router := buildActiveWebhookRouter(h)
+
+	rec := postWebhook(router, f.wh, f.token, `{"eventType":"user.updated","eventId":"evt-1","user":{"id":"u-dup","name":"Should Not Apply"}}`)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 when the match key resolves to more than one row, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var count int
+	if err := testPool.QueryRow(ctx, `SELECT COUNT(*) FROM `+f.schema+`.employees WHERE full_name = 'Should Not Apply'`).Scan(&count); err != nil {
+		t.Fatalf("count employees: %v", err)
+	}
+	if count != 0 {
+		t.Fatal("expected neither ambiguous row to be updated")
+	}
+
+	list, err := dashboard.ListDeliveries(ctx, testPool, f.wh.ID, 50, 0)
+	if err != nil {
+		t.Fatalf("ListDeliveries: %v", err)
+	}
+	if len(list) != 1 || list[0].Outcome != "ambiguous_match" {
+		t.Fatalf("expected delivery outcome=ambiguous_match, got %+v", list)
+	}
+}
+
 func TestWebhookActive_DeleteHappyPathRemovesRow(t *testing.T) {
 	f := setupWebhookActiveFixture(t)
 	f.activateWithFullLifecycleMappings(t)

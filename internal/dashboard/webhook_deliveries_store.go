@@ -17,7 +17,7 @@ import (
 type DeliveryEntry struct {
 	WebhookID      string
 	HTTPStatus     int
-	Outcome        string // captured|inserted|updated|deleted|unmapped|duplicate_skipped|row_not_found|invalid_token|malformed|write_error
+	Outcome        string // captured|inserted|updated|deleted|unmapped|duplicate_skipped|row_not_found|invalid_token|malformed|write_error|verification_challenge|ambiguous_match
 	EventTypeValue string
 	EventID        string
 	RawPayload     json.RawMessage
@@ -112,19 +112,22 @@ func ListDeliveries(ctx context.Context, pool *db.Pool, webhookID string, limit,
 	return result, rows.Err()
 }
 
+// processedOutcomes are the delivery outcomes that count as a true duplicate
+// on repeat. write_error and row_not_found are excluded: the event was not
+// durably processed, so a provider retry with the same event_id must be
+// allowed to try again.
+var processedOutcomes = []string{"inserted", "updated", "deleted", "unmapped", "duplicate_skipped"}
+
 // HasProcessedEventID reports whether a delivery already exists for
-// (webhookID, eventID) — the dedup check the active-mode delivery handler
-// (T7) performs before applying an insert mapping (spec P2 AC4, design.md
-// Tech Decisions: dedup storage lives directly on webhook_deliveries,
-// queried by (webhook_id, event_id), no separate dedup table).
+// (webhookID, eventID) with an outcome that represents genuine processing.
 func HasProcessedEventID(ctx context.Context, pool *db.Pool, webhookID, eventID string) (bool, error) {
 	if eventID == "" {
 		return false, nil
 	}
 	var exists bool
 	err := pool.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM zeep_system.webhook_deliveries WHERE webhook_id = $1 AND event_id = $2)`,
-		webhookID, eventID,
+		`SELECT EXISTS(SELECT 1 FROM zeep_system.webhook_deliveries WHERE webhook_id = $1 AND event_id = $2 AND outcome = ANY($3))`,
+		webhookID, eventID, processedOutcomes,
 	).Scan(&exists)
 	if err != nil {
 		return false, fmt.Errorf("dashboard: check processed event id for webhook %s: %w", webhookID, err)

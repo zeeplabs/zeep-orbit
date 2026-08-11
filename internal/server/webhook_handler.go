@@ -34,7 +34,17 @@ func NewWebhookHandler(pool *db.Pool, reg *registry.Registry) *WebhookHandler {
 // /hooks/{webhookId}/{token}, registered method-agnostically — the handler
 // itself checks the stored method against r.Method and 404s on mismatch,
 // per WEBHOOK-04, before ever touching the token.
+// maxWebhookBodyBytes caps an inbound webhook request body — this route is
+// public and unauthenticated until the token check below, so an unbounded
+// io.ReadAll in parseWebhookPayload would let anyone who knows a webhookId
+// (visible in the dashboard URL) submit an arbitrarily large body.
+const maxWebhookBodyBytes = 1 << 20 // 1 MiB
+
 func (h *WebhookHandler) HandleWebhookDelivery(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		r.Body = http.MaxBytesReader(w, r.Body, maxWebhookBodyBytes)
+	}
+
 	ctx := r.Context()
 	webhookID := chi.URLParam(r, "webhookId")
 	token := chi.URLParam(r, "token")
@@ -234,6 +244,12 @@ func (h *WebhookHandler) handleActiveDelivery(ctx context.Context, w http.Respon
 // update/delete-with-match-key AC4.
 var errWebhookRowNotFound = errors.New("server: webhook match key matched no row")
 
+// errWebhookAmbiguousMatch is dispatchUpdateOrDelete's sentinel for when the
+// match-key lookup finds more than one row — the match key isn't actually
+// unique for this table, so applying update/delete to whichever row the
+// query happened to return first would silently corrupt unrelated data.
+var errWebhookAmbiguousMatch = errors.New("server: webhook match key matched more than one row")
+
 // matchColumnCast returns the same ::uuid/::timestamptz cast
 // query.BuildInsert/Update apply internally (that helper is package-private
 // in internal/query, so this is a minimal local duplicate) — needed because
@@ -276,19 +292,31 @@ func (h *WebhookHandler) dispatchUpdateOrDelete(ctx context.Context, w http.Resp
 		return
 	}
 
-	lookupSQL := fmt.Sprintf(`SELECT id FROM %s.%s WHERE %s = $1%s`,
+	// LIMIT 2, not 1: the match key has no enforced uniqueness constraint, so
+	// a second row means this key is ambiguous for this table — caught here
+	// instead of silently applying the write to whichever row Postgres
+	// happened to return first.
+	lookupSQL := fmt.Sprintf(`SELECT id FROM %s.%s WHERE %s = $1%s LIMIT 2`,
 		app.SchemaName, mapping.TargetTable, matchColumn, matchColumnCast(table, matchColumn))
 
 	var targetRowID string
 	var outcome string
 	err := h.pool.WithRLSContext(ctx, db.RLSClaims{Role: "webhook", Sub: wh.ID}, h.reg.SystemConfig().StatementTimeoutMs, func(qx db.Querier) error {
-		var rowID string
-		if err := qx.QueryRow(ctx, lookupSQL, matchValue).Scan(&rowID); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return errWebhookRowNotFound
-			}
+		rows, err := qx.Query(ctx, lookupSQL, matchValue)
+		if err != nil {
 			return err
 		}
+		matchedIDs, err := pgx.CollectRows(rows, pgx.RowTo[string])
+		if err != nil {
+			return err
+		}
+		if len(matchedIDs) == 0 {
+			return errWebhookRowNotFound
+		}
+		if len(matchedIDs) > 1 {
+			return errWebhookAmbiguousMatch
+		}
+		rowID := matchedIDs[0]
 
 		switch mapping.Action {
 		case "update":
@@ -328,6 +356,12 @@ func (h *WebhookHandler) dispatchUpdateOrDelete(ctx context.Context, w http.Resp
 		if errors.Is(err, errWebhookRowNotFound) {
 			h.logDelivery(ctx, wh.ID, http.StatusOK, "row_not_found", rawPayload, eventTypeValue, eventID, "")
 			writeJSON(w, http.StatusOK, map[string]string{"status": "row_not_found"})
+			return
+		}
+		if errors.Is(err, errWebhookAmbiguousMatch) {
+			detail := fmt.Sprintf("match_key_column %q matched more than one row in %q — add a unique index or pick a column that's actually unique", matchColumn, mapping.TargetTable)
+			h.logDelivery(ctx, wh.ID, http.StatusConflict, "ambiguous_match", rawPayload, eventTypeValue, eventID, detail)
+			writeError(w, http.StatusConflict, "match key is ambiguous: matched more than one row")
 			return
 		}
 		h.logDelivery(ctx, wh.ID, http.StatusInternalServerError, "write_error", rawPayload, eventTypeValue, eventID, err.Error())

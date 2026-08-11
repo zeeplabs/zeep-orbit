@@ -415,7 +415,7 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			                    'captured','inserted','updated','deleted',
 			                    'unmapped','duplicate_skipped','row_not_found',
 			                    'invalid_token','malformed','write_error',
-			                    'verification_challenge'
+			                    'verification_challenge','ambiguous_match'
 			                  )),
 			event_type_value  TEXT,
 			event_id          TEXT,
@@ -443,6 +443,30 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 		         'unmapped','duplicate_skipped','row_not_found',
 		         'invalid_token','malformed','write_error',
 		         'verification_challenge'
+		       ));
+		   END IF;
+		 END
+		 $do$`,
+		// Widens the outcome CHECK again for 'ambiguous_match' (match-key
+		// column resolves to more than one row on update/delete) — same
+		// guarded-DO pattern, no-op once applied.
+		`DO $do$
+		 BEGIN
+		   IF EXISTS (
+		     SELECT 1 FROM pg_constraint c
+		     JOIN pg_class t ON t.oid = c.conrelid
+		     JOIN pg_namespace n ON n.oid = t.relnamespace
+		     WHERE n.nspname = 'zeep_system' AND t.relname = 'webhook_deliveries'
+		       AND c.conname = 'webhook_deliveries_outcome_check'
+		       AND pg_get_constraintdef(c.oid) NOT LIKE '%ambiguous_match%'
+		   ) THEN
+		     ALTER TABLE zeep_system.webhook_deliveries DROP CONSTRAINT webhook_deliveries_outcome_check;
+		     ALTER TABLE zeep_system.webhook_deliveries ADD CONSTRAINT webhook_deliveries_outcome_check
+		       CHECK (outcome IN (
+		         'captured','inserted','updated','deleted',
+		         'unmapped','duplicate_skipped','row_not_found',
+		         'invalid_token','malformed','write_error',
+		         'verification_challenge','ambiguous_match'
 		       ));
 		   END IF;
 		 END

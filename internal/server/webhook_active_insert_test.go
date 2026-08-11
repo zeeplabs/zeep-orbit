@@ -310,3 +310,46 @@ func TestWebhookActive_InsertMissingMappedFieldReturns500WriteError(t *testing.T
 		t.Fatalf("expected 1 delivery logged with outcome=write_error, got %+v", list)
 	}
 }
+
+func TestWebhookActive_RetryAfterWriteErrorIsNotDeduped(t *testing.T) {
+	f := setupWebhookActiveFixture(t)
+	f.activateWithInsertMapping(t)
+
+	if _, err := testPool.Exec(context.Background(), "ALTER TABLE "+f.schema+".employees ENABLE ROW LEVEL SECURITY"); err != nil {
+		t.Fatalf("enable RLS: %v", err)
+	}
+
+	h := NewWebhookHandler(testPool, testReg)
+	router := buildActiveWebhookRouter(h)
+
+	body := `{"eventType":"user.created","eventId":"evt-1","user":{"id":"u-1","name":"Ana"}}`
+	first := postWebhook(router, f.wh, f.token, body)
+	if first.Code != http.StatusInternalServerError {
+		t.Fatalf("expected first attempt to 500 under RLS denial, got %d", first.Code)
+	}
+
+	if _, err := testPool.Exec(context.Background(), "ALTER TABLE "+f.schema+".employees DISABLE ROW LEVEL SECURITY"); err != nil {
+		t.Fatalf("disable RLS: %v", err)
+	}
+
+	retry := postWebhook(router, f.wh, f.token, body)
+	if retry.Code != http.StatusOK {
+		t.Fatalf("expected retry with the same event_id to succeed once the write can go through, got %d: %s", retry.Code, retry.Body.String())
+	}
+
+	list, err := dashboard.ListDeliveries(context.Background(), testPool, f.wh.ID, 50, 0)
+	if err != nil {
+		t.Fatalf("ListDeliveries: %v", err)
+	}
+	if len(list) != 2 || list[0].Outcome != "inserted" || list[1].Outcome != "write_error" {
+		t.Fatalf("expected [inserted, write_error] newest-first, got %+v", list)
+	}
+
+	var count int
+	if err := testPool.QueryRow(context.Background(), `SELECT COUNT(*) FROM `+f.schema+`.employees`).Scan(&count); err != nil {
+		t.Fatalf("count employees: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected exactly 1 row written after the retry, got %d", count)
+	}
+}

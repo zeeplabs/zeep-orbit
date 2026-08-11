@@ -1117,6 +1117,7 @@ export interface WebhookDelivery {
     | 'malformed'
     | 'write_error'
     | 'verification_challenge'
+    | 'ambiguous_match'
   event_type_value: string | null
   event_id: string | null
   raw_payload: Record<string, unknown>

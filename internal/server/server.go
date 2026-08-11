@@ -149,14 +149,16 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 	r.Get("/health", h.HandleHealth)
 	r.Handle("/metrics", promhttp.Handler())
 
-	// Public, unauthenticated inbound webhook route — same tier as /health:
-	// no dashboard session, no end-user JWT, no {app} prefix. The token
-	// lives in the URL itself (see design.md); registered with HandleFunc
-	// (not a verb-specific method) since the webhook's configured HTTP
-	// method is a per-webhook setting the handler itself checks, not a
-	// routing-level constraint.
+	// Public, unauthenticated inbound webhook route: no dashboard session,
+	// no end-user JWT, no {app} prefix. The token lives in the URL itself
+	// (see design.md); registered with HandleFunc (not a verb-specific
+	// method) since the webhook's configured HTTP method is a per-webhook
+	// setting the handler itself checks, not a routing-level constraint.
+	// Per-IP rate limited (webhookLimiter) since the webhookId is visible in
+	// the dashboard URL and this route sits ahead of the token check.
 	webhookH := NewWebhookHandler(pool, reg)
-	r.HandleFunc("/hooks/{webhookId}/{token}", webhookH.HandleWebhookDelivery)
+	webhookLimiter := dashboard.NewRateLimiter(120, time.Minute)
+	r.With(webhookLimiter.Middleware).HandleFunc("/hooks/{webhookId}/{token}", webhookH.HandleWebhookDelivery)
 
 	dh := docs.NewHandler(reg)
 	r.Get("/docs/", dh.HandleIndex)
@@ -352,10 +354,11 @@ func logMiddleware(logger *zap.Logger, buf *dashboard.RingBuffer) func(http.Hand
 			status := cw.Status()
 			method := r.Method
 			contentType := r.Header.Get("Content-Type")
+			logPath := redactWebhookToken(r.URL.Path)
 
 			logger.Info("request",
 				zap.String("method", method),
-				zap.String("path", r.URL.Path),
+				zap.String("path", logPath),
 				zap.Int("status", status),
 				zap.Int64("latency_ms", latency.Milliseconds()),
 			)
@@ -364,7 +367,7 @@ func logMiddleware(logger *zap.Logger, buf *dashboard.RingBuffer) func(http.Hand
 				Timestamp:   start,
 				App:         dashboard.ExtractApp(r.URL.Path),
 				Method:      method,
-				Path:        r.URL.Path,
+				Path:        logPath,
 				Query:       r.URL.RawQuery,
 				Status:      status,
 				LatencyMs:   latency.Milliseconds(),
@@ -373,7 +376,7 @@ func logMiddleware(logger *zap.Logger, buf *dashboard.RingBuffer) func(http.Hand
 				ContentType: contentType,
 			}
 
-			if isTextContent(contentType) {
+			if isTextContent(contentType) && !isWebhookPath(r.URL.Path) {
 				if cw.body.Len() > 0 {
 					entry.ResBody = cw.body.String()
 				}
@@ -389,6 +392,22 @@ func logMiddleware(logger *zap.Logger, buf *dashboard.RingBuffer) func(http.Hand
 			httpRequestDuration.WithLabelValues(method).Observe(latency.Seconds())
 		})
 	}
+}
+
+func isWebhookPath(path string) bool {
+	return strings.HasPrefix(path, "/hooks/")
+}
+
+func redactWebhookToken(path string) string {
+	if !isWebhookPath(path) {
+		return path
+	}
+	parts := strings.Split(path, "/")
+	if len(parts) < 4 {
+		return path
+	}
+	parts[3] = "***"
+	return strings.Join(parts, "/")
 }
 
 func isMultipart(r *http.Request) bool {

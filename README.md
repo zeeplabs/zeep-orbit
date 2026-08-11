@@ -490,7 +490,7 @@ Full detail (per-milestone checklists, linked specs) lives in [`.specs/project/R
 | **M2 — Developer Experience** | ✅ Done | Dashboard, SDKs, relationships & indexes, migrations, filtering/sorting |
 | **M3 — Frontend Apps** | ✅ Done | GitHub Integration, Templates, Render Deploy, Custom Domains |
 | **M4 — Governance & Security** | 🔵 In progress | Audit Log, Soft Delete + retention/purge, SSO, Rate Limiting, [RBAC per app](.specs/features/rbac-per-app/) (admin/editor/viewer), [global dashboard roles](.specs/features/dashboard-global-roles/) (superadmin/admin/auditor/member) · planned: [2FA](.specs/features/two-factor-auth/), schema change approval |
-| **M5 — Storage & Events** | 🔵 In progress | S3 File Storage · planned: webhooks, event bus |
+| **M5 — Storage & Events** | 🔵 In progress | S3 File Storage, [Inbound Webhooks](.specs/features/inbound-webhooks/) · planned: outbound webhooks, event bus |
 | **M6 — i18n** | ✅ Done | pt-BR / English, language switcher |
 | **M7 — SDKs** | ✅ Done | TS, Go, Python, Rust, Java, PHP clients |
 | **M8 — Platform Services** | 🔵 In progress | planned: [SMTP/email integration](.specs/features/smtp-email-integration/) (invites, password reset), [observability integrations](.specs/features/observability-integrations/) (OpenTelemetry, Datadog, New Relic) |

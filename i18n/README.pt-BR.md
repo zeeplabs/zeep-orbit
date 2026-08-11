@@ -488,7 +488,7 @@ Detalhe completo (checklists por milestone, specs vinculadas) vive em [`.specs/p
 | **M2 — Developer Experience** | ✅ Concluído | Dashboard, SDKs, relacionamentos e índices, migrações, filtro/ordenação |
 | **M3 — Apps Frontend** | ✅ Concluído | Integração GitHub, Templates, Deploy Render, Domínios Customizados |
 | **M4 — Governança & Segurança** | 🔵 Em desenvolvimento | Audit Log, Soft Delete + retenção/purge, SSO, Rate Limiting, [RBAC por app](../.specs/features/rbac-per-app/) (admin/editor/viewer), [roles globais do dashboard](../.specs/features/dashboard-global-roles/) (superadmin/admin/auditor/member) · planejado: [2FA](../.specs/features/two-factor-auth/), fluxo de aprovação de mudanças de schema |
-| **M5 — Storage & Eventos** | 🔵 Em desenvolvimento | Storage S3 · planejado: webhooks, event bus |
+| **M5 — Storage & Eventos** | 🔵 Em desenvolvimento | Storage S3, [Webhooks de Entrada](../.specs/features/inbound-webhooks/) · planejado: webhooks de saída, event bus |
 | **M6 — i18n** | ✅ Concluído | pt-BR / English, seletor de idioma |
 | **M7 — SDKs** | ✅ Concluído | Clients TS, Go, Python, Rust, Java, PHP |
 | **M8 — Platform Services** | 🔵 Em desenvolvimento | planejado: [integração SMTP/email](../.specs/features/smtp-email-integration/) (convites, recuperação de senha), [integrações de observabilidade](../.specs/features/observability-integrations/) (OpenTelemetry, Datadog, New Relic) |

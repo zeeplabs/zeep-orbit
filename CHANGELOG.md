@@ -18,6 +18,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 - **Inbound webhooks: the full callback URL is now always visible**, not just once at creation/rotation. The token is stored AES-256-GCM encrypted (same pattern as the GitHub App/S3 config credentials) instead of a one-way SHA-256 hash, so it can be decrypted for display on every load of the Webhooks tab — a real product need, since re-pasting a webhook URL into a provider's admin panel weeks after creating it was previously impossible without rotating first. A webhook created before this change has a token that can no longer be decrypted; rotating it once produces a working link.
 
+### Fixed
+
+- **Inbound webhooks: webhook token no longer appears in application logs.** The `/hooks/{webhookId}/{token}` path was logged verbatim (zap + the dashboard's Logs ring buffer), so a global `auditor` role — which has no direct access to the Webhooks tab — could read a live write token straight out of `/dashboard/api/logs`. The path is now redacted before it reaches either log sink, and the request/response body for this route is no longer captured at all (it's a third-party provider's payload, not diagnostic data).
+- **Inbound webhooks: the public delivery route is now rate limited (120 req/min per IP) and caps the request body at 1 MiB.** Previously it ran unauthenticated and unbounded — same tier as `/health` — so anyone who knew a webhook's id (visible in its dashboard URL) could flood `webhook_deliveries` with `invalid_token` rows or send an oversized body straight into `captured_sample`.
+- **Inbound webhooks: a failed delivery (`write_error`, `row_not_found`) no longer permanently blocks its `event_id` from ever being retried.** The dedup check counted any delivery with a matching `event_id` as "already processed," including ones that failed to write — so a transient failure (e.g. an RLS policy not yet granted to the `webhook` role) followed by the provider's expected retry was silently swallowed as `duplicate_skipped` instead of applying the write, losing the event for good.
+- **Inbound webhooks: an update/delete mapping whose match-key column isn't actually unique no longer silently writes to an arbitrary row.** The lookup had no `LIMIT`/uniqueness check, so a match key resolving to more than one row (e.g. a non-unique `email` column) picked whichever row Postgres happened to return first and applied the write to it without any indication in the delivery log or the app owner's data. It's now detected and rejected as a new `ambiguous_match` outcome (`409`), with no write applied.
+
 ## [1.2.0] — 2026-08-10
 
 ### Added
