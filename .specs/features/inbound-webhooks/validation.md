@@ -5,6 +5,8 @@
 **Diff range**: `573f07f..cf58718` (18 commits, `main`, local/unpushed)
 **Verifier**: independent sub-agent (author ≠ verifier) — did not participate in implementation
 
+> [^token-storage]: Token storage was superseded after this Verifier run — see [Addendum](#addendum-cf58718head---post-pass-changes-and-opus-review) below. References to `TokenHash`/`hashWebhookToken` throughout this report describe the state *at the time this PASS was issued*; the column is now `TokenSecret`, encrypted (AES-256-GCM) rather than hashed.
+
 ---
 
 ## Task Completion
@@ -21,7 +23,7 @@
 
 | Criterion | Spec-defined outcome | `file:line` + assertion | Result |
 | --- | --- | --- | --- |
-| AC1: create webhook → unique URL+token | non-empty token, distinct from `token_hash` | `internal/dashboard/webhooks_store_test.go:70-78` — `TestCreateWebhook_HappyPath`: `token == ""` fails, `row.TokenHash == token` fails, `hashWebhookToken(token) != row.TokenHash` fails; also `internal/dashboard/ui/e2e/webhooks.spec.ts:106-111` (webhookId/token length > 0) | ✅ PASS |
+| AC1: create webhook → unique URL+token | non-empty token, distinct from stored secret | `internal/dashboard/webhooks_store_test.go` — `TestCreateWebhook_HappyPath`: `token == ""` fails, round-trips through `DecryptWebhookToken`/`VerifyWebhookToken` [^token-storage]; also `internal/dashboard/ui/e2e/webhooks.spec.ts:106-111` (webhookId/token length > 0) | ✅ PASS |
 | AC2: unmapped webhook is capture-only, no write | no table write; capture-only | Code: `internal/server/webhook_handler.go:81-90` returns before reaching `handleActiveDelivery`, which is the only path that ever calls `query.Build*`; `webhooks.spec.ts:114-119` (`rowCount == 0` after two capture POSTs) | ✅ PASS |
 | AC3: 2nd capture overwrites sample | sample after 2nd call has only 2nd call's fields | `internal/dashboard/webhooks_store_test.go:151-187` — `TestStoreCapturedSample_OverwritesOnSecondCall`: asserts key `"a"` absent, `"b"==2` present; `internal/server/webhook_handler_test.go:196-235` (same assertion at HTTP layer); `webhooks.spec.ts:150-153` (`employeeName` visible, `foo` from decoy absent) | ✅ PASS |
 | AC4: method mismatch → 404 | exact status 404 | `internal/server/webhook_handler_test.go:68-89` — `TestWebhookDelivery_MethodMismatchReturns404NoDeliveryLogged`: `rec.Code != http.StatusNotFound` fails, and asserts 0 deliveries logged; `webhooks.spec.ts:132-133` (`expect(...).toBe(404)`) | ✅ PASS |
@@ -63,7 +65,7 @@ Note: this story is **not** exercised by the Playwright e2e (`webhooks.spec.ts` 
 
 | Criterion | Spec-defined outcome | `file:line` + assertion | Result |
 | --- | --- | --- | --- |
-| AC1: rotate token invalidates old, generates new, mappings untouched | old token no longer verifies, new token verifies, distinct values | `internal/dashboard/webhooks_store_test.go:246-276` — `TestRotateToken_InvalidatesOldToken`: `got.TokenHash == hashWebhookToken(oldToken)` fails, `got.TokenHash != hashWebhookToken(newToken)` fails; HTTP layer: `webhooks_handler_test.go:224-266` — `TestRotateWebhookTokenHandler_InvalidatesOldTokenAndAudits` (also asserts old token no longer verifies via `VerifyWebhookToken`) | ✅ PASS |
+| AC1: rotate token invalidates old, generates new, mappings untouched | old token no longer verifies, new token verifies, distinct values | `internal/dashboard/webhooks_store_test.go` — `TestRotateToken_InvalidatesOldToken`: old token fails `VerifyWebhookToken`, new token passes it [^token-storage]; HTTP layer: `webhooks_handler_test.go:224-266` — `TestRotateWebhookTokenHandler_InvalidatesOldTokenAndAudits` (also asserts old token no longer verifies via `VerifyWebhookToken`) | ✅ PASS |
 | AC2: delete webhook stops URL, retains delivery log until 30-day purge | webhook 404s, row physically exists (soft-delete) | `internal/dashboard/webhooks_store_test.go:278-308` — `TestSoftDeleteWebhook_NeverHardDeletes`: explicitly queries `deleted_at IS NOT NULL` to prove the row is **not** hard-deleted; `webhooks_handler_test.go:272-310` (HTTP layer, `GetWebhookByID` → `ErrWebhookNotFound` post-delete) | ✅ PASS |
 | AC3: every create/edit/delete/rotate action recorded in `audit_log` | one `audit_log` row per action, correct `action` value | create: `webhooks_handler_test.go:151-159` (`webhook.create` count==1); rotate: `:257-265` (`webhook.rotate_token`); delete: `:301-309` (`webhook.delete`); mapping save/activate also audited (`:347-355`, `:442-450`) — **but there is no "edit webhook" capability anywhere in the codebase** (no `UpdateWebhook` store function, no PUT/PATCH handler, no route) to audit in the first place. | ❌ GAP — "edit" clause of this AC has no implementation, hence no test; not the same as the deliberately-scoped-out P2-update/delete-story exclusion, which the codebase explicitly documents. This gap is undocumented anywhere (`design.md`, `tasks.md`, code comments). |
 
@@ -160,3 +162,45 @@ One documented `SPEC_DEVIATION` found in `internal/dashboard/webhooks_store.go:3
    - **Priority**: Minor.
 
 **Next steps**: Route the 3 gaps above back as fix tasks if the team wants full closure before calling this feature done; none are blocking for demoing or shipping the P1-P3 functionality itself, since the core AC set (23 of 23 requirement rows' primary behavior) is genuinely implemented and independently verified.
+
+---
+
+## Addendum: `cf58718..HEAD` — post-PASS changes and Opus review
+
+**Added**: 2026-08-11. **Author**: the implementing agent for the changes below, *not* an independent Verifier — this addendum documents what changed and its evidence, but does not carry the same author≠verifier guarantee as the PASS above. Recorded here (M4 finding, Opus review) instead of leaving `cf58718..HEAD` with no paper trail at all; an independent Verifier pass over this same range is still recommended before the next release cut.
+
+Everything below landed after the PASS, driven either by real Slack integration testing, a direct user request, or a follow-up Opus-model review (`d662b5e..HEAD`, agent `aad6b36fb75db39af`) that found 3 blockers + 6 important + 9 minor issues (this addendum covers the fixes; the review's own findings are cited inline).
+
+**User-driven / bug-fix changes** (not independently re-verified, but each shipped with its own new/updated test, listed):
+- Provider verification-challenge echo (WEBHOOK-24, added to spec.md this session) — `internal/server/webhook_handler.go` `verificationChallenge`/`HandleWebhookDelivery`; test `TestWebhookDelivery_VerificationChallengeEchoedBeforeCapture`.
+- Token storage switched hash→encryption (design.md Tech Decisions updated this session) — `internal/dashboard/webhooks_store.go`, `internal/crypto/aes.go`; tests in `webhooks_store_test.go`/`webhooks_handler_test.go`/`internal/crypto/aes_test.go`.
+- Event-mapping list/save response was missing `json` tags (same bug class as the delivery-log fix the original PASS covered) — `internal/dashboard/webhooks_handler.go` `mappingResponse`/`toMappingResponse`; test `TestListEventMappingsHandler_ReturnsSnakeCaseFields`. Distilled as lesson L-013.
+- Saved-mapping UI now shows every `field_mappings` entry, not just the event-type/action/table summary — `WebhookMappingEditor.tsx`; e2e assertion added to `webhooks.spec.ts`.
+
+**Opus-review fixes (blockers, all fixed same session)**:
+- **B1**: webhook token was logged verbatim in `/hooks/{webhookId}/{token}` request logs (zap + dashboard `RingBuffer`), readable by the `auditor` role — fixed via `redactWebhookToken`/`isWebhookPath` in `internal/server/server.go`; body capture skipped entirely for this route.
+- **B2**: public delivery route had no rate limit or body-size cap — fixed with a 120 req/min per-IP limiter and `http.MaxBytesReader` (1 MiB) in `internal/server/webhook_handler.go`.
+- **B3**: dedup (`HasProcessedEventID`) counted `write_error`/`row_not_found` as "processed," permanently blocking a provider's expected retry — fixed by filtering on a `processedOutcomes` allowlist; test `TestWebhookActive_RetryAfterWriteErrorIsNotDeduped`.
+
+**Opus-review fixes (important, 5 of 6 fixed same session — I2-I6; I1 also fixed)**:
+- **I1**: match-key lookup had no uniqueness check — fixed with `LIMIT 2` + new outcome `ambiguous_match` (409); test `TestWebhookActive_UpdateWithAmbiguousMatchKeyIsRejected`. Documented in design.md's Error Handling Strategy this session.
+- **I2**: design.md's promised RLS-policy warning was never implemented — fixed in `WebhookMappingEditor.tsx` via `useTablePolicies`.
+- **I3**: token encryption reused `GOOGLE_OAUTH_ENCRYPTION_KEY`, fell back to a zero-byte key if unset — fixed with a dedicated `WEBHOOK_TOKEN_ENCRYPTION_KEY` that fails loudly instead; documented in README (all 4 languages) + `.env.example`.
+- **I4**: no polling while a webhook awaited its first sample — fixed with a conditional `refetchInterval` in `useWebhooks`.
+- **I5**: `SaveEventMapping` accepted an empty `event_type_value`/`field_mappings` — fixed with `ErrEventTypeValueRequired`/`ErrFieldMappingsRequired`; tests `TestSaveEventMapping_EmptyEventTypeValueRejected`/`TestSaveEventMapping_EmptyFieldMappingsRejected`.
+- **I6**: README (4 languages) still listed webhooks as "planned" — fixed, roadmap synced.
+
+**Gate at time of this addendum**: `go build`/`go vet`/`gofmt` clean, full `go test ./...` green against a disposable Postgres 16 container, `tsc -b`/`npm run build` clean, i18n key parity clean (en/pt-BR). Not re-run: the discrimination-sensor mutation test and a fresh Playwright e2e pass against a live server — both are what a real Verifier pass would add over this addendum.
+
+**M1-M9 (minor findings) — all fixed in this same addendum session**, none independently re-verified (same caveat as above — self-authored, not a fresh Verifier pass):
+- **M1**: `design.md` updated — token storage description (Data Models, Components, Risks & Concerns, Tech Decisions) now says AES-256-GCM encryption, with the original SHA-256-hash text struck through and kept visible for history.
+- **M2**: WEBHOOK-24 added to `spec.md`'s traceability table and to `design.md`'s Error Handling Strategy for the verification-challenge echo; covered by the existing `TestWebhookDelivery_VerificationChallengeEchoedBeforeCapture`.
+- **M3**: `spec.md` P3 AC3 amended with a strikethrough on "edit" plus an explicit gap note (option (b) from this file's own fix-task suggestion above) — traceability no longer claims coverage that doesn't exist.
+- **M4**: this addendum itself, plus the stale `TokenHash`/`hashWebhookToken` references above replaced with a footnote pointing here.
+- **M5**: delivery outcome badges and mapping action labels now go through `t()` (`webhooks.outcome.*`, `webhookMapping.action.*`, both locales) instead of rendering the raw enum value; `webhooks.spec.ts` updated to assert the translated (English) labels.
+- **M6**: added a raw-bytes assertion for `"field_mappings"`/`"source_path"`/`"column"` in `TestListEventMappingsHandler_ReturnsSnakeCaseFields`, matching the existing `event_type_value` check.
+- **M7**: the verification-challenge delivery now persists only `{"challenge": "..."}`, not the full inbound payload — a Slack-style legacy verification `token` field in the same request no longer sits in `webhook_deliveries` for 30 days. New assertion in `TestWebhookDelivery_VerificationChallengeEchoedBeforeCapture` confirms the token is absent and the challenge value is still recorded.
+- **M8**: `WebhookMappingEditor`'s sample-fields/table-columns grid is now `grid-cols-1 sm:grid-cols-2` instead of a fixed 2-column grid.
+- **M9**: `internal/query`'s cast helper exported as `query.PgCast`; `matchColumnCast` in `internal/server/webhook_handler.go` now calls it instead of duplicating the switch.
+
+Gate re-run after M1-M9: `go build`/`go vet`/`gofmt` clean, full `go test ./...` green (disposable Postgres), `tsc -b`/`npm run build` clean, i18n key parity clean.

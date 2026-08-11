@@ -228,21 +228,23 @@ test.describe('Inbound webhooks — full lifecycle', () => {
     await page.click('button:has-text("Hide mapping")')
     await page.click('button:has-text("View deliveries")')
 
+    // Outcome badges render through webhooks.outcome.<value> (en.json) —
+    // asserting the translated label, not the raw wire-format outcome string.
     const expectedOutcomes = [
-      'captured', // decoy capture
-      'captured', // real sample capture
-      'invalid_token', // bad token
-      'unmapped',
-      'write_error',
-      'inserted',
-      'duplicate_skipped',
+      'Captured', // decoy capture
+      'Captured', // real sample capture
+      'Invalid token', // bad token
+      'Unmapped',
+      'Write error',
+      'Inserted',
+      'Duplicate skipped',
     ]
     for (const outcome of expectedOutcomes) {
       await expect(page.getByText(outcome, { exact: true }).first()).toBeVisible()
     }
-    await expect(page.getByText('inserted', { exact: true })).toHaveCount(1)
-    await expect(page.getByText('duplicate_skipped', { exact: true })).toHaveCount(1)
-    await expect(page.getByText('captured', { exact: true })).toHaveCount(2)
+    await expect(page.getByText('Inserted', { exact: true })).toHaveCount(1)
+    await expect(page.getByText('Duplicate skipped', { exact: true })).toHaveCount(1)
+    await expect(page.getByText('Captured', { exact: true })).toHaveCount(2)
 
     void appId // app id only needed to build the create-app URL above
   })

@@ -275,6 +275,15 @@ func TestWebhookDelivery_VerificationChallengeEchoedBeforeCapture(t *testing.T) 
 	if len(list) != 1 || list[0].Outcome != "verification_challenge" {
 		t.Fatalf("expected 1 delivery logged with outcome=verification_challenge, got %+v", list)
 	}
+	// Only the challenge value is persisted -- Slack's legacy verification
+	// "token" field in the same payload has no reason to sit in
+	// webhook_deliveries for 30 days.
+	if _, hasToken := list[0].RawPayload["token"]; hasToken {
+		t.Fatalf("expected the legacy verification token to NOT be persisted in raw_payload, got %+v", list[0].RawPayload)
+	}
+	if list[0].RawPayload["challenge"] != "3eZbrw1aBm2rZgRNFdxV2595E9CY3gmdALWMmHkvFXO7tYXAYM8P" {
+		t.Fatalf("expected raw_payload to still record the challenge value, got %+v", list[0].RawPayload)
+	}
 }
 
 func TestWebhookDelivery_UnknownWebhookIDReturns404(t *testing.T) {

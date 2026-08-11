@@ -184,7 +184,7 @@ export default function WebhookMappingEditor({ appId, webhook, tables }: Webhook
           description={t("webhookMapping.noSampleDesc")}
         />
       ) : (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="flex flex-col gap-1 rounded-[10px] border border-[var(--border)] bg-[var(--sunken)] p-2">
             <p className="text-[11px] font-medium text-[var(--text-secondary)]">{t("webhookMapping.sampleFields")}</p>
             {fields.map((f) => (
@@ -242,7 +242,7 @@ export default function WebhookMappingEditor({ appId, webhook, tables }: Webhook
             <SelectContent>
               {ACTIONS.map((a) => (
                 <SelectItem key={a} value={a}>
-                  {a}
+                  {t(`webhookMapping.action.${a}`)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -297,7 +297,7 @@ export default function WebhookMappingEditor({ appId, webhook, tables }: Webhook
               <div className="flex items-center justify-between gap-2">
                 <div>
                   <span className="font-medium">{m.event_type_value}</span>
-                  <span className="text-[var(--text-tertiary)]"> — {m.action} → {m.target_table}</span>
+                  <span className="text-[var(--text-tertiary)]"> — {t(`webhookMapping.action.${m.action}`)} → {m.target_table}</span>
                 </div>
                 <Button variant="ghost" size="sm" onClick={() => deleteMapping.mutate(m.id)}>
                   <Icon name="delete" size={15} />

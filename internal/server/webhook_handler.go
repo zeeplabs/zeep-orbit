@@ -94,7 +94,13 @@ func (h *WebhookHandler) HandleWebhookDelivery(w http.ResponseWriter, r *http.Re
 	// {"challenge": "..."} — not treated as a real event, so it bypasses
 	// capture/mapping entirely regardless of the webhook's current status.
 	if challenge, ok := verificationChallenge(payload); ok {
-		h.logDelivery(ctx, wh.ID, http.StatusOK, "verification_challenge", rawPayload, "", "", "")
+		// Store only the challenge value, not the full rawPayload -- some
+		// providers following this convention (Slack's legacy Events API
+		// shape) include a separate verification "token" field alongside
+		// "challenge", which has no reason to sit in webhook_deliveries for
+		// 30 days.
+		minimal, _ := json.Marshal(map[string]string{"challenge": challenge})
+		h.logDelivery(ctx, wh.ID, http.StatusOK, "verification_challenge", minimal, "", "", "")
 		writeJSON(w, http.StatusOK, map[string]string{"challenge": challenge})
 		return
 	}
@@ -251,19 +257,13 @@ var errWebhookRowNotFound = errors.New("server: webhook match key matched no row
 var errWebhookAmbiguousMatch = errors.New("server: webhook match key matched more than one row")
 
 // matchColumnCast returns the same ::uuid/::timestamptz cast
-// query.BuildInsert/Update apply internally (that helper is package-private
-// in internal/query, so this is a minimal local duplicate) — needed because
-// pgx's extended protocol doesn't auto-cast a text parameter into a uuid
-// column for a bare WHERE col = $1.
+// query.BuildInsert/Update apply internally (via the shared query.PgCast) —
+// needed because pgx's extended protocol doesn't auto-cast a text parameter
+// into a uuid column for a bare WHERE col = $1.
 func matchColumnCast(table *registry.Table, column string) string {
 	for _, c := range table.Columns {
 		if c.Name == column {
-			switch c.Type {
-			case "uuid":
-				return "::uuid"
-			case "timestamptz":
-				return "::timestamptz"
-			}
+			return query.PgCast(c.Type)
 		}
 	}
 	return ""

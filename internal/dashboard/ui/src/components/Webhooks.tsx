@@ -336,7 +336,7 @@ function WebhookDeliveryLog({ appId, webhookId }: WebhookDeliveryLogProps) {
           >
             <span className="text-[var(--text-tertiary)]">{new Date(d.received_at).toLocaleString()}</span>
             <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${outcomeBadgeClass(d.outcome)}`}>
-              {d.outcome}
+              {t(`webhooks.outcome.${d.outcome}`)}
             </span>
             <span className="truncate font-mono text-[var(--text-secondary)]">{d.event_type_value ?? "—"}</span>
           </button>

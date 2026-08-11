@@ -493,6 +493,16 @@ func TestListEventMappingsHandler_ReturnsSnakeCaseFields(t *testing.T) {
 	if !bytes.Contains(w.Body.Bytes(), []byte(`"event_type_value"`)) {
 		t.Errorf("response is missing the snake_case key \"event_type_value\" the frontend decodes -- body=%s", w.Body.String())
 	}
+	// field_mappings is a nested slice — decoding it into mappingResponse
+	// below would self-mask the exact bug this test exists to catch (a
+	// PascalCase FieldMappings/SourcePath/Column would just leave the
+	// decoded struct's fields zero-valued, not fail to unmarshal), so assert
+	// the raw wire bytes directly, same as the event_type_value check above.
+	for _, key := range []string{`"field_mappings"`, `"source_path"`, `"column"`} {
+		if !bytes.Contains(w.Body.Bytes(), []byte(key)) {
+			t.Errorf("response is missing the snake_case key %s the frontend decodes -- body=%s", key, w.Body.String())
+		}
+	}
 
 	var rows []mappingResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &rows); err != nil {

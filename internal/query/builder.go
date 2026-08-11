@@ -44,8 +44,12 @@ func columnTypes(table *registry.Table) map[string]string {
 	return m
 }
 
-// uuid and timestamptz do not have auto-cast from text in pgx extended protocol.
-func pgCast(colType string) string {
+// PgCast returns the explicit cast pgx's extended protocol needs for a text
+// parameter bound to a uuid/timestamptz column (no auto-cast from text) —
+// exported so callers outside this package building their own bare
+// `WHERE col = $1`-style SQL (e.g. internal/server's webhook match-key
+// lookup) don't have to duplicate this switch.
+func PgCast(colType string) string {
 	switch colType {
 	case "uuid":
 		return "::uuid"
@@ -129,7 +133,7 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 			var placeholders []string
 			for _, p := range parts {
 				args = append(args, p)
-				placeholders = append(placeholders, fmt.Sprintf("$%d%s", len(args), pgCast(types[key])))
+				placeholders = append(placeholders, fmt.Sprintf("$%d%s", len(args), PgCast(types[key])))
 			}
 			whereClauses = append(whereClauses, fmt.Sprintf("%s IN (%s)", key, strings.Join(placeholders, ", ")))
 			continue
@@ -141,7 +145,7 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 				op = sqlOp
 				filterVal := strings.TrimPrefix(val, prefix)
 				args = append(args, filterVal)
-				whereClauses = append(whereClauses, fmt.Sprintf("%s %s $%d%s", key, op, len(args), pgCast(types[key])))
+				whereClauses = append(whereClauses, fmt.Sprintf("%s %s $%d%s", key, op, len(args), PgCast(types[key])))
 				found = true
 				break
 			}
@@ -236,7 +240,7 @@ func BuildInsert(schemaName, tableName string, table *registry.Table, body map[s
 		}
 		cols = append(cols, col.Name)
 		args = append(args, val)
-		placeholders = append(placeholders, fmt.Sprintf("$%d%s", len(args), pgCast(types[col.Name])))
+		placeholders = append(placeholders, fmt.Sprintf("$%d%s", len(args), PgCast(types[col.Name])))
 	}
 
 	if ownerID != "" {
@@ -285,7 +289,7 @@ func BuildUpdate(schemaName, tableName string, table *registry.Table, id string,
 			continue
 		}
 		args = append(args, val)
-		setClauses = append(setClauses, fmt.Sprintf("%s = $%d%s", col.Name, len(args), pgCast(types[col.Name])))
+		setClauses = append(setClauses, fmt.Sprintf("%s = $%d%s", col.Name, len(args), PgCast(types[col.Name])))
 	}
 
 	if len(setClauses) == 0 {
