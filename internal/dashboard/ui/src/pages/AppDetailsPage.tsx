@@ -107,12 +107,12 @@ export default function AppDetailsPage() {
       </div>
 
       <Tabs value={tab} onValueChange={setTab} className="w-full">
-        <TabsList className="mb-7 inline-flex h-auto w-auto justify-start gap-0.5 rounded-[10px] bg-[var(--sunken)] p-[3px]">
+        <TabsList className="mb-7 flex h-auto w-full max-w-full justify-start gap-0.5 overflow-x-auto rounded-[10px] bg-[var(--sunken)] p-[3px]">
           {tabDefs.map(({ v, label, badge }) => (
             <TabsTrigger
               key={v}
               value={v}
-              className="gap-1.5 rounded-[8px] px-4 py-2 text-[13px] font-bold text-[var(--text-secondary)] data-[state=active]:bg-[var(--surface-raised)] data-[state=active]:text-[var(--text-primary)] data-[state=active]:shadow-[var(--shadow-sm)]"
+              className="shrink-0 gap-1.5 rounded-[8px] px-4 py-2 text-[13px] font-bold text-[var(--text-secondary)] data-[state=active]:bg-[var(--surface-raised)] data-[state=active]:text-[var(--text-primary)] data-[state=active]:shadow-[var(--shadow-sm)]"
             >
               {label}
               {badge && (
