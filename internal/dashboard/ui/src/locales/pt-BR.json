@@ -875,6 +875,7 @@
   "webhookMapping.fieldMappingRequired": "Pelo menos um campo deve ser vinculado a uma coluna",
   "webhookMapping.matchKeyRequired": "Uma coluna de chave de correspondência é obrigatória para ações de update/delete",
   "webhookMapping.saveSuccess": "Mapeamento salvo",
+  "webhookMapping.policyWarning": "A tabela \"{{table}}\" tem políticas de linha, mas nenhuma libera a ação \"{{action}}\" para o papel webhook ainda — entregas reais vão falhar até você adicionar uma na aba Políticas.",
   "webhooks.viewDeliveries": "Ver entregas",
   "webhooks.hideDeliveries": "Ocultar entregas",
   "webhooks.mapWebhook": "Mapear",

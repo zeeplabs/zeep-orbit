@@ -463,6 +463,8 @@ A flag `--atomic` reverte automaticamente caso a atualização falhe.
 | `GOOGLE_CLIENT_SECRET`         | Não         | Client Secret do Google OAuth                          |
 | `GOOGLE_REDIRECT_URL`          | Não         | URL de redirecionamento do Google OAuth                |
 | `GOOGLE_ALLOWED_DOMAINS`       | Não         | Domínios de email permitidos, separados por vírgula    |
+| `GOOGLE_OAUTH_ENCRYPTION_KEY`  | Não         | Cifra o client secret do Google OAuth em repouso (por defeito: `DASHBOARD_BOOTSTRAP_SECRET`) |
+| `WEBHOOK_TOKEN_ENCRYPTION_KEY` | Não         | Cifra os tokens de webhook inbound em repouso (por defeito: `DASHBOARD_BOOTSTRAP_SECRET`; separada de propósito, para rodar uma sem invalidar a outra) |
 | `BRAND_THEME`                  | Não         | Tema por defeito (azure, emerald, ruby, amber, orange) |
 | `BRAND_COMPANY_NAME`           | Não         | Nome da empresa para white-label                        |
 | `LOG_LEVEL`                    | Não         | Defina `debug` para output de desenvolvimento           |

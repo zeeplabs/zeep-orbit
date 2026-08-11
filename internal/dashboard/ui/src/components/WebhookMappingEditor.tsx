@@ -10,6 +10,7 @@ import {
   useDeleteEventMapping,
   useEventMappings,
   useSaveEventMapping,
+  useTablePolicies,
 } from "../lib/api";
 import { Icon } from "@/components/ui/icon";
 import { EmptyState } from "@/components/patterns/states";
@@ -85,6 +86,16 @@ export default function WebhookMappingEditor({ appId, webhook, tables }: Webhook
 
   const selectedTable = tables.find((tb) => tb.name === targetTable);
   const requiresMatchKey = action !== "insert";
+
+  const { data: targetTablePolicies } = useTablePolicies(appId, targetTable);
+  // Native RLS only turns on for a table once it has at least one policy
+  // (table_policies_store.go) — with zero policies the webhook role's write
+  // is unrestricted, so there's nothing to warn about there. With at least
+  // one policy, the webhook role needs its own matching policy for this
+  // mapping's action, or its writes will 500 at delivery time.
+  const webhookRoleMissingPolicy =
+    (targetTablePolicies?.length ?? 0) > 0 &&
+    !targetTablePolicies?.some((p) => p.action === action && p.roles.includes("webhook"));
 
   const pickField = (path: string) => setPendingPath(path);
 
@@ -263,6 +274,11 @@ export default function WebhookMappingEditor({ appId, webhook, tables }: Webhook
             </Select>
           )}
         </div>
+        {webhookRoleMissingPolicy && (
+          <p className="text-[12px] text-[var(--warning)]">
+            {t("webhookMapping.policyWarning", { table: targetTable, action })}
+          </p>
+        )}
         {formError && <p className="text-[12px] text-[var(--danger)]">{formError}</p>}
         <div>
           <Button size="sm" disabled={saveMapping.isPending} onClick={submit}>

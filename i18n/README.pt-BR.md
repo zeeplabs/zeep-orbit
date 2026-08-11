@@ -463,6 +463,8 @@ A flag `--atomic` faz rollback automático se a atualização falhar.
 | `GOOGLE_CLIENT_SECRET`       | Não         | Google OAuth Client Secret                          |
 | `GOOGLE_REDIRECT_URL`        | Não         | URL de redirect do Google OAuth                     |
 | `GOOGLE_ALLOWED_DOMAINS`     | Não         | Domínios de email permitidos (separados por vírgula) |
+| `GOOGLE_OAUTH_ENCRYPTION_KEY` | Não        | Criptografa o Google OAuth client secret em repouso (padrão: `DASHBOARD_BOOTSTRAP_SECRET`) |
+| `WEBHOOK_TOKEN_ENCRYPTION_KEY` | Não        | Criptografa os tokens de webhook inbound em repouso (padrão: `DASHBOARD_BOOTSTRAP_SECRET`; separada de propósito, para rotacionar uma sem invalidar a outra) |
 | `BRAND_THEME`                | Não         | Tema padrão (azure, emerald, ruby, amber, orange)   |
 | `BRAND_COMPANY_NAME`         | Não         | Nome da empresa para white-label                    |
 | `LOG_LEVEL`                  | Não         | `debug` para logs de desenvolvimento                |

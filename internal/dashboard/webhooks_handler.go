@@ -325,7 +325,9 @@ func (h *Handler) SaveEventMapping(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, ErrInvalidAction),
 			errors.Is(err, ErrMatchKeyRequired),
 			errors.Is(err, ErrUnknownTargetTable),
-			errors.Is(err, ErrUnknownTargetColumn):
+			errors.Is(err, ErrUnknownTargetColumn),
+			errors.Is(err, ErrEventTypeValueRequired),
+			errors.Is(err, ErrFieldMappingsRequired):
 			// Safe to expose: fixed, non-dynamic sentinel messages, never raw
 			// DB detail (AGENTS.md §4's typed-error exception).
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})

@@ -875,6 +875,7 @@
   "webhookMapping.fieldMappingRequired": "At least one field must be linked to a column",
   "webhookMapping.matchKeyRequired": "A match key column is required for update/delete actions",
   "webhookMapping.saveSuccess": "Mapping saved",
+  "webhookMapping.policyWarning": "Table \"{{table}}\" has row policies, but none grant the \"{{action}}\" action to the webhook role yet — real deliveries will fail until you add one on the Policies tab.",
   "webhooks.viewDeliveries": "View deliveries",
   "webhooks.hideDeliveries": "Hide deliveries",
   "webhooks.mapWebhook": "Map",

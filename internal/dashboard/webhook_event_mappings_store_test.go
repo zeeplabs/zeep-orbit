@@ -96,6 +96,9 @@ func TestSaveEventMapping_UpdateAndDeleteRequireMatchKey(t *testing.T) {
 		Action:         "delete",
 		TargetTable:    "employees",
 		MatchKeyColumn: "external_id",
+		FieldMappings: []FieldMappingDef{
+			{SourcePath: "user.id", Column: "external_id"},
+		},
 	})
 	if err != nil {
 		t.Fatalf("SaveEventMapping (delete with match key): %v", err)
@@ -122,9 +125,61 @@ func TestSaveEventMapping_UnknownTableRejected(t *testing.T) {
 		EventTypeValue: "user.created",
 		Action:         "insert",
 		TargetTable:    "does_not_exist",
+		FieldMappings: []FieldMappingDef{
+			{SourcePath: "user.id", Column: "external_id"},
+		},
 	})
 	if err != ErrUnknownTargetTable {
 		t.Fatalf("expected ErrUnknownTargetTable, got %v", err)
+	}
+}
+
+func TestSaveEventMapping_EmptyEventTypeValueRejected(t *testing.T) {
+	pool := webhooksTestPool(t)
+	appID, userID := webhooksTestApp(t, pool)
+	ctx := context.Background()
+	reg := webhookMappingTestRegistry()
+
+	wh, _, err := CreateWebhook(ctx, pool, CreateWebhookInput{
+		AppID: appID, Name: "hook", Method: "POST", EventTypePath: "eventType", CreatedBy: userID,
+	})
+	if err != nil {
+		t.Fatalf("CreateWebhook: %v", err)
+	}
+
+	_, err = SaveEventMapping(ctx, pool, reg, webhookMappingTestApp, wh.ID, EventMappingDef{
+		EventTypeValue: "   ",
+		Action:         "insert",
+		TargetTable:    "employees",
+		FieldMappings: []FieldMappingDef{
+			{SourcePath: "user.id", Column: "external_id"},
+		},
+	})
+	if err != ErrEventTypeValueRequired {
+		t.Fatalf("expected ErrEventTypeValueRequired for a blank event_type_value, got %v", err)
+	}
+}
+
+func TestSaveEventMapping_EmptyFieldMappingsRejected(t *testing.T) {
+	pool := webhooksTestPool(t)
+	appID, userID := webhooksTestApp(t, pool)
+	ctx := context.Background()
+	reg := webhookMappingTestRegistry()
+
+	wh, _, err := CreateWebhook(ctx, pool, CreateWebhookInput{
+		AppID: appID, Name: "hook", Method: "POST", EventTypePath: "eventType", CreatedBy: userID,
+	})
+	if err != nil {
+		t.Fatalf("CreateWebhook: %v", err)
+	}
+
+	_, err = SaveEventMapping(ctx, pool, reg, webhookMappingTestApp, wh.ID, EventMappingDef{
+		EventTypeValue: "user.created",
+		Action:         "insert",
+		TargetTable:    "employees",
+	})
+	if err != ErrFieldMappingsRequired {
+		t.Fatalf("expected ErrFieldMappingsRequired for an empty field_mappings, got %v", err)
 	}
 }
 
@@ -171,6 +226,9 @@ func TestSaveEventMapping_DuplicateEventTypeValueReturnsConflict(t *testing.T) {
 		EventTypeValue: "user.created",
 		Action:         "insert",
 		TargetTable:    "employees",
+		FieldMappings: []FieldMappingDef{
+			{SourcePath: "user.id", Column: "external_id"},
+		},
 	}
 	if _, err := SaveEventMapping(ctx, pool, reg, webhookMappingTestApp, wh.ID, def); err != nil {
 		t.Fatalf("SaveEventMapping (1st): %v", err)
@@ -194,13 +252,14 @@ func TestListEventMappings_And_GetEventMappingByType(t *testing.T) {
 		t.Fatalf("CreateWebhook: %v", err)
 	}
 
+	oneFieldMapping := []FieldMappingDef{{SourcePath: "user.id", Column: "external_id"}}
 	if _, err := SaveEventMapping(ctx, pool, reg, webhookMappingTestApp, wh.ID, EventMappingDef{
-		EventTypeValue: "user.created", Action: "insert", TargetTable: "employees",
+		EventTypeValue: "user.created", Action: "insert", TargetTable: "employees", FieldMappings: oneFieldMapping,
 	}); err != nil {
 		t.Fatalf("SaveEventMapping (created): %v", err)
 	}
 	if _, err := SaveEventMapping(ctx, pool, reg, webhookMappingTestApp, wh.ID, EventMappingDef{
-		EventTypeValue: "user.deleted", Action: "delete", TargetTable: "employees", MatchKeyColumn: "external_id",
+		EventTypeValue: "user.deleted", Action: "delete", TargetTable: "employees", MatchKeyColumn: "external_id", FieldMappings: oneFieldMapping,
 	}); err != nil {
 		t.Fatalf("SaveEventMapping (deleted): %v", err)
 	}
@@ -241,6 +300,7 @@ func TestDeleteEventMapping(t *testing.T) {
 
 	row, err := SaveEventMapping(ctx, pool, reg, webhookMappingTestApp, wh.ID, EventMappingDef{
 		EventTypeValue: "user.created", Action: "insert", TargetTable: "employees",
+		FieldMappings: []FieldMappingDef{{SourcePath: "user.id", Column: "external_id"}},
 	})
 	if err != nil {
 		t.Fatalf("SaveEventMapping: %v", err)

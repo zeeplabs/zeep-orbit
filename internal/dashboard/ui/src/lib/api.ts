@@ -1130,6 +1130,16 @@ export function useWebhooks(appId: string): UseQueryResult<WebhookSubscription[]
     queryKey: ['webhooks', appId],
     queryFn: () => apiFetch<WebhookSubscription[]>(`/dashboard/api/apps/${appId}/webhooks`),
     enabled: Boolean(appId),
+    // Poll while any webhook is still waiting for its first sample — the
+    // capture happens from an external provider's own call, outside any
+    // mutation this dashboard tab knows about, so nothing else invalidates
+    // this query when the sample actually arrives.
+    refetchInterval: (query) => {
+      const stillCapturing = query.state.data?.some(
+        (wh) => wh.status === 'capture' && !wh.captured_sample,
+      )
+      return stillCapturing ? 3000 : false
+    },
   })
 }
 

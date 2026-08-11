@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -72,7 +73,7 @@ func generateWebhookToken() (string, error) {
 // this column; the caller must treat a decrypt error as "rotate the token"
 // rather than a hard failure.
 func DecryptWebhookToken(w WebhookRow) (string, error) {
-	return crypto.Decrypt(w.TokenSecret)
+	return crypto.DecryptWebhookToken(w.TokenSecret)
 }
 
 // VerifyWebhookToken reports whether a plaintext token presented on an
@@ -85,7 +86,7 @@ func VerifyWebhookToken(tokenSecret, presentedToken string) bool {
 	if presentedToken == "" {
 		return false
 	}
-	stored, err := crypto.Decrypt(tokenSecret)
+	stored, err := crypto.DecryptWebhookToken(tokenSecret)
 	if err != nil {
 		return false
 	}
@@ -106,7 +107,7 @@ func CreateWebhook(ctx context.Context, pool *db.Pool, input CreateWebhookInput)
 	if err != nil {
 		return WebhookRow{}, "", fmt.Errorf("dashboard: generate webhook token: %w", err)
 	}
-	tokenSecret, err := crypto.Encrypt(token)
+	tokenSecret, err := crypto.EncryptWebhookToken(token)
 	if err != nil {
 		return WebhookRow{}, "", fmt.Errorf("dashboard: encrypt webhook token: %w", err)
 	}
@@ -278,7 +279,7 @@ func RotateToken(ctx context.Context, pool *db.Pool, webhookID string) (string, 
 	if err != nil {
 		return "", fmt.Errorf("dashboard: generate webhook token: %w", err)
 	}
-	tokenSecret, err := crypto.Encrypt(token)
+	tokenSecret, err := crypto.EncryptWebhookToken(token)
 	if err != nil {
 		return "", fmt.Errorf("dashboard: encrypt webhook token: %w", err)
 	}
@@ -336,6 +337,19 @@ var ErrMatchKeyRequired = errors.New("dashboard: match_key_column is required fo
 // insert/update/delete.
 var ErrInvalidAction = errors.New("dashboard: action must be insert, update, or delete")
 
+// ErrEventTypeValueRequired is returned by SaveEventMapping when
+// event_type_value is empty — an empty value matches ExtractPath's "path not
+// found in payload" result (webhookengine.ExtractPath), so it would silently
+// catch every payload missing the configured event-type field, not just the
+// one event type it was meant to describe.
+var ErrEventTypeValueRequired = errors.New("dashboard: event_type_value is required")
+
+// ErrFieldMappingsRequired is returned by SaveEventMapping when
+// field_mappings is empty — query.BuildInsert/BuildUpdate has no columns to
+// write with an empty set, which would 500 at delivery time instead of
+// failing validation up front.
+var ErrFieldMappingsRequired = errors.New("dashboard: at least one field mapping is required")
+
 // ErrMappingConflict is returned when the UNIQUE (webhook_id,
 // event_type_value) constraint is violated (spec P2 second story AC5: one
 // mapping per event-type value per webhook).
@@ -384,6 +398,9 @@ type EventMappingRow struct {
 // registry.GetTable needs an app name to resolve the target table, which
 // design.md's own "Reuses" note for this method requires calling.
 func SaveEventMapping(ctx context.Context, pool *db.Pool, reg *registry.Registry, appName, webhookID string, def EventMappingDef) (EventMappingRow, error) {
+	if strings.TrimSpace(def.EventTypeValue) == "" {
+		return EventMappingRow{}, ErrEventTypeValueRequired
+	}
 	switch def.Action {
 	case "insert", "update", "delete":
 	default:
@@ -391,6 +408,9 @@ func SaveEventMapping(ctx context.Context, pool *db.Pool, reg *registry.Registry
 	}
 	if def.Action != "insert" && def.MatchKeyColumn == "" {
 		return EventMappingRow{}, ErrMatchKeyRequired
+	}
+	if len(def.FieldMappings) == 0 {
+		return EventMappingRow{}, ErrFieldMappingsRequired
 	}
 
 	table, ok := reg.GetTable(appName, def.TargetTable)

@@ -465,6 +465,8 @@ The `--atomic` flag rolls back automatically if the upgrade fails.
 | `GOOGLE_CLIENT_SECRET`       | No       | Google OAuth Client Secret                          |
 | `GOOGLE_REDIRECT_URL`        | No       | Google OAuth redirect URL                           |
 | `GOOGLE_ALLOWED_DOMAINS`     | No       | Comma-separated allowed email domains               |
+| `GOOGLE_OAUTH_ENCRYPTION_KEY` | No      | Encrypts Google OAuth client secrets at rest (defaults to `DASHBOARD_BOOTSTRAP_SECRET`) |
+| `WEBHOOK_TOKEN_ENCRYPTION_KEY` | No     | Encrypts inbound webhook tokens at rest (defaults to `DASHBOARD_BOOTSTRAP_SECRET`; kept separate so rotating one doesn't invalidate the other) |
 | `BRAND_THEME`                | No       | Default theme (azure, emerald, ruby, amber, orange) |
 | `BRAND_COMPANY_NAME`         | No       | Company name for white-label                        |
 | `LOG_LEVEL`                  | No       | Set `debug` for development output                  |
