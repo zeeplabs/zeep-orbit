@@ -868,6 +868,7 @@
   "webhookMapping.clickToLink": "Click to link",
   "webhookMapping.eventTypeValuePlaceholder": "Event type value (e.g. user.created)",
   "webhookMapping.matchKeyPlaceholder": "Match key column",
+  "webhookMapping.matchKeyBadge": "match key",
   "webhookMapping.saveMapping": "Save mapping",
   "webhookMapping.eventTypeValueRequired": "Event type value is required",
   "webhookMapping.targetTableRequired": "Target table is required",

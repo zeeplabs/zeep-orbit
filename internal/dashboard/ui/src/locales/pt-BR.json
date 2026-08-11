@@ -868,6 +868,7 @@
   "webhookMapping.clickToLink": "Clique para vincular",
   "webhookMapping.eventTypeValuePlaceholder": "Valor do tipo de evento (ex: user.created)",
   "webhookMapping.matchKeyPlaceholder": "Coluna de chave de correspondência",
+  "webhookMapping.matchKeyBadge": "chave de correspondência",
   "webhookMapping.saveMapping": "Salvar mapeamento",
   "webhookMapping.eventTypeValueRequired": "Valor do tipo de evento é obrigatório",
   "webhookMapping.targetTableRequired": "Tabela de destino é obrigatória",

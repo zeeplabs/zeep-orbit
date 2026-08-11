@@ -169,6 +169,15 @@ test.describe('Inbound webhooks — full lifecycle', () => {
     await page.click('button:has-text("Save mapping")')
     await expect(page.locator('text=Mapping saved')).toBeVisible()
 
+    // The saved mapping's list entry must show the actual field->column
+    // link, not just the event-type/action/table summary line — an app
+    // owner needs to see what's really mapped without re-opening the
+    // click-to-link picker. .last() targets the saved-mapping row, which
+    // renders below the still-visible sample-field picker (the picker's
+    // own "employeeName" button is the first match for this text).
+    await expect(page.locator('text=employeeName').last()).toBeVisible()
+    await expect(page.locator('text=employee_name').last()).toBeVisible()
+
     // --- P2 AC2: activating a webhook with at least one saved mapping
     // switches it from capture to active. ---
     await page.click('button:has-text("Activate")')

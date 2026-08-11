@@ -276,15 +276,31 @@ export default function WebhookMappingEditor({ appId, webhook, tables }: Webhook
           {mappings.map((m: WebhookEventMapping) => (
             <div
               key={m.id}
-              className="flex items-center justify-between gap-2 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-2.5 text-[12px]"
+              className="flex flex-col gap-2 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-2.5 text-[12px]"
             >
-              <div>
-                <span className="font-medium">{m.event_type_value}</span>
-                <span className="text-[var(--text-tertiary)]"> — {m.action} → {m.target_table}</span>
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <span className="font-medium">{m.event_type_value}</span>
+                  <span className="text-[var(--text-tertiary)]"> — {m.action} → {m.target_table}</span>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => deleteMapping.mutate(m.id)}>
+                  <Icon name="delete" size={15} />
+                </Button>
               </div>
-              <Button variant="ghost" size="sm" onClick={() => deleteMapping.mutate(m.id)}>
-                <Icon name="delete" size={15} />
-              </Button>
+              <div className="flex flex-col gap-1 rounded-md border border-[var(--border)] bg-[var(--sunken)] p-2">
+                {m.field_mappings.map((fm) => (
+                  <div key={fm.column} className="flex items-center gap-1.5 font-mono text-[11px]">
+                    <span className="truncate text-[var(--text-secondary)]">{fm.source_path}</span>
+                    <Icon name="arrow_forward" size={12} className="shrink-0 text-[var(--text-tertiary)]" />
+                    <span className="truncate text-[var(--brand)]">{fm.column}</span>
+                    {m.match_key_column === fm.column && (
+                      <span className="shrink-0 rounded-full bg-[var(--accent-tint)] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[var(--accent)]">
+                        {t("webhookMapping.matchKeyBadge")}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
         </div>
