@@ -463,6 +463,8 @@ A flag `--atomic` reverte automaticamente caso a atualização falhe.
 | `GOOGLE_CLIENT_SECRET`         | Não         | Client Secret do Google OAuth                          |
 | `GOOGLE_REDIRECT_URL`          | Não         | URL de redirecionamento do Google OAuth                |
 | `GOOGLE_ALLOWED_DOMAINS`       | Não         | Domínios de email permitidos, separados por vírgula    |
+| `GOOGLE_OAUTH_ENCRYPTION_KEY`  | Não         | Cifra o client secret do Google OAuth em repouso (por defeito: `DASHBOARD_BOOTSTRAP_SECRET`) |
+| `WEBHOOK_TOKEN_ENCRYPTION_KEY` | Não         | Cifra os tokens de webhook inbound em repouso (por defeito: `DASHBOARD_BOOTSTRAP_SECRET`; separada de propósito, para rodar uma sem invalidar a outra) |
 | `BRAND_THEME`                  | Não         | Tema por defeito (azure, emerald, ruby, amber, orange) |
 | `BRAND_COMPANY_NAME`           | Não         | Nome da empresa para white-label                        |
 | `LOG_LEVEL`                    | Não         | Defina `debug` para output de desenvolvimento           |
@@ -488,7 +490,7 @@ Detalhe completo (checklists por milestone, specs ligadas) vive em [`.specs/proj
 | **M2 — Developer Experience** | ✅ Concluído | Dashboard, SDKs, relações e índices, migrações, filtragem/ordenação |
 | **M3 — Aplicações Frontend** | ✅ Concluído | Integração com GitHub, Templates, Deploy no Render, Domínios personalizados |
 | **M4 — Governação & Segurança** | 🔵 Em desenvolvimento | Audit Log, Soft Delete + retenção/purga, SSO, Rate Limiting, [RBAC por aplicação](../.specs/features/rbac-per-app/) (admin/editor/viewer), [papéis globais do dashboard](../.specs/features/dashboard-global-roles/) (superadmin/admin/auditor/member) · planeado: [2FA](../.specs/features/two-factor-auth/), fluxo de aprovação de alterações de schema |
-| **M5 — Storage & Events** | 🔵 Em desenvolvimento | Armazenamento S3 · planeado: webhooks, event bus |
+| **M5 — Storage & Events** | 🔵 Em desenvolvimento | Armazenamento S3, [Webhooks de Entrada](../.specs/features/inbound-webhooks/) · planeado: webhooks de saída, event bus |
 | **M6 — i18n** | ✅ Concluído | pt-BR / inglês, seletor de idioma |
 | **M7 — SDKs** | ✅ Concluído | Clientes TS, Go, Python, Rust, Java, PHP |
 | **M8 — Platform Services** | 🔵 Em desenvolvimento | planeado: [integração SMTP/email](../.specs/features/smtp-email-integration/) (convites, recuperação de senha), [integrações de observabilidade](../.specs/features/observability-integrations/) (OpenTelemetry, Datadog, New Relic) |

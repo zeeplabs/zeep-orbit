@@ -40,6 +40,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import TableCard from "@/components/TableCard";
+import Webhooks from "@/components/Webhooks";
 import { AppMembersList } from "@/components/patterns/AppMembersList";
 import { AppUsersTab } from "./AppUsersPage";
 import {
@@ -52,7 +53,7 @@ import {
   type StatusTone,
 } from "@/components/patterns";
 
-const TABS = ["database", "auth", "users", "storage", "api", "tokens", "members", "observability"] as const;
+const TABS = ["database", "auth", "users", "storage", "api", "webhooks", "tokens", "members", "observability"] as const;
 
 export default function AppDetailsPage() {
   const { t } = useTranslation();
@@ -72,15 +73,16 @@ export default function AppDetailsPage() {
     return <ErrorState title={t("appForm.notFound")} />;
   }
 
-  const tabDefs: { v: (typeof TABS)[number]; label: string; badge?: boolean }[] = [
+  const tabDefs: { v: (typeof TABS)[number]; label: string; badge?: "new" | "soon" }[] = [
     { v: "database", label: t("appForm.tabDatabase") },
     { v: "auth", label: t("appForm.tabAuth") },
     { v: "users", label: t("appDetails.tabUsers") },
     { v: "storage", label: t("appForm.tabStorage") },
     { v: "api", label: t("appForm.tabApi") },
+    { v: "webhooks", label: t("webhooks.tabLabel") },
     { v: "tokens", label: t("appDetails.tabTokens") },
-    { v: "members", label: t("appDetails.tabMembers"), badge: true },
-    { v: "observability", label: t("appDetails.tabObservability"), badge: true },
+    { v: "members", label: t("appDetails.tabMembers") },
+    { v: "observability", label: t("appDetails.tabObservability"), badge: "soon" },
   ];
 
   return (
@@ -105,18 +107,18 @@ export default function AppDetailsPage() {
       </div>
 
       <Tabs value={tab} onValueChange={setTab} className="w-full">
-        <TabsList className="mb-7 inline-flex h-auto w-auto justify-start gap-0.5 rounded-[10px] bg-[var(--sunken)] p-[3px]">
+        <TabsList className="mb-7 flex h-auto w-full max-w-full justify-start gap-0.5 overflow-x-auto rounded-[10px] bg-[var(--sunken)] p-[3px]">
           {tabDefs.map(({ v, label, badge }) => (
             <TabsTrigger
               key={v}
               value={v}
-              className="gap-1.5 rounded-[8px] px-4 py-2 text-[13px] font-bold text-[var(--text-secondary)] data-[state=active]:bg-[var(--surface-raised)] data-[state=active]:text-[var(--text-primary)] data-[state=active]:shadow-[var(--shadow-sm)]"
+              className="shrink-0 gap-1.5 rounded-[8px] px-4 py-2 text-[13px] font-bold text-[var(--text-secondary)] data-[state=active]:bg-[var(--surface-raised)] data-[state=active]:text-[var(--text-primary)] data-[state=active]:shadow-[var(--shadow-sm)]"
             >
               {label}
               {badge && (
                 <span className="rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide"
                   style={{ background: "var(--accent-tint)", color: "var(--accent)" }}>
-                  {t("appDetails.badgeNew")}
+                  {badge === "new" ? t("appDetails.badgeNew") : t("appDetails.badgeSoon")}
                 </span>
               )}
             </TabsTrigger>
@@ -137,6 +139,9 @@ export default function AppDetailsPage() {
         </TabsContent>
         <TabsContent value="api" className="mt-0">
           <ApiTab app={app} />
+        </TabsContent>
+        <TabsContent value="webhooks" className="mt-0">
+          <Webhooks appId={app.id} tables={app.tables} />
         </TabsContent>
         <TabsContent value="tokens" className="mt-0">
           <TokensTab app={app} />

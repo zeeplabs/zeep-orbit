@@ -463,6 +463,8 @@ La flag `--atomic` revierte automáticamente si la actualización falla.
 | `GOOGLE_CLIENT_SECRET`        | No        | Client Secret de Google OAuth                         |
 | `GOOGLE_REDIRECT_URL`         | No        | URL de redirección de Google OAuth                    |
 | `GOOGLE_ALLOWED_DOMAINS`      | No        | Dominios de email permitidos, separados por coma      |
+| `GOOGLE_OAUTH_ENCRYPTION_KEY` | No        | Cifra el client secret de Google OAuth en reposo (por defecto: `DASHBOARD_BOOTSTRAP_SECRET`) |
+| `WEBHOOK_TOKEN_ENCRYPTION_KEY` | No       | Cifra los tokens de webhook entrante en reposo (por defecto: `DASHBOARD_BOOTSTRAP_SECRET`; separada a propósito, para rotar una sin invalidar la otra) |
 | `BRAND_THEME`                 | No        | Tema por defecto (azure, emerald, ruby, amber, orange) |
 | `BRAND_COMPANY_NAME`          | No        | Nombre de la empresa para white-label                 |
 | `LOG_LEVEL`                   | No        | Define `debug` para output de desarrollo              |
@@ -488,7 +490,7 @@ El detalle completo (checklists por milestone, specs vinculadas) vive en [`.spec
 | **M2 — Developer Experience** | ✅ Hecho | Dashboard, SDKs, relaciones e índices, migraciones, filtrado/ordenamiento |
 | **M3 — Apps Frontend** | ✅ Hecho | Integración con GitHub, Plantillas, Deploy en Render, Dominios personalizados |
 | **M4 — Gobernanza & Seguridad** | 🔵 En desarrollo | Audit Log, Soft Delete + retención/purga, SSO, Rate Limiting, [RBAC por app](../.specs/features/rbac-per-app/) (admin/editor/viewer), [roles globales del dashboard](../.specs/features/dashboard-global-roles/) (superadmin/admin/auditor/member) · planeado: [2FA](../.specs/features/two-factor-auth/), flujo de aprobación de cambios de schema |
-| **M5 — Storage & Events** | 🔵 En desarrollo | Almacenamiento S3 · planeado: webhooks, event bus |
+| **M5 — Storage & Events** | 🔵 En desarrollo | Almacenamiento S3, [Webhooks Entrantes](../.specs/features/inbound-webhooks/) · planeado: webhooks salientes, event bus |
 | **M6 — i18n** | ✅ Hecho | pt-BR / English, selector de idioma |
 | **M7 — SDKs** | ✅ Hecho | Clientes TS, Go, Python, Rust, Java, PHP |
 | **M8 — Platform Services** | 🔵 En desarrollo | planeado: [integración SMTP/email](../.specs/features/smtp-email-integration/) (invitaciones, recuperación de contraseña), [integraciones de observabilidad](../.specs/features/observability-integrations/) (OpenTelemetry, Datadog, New Relic) |

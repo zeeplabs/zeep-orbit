@@ -74,6 +74,24 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: tasks.md Test Coverage Matrix line 23 vs T2 Done-when
 - last seen: 2026-08-10T17:26:16Z
 
+### L-011 - When a spec AC lists multiple parallel actions (e.g. create/edit/delete/rotate) that must all hit an audit log, verify each action actually has an implementation before marking the AC covered — a missing action is a silent scope drop, not a covered case.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `audit-log` · harmful: 0
+- features: inbound-webhooks
+- evidence: spec.md P3 AC3 / validation.md WEBHOOK-23 (audit-log)
+- last seen: 2026-08-10T21:51:25Z
+
+### L-012 - When a task's required e2e test is merged forward into a later task ('untestable until wired'), confirm the later task's test actually exercises the merged behavior (e.g. the click-to-expand interaction), not just the surrounding happy path.
+- signal: `spec_precision_gap` · recurrence: 1 feature(s) · scope: `test-coverage` · harmful: 0
+- features: inbound-webhooks
+- evidence: spec.md P2 delivery-log AC2 / validation.md WEBHOOK-19 (test-coverage)
+- last seen: 2026-08-10T21:51:25Z
+
+### L-013 - When a store Row type has no json tags, never writeJSON it directly (or a slice of it) -- always map through a response DTO with explicit snake_case tags, and decode handler tests into that same DTO, not the internal Row type, or the test self-masks the exact PascalCase-vs-snake_case bug it should catch.
+- signal: `gate_fail` · recurrence: 1 feature(s) · scope: `json-serialization` · harmful: 0
+- features: inbound-webhooks
+- evidence: internal/dashboard/webhooks_handler.go SaveEventMapping/ListEventMappings (json-serialization)
+- last seen: 2026-08-11T12:16:01Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

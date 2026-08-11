@@ -347,6 +347,136 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
 			updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
+		// inbound-webhooks T1: catalog tables for external providers pushing
+		// events into an app table. webhook_subscriptions is the parent (one
+		// URL/token per row); webhook_event_mappings holds the per-event-type
+		// action/field configuration; webhook_deliveries is the append-only
+		// call log. See .specs/features/inbound-webhooks/design.md Data Models.
+		`CREATE TABLE IF NOT EXISTS zeep_system.webhook_subscriptions (
+			id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+			app_id           UUID        NOT NULL REFERENCES zeep_system.apps(id) ON DELETE CASCADE,
+			name             TEXT        NOT NULL,
+			method           TEXT        NOT NULL CHECK (method IN ('GET','POST','PUT','PATCH')),
+			token_secret     TEXT        NOT NULL,
+			event_type_path  TEXT        NOT NULL,
+			event_id_path    TEXT,
+			status           TEXT        NOT NULL DEFAULT 'capture' CHECK (status IN ('capture','active')),
+			captured_sample  JSONB,
+			deleted_at       TIMESTAMPTZ,
+			created_by       UUID        NOT NULL REFERENCES zeep_system.dashboard_users(id),
+			created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		// Renames token_hash -> token_secret for schemas provisioned before the
+		// token switched from a one-way SHA-256 hash to reversible AES-256-GCM
+		// encryption (the dashboard needs to display a webhook's full URL at
+		// any time, not just once at creation/rotation) — a stored SHA-256
+		// hash can never be decrypted, so any webhook created before this
+		// migration must have its token rotated once to keep working.
+		`DO $do$
+		 BEGIN
+		   IF EXISTS (
+		     SELECT 1 FROM information_schema.columns
+		     WHERE table_schema = 'zeep_system' AND table_name = 'webhook_subscriptions'
+		       AND column_name = 'token_hash'
+		   ) THEN
+		     ALTER TABLE zeep_system.webhook_subscriptions RENAME COLUMN token_hash TO token_secret;
+		   END IF;
+		 END
+		 $do$`,
+		`CREATE INDEX IF NOT EXISTS idx_webhook_subscriptions_app_id
+		 ON zeep_system.webhook_subscriptions(app_id)`,
+		// webhook_id has no ON DELETE CASCADE from webhook_deliveries (below)
+		// since the parent is only ever soft-deleted in practice, but a
+		// cascade here (mapping → subscription) is harmless and keeps the
+		// mapping table from accumulating orphaned rows if a subscription
+		// were ever hard-deleted.
+		`CREATE TABLE IF NOT EXISTS zeep_system.webhook_event_mappings (
+			id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+			webhook_id        UUID        NOT NULL REFERENCES zeep_system.webhook_subscriptions(id) ON DELETE CASCADE,
+			event_type_value  TEXT        NOT NULL,
+			action            TEXT        NOT NULL CHECK (action IN ('insert','update','delete')),
+			target_table      TEXT        NOT NULL,
+			match_key_column  TEXT,
+			field_mappings    JSONB       NOT NULL DEFAULT '[]',
+			created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+			UNIQUE (webhook_id, event_type_value)
+		)`,
+		// No ON DELETE CASCADE on webhook_id: deliveries must outlive their
+		// parent subscription's (soft-)deletion until their own independent
+		// 30-day retention purge (design.md Data Models, WEBHOOK-22).
+		`CREATE TABLE IF NOT EXISTS zeep_system.webhook_deliveries (
+			id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+			webhook_id        UUID        NOT NULL REFERENCES zeep_system.webhook_subscriptions(id),
+			received_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+			http_status       INT         NOT NULL,
+			outcome           TEXT        NOT NULL CHECK (outcome IN (
+			                    'captured','inserted','updated','deleted',
+			                    'unmapped','duplicate_skipped','row_not_found',
+			                    'invalid_token','malformed','write_error',
+			                    'verification_challenge','ambiguous_match'
+			                  )),
+			event_type_value  TEXT,
+			event_id          TEXT,
+			raw_payload       JSONB       NOT NULL DEFAULT '{}',
+			target_row_id     TEXT,
+			error_detail      TEXT
+		)`,
+		// Widens the outcome CHECK for schemas already provisioned before
+		// 'verification_challenge' existed — same guarded-DO pattern as the
+		// dashboard_users_role_check widen above, so it's a no-op once applied.
+		`DO $do$
+		 BEGIN
+		   IF EXISTS (
+		     SELECT 1 FROM pg_constraint c
+		     JOIN pg_class t ON t.oid = c.conrelid
+		     JOIN pg_namespace n ON n.oid = t.relnamespace
+		     WHERE n.nspname = 'zeep_system' AND t.relname = 'webhook_deliveries'
+		       AND c.conname = 'webhook_deliveries_outcome_check'
+		       AND pg_get_constraintdef(c.oid) NOT LIKE '%verification_challenge%'
+		   ) THEN
+		     ALTER TABLE zeep_system.webhook_deliveries DROP CONSTRAINT webhook_deliveries_outcome_check;
+		     ALTER TABLE zeep_system.webhook_deliveries ADD CONSTRAINT webhook_deliveries_outcome_check
+		       CHECK (outcome IN (
+		         'captured','inserted','updated','deleted',
+		         'unmapped','duplicate_skipped','row_not_found',
+		         'invalid_token','malformed','write_error',
+		         'verification_challenge'
+		       ));
+		   END IF;
+		 END
+		 $do$`,
+		// Widens the outcome CHECK again for 'ambiguous_match' (match-key
+		// column resolves to more than one row on update/delete) — same
+		// guarded-DO pattern, no-op once applied.
+		`DO $do$
+		 BEGIN
+		   IF EXISTS (
+		     SELECT 1 FROM pg_constraint c
+		     JOIN pg_class t ON t.oid = c.conrelid
+		     JOIN pg_namespace n ON n.oid = t.relnamespace
+		     WHERE n.nspname = 'zeep_system' AND t.relname = 'webhook_deliveries'
+		       AND c.conname = 'webhook_deliveries_outcome_check'
+		       AND pg_get_constraintdef(c.oid) NOT LIKE '%ambiguous_match%'
+		   ) THEN
+		     ALTER TABLE zeep_system.webhook_deliveries DROP CONSTRAINT webhook_deliveries_outcome_check;
+		     ALTER TABLE zeep_system.webhook_deliveries ADD CONSTRAINT webhook_deliveries_outcome_check
+		       CHECK (outcome IN (
+		         'captured','inserted','updated','deleted',
+		         'unmapped','duplicate_skipped','row_not_found',
+		         'invalid_token','malformed','write_error',
+		         'verification_challenge','ambiguous_match'
+		       ));
+		   END IF;
+		 END
+		 $do$`,
+		`CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_webhook_id_received_at
+		 ON zeep_system.webhook_deliveries(webhook_id, received_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_dedup
+		 ON zeep_system.webhook_deliveries(webhook_id, event_id) WHERE event_id IS NOT NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_received_at
+		 ON zeep_system.webhook_deliveries(received_at)`,
 	}
 
 	for _, stmt := range stmts {

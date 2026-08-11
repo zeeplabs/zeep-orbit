@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 11,
+  "next_id": 14,
   "lessons": [
     {
       "id": "L-001",
@@ -184,6 +184,60 @@
       ],
       "created": "2026-08-10T17:26:16Z",
       "last_seen": "2026-08-10T17:26:16Z"
+    },
+    {
+      "id": "L-011",
+      "key": "ac_gap::when a spec ac lists multiple parallel actions e g create edit delete rotate that must all hit an audit log verify each action actually has an implementation before marking the ac covered a missing action is a silent scope drop not a covered case",
+      "text": "When a spec AC lists multiple parallel actions (e.g. create/edit/delete/rotate) that must all hit an audit log, verify each action actually has an implementation before marking the AC covered — a missing action is a silent scope drop, not a covered case.",
+      "signal": "ac_gap",
+      "scope": "audit-log",
+      "status": "candidate",
+      "features": [
+        "inbound-webhooks"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "spec.md P3 AC3 / validation.md WEBHOOK-23 (audit-log)"
+      ],
+      "created": "2026-08-10T21:51:25Z",
+      "last_seen": "2026-08-10T21:51:25Z"
+    },
+    {
+      "id": "L-012",
+      "key": "spec_precision_gap::when a task s required e2e test is merged forward into a later task untestable until wired confirm the later task s test actually exercises the merged behavior e g the click to expand interaction not just the surrounding happy path",
+      "text": "When a task's required e2e test is merged forward into a later task ('untestable until wired'), confirm the later task's test actually exercises the merged behavior (e.g. the click-to-expand interaction), not just the surrounding happy path.",
+      "signal": "spec_precision_gap",
+      "scope": "test-coverage",
+      "status": "candidate",
+      "features": [
+        "inbound-webhooks"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "spec.md P2 delivery-log AC2 / validation.md WEBHOOK-19 (test-coverage)"
+      ],
+      "created": "2026-08-10T21:51:25Z",
+      "last_seen": "2026-08-10T21:51:25Z"
+    },
+    {
+      "id": "L-013",
+      "key": "gate_fail::when a store row type has no json tags never writejson it directly or a slice of it always map through a response dto with explicit snake case tags and decode handler tests into that same dto not the internal row type or the test self masks the exact pascalcase vs snake case bug it should catch",
+      "text": "When a store Row type has no json tags, never writeJSON it directly (or a slice of it) -- always map through a response DTO with explicit snake_case tags, and decode handler tests into that same DTO, not the internal Row type, or the test self-masks the exact PascalCase-vs-snake_case bug it should catch.",
+      "signal": "gate_fail",
+      "scope": "json-serialization",
+      "status": "candidate",
+      "features": [
+        "inbound-webhooks"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "internal/dashboard/webhooks_handler.go SaveEventMapping/ListEventMappings (json-serialization)"
+      ],
+      "created": "2026-08-11T12:16:01Z",
+      "last_seen": "2026-08-11T12:16:01Z"
     }
   ]
 }

@@ -465,6 +465,8 @@ The `--atomic` flag rolls back automatically if the upgrade fails.
 | `GOOGLE_CLIENT_SECRET`       | No       | Google OAuth Client Secret                          |
 | `GOOGLE_REDIRECT_URL`        | No       | Google OAuth redirect URL                           |
 | `GOOGLE_ALLOWED_DOMAINS`     | No       | Comma-separated allowed email domains               |
+| `GOOGLE_OAUTH_ENCRYPTION_KEY` | No      | Encrypts Google OAuth client secrets at rest (defaults to `DASHBOARD_BOOTSTRAP_SECRET`) |
+| `WEBHOOK_TOKEN_ENCRYPTION_KEY` | No     | Encrypts inbound webhook tokens at rest (defaults to `DASHBOARD_BOOTSTRAP_SECRET`; kept separate so rotating one doesn't invalidate the other) |
 | `BRAND_THEME`                | No       | Default theme (azure, emerald, ruby, amber, orange) |
 | `BRAND_COMPANY_NAME`         | No       | Company name for white-label                        |
 | `LOG_LEVEL`                  | No       | Set `debug` for development output                  |
@@ -490,7 +492,7 @@ Full detail (per-milestone checklists, linked specs) lives in [`.specs/project/R
 | **M2 — Developer Experience** | ✅ Done | Dashboard, SDKs, relationships & indexes, migrations, filtering/sorting |
 | **M3 — Frontend Apps** | ✅ Done | GitHub Integration, Templates, Render Deploy, Custom Domains |
 | **M4 — Governance & Security** | 🔵 In progress | Audit Log, Soft Delete + retention/purge, SSO, Rate Limiting, [RBAC per app](.specs/features/rbac-per-app/) (admin/editor/viewer), [global dashboard roles](.specs/features/dashboard-global-roles/) (superadmin/admin/auditor/member) · planned: [2FA](.specs/features/two-factor-auth/), schema change approval |
-| **M5 — Storage & Events** | 🔵 In progress | S3 File Storage · planned: webhooks, event bus |
+| **M5 — Storage & Events** | 🔵 In progress | S3 File Storage, [Inbound Webhooks](.specs/features/inbound-webhooks/) · planned: outbound webhooks, event bus |
 | **M6 — i18n** | ✅ Done | pt-BR / English, language switcher |
 | **M7 — SDKs** | ✅ Done | TS, Go, Python, Rust, Java, PHP clients |
 | **M8 — Platform Services** | 🔵 In progress | planned: [SMTP/email integration](.specs/features/smtp-email-integration/) (invites, password reset), [observability integrations](.specs/features/observability-integrations/) (OpenTelemetry, Datadog, New Relic) |

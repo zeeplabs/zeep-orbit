@@ -67,7 +67,7 @@ test.describe('End-user roles configuration', () => {
   test('adds a new role via Settings', async ({ page }) => {
     await createAuthApp(page, uniqueAppName('e2e_roles_add'))
 
-    await page.click('[role="tab"]:has-text("Login providers")')
+    await page.click('[role="tab"]:has-text("Login")')
 
     await expect(page.locator('text=End-user roles')).toBeVisible()
     await expect(page.getByText('member', { exact: true })).toBeVisible()
@@ -92,7 +92,7 @@ test.describe('End-user roles configuration', () => {
     expect(registerRes.status()).toBe(201)
 
     await page.goto(`/dashboard/apps/${appId}?tab=auth`)
-    await page.click('[role="tab"]:has-text("Login providers")')
+    await page.click('[role="tab"]:has-text("Login")')
 
     // Remove the "member" chip — it's in use by the end-user just created.
     await page.click('[title="Remove role"]')
@@ -107,7 +107,7 @@ test.describe('End-user roles configuration', () => {
     // Settings section that manages it must not render at all (ROLECFG-08).
     await createAuthApp(page, uniqueAppName('e2e_roles_noauth'), false)
 
-    await page.click('[role="tab"]:has-text("Login providers")')
+    await page.click('[role="tab"]:has-text("Login")')
     // Wait for the tab panel to actually finish rendering before asserting
     // absence — otherwise toHaveCount(0) can resolve on its first poll,
     // before the panel (and the section it would contain) has mounted,
@@ -129,7 +129,7 @@ test.describe('End-user roles configuration', () => {
     const appId = appIdFromUrl(page.url())
 
     // Add "viewer" so there's a second option to switch to.
-    await page.click('[role="tab"]:has-text("Login providers")')
+    await page.click('[role="tab"]:has-text("Login")')
     await page.fill('input[placeholder="New role (e.g. viewer)"]', 'viewer')
     await page.click('button:has-text("Add")')
     await expect(page.getByText('viewer', { exact: true })).toBeVisible()
@@ -204,7 +204,7 @@ test.describe('End-user roles configuration', () => {
 
     // Add a role beyond the "member" default so the chip toggle is
     // exercised against more than a single option.
-    await page.click('[role="tab"]:has-text("Login providers")')
+    await page.click('[role="tab"]:has-text("Login")')
     await page.fill('input[placeholder="New role (e.g. viewer)"]', 'admin')
     await page.click('button:has-text("Add")')
     await expect(page.getByText('admin', { exact: true })).toBeVisible()
@@ -247,7 +247,7 @@ test.describe('End-user roles configuration', () => {
   test('edits an existing table policy via the pre-populated form', async ({ page }) => {
     await createAuthApp(page, uniqueAppName('e2e_policy_edit'))
 
-    await page.click('[role="tab"]:has-text("Login providers")')
+    await page.click('[role="tab"]:has-text("Login")')
     await page.fill('input[placeholder="New role (e.g. viewer)"]', 'admin')
     await page.click('button:has-text("Add")')
     await expect(page.getByText('admin', { exact: true })).toBeVisible()

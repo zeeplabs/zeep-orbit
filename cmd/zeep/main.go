@@ -118,11 +118,19 @@ func cmdServe() *cobra.Command {
 			go func() {
 				runPurge := func() {
 					cfg, err := dashboard.GetSystemConfig(context.Background(), pool)
-					if err != nil || cfg.RetentionDays <= 0 || !cfg.SoftDeleteEnabled {
-						return
+					if err == nil && cfg.RetentionDays > 0 && cfg.SoftDeleteEnabled {
+						if _, err := dashboard.PurgeExpiredSoftDeletes(context.Background(), pool, reg, cfg.RetentionDays); err != nil {
+							fmt.Fprintf(os.Stderr, "purge error: %v\n", err)
+						}
 					}
-					if _, err := dashboard.PurgeExpiredSoftDeletes(context.Background(), pool, reg, cfg.RetentionDays); err != nil {
-						fmt.Fprintf(os.Stderr, "purge error: %v\n", err)
+					// Webhook delivery log retention (inbound-webhooks
+					// WEBHOOK-20): a fixed 30-day cutoff, independent of the
+					// soft-delete config above — the delivery log purges
+					// "regardless of a webhook's active/inactive/deleted
+					// state" (spec.md Edge Cases), so it always runs on this
+					// tick rather than being gated by SoftDeleteEnabled.
+					if _, err := dashboard.PurgeExpiredDeliveries(context.Background(), pool, 30); err != nil {
+						fmt.Fprintf(os.Stderr, "webhook delivery purge error: %v\n", err)
 					}
 				}
 				// Run once at boot — otherwise a replica that restarts more

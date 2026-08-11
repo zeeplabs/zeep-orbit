@@ -17,6 +17,26 @@ func encryptionKey() []byte {
 	if key == "" {
 		key = os.Getenv("DASHBOARD_BOOTSTRAP_SECRET")
 	}
+	return normalizeKey(key)
+}
+
+// webhookTokenEncryptionKey resolves the key used for webhook token
+// encryption — deliberately its own env var, not GOOGLE_OAUTH_ENCRYPTION_KEY,
+// so rotating either secret doesn't also invalidate the other's ciphertexts.
+// Falls back to DASHBOARD_BOOTSTRAP_SECRET (a required var, see README), so
+// this only errors if that fallback was itself left unset.
+func webhookTokenEncryptionKey() ([]byte, error) {
+	key := os.Getenv("WEBHOOK_TOKEN_ENCRYPTION_KEY")
+	if key == "" {
+		key = os.Getenv("DASHBOARD_BOOTSTRAP_SECRET")
+	}
+	if key == "" {
+		return nil, errors.New("crypto: neither WEBHOOK_TOKEN_ENCRYPTION_KEY nor DASHBOARD_BOOTSTRAP_SECRET is set")
+	}
+	return normalizeKey(key), nil
+}
+
+func normalizeKey(key string) []byte {
 	if len(key) >= 32 {
 		return []byte(key[:32])
 	}
@@ -27,7 +47,35 @@ func encryptionKey() []byte {
 
 // Encrypt encrypts plaintext using AES-256-GCM and returns a base64-encoded ciphertext.
 func Encrypt(plaintext string) (string, error) {
-	block, err := aes.NewCipher(encryptionKey())
+	return encryptWithKey(plaintext, encryptionKey())
+}
+
+// Decrypt decrypts a base64-encoded ciphertext produced by Encrypt.
+func Decrypt(encoded string) (string, error) {
+	return decryptWithKey(encoded, encryptionKey())
+}
+
+// EncryptWebhookToken encrypts a webhook's plaintext token under the
+// dedicated webhook-token key (see webhookTokenEncryptionKey).
+func EncryptWebhookToken(plaintext string) (string, error) {
+	key, err := webhookTokenEncryptionKey()
+	if err != nil {
+		return "", err
+	}
+	return encryptWithKey(plaintext, key)
+}
+
+// DecryptWebhookToken decrypts a ciphertext produced by EncryptWebhookToken.
+func DecryptWebhookToken(encoded string) (string, error) {
+	key, err := webhookTokenEncryptionKey()
+	if err != nil {
+		return "", err
+	}
+	return decryptWithKey(encoded, key)
+}
+
+func encryptWithKey(plaintext string, key []byte) (string, error) {
+	block, err := aes.NewCipher(key)
 	if err != nil {
 		return "", fmt.Errorf("crypto: new cipher: %w", err)
 	}
@@ -46,14 +94,13 @@ func Encrypt(plaintext string) (string, error) {
 	return base64.RawStdEncoding.EncodeToString(ciphertext), nil
 }
 
-// Decrypt decrypts a base64-encoded ciphertext produced by Encrypt.
-func Decrypt(encoded string) (string, error) {
+func decryptWithKey(encoded string, key []byte) (string, error) {
 	ciphertext, err := base64.RawStdEncoding.DecodeString(encoded)
 	if err != nil {
 		return "", fmt.Errorf("crypto: decode: %w", err)
 	}
 
-	block, err := aes.NewCipher(encryptionKey())
+	block, err := aes.NewCipher(key)
 	if err != nil {
 		return "", fmt.Errorf("crypto: new cipher: %w", err)
 	}
