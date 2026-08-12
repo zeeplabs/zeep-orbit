@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/zeeplabs/zeep-orbit/internal/auth"
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/dashboard"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
@@ -444,5 +445,229 @@ func TestHandlerListUnknownTable(t *testing.T) {
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("esperado 404, obtido %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// ----------------------------------------------------------------------------
+// rls-policy-mode T2: resolveOwner/filterOwner decouple "owner_id value to
+// write" from "owner_id filter to apply" (spec RLSP-01/03/04).
+
+func TestResolveOwner(t *testing.T) {
+	userCtx := auth.WithUser(context.Background(), &auth.AuthUser{ID: "user-123"})
+	anonCtx := context.Background()
+
+	cases := []struct {
+		name      string
+		rls       string
+		ctx       context.Context
+		wantOwner string
+		wantOK    bool
+	}{
+		{"no rls + user → no owner_id needed", "", userCtx, "", true},
+		{"no rls + no user → no owner_id needed", "", anonCtx, "", true},
+		{"owner + user → real owner_id", "owner", userCtx, "user-123", true},
+		{"owner + no user → unauthorized", "owner", anonCtx, "", false},
+		{"enabled + user → real owner_id", "enabled", userCtx, "user-123", true},
+		{"enabled + no user → unauthorized", "enabled", anonCtx, "", false},
+		{"policy + user → real owner_id (still populated for INSERT)", "policy", userCtx, "user-123", true},
+		{"policy + no user → unauthorized", "policy", anonCtx, "", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			table := &registry.Table{RLS: c.rls}
+			gotOwner, gotOK := resolveOwner(c.ctx, table)
+			if gotOwner != c.wantOwner || gotOK != c.wantOK {
+				t.Fatalf("resolveOwner(rls=%q) = (%q, %v), want (%q, %v)", c.rls, gotOwner, gotOK, c.wantOwner, c.wantOK)
+			}
+		})
+	}
+}
+
+func TestFilterOwner(t *testing.T) {
+	cases := []struct {
+		name string
+		rls  string
+		want string
+	}{
+		{"no rls → never a filter", "", ""},
+		{"owner → filters by owner_id", "owner", "user-123"},
+		{"enabled → filters by owner_id", "enabled", "user-123"},
+		{"policy → never a filter, native policies decide visibility", "policy", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			table := &registry.Table{RLS: c.rls}
+			got := filterOwner("user-123", table)
+			if got != c.want {
+				t.Fatalf("filterOwner(%q, rls=%q) = %q, want %q", "user-123", c.rls, got, c.want)
+			}
+		})
+	}
+}
+
+// setupPolicyModeFixture registers a fresh rls:"policy" table (no native
+// policy created — that is provisioner/dashboard's job in later tasks; this
+// task only proves the HTTP layer stops applying the automatic owner_id
+// filter and still populates owner_id on INSERT) and seeds one row owned by
+// a different user, so a filter regression (list/get scoped to $sub) would
+// be visible as a 0-row/404 result instead of the row actually being there.
+func setupPolicyModeFixture(t *testing.T) (otherUserRowID, otherUserID string) {
+	t.Helper()
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+	ctx := context.Background()
+	const schema = "rls_policy_mode_test_app"
+
+	setup := []string{
+		"DROP SCHEMA IF EXISTS " + schema + " CASCADE",
+		"CREATE SCHEMA " + schema,
+		`CREATE TABLE ` + schema + `."_auth_users" (
+			"id"            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			"email"         TEXT NOT NULL UNIQUE,
+			"password_hash" TEXT NOT NULL
+		)`,
+		`CREATE TABLE ` + schema + `.posts (
+			id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			title      TEXT NOT NULL,
+			owner_id   UUID NOT NULL REFERENCES ` + schema + `."_auth_users"("id"),
+			created_at TIMESTAMPTZ DEFAULT now(),
+			updated_at TIMESTAMPTZ DEFAULT now()
+		)`,
+		`GRANT USAGE ON SCHEMA ` + schema + ` TO zeep_app_enduser`,
+		`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ` + schema + ` TO zeep_app_enduser`,
+	}
+	for _, sql := range setup {
+		if _, err := testPool.Exec(ctx, sql); err != nil {
+			t.Fatalf("setup: %v", err)
+		}
+	}
+	t.Cleanup(func() {
+		_, _ = testPool.Exec(context.Background(), "DROP SCHEMA IF EXISTS "+schema+" CASCADE")
+	})
+
+	testReg.Register(&registry.App{
+		Config: config.AppConfig{
+			Name: "rls_policy_mode_test_app",
+			Auth: config.AuthConfig{
+				JWTSecret: "rls-policy-mode-secret",
+				Providers: config.AuthProviders{Email: true},
+			},
+		},
+		SchemaName: schema,
+		Tables: map[string]*registry.Table{
+			"posts": {
+				Name: "posts",
+				RLS:  "policy",
+				Columns: []registry.Column{
+					{Name: "title", Type: "text", Required: true},
+				},
+			},
+		},
+	})
+	t.Cleanup(func() { testReg.Unregister("rls_policy_mode_test_app") })
+
+	if err := testPool.QueryRow(ctx,
+		`INSERT INTO `+schema+`."_auth_users" (email, password_hash) VALUES ('other-user@test.com', 'x') RETURNING id`,
+	).Scan(&otherUserID); err != nil {
+		t.Fatalf("insert other user: %v", err)
+	}
+	if err := testPool.QueryRow(ctx,
+		`INSERT INTO `+schema+`.posts (title, owner_id) VALUES ('other user post', $1) RETURNING id`,
+		otherUserID,
+	).Scan(&otherUserRowID); err != nil {
+		t.Fatalf("seed other user's row: %v", err)
+	}
+	return otherUserRowID, otherUserID
+}
+
+// TestPolicyMode_ListAndGetSeeOtherUsersRow proves RLSP-01/04: a "policy"
+// table's list/get no longer apply the automatic owner_id = $sub filter —
+// the calling user sees a row owned by someone else (visibility is left to
+// native Postgres policies, none of which exist in this fixture, so nothing
+// in the app layer itself restricts the result).
+func TestPolicyMode_ListAndGetSeeOtherUsersRow(t *testing.T) {
+	otherUserRowID, _ := setupPolicyModeFixture(t)
+	h := NewHandler(testPool, testReg)
+	router := buildRLSRouter(h)
+	basePath := "/rls_policy_mode_test_app/posts"
+
+	jwt, err := auth.IssueJWT([]byte("rls-policy-mode-secret"), "calling-user-id", "caller@test.com", "rls_policy_mode_test_app", "member")
+	if err != nil {
+		t.Fatalf("IssueJWT: %v", err)
+	}
+	bearer := "Bearer " + jwt
+
+	t.Run("List", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, basePath+"/", nil)
+		req.Header.Set("Authorization", bearer)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("esperado 200, obtido %d: %s", rec.Code, rec.Body.String())
+		}
+		var resp map[string]any
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		data, _ := resp["data"].([]any)
+		if len(data) != 1 {
+			t.Fatalf("esperado ver a linha de outro usuário (nenhum filtro owner_id em rls:policy), obtido %d item(s)", len(data))
+		}
+	})
+
+	t.Run("GetByID", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, basePath+"/"+otherUserRowID+"/", nil)
+		req.Header.Set("Authorization", bearer)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("esperado 200 (linha de outro usuário visível sem filtro owner_id), obtido %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
+// TestPolicyMode_CreatePopulatesOwnerID proves RLSP-03: INSERT on a
+// "policy" table still fills owner_id with the authenticated user's sub,
+// exactly like "enabled" — the removal of the auto-filter on reads must not
+// also break the NOT NULL owner_id write path.
+func TestPolicyMode_CreatePopulatesOwnerID(t *testing.T) {
+	setupPolicyModeFixture(t)
+	ctx := context.Background()
+
+	var creatingUserID string
+	if err := testPool.QueryRow(ctx,
+		`INSERT INTO rls_policy_mode_test_app."_auth_users" (email, password_hash) VALUES ('creator@test.com', 'x') RETURNING id`,
+	).Scan(&creatingUserID); err != nil {
+		t.Fatalf("insert creating user: %v", err)
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildRLSRouter(h)
+	basePath := "/rls_policy_mode_test_app/posts"
+
+	jwt, err := auth.IssueJWT([]byte("rls-policy-mode-secret"), creatingUserID, "creator@test.com", "rls_policy_mode_test_app", "member")
+	if err != nil {
+		t.Fatalf("IssueJWT: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, basePath+"/", jsonBody(map[string]any{"title": "novo post"}))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+jwt)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("esperado 201, obtido %d: %s", rec.Code, rec.Body.String())
+	}
+	var row map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&row); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	ownerID, _ := row["owner_id"].(string)
+	if ownerID != creatingUserID {
+		t.Fatalf("owner_id = %q, want %q (o sub do usuário autenticado)", ownerID, creatingUserID)
 	}
 }

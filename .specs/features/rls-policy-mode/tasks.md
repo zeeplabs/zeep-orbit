@@ -141,11 +141,11 @@ T5 → T11
 
 **Done when**:
 
-- [ ] Tabela `rls: "policy"` — `HandleList`/`HandleGetByID`/`HandleUpdate`/`HandleDelete` não recebem `ownerID` como filtro (SQL gerado sem `owner_id = $N`)
-- [ ] Tabela `rls: "policy"` — `HandleCreate` continua populando `owner_id` com o `sub` do usuário autenticado
-- [ ] Tabela `rls: "owner"`/`"enabled"` — nenhuma mudança de SQL gerado (teste de regressão comparando query antes/depois)
-- [ ] Gate: `go build ./... && go vet ./... && gofmt -l internal/server/handler.go internal/server/handler_test.go`
-- [ ] Test count: casos novos para `"policy"` (list/get/update/delete sem filtro, insert com filtro) + suíte existente de `internal/server` sem regressão
+- [x] Tabela `rls: "policy"` — `HandleList`/`HandleGetByID`/`HandleUpdate`/`HandleDelete` não recebem `ownerID` como filtro (SQL gerado sem `owner_id = $N`)
+- [x] Tabela `rls: "policy"` — `HandleCreate` continua populando `owner_id` com o `sub` do usuário autenticado
+- [x] Tabela `rls: "owner"`/`"enabled"` — nenhuma mudança de SQL gerado (teste de regressão comparando query antes/depois)
+- [x] Gate: `go build ./... && go vet ./... && gofmt -l internal/server/handler.go internal/server/handler_test.go`
+- [x] Test count: casos novos para `"policy"` (list/get/update/delete sem filtro, insert com filtro) + suíte existente de `internal/server` sem regressão
 
 **Tests**: unit
 **Gate**: quick
