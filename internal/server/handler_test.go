@@ -627,6 +627,42 @@ func TestPolicyMode_ListAndGetSeeOtherUsersRow(t *testing.T) {
 			t.Fatalf("esperado 200 (linha de outro usuário visível sem filtro owner_id), obtido %d: %s", rec.Code, rec.Body.String())
 		}
 	})
+
+	// Update and Delete prove AC P1-4's other half: the system SHALL NOT
+	// apply WHERE owner_id = $sub to UPDATE/DELETE on a "policy" table
+	// either. Under the pre-fix wiring (filterOwner replaced by ownerID at
+	// the query.BuildUpdate/BuildDelete call sites) both would 404/0-affect,
+	// since "calling-user-id" never owns otherUserRowID.
+	t.Run("Update", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPatch, basePath+"/"+otherUserRowID+"/",
+			jsonBody(map[string]any{"title": "editado por outro usuário"}))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", bearer)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("esperado 200 (UPDATE em linha de outro usuário sem filtro owner_id em rls:policy), obtido %d: %s", rec.Code, rec.Body.String())
+		}
+		var row map[string]any
+		if err := json.NewDecoder(rec.Body).Decode(&row); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if row["title"] != "editado por outro usuário" {
+			t.Fatalf("title esperado atualizado, obtido %v (UPDATE não pode ter sido bloqueado por owner_id)", row["title"])
+		}
+	})
+
+	t.Run("Delete", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodDelete, basePath+"/"+otherUserRowID+"/", nil)
+		req.Header.Set("Authorization", bearer)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("esperado 204 (DELETE em linha de outro usuário sem filtro owner_id em rls:policy), obtido %d: %s", rec.Code, rec.Body.String())
+		}
+	})
 }
 
 // TestPolicyMode_CreatePopulatesOwnerID proves RLSP-03: INSERT on a
