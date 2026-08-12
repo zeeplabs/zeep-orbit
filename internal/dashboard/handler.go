@@ -1900,7 +1900,7 @@ func (h *Handler) ListDataBrowserApps(w http.ResponseWriter, r *http.Request) {
 			}
 			cols = append(cols, DataBrowserTableColumn{Name: "created_at", Type: "timestamptz"})
 			cols = append(cols, DataBrowserTableColumn{Name: "updated_at", Type: "timestamptz"})
-			if t.RLS == "owner" {
+			if config.HasOwnerColumn(t.RLS) {
 				cols = append(cols, DataBrowserTableColumn{Name: "owner_id", Type: "uuid"})
 			}
 

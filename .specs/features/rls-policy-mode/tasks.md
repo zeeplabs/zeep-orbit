@@ -337,9 +337,9 @@ T5 → T11
 
 **Done when**:
 
-- [ ] Data Browser lista `owner_id` como coluna pra tabelas `"owner"`, `"enabled"` e `"policy"`
-- [ ] Gate: `go build ./... && go vet ./... && gofmt -l internal/dashboard/handler.go`
-- [ ] Test count: caso novo cobrindo `"enabled"`/`"policy"` no Data Browser (se já existir teste da rota, estender; senão, teste unitário isolado da montagem de `cols`)
+- [x] Data Browser lista `owner_id` como coluna pra tabelas `"owner"`, `"enabled"` e `"policy"`
+- [x] Gate: `go build ./... && go vet ./... && gofmt -l internal/dashboard/handler.go`
+- [x] Test count: caso novo cobrindo `"enabled"`/`"policy"` no Data Browser (se já existir teste da rota, estender; senão, teste unitário isolado da montagem de `cols`)
 
 **Tests**: unit
 **Gate**: quick
