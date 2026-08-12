@@ -144,6 +144,25 @@ test.describe('Policy Templates & Help Drawer', () => {
     await page.getByRole('button', { name: 'Apply template' }).click()
     await expect(page.getByText('tpl_open_read_select', { exact: true })).toBeVisible()
 
+    // --- P1 AC8: a single-action template's create call failing surfaces
+    // via toast.error and leaves no stuck state — reapplying the SAME
+    // template/role now collides on the generated name (tpl_open_read_select
+    // already exists from the apply above), forcing a real backend
+    // rejection instead of a client-side validation short-circuit. ---
+    await useTemplateButton(page, 1).click()
+    await page.getByRole('button', { name: 'member', exact: true }).click()
+    const applyOpenReadAgain = page.getByRole('button', { name: 'Apply template' })
+    await applyOpenReadAgain.click()
+    // internal/dashboard/handler.go's exact 409 message for a duplicate
+    // policy name, surfaced verbatim via toast.error(error.message).
+    await expect(page.getByText('a policy with this name already exists on this table')).toBeVisible()
+    // Not stuck: the button is enabled again and a second attempt is still
+    // possible (isApplying's `finally` cleared) — assert the exact opposite
+    // policy count didn't change (no duplicate silently created).
+    await expect(applyOpenReadAgain).toBeEnabled()
+    expect((await getPolicies(page, appId, 'posts')).filter((p) => p.pg_policy_name === 'tpl_open_read_select')).toHaveLength(1)
+    await page.getByRole('button', { name: 'Close', exact: true }).click() // collapse this template's draft before moving on
+
     // --- P1 AC5 (PTPL-04): "Nobody edits, read-only" — exactly one select
     // policy, no action picker for this template. ---
     await useTemplateButton(page, 2).click()
@@ -167,11 +186,27 @@ test.describe('Policy Templates & Help Drawer', () => {
     // --- P3 AC1/AC3 (PTPL-08): opening "Help" over an in-progress template
     // draft doesn't discard it; closing the drawer preserves the draft. ---
     await page.getByRole('button', { name: 'Help', exact: true }).click()
+    const helpDialog = page.getByRole('dialog')
     await expect(page.getByText('Building an advanced policy', { exact: true })).toBeVisible()
-    // >=3 worked examples, using only the real operator/claim allowlist —
     // spot-check one example's rendered clause text, scoped to the drawer
     // (the same clause text also appears in the policy list below it).
-    await expect(page.getByRole('dialog').getByText(/owner_id = claim:sub/)).toBeVisible()
+    await expect(helpDialog.getByText(/owner_id = claim:sub/)).toBeVisible()
+    // P3 AC2: >=3 worked examples, and none of them uses anything outside
+    // the real operator/claim allowlist — asserted on the drawer's actual
+    // rendered text (not just a source-code comment) so a future example
+    // that slips in "LIKE"/"now()"/an invented claim fails this test.
+    const helpText = await helpDialog.innerText()
+    const exampleCount = await helpDialog.locator('p.font-semibold').count()
+    expect(exampleCount).toBeGreaterThanOrEqual(3)
+    expect(helpText.toLowerCase()).not.toContain('like ')
+    expect(helpText).not.toContain('now()')
+    // Every "claim:X" rendered in the drawer must be one of the 3 real
+    // claims — a future example slipping in an invented claim fails here.
+    const claimsUsed = [...helpText.matchAll(/claim:(\w+)/g)].map((m) => m[1])
+    expect(claimsUsed.length).toBeGreaterThan(0)
+    for (const claim of claimsUsed) {
+      expect(['role', 'sub', 'email']).toContain(claim)
+    }
     await page.keyboard.press('Escape')
     await expect(page.getByText('Building an advanced policy', { exact: true })).toHaveCount(0)
     await expect(page.getByPlaceholder('Value')).toHaveValue('published')
