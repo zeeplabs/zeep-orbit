@@ -319,16 +319,25 @@ T8 depends on T5, T6, and T7. T9 depends on T8.
 
 **Done when**:
 
-- [ ] `table.rls` flows into `TablePoliciesTab` at the real call site
-- [ ] `policy-templates.spec.ts` exercises every template (PTPL-01,02,04,05,06,07) and the help drawer, each stage commented with the AC it covers
-- [ ] Partial-failure stage genuinely forces the 2nd/3rd composite call to fail and asserts the resulting status list and successful retry-skip
-- [ ] Gate check passes (Full): `cd internal/dashboard/ui && npx tsc -b && npm run build`, then `npm run test:e2e -- policy-templates.spec.ts` against a running `zeep` binary with `DATABASE_URL`/`DASHBOARD_BOOTSTRAP_SECRET` set
-- [ ] Build gate passes: `python3 -c "import json; json.load(open('internal/dashboard/ui/src/locales/en.json')); json.load(open('internal/dashboard/ui/src/locales/pt-BR.json'))"`, `go build ./... && go vet ./...` from repo root (no backend regression)
+- [x] `table.rls` flows into `TablePoliciesTab` at the real call site (landed in T8's commit — see that task's deviation note)
+- [x] `policy-templates.spec.ts` exercises every template (PTPL-01,02,04,05,06,07) and the help drawer, each stage commented with the AC it covers
+- [x] Partial-failure stage genuinely forces the 2nd/3rd composite call to fail and asserts the resulting status list and successful retry-skip
+- [x] Gate check passes (Full): `cd internal/dashboard/ui && npx tsc -b && npm run build`, then `npm run test:e2e -- policy-templates.spec.ts` against a running `zeep` binary with `DATABASE_URL`/`DASHBOARD_BOOTSTRAP_SECRET` set
+- [x] Build gate passes: `python3 -c "import json; json.load(open('internal/dashboard/ui/src/locales/en.json')); json.load(open('internal/dashboard/ui/src/locales/pt-BR.json'))"`, `go build ./... && go vet ./...` from repo root (no backend regression)
+
+**Status**: ✅ Complete
 
 **Tests**: e2e
 **Gate**: full
 
 **Commit**: `test(dashboard-ui): add end-to-end coverage for policy templates and help drawer`
+
+**Findings from writing this suite (not fixed here, out of scope for policy-templates):**
+
+1. **Pre-existing, unrelated bug**: a freshly created table's RLS select defaults to "Public", which sends `rls: "disabled"` — a value `internal/dashboard/handler.go` has always rejected (there's even a Go test, `handler_test.go:116`, asserting the rejection message). `AppDetailsPage.tsx:193`'s `defaultRls` fallback and `TableCard.tsx:309`'s `SelectItem value="disabled"` both use the literal string `"disabled"` instead of `""`. Reproduces identically at the T7 commit (before this batch), and confirmed CI (`gh run list`) only runs `go test`, never the Playwright e2e suite, which is how this went uncaught. It blocks the default "Add table" flow for any e2e test that doesn't explicitly switch RLS away from "Public" — including the pre-existing `enduser-roles.spec.ts` tests "creates a policy selecting roles via chips", "edits an existing table policy...", and "shows an orphan role...". `policy-templates.spec.ts` routes around it by always switching to "Restricted" right after "Add table". Recommend a follow-up fix task (change both literals to `""`) — not done in this commit since it's unrelated to policy-templates.
+2. **`PTPL-03` is unused.** It's referenced in `spec.md`'s Assumptions table (owner-dependent templates: "PTPL-01, PTPL-03, PTPL-06") but never appears in the Requirement Traceability table or maps to any template/builder in `design.md`/`policyTemplates.ts`. Looks like a leftover ID from drafting, not a missed requirement — no template was ever specified for it. Flagged for the Verifier; not resolved here since fixing spec.md's own ID list is outside T8/T9's scope.
+
+**Requirement Traceability (spec.md) updated to Done** for PTPL-01 through PTPL-08 in the same change as this commit — the full chain (templates → picker → composite/partial-failure → wiring → e2e) is now exercised end-to-end.
 
 ---
 
