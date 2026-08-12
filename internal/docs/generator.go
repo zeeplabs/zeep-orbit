@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/registry"
 )
 
@@ -261,7 +262,7 @@ func buildResponseSchema(table *registry.Table) schemaOrRef {
 	}
 	required := []string{"id", "created_at", "updated_at"}
 
-	if table.RLS == "owner" {
+	if config.HasOwnerColumn(table.RLS) {
 		props["owner_id"] = schemaOrRef{Type: "string", Format: "uuid", ReadOnly: true}
 		required = append(required, "owner_id")
 	}

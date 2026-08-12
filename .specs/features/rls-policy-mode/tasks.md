@@ -308,11 +308,11 @@ T5 → T11
 
 **Done when**:
 
-- [ ] Schema OpenAPI de tabela `rls: "policy"` inclui `owner_id` (uuid, readOnly)
-- [ ] Schema de tabela `rls: "owner"` continua idêntico (regressão)
-- [ ] Schema de tabela `rls: "enabled"` agora também inclui `owner_id` — correção de gap pré-existente, fora do escopo original mas coberta de graça pela troca de predicado
-- [ ] Gate: `go build ./... && go vet ./... && gofmt -l internal/docs/generator.go internal/docs/generator_test.go`
-- [ ] Test count: 1 caso novo (`policy`) + 1 caso de regressão (`enabled` agora expõe `owner_id`) + suíte existente
+- [x] Schema OpenAPI de tabela `rls: "policy"` inclui `owner_id` (uuid, readOnly)
+- [x] Schema de tabela `rls: "owner"` continua idêntico (regressão)
+- [x] Schema de tabela `rls: "enabled"` agora também inclui `owner_id` — correção de gap pré-existente, fora do escopo original mas coberta de graça pela troca de predicado
+- [x] Gate: `go build ./... && go vet ./... && gofmt -l internal/docs/generator.go internal/docs/generator_test.go`
+- [x] Test count: 1 caso novo (`policy`) + 1 caso de regressão (`enabled` agora expõe `owner_id`) + suíte existente
 
 **Tests**: unit
 **Gate**: quick
