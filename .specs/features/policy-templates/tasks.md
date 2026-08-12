@@ -256,12 +256,14 @@ T8 depends on T5, T6, and T7. T9 depends on T8.
 
 **Done when**:
 
-- [ ] Applying the composite template with no existing policies creates all 3 (select, update, delete) via 3 sequential calls
-- [ ] If the 2nd call fails, the 3rd is never attempted; UI shows "created: select" / "failed: update (<message>)" / "pending: delete"
-- [ ] Re-applying after that partial failure skips `select` (already exists per `existingPolicies`) and retries only `update`/`delete`
-- [ ] Apply button and template/mode switching are disabled for the duration of the sequential calls
-- [ ] All new strings present in `en.json` and `pt-BR.json`
-- [ ] Gate check passes: `cd internal/dashboard/ui && npx tsc -b && npm run build`
+- [x] Applying the composite template with no existing policies creates all 3 (select, update, delete) via 3 sequential calls
+- [x] If the 2nd call fails, the 3rd is never attempted; UI shows "created: select" / "failed: update (<message>)" / "pending: delete" (`applyComposite`'s loop `return`s on the first caught error, leaving later actions at their initial `"pending"` status)
+- [x] Re-applying after that partial failure skips `select` (already exists per `existingPolicies`) and retries only `update`/`delete` (`initial[def.action]` computed fresh from `existingPolicies.some(p => p.pg_policy_name === def.name)` on every call)
+- [x] Apply button and template/mode switching are disabled for the duration of the sequential calls (`isApplying` gates every template's toggle button and every apply button)
+- [x] All new strings present in `en.json` and `pt-BR.json`
+- [x] Gate check passes: `cd internal/dashboard/ui && npx tsc -b && npm run build`
+
+**Status**: ✅ Complete
 
 **Tests**: none — merge-forward to T9 (partial-failure/retry scenario needs a real backend round-trip through the wired screen to be meaningfully verified, not a mock)
 **Gate**: full

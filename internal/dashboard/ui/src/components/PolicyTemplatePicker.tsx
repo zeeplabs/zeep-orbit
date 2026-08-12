@@ -10,6 +10,8 @@ import {
   buildOpenReadPolicy,
   buildReadOnlyPolicy,
   buildValueMatchPolicy,
+  buildOpenReadOwnerWritePolicies,
+  generatedPolicyName,
 } from "../lib/policyTemplates";
 import { RoleChipPicker } from "./RoleChipPicker";
 import { Button } from "@/components/ui/button";
@@ -26,6 +28,15 @@ import {
 // that lets the user pick more than one action; the others are fixed to
 // "select" per TEMPLATE_DEFINITIONS.actionsFixed.
 const OWNER_ONLY_ACTIONS = ["select", "insert", "update", "delete"];
+
+// Order matches buildOpenReadOwnerWritePolicies' return order (select, update, delete).
+const COMPOSITE_ACTIONS = ["select", "update", "delete"] as const;
+
+type CompositeActionStatus = "pending" | "created" | "skipped" | "failed";
+interface CompositeStatusEntry {
+  status: CompositeActionStatus;
+  reason?: string;
+}
 
 export interface PolicyTemplatePickerProps {
   appId: string;
@@ -59,12 +70,14 @@ export function PolicyTemplatePicker({
   const [valueMatchColumn, setValueMatchColumn] = useState(columns[0]?.name ?? "");
   const [valueMatchValue, setValueMatchValue] = useState("");
   const [isApplying, setIsApplying] = useState(false);
+  const [compositeStatus, setCompositeStatus] = useState<Record<string, CompositeStatusEntry> | null>(null);
 
   const resetInputs = () => {
     setOwnerActions([]);
     setRoles([]);
     setValueMatchColumn(columns[0]?.name ?? "");
     setValueMatchValue("");
+    setCompositeStatus(null);
   };
 
   const toggleTemplate = (id: TemplateId) => {
@@ -110,9 +123,39 @@ export function PolicyTemplatePicker({
   const applyValueMatch = () =>
     applySequentially([buildValueMatchPolicy(valueMatchColumn, valueMatchValue.trim(), roles)]);
 
-  const visibleTemplates = TEMPLATE_DEFINITIONS.filter(
-    (def) => def.kind !== "composite" && (!def.requiresOwnerColumn || hasOwnerColumn(rls)),
-  );
+  // Composite template (PTPL-06): 3 sequential POSTs (select, update,
+  // delete). Skips any action whose generatedPolicyName already exists in
+  // existingPolicies (retry-after-partial-failure, spec P2 AC3); stops the
+  // sequence at the first failure, leaving the remaining actions "pending"
+  // (spec P2 AC2).
+  const applyComposite = async () => {
+    const defs = buildOpenReadOwnerWritePolicies(roles);
+    const initial: Record<string, CompositeStatusEntry> = {};
+    for (const def of defs) {
+      const alreadyExists = existingPolicies.some((p) => p.pg_policy_name === def.name);
+      initial[def.action] = { status: alreadyExists ? "skipped" : "pending" };
+    }
+    setCompositeStatus(initial);
+    setIsApplying(true);
+    try {
+      for (const def of defs) {
+        if (initial[def.action].status === "skipped") continue;
+        try {
+          await createPolicy.mutateAsync(def);
+          setCompositeStatus((prev) => (prev ? { ...prev, [def.action]: { status: "created" } } : prev));
+        } catch (err) {
+          const reason = err instanceof Error ? err.message : String(err);
+          setCompositeStatus((prev) => (prev ? { ...prev, [def.action]: { status: "failed", reason } } : prev));
+          return;
+        }
+      }
+      onDone();
+    } finally {
+      setIsApplying(false);
+    }
+  };
+
+  const visibleTemplates = TEMPLATE_DEFINITIONS.filter((def) => !def.requiresOwnerColumn || hasOwnerColumn(rls));
 
   return (
     <div className="flex flex-col gap-2.5">
@@ -241,6 +284,40 @@ export function PolicyTemplatePicker({
               >
                 {t("tablePolicies.templates.apply")}
               </Button>
+            </div>
+          )}
+
+          {activeTemplate === def.id && def.id === "open_read_owner_write" && (
+            <div className="flex flex-col gap-2.5">
+              <RoleChipPicker
+                availableRoles={availableRoles}
+                selected={roles}
+                onToggle={toggleRole}
+                label={t("tablePolicies.rolesChipsLabel")}
+                placeholder={t("tablePolicies.rolesPlaceholder")}
+              />
+              <Button
+                size="sm"
+                className="self-start"
+                disabled={isApplying || roles.length === 0}
+                onClick={applyComposite}
+              >
+                {t("tablePolicies.templates.apply")}
+              </Button>
+              {compositeStatus && (
+                <div className="flex flex-col gap-0.5 font-mono text-[11px] text-[var(--text-secondary)]">
+                  {COMPOSITE_ACTIONS.map((action) => {
+                    const entry = compositeStatus[action];
+                    if (!entry) return null;
+                    return (
+                      <span key={action}>
+                        {action}: {t(`tablePolicies.templates.composite.status.${entry.status}`)}
+                        {entry.status === "failed" && entry.reason ? ` (${entry.reason})` : ""}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
