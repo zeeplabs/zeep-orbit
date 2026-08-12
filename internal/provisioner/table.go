@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/zeeplabs/zeep-orbit/internal/config"
+	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
 
 // systemColumnNames lists the reserved column names managed by the server; they
@@ -141,6 +142,22 @@ func (p *Provisioner) createTable(ctx context.Context, schemaName, tableName str
 	}
 
 	return true, nil
+}
+
+// EnsureRowLevelSecurity runs `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` on
+// schemaName.tableName against db (a *db.Pool or a pgx.Tx — anything
+// satisfying db.Querier), so callers can run it either directly on the pool
+// or inside an existing transaction (e.g. dashboard.CreateTablePolicy's tx).
+// It is idempotent — Postgres does not error when RLS is already enabled —
+// so callers may invoke it unconditionally whenever a table needs the
+// fail-closed guarantee (RLS enabled + zero policies denies every row to
+// zeep_app_enduser natively, with no application-level check).
+func EnsureRowLevelSecurity(ctx context.Context, pool db.Querier, schemaName, tableName string) error {
+	sql := fmt.Sprintf(`ALTER TABLE %q.%q ENABLE ROW LEVEL SECURITY`, schemaName, tableName)
+	if _, err := pool.Exec(ctx, sql); err != nil {
+		return fmt.Errorf("table: enable row level security on %q.%q: %w", schemaName, tableName, err)
+	}
+	return nil
 }
 
 // checkDependents returns a description of any foreign key in the same

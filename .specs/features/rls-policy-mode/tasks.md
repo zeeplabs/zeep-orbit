@@ -169,10 +169,10 @@ T5 → T11
 
 **Done when**:
 
-- [ ] `EnsureRowLevelSecurity` executa `ALTER TABLE %q.%q ENABLE ROW LEVEL SECURITY` e é idempotente (chamar duas vezes não erra)
-- [ ] `table_policies_store.go` usa a função extraída, comportamento de `TestCreateTablePolicy_EnablesRowLevelSecurityOnlyOnce` inalterado
-- [ ] Gate: `go build ./... && go vet ./... && gofmt -l internal/provisioner/table.go internal/dashboard/table_policies_store.go`
-- [ ] Test count: suíte de `internal/dashboard/table_policies_store_test.go` sem regressão + novo teste unitário de `EnsureRowLevelSecurity`
+- [x] `EnsureRowLevelSecurity` executa `ALTER TABLE %q.%q ENABLE ROW LEVEL SECURITY` e é idempotente (chamar duas vezes não erra)
+- [x] `table_policies_store.go` usa a função extraída, comportamento de `TestCreateTablePolicy_EnablesRowLevelSecurityOnlyOnce` inalterado
+- [x] Gate: `go build ./... && go vet ./... && gofmt -l internal/provisioner/table.go internal/dashboard/table_policies_store.go`
+- [x] Test count: suíte de `internal/dashboard/table_policies_store_test.go` sem regressão + novo teste unitário de `EnsureRowLevelSecurity`
 
 **Tests**: unit
 **Gate**: quick
