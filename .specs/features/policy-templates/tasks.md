@@ -224,13 +224,15 @@ T8 depends on T5, T6, and T7. T9 depends on T8.
 
 **Done when**:
 
-- [ ] All 5 templates render; `owner_only` hidden when `hasOwnerColumn(rls)` is false
-- [ ] Applying `owner_only` for 2 selected actions calls `createPolicy.mutateAsync` twice with the `PolicyDef`s from `buildOwnerOnlyPolicies`
-- [ ] Applying `open_read`/`read_only`/`value_match` calls it once each with the matching builder's output
-- [ ] `blocked_by_default` never triggers a mutation call
-- [ ] Failure on any call surfaces via the existing `toast.error` (`useCreateTablePolicy`'s `onError`, `api.ts:243-260`) — no unhandled promise rejection, no stuck loading state
-- [ ] All new strings (template names/descriptions/inputs) present in `en.json` and `pt-BR.json`
-- [ ] Gate check passes: `cd internal/dashboard/ui && npx tsc -b && npm run build`
+- [x] All 5 templates render; `owner_only` hidden when `hasOwnerColumn(rls)` is false
+- [x] Applying `owner_only` for 2 selected actions calls `createPolicy.mutateAsync` twice with the `PolicyDef`s from `buildOwnerOnlyPolicies`
+- [x] Applying `open_read`/`read_only`/`value_match` calls it once each with the matching builder's output
+- [x] `blocked_by_default` never triggers a mutation call (renders as static text, no "use"/"apply" button — `def.kind !== "info"` gate)
+- [x] Failure on any call surfaces via the existing `toast.error` (`useCreateTablePolicy`'s `onError`, `api.ts:243-260`) — no unhandled promise rejection (caught in `applySequentially`), no stuck loading state (`finally` clears `isApplying`)
+- [x] All new strings (template names/descriptions/inputs) present in `en.json` and `pt-BR.json`
+- [x] Gate check passes: `cd internal/dashboard/ui && npx tsc -b && npm run build`
+
+**Status**: ✅ Complete
 
 **Tests**: none — merge-forward to T9 (needs to be mounted inside `TablePolicies.tsx`, T8, to be reachable through a real browser session)
 **Gate**: full
