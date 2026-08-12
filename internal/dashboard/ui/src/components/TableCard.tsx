@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation, Trans } from "react-i18next";
 import { TableDef, ColumnDef, IndexDef, ReferenceDef } from "../lib/api";
+import { hasOwnerColumn } from "../lib/rls";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon";
 import { StatusPill } from "@/components/patterns";
@@ -81,7 +82,7 @@ const OWNER_ID_AUTO_COLUMN = { name: "owner_id", type: "uuid", required: true, u
 
 // owner_id só existe quando RLS está ativo (config.HasOwnerColumn: rls == "owner" || rls == "enabled" || rls == "policy").
 const autoColumnsFor = (rls: string) =>
-  rls === "enabled" || rls === "owner" || rls === "policy" ? [...BASE_AUTO_COLUMNS, OWNER_ID_AUTO_COLUMN] : BASE_AUTO_COLUMNS;
+  hasOwnerColumn(rls) ? [...BASE_AUTO_COLUMNS, OWNER_ID_AUTO_COLUMN] : BASE_AUTO_COLUMNS;
 
 // Mirrors config.AutoScopesByOwner: "policy" mode is a different group from
 // ""/"owner"/"enabled" — switching a saved table between the two groups
