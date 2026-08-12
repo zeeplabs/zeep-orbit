@@ -1,6 +1,7 @@
 package provisioner
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -648,6 +649,9 @@ func TestBuildPolicySQL_OwnerIDRejectsIncompatibleOperator(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for owner_id with LIKE (operator outside allowlist), got nil")
 	}
+	if !strings.Contains(err.Error(), `invalid operator "LIKE"`) {
+		t.Fatalf("err = %q, want it to contain %q", err.Error(), `invalid operator "LIKE"`)
+	}
 }
 
 // TestBuildPolicySQL_OtherSystemColumnsStillRejected covers RLSP-05/06's
@@ -670,6 +674,10 @@ func TestBuildPolicySQL_OtherSystemColumnsStillRejected(t *testing.T) {
 		_, err := BuildPolicySQL("app_schema", "requests", def, testColumns())
 		if err == nil {
 			t.Fatalf("column %q: expected error (still not referenceable), got nil", col)
+		}
+		wantMsg := fmt.Sprintf(`unknown column %q`, col)
+		if !strings.Contains(err.Error(), wantMsg) {
+			t.Fatalf("column %q: err = %q, want it to contain %q", col, err.Error(), wantMsg)
 		}
 	}
 }

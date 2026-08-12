@@ -113,6 +113,10 @@ func TestValidateTableInputRejectsUnknownRLS(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for unrecognized rls value, got nil")
 	}
+	wantMsg := `table clientes has an invalid rls value: disabled (must be one of "", "owner", "enabled", "policy")`
+	if err.Error() != wantMsg {
+		t.Fatalf("err = %q, want %q", err.Error(), wantMsg)
+	}
 }
 
 // TestValidateTableInputAcceptsPolicyWithEmailAuth covers RLSP-10: "policy"
@@ -132,6 +136,10 @@ func TestValidateTableInputRejectsPolicyWithoutEmailAuth(t *testing.T) {
 	err := validateTableInput(tbl, false, nil)
 	if err == nil {
 		t.Fatal("expected error for rls:policy table without email auth, got nil")
+	}
+	wantMsg := `table posts uses restricted access (RLS), which requires 'Autenticação por e-mail' to be enabled for this app`
+	if err.Error() != wantMsg {
+		t.Fatalf("err = %q, want %q", err.Error(), wantMsg)
 	}
 }
 
