@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
+	"github.com/zeeplabs/zeep-orbit/internal/provisioner"
 	"github.com/zeeplabs/zeep-orbit/internal/storage"
 )
 
@@ -487,8 +488,20 @@ func InsertAppTable(ctx context.Context, pool *db.Pool, appID string, t AppTable
 
 // UpdateAppTable updates rls/columns/indexes of an existing table. The table
 // name is immutable once created — renaming would require renaming the
-// physical table too, out of scope here.
-func UpdateAppTable(ctx context.Context, pool *db.Pool, appID, tableID, rls string, columns []config.ColumnConfig, indexes []config.IndexConfig) (AppTableRow, error) {
+// physical table too, out of scope here. schemaName is the app's physical
+// Postgres schema (schemaNameForDB(app.Name)) — the caller already has it
+// from GetApp, so this avoids a second lookup here.
+//
+// When the new rls is "policy", this also enables native RLS on the
+// physical table (provisioner.EnsureRowLevelSecurity) before returning, so a
+// table switching into policy mode preserves the fail-closed guarantee
+// (RLSP-02) even if it never got RLS enabled lazily (a legacy "enabled"
+// table with no policies yet never triggered table_policies_store.go's
+// enable-on-first-policy path). The call is unconditional on the new value,
+// not conditioned on the old one — EnsureRowLevelSecurity is idempotent, and
+// switching "policy" → "enabled"/"owner" intentionally never disables RLS
+// (RLSP-08: RLS enabled is a one-way ratchet here, never turned back off).
+func UpdateAppTable(ctx context.Context, pool *db.Pool, appID, tableID, schemaName, rls string, columns []config.ColumnConfig, indexes []config.IndexConfig) (AppTableRow, error) {
 	if indexes == nil {
 		indexes = []config.IndexConfig{}
 	}
@@ -520,6 +533,13 @@ func UpdateAppTable(ctx context.Context, pool *db.Pool, appID, tableID, rls stri
 	if err := json.Unmarshal(idxJSON, &row.Indexes); err != nil {
 		return AppTableRow{}, fmt.Errorf("dashboard: unmarshal indexes for table %s: %w", tableID, err)
 	}
+
+	if rls == "policy" {
+		if err := provisioner.EnsureRowLevelSecurity(ctx, pool, schemaName, row.Name); err != nil {
+			return AppTableRow{}, fmt.Errorf("dashboard: enable row level security for table %s: %w", tableID, err)
+		}
+	}
+
 	return row, nil
 }
 

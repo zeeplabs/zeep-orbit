@@ -341,11 +341,140 @@ func TestUpdateAppTable_RoundTripsIndexes(t *testing.T) {
 	}
 
 	newIndexes := []config.IndexConfig{{Name: "idx_users_email", Columns: []string{"email"}, Unique: true}}
-	updated, err := UpdateAppTable(context.Background(), pool, appID, created.ID, "", created.Columns, newIndexes)
+	updated, err := UpdateAppTable(context.Background(), pool, appID, created.ID, "", "", created.Columns, newIndexes)
 	if err != nil {
 		t.Fatalf("UpdateAppTable: %v", err)
 	}
 	if len(updated.Indexes) != 1 || updated.Indexes[0].Name != "idx_users_email" {
 		t.Fatalf("expected updated indexes to round-trip, got %+v", updated.Indexes)
+	}
+}
+
+// setupPhysicalTable creates a real schema+table (outside app_tables
+// metadata) so UpdateAppTable's provisioner.EnsureRowLevelSecurity call has
+// something real to ALTER — apps_store_test.go's other tests only touch the
+// zeep_system.app_tables metadata row, never a physical table.
+func setupPhysicalTable(t *testing.T, pool *db.Pool, schema, table string) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(), fmt.Sprintf(`CREATE SCHEMA IF NOT EXISTS %q`, schema)); err != nil {
+		t.Fatalf("create schema %q: %v", schema, err)
+	}
+	if _, err := pool.Exec(context.Background(), fmt.Sprintf(
+		`CREATE TABLE %q.%q (
+			id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			owner_id UUID NOT NULL
+		)`, schema, table)); err != nil {
+		t.Fatalf("create table %q.%q: %v", schema, table, err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), fmt.Sprintf(`DROP SCHEMA IF EXISTS %q CASCADE`, schema))
+	})
+}
+
+// TestUpdateAppTable_SwitchToPolicy_EnablesRowLevelSecurity covers T7's
+// "Done when": a table with an existing legacy RLS mode (no policy ever
+// created, so RLS was never enabled lazily) that switches to "policy" must
+// come out with native RLS enabled — the mechanism spec.md AC P1-2/P3-3
+// relies on for the fail-closed guarantee.
+func TestUpdateAppTable_SwitchToPolicy_EnablesRowLevelSecurity(t *testing.T) {
+	pool := appsStoreTestPool(t)
+	appID := appsStoreTestApp(t, pool)
+	schema := "test_app"
+	setupPhysicalTable(t, pool, schema, "widgets")
+
+	created, err := InsertAppTable(context.Background(), pool, appID, AppTableRow{
+		Name: "widgets",
+		RLS:  "enabled",
+	})
+	if err != nil {
+		t.Fatalf("InsertAppTable: %v", err)
+	}
+
+	if relRowSecurityEnabled(t, pool, schema, "widgets") {
+		t.Fatal("expected RLS disabled before switching to policy mode")
+	}
+
+	updated, err := UpdateAppTable(context.Background(), pool, appID, created.ID, schema, "policy", created.Columns, created.Indexes)
+	if err != nil {
+		t.Fatalf("UpdateAppTable: %v", err)
+	}
+	if updated.RLS != "policy" {
+		t.Fatalf("expected rls %q, got %q", "policy", updated.RLS)
+	}
+	if !relRowSecurityEnabled(t, pool, schema, "widgets") {
+		t.Fatal("expected RLS enabled after switching to policy mode")
+	}
+}
+
+// TestUpdateAppTable_SwitchToPolicy_PreservesExistingData covers T7's "Done
+// when": the mode switch must not recreate the table or lose data already
+// stored in it (spec.md AC P3-2).
+func TestUpdateAppTable_SwitchToPolicy_PreservesExistingData(t *testing.T) {
+	pool := appsStoreTestPool(t)
+	appID := appsStoreTestApp(t, pool)
+	schema := "test_app"
+	setupPhysicalTable(t, pool, schema, "widgets")
+
+	ownerID := testUser(t, pool, "widget-owner@example.com", "superadmin")
+	if _, err := pool.Exec(context.Background(),
+		fmt.Sprintf(`INSERT INTO %q.widgets (owner_id) VALUES ($1)`, schema), ownerID,
+	); err != nil {
+		t.Fatalf("seed widgets row: %v", err)
+	}
+
+	created, err := InsertAppTable(context.Background(), pool, appID, AppTableRow{
+		Name: "widgets",
+		RLS:  "enabled",
+	})
+	if err != nil {
+		t.Fatalf("InsertAppTable: %v", err)
+	}
+
+	if _, err := UpdateAppTable(context.Background(), pool, appID, created.ID, schema, "policy", created.Columns, created.Indexes); err != nil {
+		t.Fatalf("UpdateAppTable: %v", err)
+	}
+
+	var count int
+	if err := pool.QueryRow(context.Background(), fmt.Sprintf(`SELECT count(*) FROM %q.widgets`, schema)).Scan(&count); err != nil {
+		t.Fatalf("count widgets rows: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected the pre-existing row to survive the mode switch, got count=%d", count)
+	}
+}
+
+// TestUpdateAppTable_SwitchPolicyToEnabled_KeepsRowLevelSecurityEnabled
+// covers T7's "Done when": switching "policy" → "enabled" must keep RLS
+// enabled — RLS enablement is a one-way ratchet here (RLSP-08), never
+// disabled by a mode switch back.
+func TestUpdateAppTable_SwitchPolicyToEnabled_KeepsRowLevelSecurityEnabled(t *testing.T) {
+	pool := appsStoreTestPool(t)
+	appID := appsStoreTestApp(t, pool)
+	schema := "test_app"
+	setupPhysicalTable(t, pool, schema, "widgets")
+
+	created, err := InsertAppTable(context.Background(), pool, appID, AppTableRow{
+		Name: "widgets",
+		RLS:  "policy",
+	})
+	if err != nil {
+		t.Fatalf("InsertAppTable: %v", err)
+	}
+	if _, err := UpdateAppTable(context.Background(), pool, appID, created.ID, schema, "policy", created.Columns, created.Indexes); err != nil {
+		t.Fatalf("UpdateAppTable (seed policy mode): %v", err)
+	}
+	if !relRowSecurityEnabled(t, pool, schema, "widgets") {
+		t.Fatal("expected RLS enabled after seeding policy mode")
+	}
+
+	updated, err := UpdateAppTable(context.Background(), pool, appID, created.ID, schema, "enabled", created.Columns, created.Indexes)
+	if err != nil {
+		t.Fatalf("UpdateAppTable (switch back to enabled): %v", err)
+	}
+	if updated.RLS != "enabled" {
+		t.Fatalf("expected rls %q, got %q", "enabled", updated.RLS)
+	}
+	if !relRowSecurityEnabled(t, pool, schema, "widgets") {
+		t.Fatal("expected RLS to remain enabled after switching back to enabled")
 	}
 }

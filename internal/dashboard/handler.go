@@ -1244,7 +1244,7 @@ func (h *Handler) UpdateAppTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	row, err := UpdateAppTable(r.Context(), h.pool, appID, tableID, body.RLS, body.Columns, body.Indexes)
+	row, err := UpdateAppTable(r.Context(), h.pool, appID, tableID, schemaNameForDB(app.Name), body.RLS, body.Columns, body.Indexes)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})

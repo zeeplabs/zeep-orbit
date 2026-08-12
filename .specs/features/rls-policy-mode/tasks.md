@@ -280,11 +280,11 @@ T5 → T11
 
 **Done when**:
 
-- [ ] Tabela `"enabled"` sem nenhuma policy, com dados de múltiplos usuários, trocada para `"policy"` → RLS fica habilitado e, sem policy nenhuma, todos os usuários passam a ver `[]` (não vazamento)
-- [ ] Troca não recria a tabela nem apaga dados existentes
-- [ ] Troca `"policy"` → `"enabled"` continua funcionando (RLS habilitado não é desligado, comportamento de app volta a filtrar por dono)
-- [ ] Gate: `go build ./... && go test ./... && go vet ./... && gofmt -l internal/dashboard/apps_store.go internal/dashboard/apps_store_test.go`
-- [ ] Test count: 3 casos novos de troca de modo + suíte existente sem regressão
+- [x] Tabela `"enabled"` sem nenhuma policy, com dados de múltiplos usuários, trocada para `"policy"` → RLS fica habilitado e, sem policy nenhuma, todos os usuários passam a ver `[]` (não vazamento)
+- [x] Troca não recria a tabela nem apaga dados existentes
+- [x] Troca `"policy"` → `"enabled"` continua funcionando (RLS habilitado não é desligado, comportamento de app volta a filtrar por dono)
+- [x] Gate: `go build ./... && go test ./... && go vet ./... && gofmt -l internal/dashboard/apps_store.go internal/dashboard/apps_store_test.go`
+- [x] Test count: 3 casos novos de troca de modo + suíte existente sem regressão
 
 **Tests**: unit
 **Gate**: full
