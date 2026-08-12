@@ -187,6 +187,20 @@ func TestRLSPolicyMode_EndToEnd(t *testing.T) {
 		}
 	})
 
+	t.Run("REST_NoSelectPolicyReturnsNotFoundForGetByID", func(t *testing.T) {
+		// spec AC P1-2 covers GET /{app}/{table} AND GET /{app}/{table}/{id}
+		// — this proves the get-by-id half: fail-closed also denies a
+		// direct lookup by id, not just the list form.
+		req := httptest.NewRequest(http.MethodGet, basePath+"/"+postAID+"/", nil)
+		req.Header.Set("Authorization", bearerNoPolicy)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("esperado 404 (nenhuma select policy para no_policy_role), obtido %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+
 	t.Run("RawPgxConnectionAsEnduserRoleReproducesTheSameDenial", func(t *testing.T) {
 		// Proves the fail-closed guarantee is DB-level (RLS enabled + zero
 		// policies), not something resolveOwner enforces in the app layer —

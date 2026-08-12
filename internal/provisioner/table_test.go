@@ -158,8 +158,8 @@ func TestCreateTable_PolicyModeEnablesRLSAtCreation(t *testing.T) {
 	if _, err := pool.Exec(ctx, fmt.Sprintf(`GRANT USAGE ON SCHEMA %q TO zeep_app_enduser`, schema)); err != nil {
 		t.Fatalf("grant usage: %v", err)
 	}
-	if _, err := pool.Exec(ctx, fmt.Sprintf(`GRANT SELECT ON ALL TABLES IN SCHEMA %q TO zeep_app_enduser`, schema)); err != nil {
-		t.Fatalf("grant select: %v", err)
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`GRANT SELECT, UPDATE, DELETE ON ALL TABLES IN SCHEMA %q TO zeep_app_enduser`, schema)); err != nil {
+		t.Fatalf("grant select/update/delete: %v", err)
 	}
 	var ownerID string
 	if err := pool.QueryRow(ctx, fmt.Sprintf(`INSERT INTO %q."_auth_users" DEFAULT VALUES RETURNING id`, schema)).Scan(&ownerID); err != nil {
@@ -183,6 +183,24 @@ func TestCreateTable_PolicyModeEnablesRLSAtCreation(t *testing.T) {
 	}
 	if count != 0 {
 		t.Fatalf("zeep_app_enduser saw %d row(s), want 0 (fail-closed: RLS enabled, zero policies)", count)
+	}
+
+	// Spec Edge Case: "IF a rls:policy table receives DELETE or UPDATE with
+	// no matching policy THEN the operation is denied (0 rows affected)" —
+	// same native deny-all must hold for writes, not just SELECT.
+	updateTag, err := tx.Exec(ctx, fmt.Sprintf(`UPDATE %q.posts SET title = 'hacked'`, schema))
+	if err != nil {
+		t.Fatalf("update as enduser role: %v", err)
+	}
+	if updateTag.RowsAffected() != 0 {
+		t.Fatalf("zeep_app_enduser updated %d row(s), want 0 (fail-closed: RLS enabled, zero policies)", updateTag.RowsAffected())
+	}
+	deleteTag, err := tx.Exec(ctx, fmt.Sprintf(`DELETE FROM %q.posts`, schema))
+	if err != nil {
+		t.Fatalf("delete as enduser role: %v", err)
+	}
+	if deleteTag.RowsAffected() != 0 {
+		t.Fatalf("zeep_app_enduser deleted %d row(s), want 0 (fail-closed: RLS enabled, zero policies)", deleteTag.RowsAffected())
 	}
 }
 

@@ -112,7 +112,7 @@ Este spec adiciona um terceiro modo de RLS, `rls: "policy"`, que desacopla o aut
 | Requirement ID | Story | Phase | Status |
 | --------------- | ----------- | ------ | ------- |
 | RLSP-01 | P1: Modo policy sem auto-scope | Tasks | Verified |
-| RLSP-02 | P1: Fail-closed nativo desde criação | Tasks | Implementing |
+| RLSP-02 | P1: Fail-closed nativo desde criação | Tasks | Verified |
 | RLSP-03 | P1: owner_id continua preenchido no INSERT | Tasks | Implementing |
 | RLSP-04 | P1: modos existentes intactos | Tasks | Implementing |
 | RLSP-05 | P2: owner_id referenciável em clause | Tasks | Implementing |
