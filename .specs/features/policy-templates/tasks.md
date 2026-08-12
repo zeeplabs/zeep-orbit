@@ -108,11 +108,13 @@ T8 depends on T5, T6, and T7. T9 depends on T8.
 
 **Done when**:
 
-- [ ] `buildOwnerOnlyPolicies(["select","update"], ["member"])` returns one `PolicyDef` per action, each with `clauses: [{column: "owner_id", operator: "=", value_source: "claim", value: "sub"}]` and `roles: ["member"]`
-- [ ] `buildOpenReadPolicy(["member"])` returns a single `PolicyDef` with `action: "select"` and `clauses: [{column: "owner_id", operator: "IS NOT NULL"}]` (no `value`/`value_source`, matching the unary-operator shape `internal/provisioner/policy.go` expects)
-- [ ] `buildValueMatchPolicy("status", "published", ["member"])` returns `action: "select"`, `clauses: [{column: "status", operator: "=", value_source: "literal", value: "published"}]`
-- [ ] `TEMPLATE_DEFINITIONS` has exactly 5 entries (`owner_only`, `open_read`, `read_only`, `value_match`, `blocked_by_default`), each with `requiresOwnerColumn` set per the spec Assumptions table
-- [ ] Gate check passes: `cd internal/dashboard/ui && npx tsc -b`
+- [x] `buildOwnerOnlyPolicies(["select","update"], ["member"])` returns one `PolicyDef` per action, each with `clauses: [{column: "owner_id", operator: "=", value_source: "claim", value: "sub"}]` and `roles: ["member"]`
+- [x] `buildOpenReadPolicy(["member"])` returns a single `PolicyDef` with `action: "select"` and `clauses: [{column: "owner_id", operator: "IS NOT NULL"}]` (no `value`/`value_source`, matching the unary-operator shape `internal/provisioner/policy.go` expects)
+- [x] `buildValueMatchPolicy("status", "published", ["member"])` returns `action: "select"`, `clauses: [{column: "status", operator: "=", value_source: "literal", value: "published"}]`
+- [x] `TEMPLATE_DEFINITIONS` has exactly 5 entries (`owner_only`, `open_read`, `read_only`, `value_match`, `blocked_by_default`), each with `requiresOwnerColumn` set per the spec Assumptions table
+- [x] Gate check passes: `cd internal/dashboard/ui && npx tsc -b`
+
+**Status**: ✅ Complete
 
 **Tests**: none — merge-forward: this pure logic can't be driven through the browser until `PolicyTemplatePicker` wires it in; e2e coverage for every builder above lands in T9's `policy-templates.spec.ts` (Resolving Compilation Dependencies, `tasks.md` reference)
 **Gate**: quick
