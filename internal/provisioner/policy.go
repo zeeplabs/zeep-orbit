@@ -149,10 +149,17 @@ func buildPolicySQL(schema, table string, def PolicyDef, tableColumns []config.C
 		return "", fmt.Errorf("policy: at least one clause is required")
 	}
 
-	colByName := make(map[string]config.ColumnConfig, len(tableColumns))
+	colByName := make(map[string]config.ColumnConfig, len(tableColumns)+1)
 	for _, c := range tableColumns {
 		colByName[c.Name] = c
 	}
+	// owner_id is a system column, never part of tableColumns (it is
+	// injected directly into the DDL by provisioner/table.go when
+	// config.HasOwnerColumn(rls) is true), but it always exists on any
+	// "owner"/"enabled"/"policy" table — make it referenceable in policy
+	// clauses so a policy can combine a role check with "or it's your own
+	// row" (spec RLSP-05).
+	colByName["owner_id"] = config.ColumnConfig{Name: "owner_id", Type: "uuid"}
 
 	clauseExpr, err := foldClauses(def.Clauses, colByName)
 	if err != nil {

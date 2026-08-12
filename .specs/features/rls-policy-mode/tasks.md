@@ -224,11 +224,11 @@ T5 → T11
 
 **Done when**:
 
-- [ ] Policy com cláusula `{Column: "owner_id", Operator: "=", ValueSource: "claim", Value: "sub"}` traduz para `"owner_id" = current_setting('app.jwt_sub', true)::UUID`
-- [ ] Cláusula com `owner_id` e operador incompatível com `uuid` (ex.: `LIKE`) continua rejeitada pela mesma validação de tipo já existente
-- [ ] Coluna fora de `tableColumns` e diferente de `owner_id` continua rejeitada como "unknown column"
-- [ ] Gate: `go build ./... && go vet ./... && gofmt -l internal/provisioner/policy.go internal/provisioner/policy_test.go`
-- [ ] Test count: 3 casos novos (clause válida com owner_id, operador incompatível, coluna de sistema diferente ainda rejeitada) + suíte existente sem regressão
+- [x] Policy com cláusula `{Column: "owner_id", Operator: "=", ValueSource: "claim", Value: "sub"}` traduz para `"owner_id" = current_setting('app.jwt_sub', true)::UUID`
+- [x] Cláusula com `owner_id` e operador incompatível com `uuid` (ex.: `LIKE`) continua rejeitada pela mesma validação de tipo já existente
+- [x] Coluna fora de `tableColumns` e diferente de `owner_id` continua rejeitada como "unknown column"
+- [x] Gate: `go build ./... && go vet ./... && gofmt -l internal/provisioner/policy.go internal/provisioner/policy_test.go`
+- [x] Test count: 3 casos novos (clause válida com owner_id, operador incompatível, coluna de sistema diferente ainda rejeitada) + suíte existente sem regressão
 
 **Tests**: unit
 **Gate**: quick

@@ -115,8 +115,8 @@ Este spec adiciona um terceiro modo de RLS, `rls: "policy"`, que desacopla o aut
 | RLSP-02 | P1: Fail-closed nativo desde criação | Tasks | Implementing |
 | RLSP-03 | P1: owner_id continua preenchido no INSERT | Tasks | Implementing |
 | RLSP-04 | P1: modos existentes intactos | Tasks | Implementing |
-| RLSP-05 | P2: owner_id referenciável em clause | Design | Pending |
-| RLSP-06 | P2: validação de tipo/coluna mantida | Design | Pending |
+| RLSP-05 | P2: owner_id referenciável em clause | Tasks | Implementing |
+| RLSP-06 | P2: validação de tipo/coluna mantida | Tasks | Implementing |
 | RLSP-07 | P3: troca de modo via Dashboard, com aviso | Design | Pending |
 | RLSP-08 | P3: troca preserva fail-closed em tabela legada | Design | Pending |
 | RLSP-09 | P1: validação de enum `rls` (fecha gap pré-existente) | Tasks | Implementing |
