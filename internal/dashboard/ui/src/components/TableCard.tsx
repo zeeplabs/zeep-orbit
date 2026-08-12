@@ -91,6 +91,15 @@ const autoColumnsFor = (rls: string) =>
 // "enabled") does not change row visibility semantics and needs no warning.
 const isPolicyRLS = (rls: string) => rls === "policy";
 
+// Radix Select reserves the empty string as its internal placeholder sentinel
+// (shouldShowPlaceholder in @radix-ui/react-select) — a SelectItem with
+// value="" never renders its label into the trigger. rls: "" is the real,
+// backend-valid "Public"/no-RLS value (config.ValidRLS), so the Select UI
+// maps it to this sentinel and back; nothing outside the Select ever sees it.
+const RLS_PUBLIC_SENTINEL = "public";
+const toSelectValue = (rls: string) => (rls === "" ? RLS_PUBLIC_SENTINEL : rls);
+const fromSelectValue = (val: string) => (val === RLS_PUBLIC_SENTINEL ? "" : val);
+
 const emptyColumn = (): ColumnDef => ({
   name: "",
   type: "text",
@@ -301,12 +310,12 @@ export default function TableCard({
           placeholder={t("appForm.tableName")}
           className="h-8 px-3 py-1.5 text-[13px] bg-[var(--sunken)] border-[var(--border)] rounded-md text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] brand-focus"
         />
-        <Select value={rls} onValueChange={changeRls}>
+        <Select value={toSelectValue(rls)} onValueChange={(val) => changeRls(fromSelectValue(val))}>
           <SelectTrigger className="h-8 w-[100px] shrink-0 text-[12px] bg-[var(--sunken)] border-[var(--border)] text-[var(--text-primary)] rounded-md px-3 brand-focus">
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="bg-[var(--surface-raised)] border-[var(--border)] text-[var(--text-primary)]">
-            <SelectItem value="disabled" className="text-[12px] focus:bg-[var(--hover-surface)] focus:text-[var(--text-primary)]">
+            <SelectItem value={RLS_PUBLIC_SENTINEL} className="text-[12px] focus:bg-[var(--hover-surface)] focus:text-[var(--text-primary)]">
               {t("appForm.tablePublic")}
             </SelectItem>
             <SelectItem
