@@ -29,6 +29,7 @@ export const TEMPLATE_DEFINITIONS: TemplateDefinition[] = [
   { id: "open_read", requiresOwnerColumn: false, kind: "single", actionsFixed: ["select"] },
   { id: "read_only", requiresOwnerColumn: false, kind: "single", actionsFixed: ["select"] },
   { id: "value_match", requiresOwnerColumn: false, kind: "single", actionsFixed: ["select"] },
+  { id: "open_read_owner_write", requiresOwnerColumn: true, kind: "composite", actionsFixed: ["select", "update", "delete"] },
   { id: "blocked_by_default", requiresOwnerColumn: false, kind: "info" },
 ];
 
@@ -84,4 +85,18 @@ export function buildValueMatchPolicy(column: string, value: string, roles: stri
     roles,
     clauses: [{ column, operator: "=", value_source: "literal", value }],
   };
+}
+
+// buildOpenReadOwnerWritePolicies (PTPL-06): open read for readRoles, write
+// (update/delete) restricted to the row's owner. Reuses buildOpenReadPolicy
+// and buildOwnerOnlyPolicies' clause shapes — only the generated Name is
+// rebased onto this template's id, since each of the 3 policies belongs to
+// the composite template, not to open_read/owner_only individually.
+export function buildOpenReadOwnerWritePolicies(readRoles: string[]): PolicyDef[] {
+  const select = buildOpenReadPolicy(readRoles);
+  const [update, del] = buildOwnerOnlyPolicies(["update", "delete"], readRoles);
+  return [select, update, del].map((policy) => ({
+    ...policy,
+    name: generatedPolicyName("open_read_owner_write", policy.action),
+  }));
 }

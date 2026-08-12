@@ -138,9 +138,11 @@ T8 depends on T5, T6, and T7. T9 depends on T8.
 
 **Done when**:
 
-- [ ] `buildOpenReadOwnerWritePolicies(["member"])` returns exactly 3 `PolicyDef`s: one `select` (open-read shape), one `update` and one `delete` (both owner-only shape), all with `roles: ["member"]`
-- [ ] `TEMPLATE_DEFINITIONS` now has 6 entries, `open_read_owner_write` marked `kind: "composite"`
-- [ ] Gate check passes: `cd internal/dashboard/ui && npx tsc -b`
+- [x] `buildOpenReadOwnerWritePolicies(["member"])` returns exactly 3 `PolicyDef`s: one `select` (open-read shape), one `update` and one `delete` (both owner-only shape), all with `roles: ["member"]`
+- [x] `TEMPLATE_DEFINITIONS` now has 6 entries, `open_read_owner_write` marked `kind: "composite"`
+- [x] Gate check passes: `cd internal/dashboard/ui && npx tsc -b`
+
+**Status**: ✅ Complete
 
 **Tests**: none — merge-forward to T9 (same rationale as T2; composite flow additionally needs T7's retry/partial-failure UI before it is meaningfully testable through the browser)
 **Gate**: quick
