@@ -34,7 +34,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 | Gate Level | When to Use | Command |
 | ---------- | ------------ | ------- |
 | Quick | Após tasks Go sem dependência de Postgres real | `go build ./... && go vet ./... && gofmt -l <arquivos alterados>` |
-| Full | Após tasks que tocam `internal/server`/`internal/dashboard`/`internal/provisioner` com teste de integração | `go build ./... && go test ./... && go vet ./... && gofmt -l <arquivos alterados>` (suíte completa exige Postgres descartável via `TEST_DATABASE_URL`, mesmo padrão já usado nas sessões anteriores desta feature) |
+| Full | Após tasks que tocam `internal/server`/`internal/dashboard`/`internal/provisioner` com teste de integração | `TEST_DATABASE_URL=postgres://zeep:zeep@localhost:5434/zeep?sslmode=disable DASHBOARD_BOOTSTRAP_SECRET=<qualquer valor> go build ./... && go test ./... -p 1 && go vet ./... && gofmt -l <arquivos alterados>` (Postgres descartável obrigatório; `-p 1` evita contenção entre pacotes de teste compartilhando o mesmo banco — sem isso, ~20 testes de webhook em `internal/server` falham por corrida, não por regressão desta feature) |
 | Build | Após task que toca frontend (`internal/dashboard/ui`) | `cd internal/dashboard/ui && npx tsc -b && npm run build` |
 
 ---

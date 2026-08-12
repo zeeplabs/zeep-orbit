@@ -113,12 +113,12 @@ Este spec adiciona um terceiro modo de RLS, `rls: "policy"`, que desacopla o aut
 | --------------- | ----------- | ------ | ------- |
 | RLSP-01 | P1: Modo policy sem auto-scope | Tasks | Verified |
 | RLSP-02 | P1: Fail-closed nativo desde criação | Tasks | Verified |
-| RLSP-03 | P1: owner_id continua preenchido no INSERT | Tasks | Implementing |
-| RLSP-04 | P1: modos existentes intactos | Tasks | Implementing |
-| RLSP-05 | P2: owner_id referenciável em clause | Tasks | Implementing |
+| RLSP-03 | P1: owner_id continua preenchido no INSERT | Tasks | Verified |
+| RLSP-04 | P1: modos existentes intactos | Tasks | Verified |
+| RLSP-05 | P2: owner_id referenciável em clause | Tasks | Verified |
 | RLSP-06 | P2: validação de tipo/coluna mantida | Tasks | Verified |
-| RLSP-07 | P3: troca de modo via Dashboard, com aviso | Tasks | Implementing |
-| RLSP-08 | P3: troca preserva fail-closed em tabela legada | Tasks | Implementing |
+| RLSP-07 | P3: troca de modo via Dashboard, com aviso | Tasks | Verified |
+| RLSP-08 | P3: troca preserva fail-closed em tabela legada | Tasks | Verified |
 | RLSP-09 | P1: validação de enum `rls` (fecha gap pré-existente) | Tasks | Verified |
 | RLSP-10 | Edge: resolveTableRLS/auth-email gate reconhecem `"policy"` | Tasks | Verified |
 

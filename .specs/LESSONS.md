@@ -92,6 +92,36 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: internal/dashboard/webhooks_handler.go SaveEventMapping/ListEventMappings (json-serialization)
 - last seen: 2026-08-11T12:16:01Z
 
+### L-014 - When a helper is applied at several call sites, assert the behavior at every call site through the public entry point, not just the helper in isolation.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `routes` · harmful: 0
+- features: rls-policy-mode
+- evidence: internal/server/handler.go:278,:332 (sensor mutation 6) (routes)
+- last seen: 2026-08-12T15:01:13Z
+
+### L-015 - Cover every HTTP verb an acceptance criterion names, not only the read path that is easiest to assert.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `routes` · harmful: 0
+- features: rls-policy-mode
+- evidence: spec.md AC P1-2 + Edge Cases (UPDATE/DELETE deny) (routes)
+- last seen: 2026-08-12T15:01:13Z
+
+### L-016 - When the spec requires a clear error, assert the error message content, not just that the error is non-nil.
+- signal: `spec_precision_gap` · recurrence: 1 feature(s) · scope: `validation` · harmful: 0
+- features: rls-policy-mode
+- evidence: internal/dashboard/handler_test.go:114; internal/provisioner/policy_test.go:650 (validation)
+- last seen: 2026-08-12T15:01:13Z
+
+### L-017 - Before writing an acceptance criterion that leans on an existing validation, confirm that validation actually exists in the code path it names.
+- signal: `spec_precision_gap` · recurrence: 1 feature(s) · scope: `validation` · harmful: 0
+- features: rls-policy-mode
+- evidence: spec.md AC P2-2; internal/provisioner/policy.go:231-233 (global policyOperators allowlist, no per-type check) (validation)
+- last seen: 2026-08-12T15:32:07Z
+
+### L-018 - When a criterion promises unchanged generated output, assert the generated string itself, not only that behavior still passes.
+- signal: `spec_precision_gap` · recurrence: 1 feature(s) · scope: `provisioner` · harmful: 0
+- features: rls-policy-mode
+- evidence: spec.md AC P1-6 / tasks.md T2 Done-when; no generated-SQL comparison test exists (provisioner)
+- last seen: 2026-08-12T15:32:07Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.
