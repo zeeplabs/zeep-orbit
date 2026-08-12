@@ -72,7 +72,7 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/aminhaapp/tarefas
 | **Relações e Índices** | Foreign keys (`references` + `on_delete`) e índices no schema builder, validados e ordenados automaticamente |
 | **Autenticação por Email** | Registo e login com email/palavra-passe por aplicação |
 | **Google OAuth**       | Início de sessão com Google — dashboard e por aplicação  |
-| **Row-Level Security** | Filtragem automática de dados por proprietário (`rls: owner`), com opção de "exigir RLS por omissão" em tabelas novas |
+| **Row-Level Security** | Filtragem automática de dados por proprietário (`rls: owner`/`rls: enabled`), com opção de "exigir RLS por omissão" em tabelas novas; `rls: policy` remove por completo o filtro automático de proprietário, delegando a visibilidade e a permissão de escrita a 100% às table policies nativas do Postgres — incluindo policies que dão a um role acesso a linhas de outros utilizadores |
 | **Policies de Linha para Utilizador Final** | Regras de acesso por linha, por tabela/ação, combinando o papel de negócio do utilizador final com uma condição sobre os dados da própria linha, aplicadas por RLS nativo do Postgres (`CREATE POLICY`) — não um filtro na camada Go |
 | **Papéis de Utilizador Final Configuráveis** | Defina a sua própria lista de papéis de negócio por app, usada pelas policies de linha e mostrada na gestão de utilizadores do app |
 | **App Tokens**         | Gestão de JWT para aplicações sem auth por email (criar, revogar, renovar) |
