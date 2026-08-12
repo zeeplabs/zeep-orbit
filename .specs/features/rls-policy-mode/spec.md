@@ -126,7 +126,7 @@ Este spec adiciona um terceiro modo de RLS, `rls: "policy"`, que desacopla o aut
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 10 total, 8 mapped to tasks (T1-T6 done: RLSP-01/02/03/04/05/06/09/10), 2 unmapped ⚠️ (RLSP-07/08, tasks T7-T11 not yet executed in this batch)
+**Coverage:** 10 total, all 10 mapped and implemented (T1-T6: RLSP-01/02/03/04/05/06/09/10; T7-T11: RLSP-07/08, plus RLSP-10 edge cases in T8/T9 and end-to-end coverage of RLSP-01/02/03/04 in T11). Status left at "Implementing", not "Verified" — feature-level Verifier validation is a separate step, not run by this batch.
 
 ---
 

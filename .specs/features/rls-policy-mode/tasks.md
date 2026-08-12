@@ -391,10 +391,10 @@ T5 → T11
 
 **Done when**:
 
-- [ ] Os 4 cenários (a-d) do "What" passam contra Postgres real
-- [ ] Cenário (a) prova fail-closed sem depender de nenhum filtro de app (testável desligando temporariamente a asserção de app e confirmando que o Postgres já nega — ou, mais simples, testando direto com conexão raw pgx como `zeep_app_enduser`, mesmo padrão de `RawPgxConnectionAsEnduserRoleReproducesTheSameDenial` em `rls_policy_test.go`)
-- [ ] Gate: `TEST_DATABASE_URL=postgres://... go test ./internal/server/... -run TestRLSPolicyMode -v`
-- [ ] Test count: mínimo 4 sub-testes (um por cenário), todos verdes
+- [x] Os 4 cenários (a-d) do "What" passam contra Postgres real
+- [x] Cenário (a) prova fail-closed sem depender de nenhum filtro de app (testável desligando temporariamente a asserção de app e confirmando que o Postgres já nega — ou, mais simples, testando direto com conexão raw pgx como `zeep_app_enduser`, mesmo padrão de `RawPgxConnectionAsEnduserRoleReproducesTheSameDenial` em `rls_policy_test.go`)
+- [x] Gate: `TEST_DATABASE_URL=postgres://... go test ./internal/server/... -run TestRLSPolicyMode -v`
+- [x] Test count: mínimo 4 sub-testes (um por cenário), todos verdes
 
 **Tests**: integration
 **Gate**: full
