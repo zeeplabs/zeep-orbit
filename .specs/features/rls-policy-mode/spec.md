@@ -74,7 +74,7 @@ Este spec adiciona um terceiro modo de RLS, `rls: "policy"`, que desacopla o aut
 **Acceptance Criteria**:
 
 1. WHEN o admin cria uma policy referenciando a coluna `owner_id` em uma tabela `rls: "policy"` ou `rls: "owner"` ou `rls: "enabled"` THEN o validador de cláusulas (`translateClause`) SHALL aceitar `owner_id` como coluna válida, com tipo `uuid`.
-2. IF uma cláusula referencia `owner_id` com operador incompatível com `uuid` (ex.: `LIKE`) THEN o sistema SHALL rejeitar a policy com erro claro, mesma validação de tipo já aplicada às demais colunas `uuid`.
+2. IF uma cláusula referencia `owner_id` com operador fora do allowlist global de `policyOperators` (`internal/provisioner/policy.go:21-32`, ex.: `LIKE`) THEN o sistema SHALL rejeitar a policy com erro claro — mesmo allowlist fixo já aplicado a qualquer cláusula, independente da coluna referenciada (não é uma validação de tipo por coluna; nenhum operador é filtrado por ser incompatível especificamente com `uuid`).
 3. The system SHALL continuar rejeitando qualquer coluna que não esteja em `table.Columns` nem seja `owner_id` (nenhuma outra coluna de sistema — `id`, `created_at`, `updated_at`, `deleted_at` — passa a ser referenciável por esta feature).
 
 **Independent Test**: Criar policy `select` com cláusula `owner_id = claim.sub OR role = 'admin'` numa tabela `rls: "policy"` → usuário comum vê só as próprias linhas, usuário `admin` vê todas.

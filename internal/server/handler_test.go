@@ -511,7 +511,7 @@ func TestFilterOwner(t *testing.T) {
 // filter and still populates owner_id on INSERT) and seeds one row owned by
 // a different user, so a filter regression (list/get scoped to $sub) would
 // be visible as a 0-row/404 result instead of the row actually being there.
-func setupPolicyModeFixture(t *testing.T) (otherUserRowID, otherUserID string) {
+func setupPolicyModeFixture(t *testing.T) (otherUserRowID, otherUserID, callingUserID string) {
 	t.Helper()
 	if os.Getenv("TEST_DATABASE_URL") == "" {
 		t.Skip("TEST_DATABASE_URL não configurado")
@@ -578,7 +578,17 @@ func setupPolicyModeFixture(t *testing.T) (otherUserRowID, otherUserID string) {
 	).Scan(&otherUserRowID); err != nil {
 		t.Fatalf("seed other user's row: %v", err)
 	}
-	return otherUserRowID, otherUserID
+
+	// A real UUID sub, distinct from otherUserID, is required so the
+	// filterOwner->ownerID mutation dies as a genuine 0-row/404 (the calling
+	// user's owner_id legitimately doesn't match) instead of a 500 from an
+	// invalid ::uuid cast on a non-UUID sub — a weaker, accidental kill.
+	if err := testPool.QueryRow(ctx,
+		`INSERT INTO `+schema+`."_auth_users" (email, password_hash) VALUES ('calling-user@test.com', 'x') RETURNING id`,
+	).Scan(&callingUserID); err != nil {
+		t.Fatalf("insert calling user: %v", err)
+	}
+	return otherUserRowID, otherUserID, callingUserID
 }
 
 // TestPolicyMode_ListAndGetSeeOtherUsersRow proves RLSP-01/04: a "policy"
@@ -587,12 +597,12 @@ func setupPolicyModeFixture(t *testing.T) (otherUserRowID, otherUserID string) {
 // native Postgres policies, none of which exist in this fixture, so nothing
 // in the app layer itself restricts the result).
 func TestPolicyMode_ListAndGetSeeOtherUsersRow(t *testing.T) {
-	otherUserRowID, _ := setupPolicyModeFixture(t)
+	otherUserRowID, _, callingUserID := setupPolicyModeFixture(t)
 	h := NewHandler(testPool, testReg)
 	router := buildRLSRouter(h)
 	basePath := "/rls_policy_mode_test_app/posts"
 
-	jwt, err := auth.IssueJWT([]byte("rls-policy-mode-secret"), "calling-user-id", "caller@test.com", "rls_policy_mode_test_app", "member")
+	jwt, err := auth.IssueJWT([]byte("rls-policy-mode-secret"), callingUserID, "calling-user@test.com", "rls_policy_mode_test_app", "member")
 	if err != nil {
 		t.Fatalf("IssueJWT: %v", err)
 	}
