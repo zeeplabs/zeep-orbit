@@ -196,11 +196,11 @@ T5 → T11
 
 **Done when**:
 
-- [ ] Tabela criada com `rls: "policy"` sai do provisionamento com `ENABLE ROW LEVEL SECURITY` já ativo, sem nenhuma policy ainda cadastrada
-- [ ] `SELECT`/`UPDATE`/`DELETE` como `zeep_app_enduser` nessa tabela recém-criada retornam zero linhas/zero linhas afetadas (fail-closed nativo, sem código de app)
-- [ ] Colunas `owner_id` continuam sendo criadas para `"owner"`, `"enabled"` e agora também `"policy"` (mesma DDL)
-- [ ] Gate: `go build ./... && go test ./... && go vet ./... && gofmt -l internal/provisioner/table.go internal/provisioner/table_test.go`
-- [ ] Test count: casos novos para `rls: "policy"` em ambas as funções + suíte existente sem regressão
+- [x] Tabela criada com `rls: "policy"` sai do provisionamento com `ENABLE ROW LEVEL SECURITY` já ativo, sem nenhuma policy ainda cadastrada
+- [x] `SELECT`/`UPDATE`/`DELETE` como `zeep_app_enduser` nessa tabela recém-criada retornam zero linhas/zero linhas afetadas (fail-closed nativo, sem código de app)
+- [x] Colunas `owner_id` continuam sendo criadas para `"owner"`, `"enabled"` e agora também `"policy"` (mesma DDL)
+- [x] Gate: `go build ./... && go test ./... && go vet ./... && gofmt -l internal/provisioner/table.go internal/provisioner/table_test.go`
+- [x] Test count: casos novos para `rls: "policy"` em ambas as funções + suíte existente sem regressão
 
 **Tests**: unit
 **Gate**: full

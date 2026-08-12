@@ -121,7 +121,7 @@ func (p *Provisioner) createTable(ctx context.Context, schemaName, tableName str
 		colDefs = append(colDefs, columnDDL(schemaName, col))
 	}
 
-	if rls == "owner" || rls == "enabled" {
+	if config.HasOwnerColumn(rls) {
 		colDefs = append(colDefs, fmt.Sprintf(`"owner_id" UUID NOT NULL REFERENCES %q."_auth_users"("id")`, schemaName))
 	}
 
@@ -139,6 +139,19 @@ func (p *Provisioner) createTable(ctx context.Context, schemaName, tableName str
 
 	if _, err := p.pool.Exec(ctx, sql); err != nil {
 		return false, fmt.Errorf("table: create %q.%q: %w", schemaName, tableName, err)
+	}
+
+	// "policy" tables get RLS enabled at creation, before any policy exists,
+	// so the fail-closed guarantee (RLS enabled + zero policies denies
+	// every row to zeep_app_enduser natively) holds from the first instant
+	// the table exists — "owner"/"enabled" tables still enable RLS lazily,
+	// on their first CREATE POLICY (table_policies_store.go), since they
+	// already get their filtering from the application layer in the
+	// meantime.
+	if rls == "policy" {
+		if err := EnsureRowLevelSecurity(ctx, p.pool, schemaName, tableName); err != nil {
+			return false, err
+		}
 	}
 
 	return true, nil
@@ -255,7 +268,7 @@ func (p *Provisioner) addMissingColumns(ctx context.Context, schemaName, tableNa
 		added = append(added, fmt.Sprintf("%s.%s.%s", schemaName, tableName, col.Name))
 	}
 
-	if rls == "owner" || rls == "enabled" {
+	if config.HasOwnerColumn(rls) {
 		if _, found := existing["owner_id"]; !found {
 			sql := fmt.Sprintf(
 				`ALTER TABLE %q.%q ADD COLUMN IF NOT EXISTS "owner_id" UUID REFERENCES %q."_auth_users"("id")`,
