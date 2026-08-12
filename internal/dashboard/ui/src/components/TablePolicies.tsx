@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { ColumnDef, PolicyClause, TablePolicyRow, useApp, useCreateTablePolicy, useDeleteTablePolicy, useTablePolicies, useUpdateTablePolicy } from "../lib/api";
+import { RoleChipPicker } from "./RoleChipPicker";
 import { Icon } from "@/components/ui/icon";
 import { EmptyState } from "@/components/patterns";
 import { Input } from "@/components/ui/input";
@@ -73,11 +74,6 @@ export default function TablePoliciesTab({ appId, tableName, columns }: TablePol
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
   const [clauses, setClauses] = useState<ClauseDraft[]>([emptyClause(firstColumn)]);
   const [formError, setFormError] = useState<string | null>(null);
-
-  // Roles offered as chips: the app's configured list, plus any role
-  // already selected but no longer in that list (orphaned) — always shown,
-  // never silently dropped (ROLECFG-16).
-  const chipRoles = Array.from(new Set([...availableRoles, ...selectedRoles]));
 
   const toggleRole = (role: string) =>
     setSelectedRoles((prev) => (prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]));
@@ -208,32 +204,14 @@ export default function TablePoliciesTab({ appId, tableName, columns }: TablePol
             </Select>
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5" title={t("tablePolicies.rolesChipsHint")}>
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
-              {t("tablePolicies.rolesChipsLabel")}
-            </span>
-            {chipRoles.length === 0 ? (
-              <span className="text-[12px] text-[var(--text-tertiary)]">{t("tablePolicies.rolesPlaceholder")}</span>
-            ) : (
-              chipRoles.map((role) => {
-                const selected = selectedRoles.includes(role);
-                return (
-                  <button
-                    key={role}
-                    type="button"
-                    onClick={() => toggleRole(role)}
-                    className={
-                      selected
-                        ? "rounded-full border border-[var(--primary)] bg-[var(--primary)] px-2.5 py-1 text-[12px] font-semibold text-white cursor-pointer"
-                        : "rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[12px] font-semibold text-[var(--text-secondary)] cursor-pointer hover:bg-[var(--hover-surface)]"
-                    }
-                  >
-                    {role}
-                  </button>
-                );
-              })
-            )}
-          </div>
+          <RoleChipPicker
+            availableRoles={availableRoles}
+            selected={selectedRoles}
+            onToggle={toggleRole}
+            label={t("tablePolicies.rolesChipsLabel")}
+            placeholder={t("tablePolicies.rolesPlaceholder")}
+            hint={t("tablePolicies.rolesChipsHint")}
+          />
 
           <div className="flex flex-col gap-2">
             {clauses.map((clause, ci) => (

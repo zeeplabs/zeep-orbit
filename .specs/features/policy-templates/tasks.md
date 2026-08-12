@@ -166,9 +166,11 @@ T8 depends on T5, T6, and T7. T9 depends on T8.
 
 **Done when**:
 
-- [ ] `RoleChipPicker` renders identically to the block it replaces (same chip styling classes, same orphaned-role-stays-visible behavior)
-- [ ] Advanced form in `TablePolicies.tsx` uses `RoleChipPicker`, existing advanced-form policy creation/edit still works with no behavior change
-- [ ] Gate check passes: `cd internal/dashboard/ui && npx tsc -b && npm run build`
+- [x] `RoleChipPicker` renders identically to the block it replaces (same chip styling classes, same orphaned-role-stays-visible behavior)
+- [x] Advanced form in `TablePolicies.tsx` uses `RoleChipPicker`, existing advanced-form policy creation/edit still works with no behavior change
+- [x] Gate check passes: `cd internal/dashboard/ui && npx tsc -b && npm run build`
+
+**Status**: ✅ Complete
 
 **Tests**: none — behavior-preserving extraction; the advanced form's existing e2e coverage (if any touches policies) is unaffected; new coverage for its reuse in template mode lands in T9
 **Gate**: full
