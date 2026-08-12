@@ -287,16 +287,20 @@ T8 depends on T5, T6, and T7. T9 depends on T8.
 
 **Done when**:
 
-- [ ] Opening "create policy" on a table shows the template picker by default
-- [ ] "Modo avançado" switches to the existing technical form and back, without losing already-selected roles when the fields translate directly (spec Edge Cases)
-- [ ] "Ajuda" opens the drawer over whichever mode/form is active; closing it preserves that mode's in-progress state
-- [ ] `TablePoliciesTabProps.rls` is required and consumed
-- [ ] Gate check passes: `cd internal/dashboard/ui && npx tsc -b && npm run build`
+- [x] Opening "create policy" on a table shows the template picker by default
+- [x] "Modo avançado" switches to the existing technical form and back, without losing already-selected roles when the fields translate directly (spec Edge Cases)
+- [x] "Ajuda" opens the drawer over whichever mode/form is active; closing it preserves that mode's in-progress state
+- [x] `TablePoliciesTabProps.rls` is required and consumed
+- [x] Gate check passes: `cd internal/dashboard/ui && npx tsc -b && npm run build`
 
-**Tests**: none — merge-forward to T9 (this task completes the wiring; T9 supplies the `rls` value from `TableCard` and adds the e2e suite that exercises everything end-to-end)
+**Status**: ✅ Complete
+
+**Tests**: none — merge-forward to T9 (this task completes the wiring; T9 adds the e2e suite that exercises everything end-to-end)
 **Gate**: full
 
 **Commit**: `feat(dashboard-ui): wire policy template picker, advanced mode toggle, and help drawer`
+
+**Deviation note**: Making `TablePoliciesTabProps.rls` required (as this task specifies) makes `tsc -b` fail at `TableCard.tsx:416` until that call site passes it — T9 was originally where that 1-line change would land, but a task cannot be marked done with a broken gate. Passed `rls={table.rls}` (the same value T9 was going to add, already in scope in `TableCard.tsx`) in this commit so T8's own gate is green. T9's "Done when" bullet for this line is therefore already satisfied; T9's real remaining work is the e2e suite.
 
 ---
 

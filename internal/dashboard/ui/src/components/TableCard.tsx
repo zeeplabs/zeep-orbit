@@ -413,7 +413,7 @@ export default function TableCard({
             />
           </TabsContent>
           <TabsContent value="policies" className="mt-0 px-4 pb-4">
-            <TablePoliciesTab appId={appId} tableName={table.name} columns={table.columns} />
+            <TablePoliciesTab appId={appId} tableName={table.name} columns={table.columns} rls={table.rls} />
           </TabsContent>
         </Tabs>
       )}

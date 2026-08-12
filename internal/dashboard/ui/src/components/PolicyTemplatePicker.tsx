@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { ColumnDef, PolicyDef, TablePolicyRow, useCreateTablePolicy } from "../lib/api";
@@ -46,6 +46,10 @@ export interface PolicyTemplatePickerProps {
   columns: ColumnDef[];
   existingPolicies: TablePolicyRow[];
   onDone: () => void;
+  /** T8: lets TablePoliciesTab hand off the in-progress role selection to
+   * the advanced form when the user switches to "Modo avançado" mid-draft
+   * (spec Edge Cases — fields that translate directly aren't lost). */
+  onRolesChange?: (roles: string[]) => void;
 }
 
 // PolicyTemplatePicker (PTPL-01/02/04/05/06/07) — the default screen for
@@ -60,6 +64,7 @@ export function PolicyTemplatePicker({
   columns,
   existingPolicies,
   onDone,
+  onRolesChange,
 }: PolicyTemplatePickerProps) {
   const { t } = useTranslation();
   const createPolicy = useCreateTablePolicy(appId, tableName);
@@ -95,6 +100,13 @@ export function PolicyTemplatePicker({
 
   const toggleRole = (role: string) =>
     setRoles((prev) => (prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]));
+
+  useEffect(() => {
+    onRolesChange?.(roles);
+    // onRolesChange is expected to be a stable setState-style callback from
+    // the parent; only "roles" itself should re-trigger the hand-off.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roles]);
 
   // Applies 1+ generated PolicyDefs sequentially, awaiting each — a failure
   // on any call surfaces via useCreateTablePolicy's own onError
