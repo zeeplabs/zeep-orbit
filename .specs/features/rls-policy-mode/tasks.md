@@ -363,11 +363,11 @@ T5 → T11
 
 **Done when**:
 
-- [ ] `Select` de RLS mostra `"policy"` como opção, com string traduzida em `en.json` e `pt-BR.json`
-- [ ] `autoColumnsFor("policy")` inclui a coluna `owner_id` (mesma lista de `"owner"`/`"enabled"`)
-- [ ] Trocar o valor numa tabela existente entre grupos (`""/"owner"/"enabled"` ↔ `"policy"`) dispara o aviso antes de chamar `onUpdate`; trocar dentro do mesmo grupo (ex.: `"owner"` → `"enabled"`) ou numa tabela ainda não salva (criação) não dispara
-- [ ] Gate: `cd internal/dashboard/ui && npx tsc -b && npm run build`
-- [ ] `python3 -c "import json; json.load(open('internal/dashboard/ui/src/locales/en.json'))"` e o mesmo pra `pt-BR.json` sem erro
+- [x] `Select` de RLS mostra `"policy"` como opção, com string traduzida em `en.json` e `pt-BR.json`
+- [x] `autoColumnsFor("policy")` inclui a coluna `owner_id` (mesma lista de `"owner"`/`"enabled"`)
+- [x] Trocar o valor numa tabela existente entre grupos (`""/"owner"/"enabled"` ↔ `"policy"`) dispara o aviso antes de chamar `onUpdate`; trocar dentro do mesmo grupo (ex.: `"owner"` → `"enabled"`) ou numa tabela ainda não salva (criação) não dispara
+- [x] Gate: `cd internal/dashboard/ui && npx tsc -b && npm run build`
+- [x] `python3 -c "import json; json.load(open('internal/dashboard/ui/src/locales/en.json'))"` e o mesmo pra `pt-BR.json` sem erro
 
 **Tests**: none (sem runner de teste no frontend — build gate cobre)
 **Gate**: build

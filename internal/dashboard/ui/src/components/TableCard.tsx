@@ -79,9 +79,16 @@ const BASE_AUTO_COLUMNS = [
 
 const OWNER_ID_AUTO_COLUMN = { name: "owner_id", type: "uuid", required: true, unique: false };
 
-// owner_id só existe quando RLS está ativo (provisioner.go: rls == "owner" || rls == "enabled").
+// owner_id só existe quando RLS está ativo (config.HasOwnerColumn: rls == "owner" || rls == "enabled" || rls == "policy").
 const autoColumnsFor = (rls: string) =>
-  rls === "enabled" || rls === "owner" ? [...BASE_AUTO_COLUMNS, OWNER_ID_AUTO_COLUMN] : BASE_AUTO_COLUMNS;
+  rls === "enabled" || rls === "owner" || rls === "policy" ? [...BASE_AUTO_COLUMNS, OWNER_ID_AUTO_COLUMN] : BASE_AUTO_COLUMNS;
+
+// Mirrors config.AutoScopesByOwner: "policy" mode is a different group from
+// ""/"owner"/"enabled" — switching a saved table between the two groups
+// changes which rows each role can see (RLSP-07), so the UI must confirm
+// before applying it. Switching within the same group (e.g. "owner" ->
+// "enabled") does not change row visibility semantics and needs no warning.
+const isPolicyRLS = (rls: string) => rls === "policy";
 
 const emptyColumn = (): ColumnDef => ({
   name: "",
@@ -166,6 +173,16 @@ export default function TableCard({
     setEditing(false);
     onExitEdit();
     if (isDraft) onDiscardDraft();
+  };
+
+  // Only warns on a saved table (isDraft === false) crossing between the
+  // ""/"owner"/"enabled" group and "policy" — a brand-new table has no rows
+  // yet, so there is nothing to warn about (spec.md RLSP-07 AC1).
+  const changeRls = (val: string) => {
+    if (!isDraft && isPolicyRLS(val) !== isPolicyRLS(rls)) {
+      if (!confirm(t("tableCard.rlsModeSwitchConfirm"))) return;
+    }
+    setRls(val);
   };
 
   const addColumn = () => setColumns((prev) => [...prev, emptyColumn()]);
@@ -283,7 +300,7 @@ export default function TableCard({
           placeholder={t("appForm.tableName")}
           className="h-8 px-3 py-1.5 text-[13px] bg-[var(--sunken)] border-[var(--border)] rounded-md text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] brand-focus"
         />
-        <Select value={rls} onValueChange={setRls}>
+        <Select value={rls} onValueChange={changeRls}>
           <SelectTrigger className="h-8 w-[100px] shrink-0 text-[12px] bg-[var(--sunken)] border-[var(--border)] text-[var(--text-primary)] rounded-md px-3 brand-focus">
             <SelectValue />
           </SelectTrigger>
@@ -297,6 +314,13 @@ export default function TableCard({
               className="text-[12px] focus:bg-[var(--hover-surface)] focus:text-[var(--text-primary)]"
             >
               {t("appForm.tableRestricted")}
+            </SelectItem>
+            <SelectItem
+              value="policy"
+              disabled={!authEmailEnabled}
+              className="text-[12px] focus:bg-[var(--hover-surface)] focus:text-[var(--text-primary)]"
+            >
+              {t("appForm.tablePolicy")}
             </SelectItem>
           </SelectContent>
         </Select>
