@@ -194,11 +194,13 @@ T8 depends on T5, T6, and T7. T9 depends on T8.
 
 **Done when**:
 
-- [ ] Component renders ≥3 example blocks, each showing column/operator/claim-or-literal/logic in plain text (not a live form)
-- [ ] Every operator and claim referenced in the examples is a member of the real allowlists (`internal/provisioner/policy.go:21-32,40-45`) — manually cross-checked against the file, listed in the PR/commit description
-- [ ] All strings present in both `en.json` and `pt-BR.json` under `tablePolicies.help.*`
-- [ ] `python3 -c "import json; json.load(open('internal/dashboard/ui/src/locales/en.json')); json.load(open('internal/dashboard/ui/src/locales/pt-BR.json'))"` passes
-- [ ] Gate check passes: `cd internal/dashboard/ui && npx tsc -b && npm run build`
+- [x] Component renders ≥3 example blocks, each showing column/operator/claim-or-literal/logic in plain text (not a live form)
+- [x] Every operator and claim referenced in the examples is a member of the real allowlists (`internal/provisioner/policy.go:21-32,40-45`) — manually cross-checked against the file: example 1 uses `=`/claim `email`; example 2 uses `IN`/`>=` with literals; example 3 uses `IS NULL`/`=` with claim `sub` — no `LIKE`, no SQL function, no invented claim
+- [x] All strings present in both `en.json` and `pt-BR.json` under `tablePolicies.help.*`
+- [x] `python3 -c "import json; json.load(open('internal/dashboard/ui/src/locales/en.json')); json.load(open('internal/dashboard/ui/src/locales/pt-BR.json'))"` passes
+- [x] Gate check passes: `cd internal/dashboard/ui && npx tsc -b && npm run build`
+
+**Status**: ✅ Complete
 
 **Tests**: none — merge-forward to T9 (drawer open/close-preserves-draft behavior needs T8's wiring to be reachable through the browser)
 **Gate**: full
