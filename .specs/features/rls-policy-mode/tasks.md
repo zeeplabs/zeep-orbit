@@ -252,11 +252,11 @@ T5 → T11
 
 **Done when**:
 
-- [ ] `rls: "disabled"` (ou qualquer valor não reconhecido) é rejeitado com erro claro na criação/atualização de tabela
-- [ ] `rls: "policy"` sem auth por e-mail habilitada no app é rejeitado, mesma regra hoje aplicada a `"owner"`/`"enabled"`
-- [ ] `rls: "policy"` com auth por e-mail habilitada é aceito
-- [ ] Gate: `go build ./... && go vet ./... && gofmt -l internal/dashboard/handler.go internal/dashboard/handler_test.go`
-- [ ] Test count: `TestValidateTableInputRejectsUnknownRLS` (novo) + `TestValidateTableInputAcceptsPolicyWithEmailAuth` (novo) + suíte existente sem regressão
+- [x] `rls: "disabled"` (ou qualquer valor não reconhecido) é rejeitado com erro claro na criação/atualização de tabela
+- [x] `rls: "policy"` sem auth por e-mail habilitada no app é rejeitado, mesma regra hoje aplicada a `"owner"`/`"enabled"`
+- [x] `rls: "policy"` com auth por e-mail habilitada é aceito
+- [x] Gate: `go build ./... && go vet ./... && gofmt -l internal/dashboard/handler.go internal/dashboard/handler_test.go`
+- [x] Test count: `TestValidateTableInputRejectsUnknownRLS` (novo) + `TestValidateTableInputAcceptsPolicyWithEmailAuth` (novo) + suíte existente sem regressão
 
 **Tests**: unit
 **Gate**: quick

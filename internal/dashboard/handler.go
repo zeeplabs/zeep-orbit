@@ -126,10 +126,14 @@ func validateTableInput(t AppTableRow, authEmailEnabled bool, otherTables []AppT
 		}
 	}
 
+	if !config.ValidRLS(t.RLS) {
+		return errors.New("table " + t.Name + " has an invalid rls value: " + t.RLS + " (must be one of \"\", \"owner\", \"enabled\", \"policy\")")
+	}
+
 	// owner_id FK points at "_auth_users", which the provisioner only
 	// creates when email auth is on — restricted access without it is a
 	// guaranteed provisioning failure, not a soft misconfiguration.
-	if (t.RLS == "enabled" || t.RLS == "owner") && !authEmailEnabled {
+	if config.HasOwnerColumn(t.RLS) && !authEmailEnabled {
 		return errors.New("table " + t.Name + " uses restricted access (RLS), which requires 'Autenticação por e-mail' to be enabled for this app")
 	}
 

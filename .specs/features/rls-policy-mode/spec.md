@@ -120,13 +120,13 @@ Este spec adiciona um terceiro modo de RLS, `rls: "policy"`, que desacopla o aut
 | RLSP-07 | P3: troca de modo via Dashboard, com aviso | Design | Pending |
 | RLSP-08 | P3: troca preserva fail-closed em tabela legada | Design | Pending |
 | RLSP-09 | P1: validação de enum `rls` (fecha gap pré-existente) | Tasks | Implementing |
-| RLSP-10 | Edge: resolveTableRLS/auth-email gate reconhecem `"policy"` | Design | Pending |
+| RLSP-10 | Edge: resolveTableRLS/auth-email gate reconhecem `"policy"` | Tasks | Implementing |
 
 **ID format:** `RLSP-NN`
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 10 total, 0 mapped to tasks, 10 unmapped ⚠️ (aguardando fase Design/Tasks)
+**Coverage:** 10 total, 8 mapped to tasks (T1-T6 done: RLSP-01/02/03/04/05/06/09/10), 2 unmapped ⚠️ (RLSP-07/08, tasks T7-T11 not yet executed in this batch)
 
 ---
 
