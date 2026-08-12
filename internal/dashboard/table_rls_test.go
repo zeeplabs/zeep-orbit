@@ -16,6 +16,7 @@ func TestResolveTableRLS(t *testing.T) {
 		{"explicit public always respected", "disabled", true, true, "disabled"},
 		{"explicit restricted respected", "enabled", true, true, "enabled"},
 		{"omitted + no require + no auth → public", "", false, false, ""},
+		{"explicit policy respected", "policy", true, true, "policy"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
