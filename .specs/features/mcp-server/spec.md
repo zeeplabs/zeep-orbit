@@ -167,8 +167,8 @@ Both need the same thing: a stable, scoped, auditable set of tools an LLM can ca
 | MCP-05 | P1 AC5: PAT create/revoke audited | Tasks (T13) | Pending |
 | MCP-19 | P1 (OAuth) AC1: authorization server metadata discoverable | Tasks (T17) | Verified |
 | MCP-20 | P1 (OAuth) AC2: dynamic client registration issues a client_id with no manual setup | Tasks (T17) | Verified |
-| MCP-21 | P1 (OAuth) AC3: authorize endpoint requires login then shows consent, naming the client | Design | Pending |
-| MCP-22 | P1 (OAuth) AC4: PKCE-bound authorization code, single-use | Design | Pending |
+| MCP-21 | P1 (OAuth) AC3: authorize endpoint requires login then shows consent, naming the client | Tasks (T18, T19) | Implementing |
+| MCP-22 | P1 (OAuth) AC4: PKCE-bound authorization code, single-use | Tasks (T18, T19, T20) | Implementing |
 | MCP-23 | P1 (OAuth) AC5: token exchange resolves through the same identity path as a manual PAT | Design | Pending |
 | MCP-24 | P1 (OAuth) AC6/AC7: refresh token renewal; reused/expired/mismatched-PKCE code rejected | Design | Pending |
 | MCP-06 | P2 (app/table) AC1: `orbit_create_app` matches `POST /dashboard/api/apps` behavior | Tasks (T4, T11) | Verified |

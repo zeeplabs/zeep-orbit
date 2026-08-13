@@ -132,6 +132,13 @@ func cmdServe() *cobra.Command {
 					if _, err := dashboard.PurgeExpiredDeliveries(context.Background(), pool, 30); err != nil {
 						fmt.Fprintf(os.Stderr, "webhook delivery purge error: %v\n", err)
 					}
+					// OAuth authorization codes (mcp-server spec, T18): always
+					// runs, independent of the soft-delete config above — a
+					// code is single-use and expires in 10 minutes, so this is
+					// pure cleanup of already-dead rows, never live data.
+					if _, err := dashboard.PurgeExpiredAuthCodes(context.Background(), pool); err != nil {
+						fmt.Fprintf(os.Stderr, "oauth auth code purge error: %v\n", err)
+					}
 				}
 				// Run once at boot — otherwise a replica that restarts more
 				// often than the 6h ticker period could go arbitrarily long

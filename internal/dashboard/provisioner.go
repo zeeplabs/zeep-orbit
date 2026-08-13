@@ -540,6 +540,24 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 		   END IF;
 		 END
 		 $do$`,
+		// Single-use, short-lived PKCE authorization codes (mcp-server spec,
+		// T18) — hashed like every other token in this design (design.md
+		// Tech Decisions), never an in-memory map, so a code issued by one
+		// replica is exchangeable against a different replica handling the
+		// token-exchange request (AGENTS.md's no-in-memory-cross-request-
+		// state rule).
+		`CREATE TABLE IF NOT EXISTS zeep_system.oauth_auth_codes (
+			id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+			code_hash      TEXT        NOT NULL UNIQUE,
+			client_id      TEXT        NOT NULL REFERENCES zeep_system.oauth_clients(id) ON DELETE CASCADE,
+			user_id        UUID        NOT NULL REFERENCES zeep_system.dashboard_users(id) ON DELETE CASCADE,
+			code_challenge TEXT        NOT NULL,
+			redirect_uri   TEXT        NOT NULL,
+			used_at        TIMESTAMPTZ,
+			expires_at     TIMESTAMPTZ NOT NULL,
+			created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_oauth_auth_codes_expires_at ON zeep_system.oauth_auth_codes(expires_at)`,
 	}
 
 	for _, stmt := range stmts {

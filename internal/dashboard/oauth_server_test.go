@@ -2,9 +2,12 @@ package dashboard
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 )
@@ -103,5 +106,158 @@ func TestRegisterClientHandler_RateLimitedPerIP(t *testing.T) {
 	}
 	if code := doRequest(); code != http.StatusTooManyRequests {
 		t.Fatalf("expected the 3rd request within the window to be rate-limited (429), got %d", code)
+	}
+}
+
+// authorizeTestQuery builds a valid /dashboard/oauth/authorize query string
+// for clientID/redirectURI, used as the baseline every T18 Authorize test
+// tweaks one param of.
+func authorizeTestQuery(clientID, redirectURI string) string {
+	return "response_type=code&client_id=" + clientID +
+		"&redirect_uri=" + redirectURI +
+		"&code_challenge=abc123&code_challenge_method=S256&state=xyz"
+}
+
+// TestAuthorize_UnknownClientRejectedWithoutRedirect covers T18's Done-when:
+// /authorize with an unknown client_id returns 400, no redirect (design.md
+// Error Handling Strategy: invalid_client, redirecting to an unregistered
+// URI would be an open-redirect risk).
+func TestAuthorize_UnknownClientRejectedWithoutRedirect(t *testing.T) {
+	pool := oauthClientTestPool(t)
+	h := NewOAuthHandler(pool)
+
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/oauth/authorize?"+authorizeTestQuery("not-a-real-client", "https://example.com/cb"), nil)
+	rr := httptest.NewRecorder()
+
+	h.Authorize(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+	if loc := rr.Header().Get("Location"); loc != "" {
+		t.Fatalf("expected no redirect for an unknown client, got Location: %q", loc)
+	}
+	var body map[string]string
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal error body: %v", err)
+	}
+	if body["error"] != "invalid_client" {
+		t.Fatalf("expected error=invalid_client, got %q", body["error"])
+	}
+}
+
+// TestAuthorize_MismatchedRedirectURIRejectedWithoutRedirect covers T18's
+// Done-when: /authorize with a redirect_uri not matching the registered
+// client returns 400, no redirect.
+func TestAuthorize_MismatchedRedirectURIRejectedWithoutRedirect(t *testing.T) {
+	pool := oauthClientTestPool(t)
+	h := NewOAuthHandler(pool)
+	client, err := RegisterClient(context.Background(), pool, RegisterClientInput{
+		Name:         "cli",
+		RedirectURIs: []string{"https://example.com/cb"},
+	})
+	if err != nil {
+		t.Fatalf("RegisterClient: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/oauth/authorize?"+authorizeTestQuery(client.ID, "https://attacker.example.com/cb"), nil)
+	rr := httptest.NewRecorder()
+
+	h.Authorize(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+	if loc := rr.Header().Get("Location"); loc != "" {
+		t.Fatalf("expected no redirect for a mismatched redirect_uri, got Location: %q", loc)
+	}
+	var body map[string]string
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal error body: %v", err)
+	}
+	if body["error"] != "invalid_request" {
+		t.Fatalf("expected error=invalid_request, got %q", body["error"])
+	}
+}
+
+// TestAuthorize_NoSessionRedirectsToLoginPreservingParams covers T18's
+// Done-when: /authorize with no active session redirects to login,
+// preserving OAuth params for after login completes (spec P1-OAuth AC3).
+func TestAuthorize_NoSessionRedirectsToLoginPreservingParams(t *testing.T) {
+	pool := oauthClientTestPool(t)
+	h := NewOAuthHandler(pool)
+	client, err := RegisterClient(context.Background(), pool, RegisterClientInput{
+		Name:         "cli",
+		RedirectURIs: []string{"https://example.com/cb"},
+	})
+	if err != nil {
+		t.Fatalf("RegisterClient: %v", err)
+	}
+
+	target := "/dashboard/oauth/authorize?" + authorizeTestQuery(client.ID, "https://example.com/cb")
+	req := httptest.NewRequest(http.MethodGet, target, nil)
+	rr := httptest.NewRecorder()
+
+	h.Authorize(rr, req)
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("expected 302, got %d", rr.Code)
+	}
+	loc := rr.Header().Get("Location")
+	if !strings.HasPrefix(loc, "/dashboard/login?return_to=") {
+		t.Fatalf("expected a redirect to the login page with return_to, got %q", loc)
+	}
+	decoded, err := url.QueryUnescape(strings.TrimPrefix(loc, "/dashboard/login?return_to="))
+	if err != nil {
+		t.Fatalf("unescape return_to: %v", err)
+	}
+	if decoded != target {
+		t.Fatalf("expected return_to to preserve the original OAuth request exactly, got %q, want %q", decoded, target)
+	}
+}
+
+// TestAuthorize_ActiveSessionHandsOffToConsent covers T18's Done-when:
+// /authorize with an active session reaches the consent step (hands off to
+// T19; this task's own test asserts the handoff happens, not the consent
+// UI itself).
+func TestAuthorize_ActiveSessionHandsOffToConsent(t *testing.T) {
+	pool := oauthClientTestPool(t)
+	h := NewOAuthHandler(pool)
+	client, err := RegisterClient(context.Background(), pool, RegisterClientInput{
+		Name:         "cli",
+		RedirectURIs: []string{"https://example.com/cb"},
+	})
+	if err != nil {
+		t.Fatalf("RegisterClient: %v", err)
+	}
+	userID := testUser(t, pool, "authorize-consent@example.com", "admin")
+	sessionToken := "session-token-for-authorize-consent-test"
+	if err := CreateSession(context.Background(), pool, sessionToken, userID, time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	query := authorizeTestQuery(client.ID, "https://example.com/cb")
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/oauth/authorize?"+query, nil)
+	req.AddCookie(&http.Cookie{Name: cookieName, Value: sessionToken})
+	rr := httptest.NewRecorder()
+
+	h.Authorize(rr, req)
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("expected 302, got %d", rr.Code)
+	}
+	loc := rr.Header().Get("Location")
+	if !strings.HasPrefix(loc, "/dashboard/oauth/consent?") {
+		t.Fatalf("expected a redirect handing off to the consent screen, got %q", loc)
+	}
+	locURL, err := url.Parse(loc)
+	if err != nil {
+		t.Fatalf("parse Location: %v", err)
+	}
+	if locURL.Query().Get("client_id") != client.ID {
+		t.Fatalf("expected client_id to be preserved in the consent handoff, got %q", locURL.Query().Get("client_id"))
+	}
+	if locURL.Query().Get("code_challenge") != "abc123" {
+		t.Fatalf("expected code_challenge to be preserved in the consent handoff, got %q", locURL.Query().Get("code_challenge"))
 	}
 }

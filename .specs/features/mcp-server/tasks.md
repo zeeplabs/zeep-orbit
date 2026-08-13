@@ -490,12 +490,12 @@ T15 depends on T10, T11, T12 (needs every tool registered to exercise the full P
 
 **Done when**:
 
-- [ ] `/authorize` with an unknown `client_id` or a `redirect_uri` not matching the registered client returns `400`, no redirect
-- [ ] `/authorize` with no active session redirects to login, preserving OAuth params for after login completes
-- [ ] `/authorize` with an active session reaches the consent step (hands off to T19; this task's own test asserts the handoff happens, not the consent UI itself)
-- [ ] Gate check passes: `go test ./internal/dashboard/...`
+- [x] `/authorize` with an unknown `client_id` or a `redirect_uri` not matching the registered client returns `400`, no redirect
+- [x] `/authorize` with no active session redirects to login, preserving OAuth params for after login completes
+- [x] `/authorize` with an active session reaches the consent step (hands off to T19; this task's own test asserts the handoff happens, not the consent UI itself)
+- [x] Gate check passes: `go test ./internal/dashboard/...`
 
-**Status**: Not Started
+**Status**: Complete
 
 **Tests**: integration
 **Gate**: quick
