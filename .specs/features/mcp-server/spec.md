@@ -164,7 +164,7 @@ Both need the same thing: a stable, scoped, auditable set of tools an LLM can ca
 | MCP-02 | P1 AC2: valid PAT resolves to admin identity, authorizes as that admin | Tasks (T1, T2) | Verified |
 | MCP-03 | P1 AC3: invalid/expired/revoked PAT rejected before tool execution | Tasks (T1, T2) | Verified |
 | MCP-04 | P1 AC4: revoked PAT rejected on next request | Tasks (T1) | Verified |
-| MCP-05 | P1 AC5: PAT create/revoke audited | Tasks (T13) | Pending |
+| MCP-05 | P1 AC5: PAT create/revoke audited | Tasks (T13) | Verified |
 | MCP-19 | P1 (OAuth) AC1: authorization server metadata discoverable | Tasks (T17, T21) | Verified |
 | MCP-20 | P1 (OAuth) AC2: dynamic client registration issues a client_id with no manual setup | Tasks (T17, T21) | Verified |
 | MCP-21 | P1 (OAuth) AC3: authorize endpoint requires login then shows consent, naming the client | Tasks (T18, T19, T21) | Verified |

@@ -608,13 +608,13 @@ T15 depends on T10, T11, T12 (needs every tool registered to exercise the full P
 
 **Done when**:
 
-- [ ] `POST /dashboard/api/me/pats` with a name creates a PAT, response includes the plaintext token exactly once
-- [ ] `GET /dashboard/api/me/pats` lists the caller's tokens, no token value in the response
-- [ ] `DELETE /dashboard/api/me/pats/{id}` for another user's PAT id returns `404`/`403`, not success
-- [ ] Each action produces an `audit_log` entry (`pat.create`, `pat.revoke`)
-- [ ] Gate check passes: `go test ./internal/dashboard/...`
+- [x] `POST /dashboard/api/me/pats` with a name creates a PAT, response includes the plaintext token exactly once
+- [x] `GET /dashboard/api/me/pats` lists the caller's tokens, no token value in the response
+- [x] `DELETE /dashboard/api/me/pats/{id}` for another user's PAT id returns `404`/`403`, not success
+- [x] Each action produces an `audit_log` entry (`pat.create`, `pat.revoke`)
+- [x] Gate check passes: `go test ./internal/dashboard/...`
 
-**Status**: Not Started
+**Status**: Complete
 
 **Tests**: integration
 **Gate**: quick
