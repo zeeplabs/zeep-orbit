@@ -7,7 +7,7 @@ import { PolicyTemplatePicker } from "./PolicyTemplatePicker";
 import { PolicyHelpContent } from "./PolicyHelpContent";
 import { FormDrawer } from "@/components/patterns/FormDrawer";
 import { Icon } from "@/components/ui/icon";
-import { EmptyState } from "@/components/patterns";
+import { EmptyState, ConfirmDialog } from "@/components/patterns";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -92,9 +92,14 @@ export default function TablePoliciesTab({ appId, tableName, columns, rls }: Tab
   const toggleRole = (role: string) =>
     setSelectedRoles((prev) => (prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]));
 
-  const remove = (policy: TablePolicyRow) => {
-    if (!confirm(t("tablePolicies.deleteConfirm", { name: policy.pg_policy_name }))) return;
-    deletePolicy.mutate(policy.id);
+  const [deleteTarget, setDeleteTarget] = useState<TablePolicyRow | null>(null);
+
+  const remove = (policy: TablePolicyRow) => setDeleteTarget(policy);
+
+  const confirmRemove = () => {
+    if (!deleteTarget) return;
+    deletePolicy.mutate(deleteTarget.id);
+    setDeleteTarget(null);
   };
 
   const resetForm = () => {
@@ -489,6 +494,19 @@ export default function TablePoliciesTab({ appId, tableName, columns, rls }: Tab
           </div>
         ))}
       </div>
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title={t("tablePolicies.deleteTitle")}
+        message={t("tablePolicies.deleteConfirm", { name: deleteTarget?.pg_policy_name ?? "" })}
+        confirmLabel={t("tablePolicies.delete")}
+        cancelLabel={t("tablePolicies.cancel")}
+        destructive
+        icon="delete"
+        loading={deletePolicy.isPending}
+        onConfirm={confirmRemove}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

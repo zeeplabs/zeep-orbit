@@ -15,6 +15,7 @@ import {
 } from "../lib/api";
 import { Icon } from "@/components/ui/icon";
 import { EmptyState, LoadingState } from "@/components/patterns/states";
+import { ConfirmDialog } from "@/components/patterns";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -126,8 +127,15 @@ export default function Webhooks({ appId, tables }: WebhooksProps) {
     }
   };
 
-  const rotate = async (webhook: WebhookSubscription) => {
-    if (!confirm(t("webhooks.rotateConfirm", { name: webhook.name }))) return;
+  const [rotateTarget, setRotateTarget] = useState<WebhookSubscription | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<WebhookSubscription | null>(null);
+
+  const rotate = (webhook: WebhookSubscription) => setRotateTarget(webhook);
+
+  const confirmRotate = async () => {
+    if (!rotateTarget) return;
+    const webhook = rotateTarget;
+    setRotateTarget(null);
     try {
       await rotateToken.mutateAsync(webhook.id);
       toast.success(t("webhooks.rotateSuccess"));
@@ -136,9 +144,12 @@ export default function Webhooks({ appId, tables }: WebhooksProps) {
     }
   };
 
-  const remove = (webhook: WebhookSubscription) => {
-    if (!confirm(t("webhooks.deleteConfirm", { name: webhook.name }))) return;
-    deleteWebhook.mutate(webhook.id);
+  const remove = (webhook: WebhookSubscription) => setDeleteTarget(webhook);
+
+  const confirmRemove = () => {
+    if (!deleteTarget) return;
+    deleteWebhook.mutate(deleteTarget.id);
+    setDeleteTarget(null);
   };
 
   if (isLoading) return <LoadingState />;
@@ -318,6 +329,30 @@ export default function Webhooks({ appId, tables }: WebhooksProps) {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={rotateTarget !== null}
+        title={t("webhooks.rotateTitle")}
+        message={t("webhooks.rotateConfirm", { name: rotateTarget?.name ?? "" })}
+        confirmLabel={t("webhooks.rotateToken")}
+        cancelLabel={t("webhooks.cancel")}
+        icon="refresh"
+        loading={rotateToken.isPending}
+        onConfirm={confirmRotate}
+        onCancel={() => setRotateTarget(null)}
+      />
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title={t("webhooks.deleteTitle")}
+        message={t("webhooks.deleteConfirm", { name: deleteTarget?.name ?? "" })}
+        confirmLabel={t("webhooks.delete")}
+        cancelLabel={t("webhooks.cancel")}
+        destructive
+        icon="delete"
+        loading={deleteWebhook.isPending}
+        onConfirm={confirmRemove}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

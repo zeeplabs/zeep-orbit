@@ -4,7 +4,7 @@ import { TableDef, ColumnDef, IndexDef, ReferenceDef } from "../lib/api";
 import { hasOwnerColumn } from "../lib/rls";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon";
-import { StatusPill } from "@/components/patterns";
+import { StatusPill, ConfirmDialog } from "@/components/patterns";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -167,6 +167,8 @@ export default function TableCard({
   const [error, setError] = useState<string | null>(null);
   const [showRelationshipsInfo, setShowRelationshipsInfo] = useState(false);
   const [showIndexInfo, setShowIndexInfo] = useState(false);
+  const [pendingRlsValue, setPendingRlsValue] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const enterEdit = () => {
     setName(table.name);
@@ -190,9 +192,16 @@ export default function TableCard({
   // yet, so there is nothing to warn about (spec.md RLSP-07 AC1).
   const changeRls = (val: string) => {
     if (!isDraft && isPolicyRLS(val) !== isPolicyRLS(rls)) {
-      if (!confirm(t("tableCard.rlsModeSwitchConfirm"))) return;
+      setPendingRlsValue(val);
+      return;
     }
     setRls(val);
+  };
+
+  const confirmRlsChange = () => {
+    if (pendingRlsValue === null) return;
+    setRls(pendingRlsValue);
+    setPendingRlsValue(null);
   };
 
   const addColumn = () => setColumns((prev) => [...prev, emptyColumn()]);
@@ -254,8 +263,12 @@ export default function TableCard({
     }
   }
 
-  async function remove() {
-    if (!confirm(t("tableCard.deleteConfirm", { name: table.name }))) return;
+  function remove() {
+    setConfirmingDelete(true);
+  }
+
+  async function confirmRemove() {
+    setConfirmingDelete(false);
     setDeleting(true);
     setError(null);
     try {
@@ -426,6 +439,29 @@ export default function TableCard({
           </TabsContent>
         </Tabs>
       )}
+
+      <ConfirmDialog
+        open={pendingRlsValue !== null}
+        title={t("tableCard.rlsModeSwitchTitle")}
+        message={t("tableCard.rlsModeSwitchConfirm")}
+        confirmLabel={t("tableCard.continue")}
+        cancelLabel={t("tableCard.cancel")}
+        icon="warning"
+        onConfirm={confirmRlsChange}
+        onCancel={() => setPendingRlsValue(null)}
+      />
+      <ConfirmDialog
+        open={confirmingDelete}
+        title={t("tableCard.deleteTitle")}
+        message={t("tableCard.deleteConfirm", { name: table.name })}
+        confirmLabel={t("tableCard.deleteTable")}
+        cancelLabel={t("tableCard.cancel")}
+        destructive
+        icon="delete"
+        loading={deleting}
+        onConfirm={confirmRemove}
+        onCancel={() => setConfirmingDelete(false)}
+      />
     </div>
   );
 }
