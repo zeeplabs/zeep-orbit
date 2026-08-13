@@ -1508,6 +1508,44 @@ func (h *Handler) ListTablePolicies(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, policies)
 }
 
+// ErrTableNotFound is returned by CreateTablePolicyForUser when tableName
+// does not resolve to a table on the app — distinct from ErrNotFound (which
+// covers "app not found/no access") so the caller can tell the two 404s
+// apart, matching the two distinct messages CreateTablePolicy's handler
+// returned before extraction ("not found" vs. "table not found").
+var ErrTableNotFound = errors.New("dashboard: table not found")
+
+// CreateTablePolicyForUser is the shared operation behind CreateTablePolicy
+// — the exact authorization/store/audit path a MCP tool call
+// (orbit_create_policy_from_template, mcp-server spec MCP-13/MCP-14/MCP-10)
+// will call into identically. Extracted verbatim from the former
+// CreateTablePolicy handler body; behavior is unchanged.
+func (h *Handler) CreateTablePolicyForUser(ctx context.Context, user *DashboardUser, appID, tableName string, def PolicyDef, ip string) (*TablePolicyRow, error) {
+	app, role, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, err
+	}
+	if !role.CanManage() {
+		return nil, ErrForbidden
+	}
+	table := findAppTableByName(app, tableName)
+	if table == nil {
+		return nil, ErrTableNotFound
+	}
+
+	schemaName := schemaNameForDB(app.Name)
+	row, err := CreateTablePolicy(ctx, h.pool, appID, schemaName, tableName, table.Columns, def, user.ID)
+	if err != nil {
+		// Returned raw: may be *provisioner.ValidationError or
+		// ErrPolicyAlreadyExists, unwrapped/matched by the caller the same
+		// way the pre-extraction handler did.
+		return nil, err
+	}
+
+	h.audit(ctx, user.ID, user.Email, "app.table_policy.create", "table_policy", row.ID, app.Name+"/"+tableName+"/"+row.PgPolicyName, nil, ip)
+	return &row, nil
+}
+
 // CreateTablePolicy handles POST /dashboard/api/apps/{id}/tables/{table}/policies.
 func (h *Handler) CreateTablePolicy(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
@@ -1518,24 +1556,6 @@ func (h *Handler) CreateTablePolicy(w http.ResponseWriter, r *http.Request) {
 
 	appID := chi.URLParam(r, "id")
 	tableName := chi.URLParam(r, "table")
-	app, role, err := GetApp(r.Context(), h.pool, appID, user)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
-			return
-		}
-		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
-		return
-	}
-	if !role.CanManage() {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
-		return
-	}
-	table := findAppTableByName(app, tableName)
-	if table == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
-		return
-	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
 	var body PolicyDef
@@ -1543,11 +1563,16 @@ func (h *Handler) CreateTablePolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	schemaName := schemaNameForDB(app.Name)
-	row, err := CreateTablePolicy(r.Context(), h.pool, appID, schemaName, tableName, table.Columns, body, user.ID)
+	row, err := h.CreateTablePolicyForUser(r.Context(), user, appID, tableName, body, r.RemoteAddr)
 	if err != nil {
 		var valErr *provisioner.ValidationError
 		switch {
+		case errors.Is(err, ErrNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		case errors.Is(err, ErrForbidden):
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		case errors.Is(err, ErrTableNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
 		case errors.As(err, &valErr):
 			// Safe to expose: describes which clause/field failed, never
 			// internal detail (AGENTS.md §4 — provisioner.ValidationError is
@@ -1563,7 +1588,6 @@ func (h *Handler) CreateTablePolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, row)
-	h.audit(r.Context(), user.ID, user.Email, "app.table_policy.create", "table_policy", row.ID, app.Name+"/"+tableName+"/"+row.PgPolicyName, nil, r.RemoteAddr)
 }
 
 // UpdateTablePolicy handles PUT /dashboard/api/apps/{id}/tables/{table}/policies/{policyId}.

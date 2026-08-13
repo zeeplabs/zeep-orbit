@@ -284,11 +284,11 @@ T15 depends on T10, T11, T12 (needs every tool registered to exercise the full P
 
 **Done when**:
 
-- [ ] Every existing test for `CreateTablePolicy` passes unmodified
-- [ ] New test calls `CreateTablePolicyForUser` directly for success + the existing validation-failure cases (invalid operator, invalid claim, malformed clause)
-- [ ] Gate check passes: `go test ./internal/dashboard/...`
+- [x] Every existing test for `CreateTablePolicy` passes unmodified
+- [x] New test calls `CreateTablePolicyForUser` directly for success + the existing validation-failure cases (invalid operator, invalid claim, malformed clause)
+- [x] Gate check passes: `go test ./internal/dashboard/...`
 
-**Status**: Not Started
+**Status**: Complete
 
 **Tests**: integration
 **Gate**: quick
