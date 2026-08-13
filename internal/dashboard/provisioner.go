@@ -477,6 +477,25 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 		 ON zeep_system.webhook_deliveries(webhook_id, event_id) WHERE event_id IS NOT NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_received_at
 		 ON zeep_system.webhook_deliveries(received_at)`,
+		// Personal access tokens for MCP-server / script access (mcp-server
+		// spec, T1). oauth_client_id/refresh_token_hash have no FK yet — the
+		// oauth_clients table they'll eventually reference is added later
+		// (T17); a plain UUID column now avoids a second migration then, per
+		// design.md's Data Models note for dashboard_pats.
+		`CREATE TABLE IF NOT EXISTS zeep_system.dashboard_pats (
+			id                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+			user_id            UUID        NOT NULL REFERENCES zeep_system.dashboard_users(id) ON DELETE CASCADE,
+			name               TEXT        NOT NULL,
+			token_hash         TEXT        NOT NULL UNIQUE,
+			kind               TEXT        NOT NULL CHECK (kind IN ('manual','ephemeral','oauth')),
+			oauth_client_id    UUID,
+			refresh_token_hash TEXT,
+			expires_at         TIMESTAMPTZ,
+			revoked_at         TIMESTAMPTZ,
+			last_used_at       TIMESTAMPTZ,
+			created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_dashboard_pats_user_id ON zeep_system.dashboard_pats(user_id)`,
 	}
 
 	for _, stmt := range stmts {
