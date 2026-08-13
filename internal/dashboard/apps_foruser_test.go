@@ -15,7 +15,7 @@ func TestCreateAppForUser_HappyPath(t *testing.T) {
 	defer pool.Close()
 	ctx := context.Background()
 
-	app, err := h.CreateAppForUser(ctx, actors["loner"], appRequestBody{
+	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{
 		Name:             "cli-created-app",
 		AuthEmailEnabled: true,
 	}, "127.0.0.1")
@@ -58,7 +58,7 @@ func TestCreateAppForUser_InvalidNameReturnsValidationError(t *testing.T) {
 	defer pool.Close()
 	ctx := context.Background()
 
-	app, err := h.CreateAppForUser(ctx, actors["loner"], appRequestBody{
+	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{
 		Name: "Invalid Name!",
 	}, "127.0.0.1")
 	if app != nil {

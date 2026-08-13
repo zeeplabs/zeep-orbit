@@ -26,9 +26,15 @@ import (
 // find no matching session there. Stateless mode re-derives a session per
 // request instead, consistent with ResolvePAT's own no-caching, hit-the-DB-
 // every-time design.
-func NewHandler(pool *db.Pool, rl *dashboard.RateLimiter) http.Handler {
+//
+// dashH is the same *dashboard.Handler instance internal/server/server.go's
+// REST routes use — the write tools (T11) call its CreateAppForUser/
+// CreateAppTableForUser/UpdateTableRLSModeForUser methods directly, so a
+// tool call runs through the identical provisioner/audit wiring a REST call
+// would (design.md: Shared Operation Functions).
+func NewHandler(pool *db.Pool, dashH *dashboard.Handler, rl *dashboard.RateLimiter) http.Handler {
 	server := mcp.NewServer(&mcp.Implementation{Name: "zeep-orbit", Version: "1.0.0"}, nil)
-	RegisterTools(server, ToolDeps{Pool: pool})
+	RegisterTools(server, ToolDeps{Pool: pool, DashH: dashH})
 
 	streamable := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
 		return server

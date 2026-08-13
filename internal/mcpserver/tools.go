@@ -16,16 +16,21 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/dashboard"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
+	"github.com/zeeplabs/zeep-orbit/internal/provisioner"
 )
 
-// ToolDeps bundles what every registered tool needs — currently just the
-// shared Postgres pool the *ForUser operation functions already take. Kept
-// as its own type so RegisterTools's signature doesn't need to change if a
-// future tool needs another dependency.
+// ToolDeps bundles what every registered tool needs: the shared Postgres
+// pool the read-only *ForUser functions take directly (T10), plus the
+// *dashboard.Handler the write *ForUser methods (T4-T7) are bound to —
+// same Handler instance internal/server/server.go's REST routes already
+// use, so a write tool call runs through the identical provisioner/audit
+// wiring a REST call would.
 type ToolDeps struct {
-	Pool *db.Pool
+	Pool  *db.Pool
+	DashH *dashboard.Handler
 }
 
 // errInternal is the fixed, safe-to-expose message every tool returns for
@@ -42,6 +47,7 @@ var errUnauthorized = errors.New("unauthorized")
 // once per NewHandler construction.
 func RegisterTools(server *mcp.Server, deps ToolDeps) {
 	registerReadTools(server, deps)
+	registerWriteTools(server, deps)
 }
 
 // orbitListAppsInput takes no arguments — the tool always lists the calling
@@ -101,5 +107,118 @@ func registerReadTools(server *mcp.Server, deps ToolDeps) {
 			return nil, nil, errInternal
 		}
 		return nil, schema, nil
+	})
+}
+
+// orbitCreateAppInput mirrors the minimal slice of dashboard's
+// appRequestBody a "describe an app, get an app" tool call needs (mcp-server
+// spec P2 AC1: "valid name and configuration") — name plus whether the
+// app's own end users authenticate with email/password. The richer
+// sub-objects (auth_providers, storage_config, rate_limit) stay REST/UI-only
+// for now; nothing in the spec's P2 story requires an LLM to set them.
+type orbitCreateAppInput struct {
+	Name             string `json:"name" jsonschema:"the app's name (lowercase letters, numbers, and hyphens)"`
+	AuthEmailEnabled bool   `json:"auth_email_enabled,omitempty" jsonschema:"whether this app's end users authenticate with email/password"`
+}
+
+// orbitCreateTableInput mirrors dashboard's tableRequestBody plus the
+// target app id (tableRequestBody's id normally comes from the URL path).
+type orbitCreateTableInput struct {
+	AppID   string                `json:"app_id" jsonschema:"id of the app to add the table to"`
+	Name    string                `json:"name" jsonschema:"the table's name"`
+	RLS     string                `json:"rls,omitempty" jsonschema:"row-level security mode: one of \"\", \"owner\", \"enabled\", \"policy\""`
+	Columns []config.ColumnConfig `json:"columns" jsonschema:"the table's columns"`
+	Indexes []config.IndexConfig  `json:"indexes,omitempty" jsonschema:"indexes to create on the table"`
+}
+
+// orbitSetTableRLSModeInput is the input for orbit_set_table_rls_mode.
+type orbitSetTableRLSModeInput struct {
+	AppID     string `json:"app_id" jsonschema:"id of the app that owns the table"`
+	TableName string `json:"table_name" jsonschema:"name of the table to update"`
+	RLSMode   string `json:"rls_mode" jsonschema:"one of \"\", \"owner\", \"enabled\", \"policy\""`
+}
+
+// mapWriteError maps an error returned by one of the write *ForUser
+// functions to a caller-safe tool error: *dashboard.ValidationError and
+// *provisioner.TypeChangeError messages are safe to expose verbatim (same
+// "safe to expose" exception AGENTS.md §4 carves out for
+// provisioner.ValidationError — the caller-input-naming message is the
+// point of MCP-08), ErrNotFound/ErrForbidden map to their REST-equivalent
+// wording, and everything else collapses to the fixed generic message.
+func mapWriteError(err error) error {
+	var valErr *dashboard.ValidationError
+	var typeErr *provisioner.TypeChangeError
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, dashboard.ErrNotFound):
+		return errors.New("not found")
+	case errors.Is(err, dashboard.ErrForbidden):
+		return errors.New("forbidden")
+	case errors.As(err, &valErr):
+		return valErr
+	case errors.As(err, &typeErr):
+		return typeErr
+	default:
+		return errInternal
+	}
+}
+
+// registerWriteTools registers the three core write tools (mcp-server spec
+// T11) — each a thin wrapper over a Phase 2 *ForUser method, so a tool call
+// runs through the exact same validation/provisioner/audit path the
+// equivalent REST endpoint uses.
+func registerWriteTools(server *mcp.Server, deps ToolDeps) {
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_create_app",
+		Description: "Create a new app.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitCreateAppInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		app, err := deps.DashH.CreateAppForUser(ctx, user, dashboard.AppRequestBody{
+			Name:             in.Name,
+			AuthEmailEnabled: in.AuthEmailEnabled,
+		}, "mcp")
+		if err != nil {
+			return nil, nil, mapWriteError(err)
+		}
+		return nil, app, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_create_table",
+		Description: "Create a table (with columns) on an existing app.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitCreateTableInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		row, err := deps.DashH.CreateAppTableForUser(ctx, user, in.AppID, dashboard.TableRequestBody{
+			Name:    in.Name,
+			RLS:     in.RLS,
+			Columns: in.Columns,
+			Indexes: in.Indexes,
+		}, "mcp")
+		if err != nil {
+			return nil, nil, mapWriteError(err)
+		}
+		return nil, row, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_set_table_rls_mode",
+		Description: "Set a table's row-level security mode.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitSetTableRLSModeInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		row, err := deps.DashH.UpdateTableRLSModeForUser(ctx, user, in.AppID, in.TableName, in.RLSMode, "mcp")
+		if err != nil {
+			return nil, nil, mapWriteError(err)
+		}
+		return nil, row, nil
 	})
 }

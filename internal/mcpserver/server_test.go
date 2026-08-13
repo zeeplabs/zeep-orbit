@@ -9,9 +9,23 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"go.uber.org/zap"
 
 	"github.com/zeeplabs/zeep-orbit/internal/dashboard"
+	"github.com/zeeplabs/zeep-orbit/internal/db"
+	"github.com/zeeplabs/zeep-orbit/internal/registry"
 )
+
+// newTestDashboardHandler builds a real *dashboard.Handler (real registry,
+// real provisioner) for tests that need to exercise a write tool
+// (orbit_create_app etc.) — same construction internal/server/server.go
+// uses, so a tool call in tests runs through the identical
+// provisioner/audit wiring a REST call or production /dashboard/mcp request
+// would (no mocking of db.Pool or the provisioner, per this repo's existing
+// test convention).
+func newTestDashboardHandler(pool *db.Pool) *dashboard.Handler {
+	return dashboard.NewHandler(pool, registry.New(), zap.NewNop())
+}
 
 // bearerTransport injects a static Authorization: Bearer <token> header on
 // every outbound request — used so tests can drive a real
@@ -52,7 +66,7 @@ func TestNewHandler_ValidPAT_InitializeHandshakeSucceeds(t *testing.T) {
 	}
 
 	rl := dashboard.NewRateLimiter(100, time.Minute)
-	srv := httptest.NewServer(NewHandler(pool, rl))
+	srv := httptest.NewServer(NewHandler(pool, newTestDashboardHandler(pool), rl))
 	defer srv.Close()
 
 	sess, err := connectClient(context.Background(), srv.URL, token)
@@ -72,7 +86,7 @@ func TestNewHandler_ValidPAT_InitializeHandshakeSucceeds(t *testing.T) {
 func TestNewHandler_InvalidPAT_RejectedBeforeMCPLayer(t *testing.T) {
 	pool := authTestPool(t)
 	rl := dashboard.NewRateLimiter(100, time.Minute)
-	srv := httptest.NewServer(NewHandler(pool, rl))
+	srv := httptest.NewServer(NewHandler(pool, newTestDashboardHandler(pool), rl))
 	defer srv.Close()
 
 	if _, err := connectClient(context.Background(), srv.URL, "not-a-real-token"); err == nil {
@@ -101,7 +115,7 @@ func TestNewHandler_RateLimitExceeded_RejectsNthCallKeyedByPATID(t *testing.T) {
 	}
 
 	rl := dashboard.NewRateLimiter(2, time.Minute)
-	srv := httptest.NewServer(NewHandler(pool, rl))
+	srv := httptest.NewServer(NewHandler(pool, newTestDashboardHandler(pool), rl))
 	defer srv.Close()
 
 	doRequest := func(t *testing.T, token string) int {

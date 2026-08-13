@@ -20,14 +20,14 @@ func TestUpdateTableRLSModeForUser_AllValidValues(t *testing.T) {
 
 	// A table on an app with email auth enabled, so every RLS value
 	// (including the owner-column ones) is valid for it.
-	emailApp, err := h.CreateAppForUser(ctx, actors["loner"], appRequestBody{
+	emailApp, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{
 		Name:             "rls-mode-app",
 		AuthEmailEnabled: true,
 	}, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("CreateAppForUser: %v", err)
 	}
-	table, err := h.CreateAppTableForUser(ctx, actors["loner"], emailApp.ID, tableRequestBody{
+	table, err := h.CreateAppTableForUser(ctx, actors["loner"], emailApp.ID, TableRequestBody{
 		Name:    "items",
 		Columns: []config.ColumnConfig{{Name: "title", Type: "text"}},
 	}, "127.0.0.1")
@@ -70,14 +70,14 @@ func TestUpdateTableRLSModeForUser_OwnerRLSWithoutEmailAuthRejected(t *testing.T
 	defer pool.Close()
 	ctx := context.Background()
 
-	noEmailApp, err := h.CreateAppForUser(ctx, actors["loner"], appRequestBody{
+	noEmailApp, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{
 		Name:             "no-email-auth-app",
 		AuthEmailEnabled: false,
 	}, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("CreateAppForUser: %v", err)
 	}
-	table, err := h.CreateAppTableForUser(ctx, actors["loner"], noEmailApp.ID, tableRequestBody{
+	table, err := h.CreateAppTableForUser(ctx, actors["loner"], noEmailApp.ID, TableRequestBody{
 		Name:    "items",
 		Columns: []config.ColumnConfig{{Name: "title", Type: "text"}},
 	}, "127.0.0.1")

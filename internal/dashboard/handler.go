@@ -854,9 +854,9 @@ func (h *Handler) ListApps(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, apps)
 }
 
-// appRequestBody is the JSON body for create/update app requests. Tables are
+// AppRequestBody is the JSON body for create/update app requests. Tables are
 // managed one at a time via the /apps/{id}/tables endpoints, not here.
-type appRequestBody struct {
+type AppRequestBody struct {
 	Name             string                  `json:"name"`
 	AuthEmailEnabled bool                    `json:"auth_email_enabled"`
 	AuthProviders    json.RawMessage         `json:"auth_providers,omitempty"`
@@ -864,8 +864,8 @@ type appRequestBody struct {
 	RateLimit        *config.RateLimitConfig `json:"rate_limit,omitempty"`
 }
 
-// tableRequestBody is the JSON body for create/update table requests.
-type tableRequestBody struct {
+// TableRequestBody is the JSON body for create/update table requests.
+type TableRequestBody struct {
 	Name    string                `json:"name"`
 	RLS     string                `json:"rls"`
 	Columns []config.ColumnConfig `json:"columns"`
@@ -899,7 +899,7 @@ var (
 // validation/store/provisioner/audit path a MCP tool call (orbit_create_app)
 // will call into identically (mcp-server spec, MCP-06/MCP-10). Extracted
 // verbatim from the former CreateApp handler body; behavior is unchanged.
-func (h *Handler) CreateAppForUser(ctx context.Context, user *DashboardUser, body appRequestBody, ip string) (*AppRow, error) {
+func (h *Handler) CreateAppForUser(ctx context.Context, user *DashboardUser, body AppRequestBody, ip string) (*AppRow, error) {
 	if err := validateAppInput(body.Name); err != nil {
 		return nil, &ValidationError{msg: err.Error()}
 	}
@@ -951,7 +951,7 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
-	var body appRequestBody
+	var body AppRequestBody
 	if !h.decodeJSONBody(w, r, &body) {
 		return
 	}
@@ -1017,7 +1017,7 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 	appID := chi.URLParam(r, "id")
 
 	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
-	var body appRequestBody
+	var body AppRequestBody
 	if !h.decodeJSONBody(w, r, &body) {
 		return
 	}
@@ -1161,7 +1161,7 @@ var (
 // (orbit_create_table) will call into identically (mcp-server spec,
 // MCP-07/MCP-08/MCP-10). Extracted verbatim from the former CreateAppTable
 // handler body; behavior is unchanged.
-func (h *Handler) CreateAppTableForUser(ctx context.Context, user *DashboardUser, appID string, body tableRequestBody, ip string) (*AppTableRow, error) {
+func (h *Handler) CreateAppTableForUser(ctx context.Context, user *DashboardUser, appID string, body TableRequestBody, ip string) (*AppTableRow, error) {
 	app, role, err := GetApp(ctx, h.pool, appID, user)
 	if err != nil {
 		return nil, err
@@ -1221,7 +1221,7 @@ func (h *Handler) CreateAppTable(w http.ResponseWriter, r *http.Request) {
 	appID := chi.URLParam(r, "id")
 
 	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
-	var body tableRequestBody
+	var body TableRequestBody
 	if !h.decodeJSONBody(w, r, &body) {
 		return
 	}
@@ -1293,7 +1293,7 @@ func (h *Handler) UpdateAppTable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
-	var body tableRequestBody
+	var body TableRequestBody
 	if !h.decodeJSONBody(w, r, &body) {
 		return
 	}

@@ -401,13 +401,13 @@ T15 depends on T10, T11, T12 (needs every tool registered to exercise the full P
 
 **Done when**:
 
-- [ ] `orbit_create_app` via a real MCP client creates an app identical to what the REST endpoint would for the same input, and produces the same `audit_log` entry
-- [ ] `orbit_create_table` via a real MCP client on that app creates a table with columns exactly as specified
-- [ ] `orbit_set_table_rls_mode` via a real MCP client sets the table's RLS mode; invalid RLS value returns a structured tool error, table unchanged
-- [ ] A malformed `orbit_create_table` call (e.g. duplicate column name) returns a structured tool error naming the problem, no partial table created
-- [ ] Gate check passes: `go test ./internal/mcpserver/...`
+- [x] `orbit_create_app` via a real MCP client creates an app identical to what the REST endpoint would for the same input, and produces the same `audit_log` entry
+- [x] `orbit_create_table` via a real MCP client on that app creates a table with columns exactly as specified
+- [x] `orbit_set_table_rls_mode` via a real MCP client sets the table's RLS mode; invalid RLS value returns a structured tool error, table unchanged
+- [x] A malformed `orbit_create_table` call (e.g. duplicate column name) returns a structured tool error naming the problem, no partial table created
+- [x] Gate check passes: `go test ./internal/mcpserver/...`
 
-**Status**: Not Started
+**Status**: Complete
 
 **Tests**: integration, real MCP client roundtrip
 **Gate**: quick

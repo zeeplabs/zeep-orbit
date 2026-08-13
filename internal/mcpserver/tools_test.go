@@ -22,7 +22,7 @@ import (
 func startMCPSession(t *testing.T, pool *db.Pool, token string) *mcp.ClientSession {
 	t.Helper()
 	rl := dashboard.NewRateLimiter(1000, time.Minute)
-	srv := httptest.NewServer(NewHandler(pool, rl))
+	srv := httptest.NewServer(NewHandler(pool, newTestDashboardHandler(pool), rl))
 	sess, err := connectClient(context.Background(), srv.URL, token)
 	if err != nil {
 		t.Fatalf("connect MCP client: %v", err)

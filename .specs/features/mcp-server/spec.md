@@ -171,12 +171,12 @@ Both need the same thing: a stable, scoped, auditable set of tools an LLM can ca
 | MCP-22 | P1 (OAuth) AC4: PKCE-bound authorization code, single-use | Design | Pending |
 | MCP-23 | P1 (OAuth) AC5: token exchange resolves through the same identity path as a manual PAT | Design | Pending |
 | MCP-24 | P1 (OAuth) AC6/AC7: refresh token renewal; reused/expired/mismatched-PKCE code rejected | Design | Pending |
-| MCP-06 | P2 (app/table) AC1: `orbit_create_app` matches `POST /dashboard/api/apps` behavior | Design | Pending |
-| MCP-07 | P2 (app/table) AC2: `orbit_create_table` matches `POST /dashboard/api/apps/{id}/tables` behavior/validation | Design | Pending |
-| MCP-08 | P2 (app/table) AC3: validation failure returns structured tool error | Design | Pending |
+| MCP-06 | P2 (app/table) AC1: `orbit_create_app` matches `POST /dashboard/api/apps` behavior | Tasks (T4, T11) | Verified |
+| MCP-07 | P2 (app/table) AC2: `orbit_create_table` matches `POST /dashboard/api/apps/{id}/tables` behavior/validation | Tasks (T5, T11) | Verified |
+| MCP-08 | P2 (app/table) AC3: validation failure returns structured tool error | Tasks (T11) | Verified |
 | MCP-09 | P2 (app/table) AC4: `orbit_get_app_schema` reflects current state | Tasks (T8, T10) | Verified |
-| MCP-10 | P2 (app/table) AC5: tool calls produce the same audit_log entries as REST | Design | Pending |
-| MCP-11 | P2 (RLS/policy) AC1: `orbit_set_table_rls_mode` matches existing validation | Design | Pending |
+| MCP-10 | P2 (app/table) AC5: tool calls produce the same audit_log entries as REST | Tasks (T4-T7, T11) | Verified |
+| MCP-11 | P2 (RLS/policy) AC1: `orbit_set_table_rls_mode` matches existing validation | Tasks (T6, T11) | Verified |
 | MCP-12 | P2 (RLS/policy) AC2: `orbit_list_policy_templates` matches UI's template set | Design | Pending |
 | MCP-13 | P2 (RLS/policy) AC3: `orbit_create_policy_from_template` matches UI's sequential-create + partial-failure behavior | Design | Pending |
 | MCP-14 | P2 (RLS/policy) AC4: missing/invalid template input rejected before any policy is created | Design | Pending |

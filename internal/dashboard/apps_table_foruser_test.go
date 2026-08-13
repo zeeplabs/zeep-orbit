@@ -17,7 +17,7 @@ func TestCreateAppTableForUser_HappyPath(t *testing.T) {
 	defer pool.Close()
 	ctx := context.Background()
 
-	row, err := h.CreateAppTableForUser(ctx, actors["loner"], appID, tableRequestBody{
+	row, err := h.CreateAppTableForUser(ctx, actors["loner"], appID, TableRequestBody{
 		Name:    "widgets",
 		Columns: []config.ColumnConfig{{Name: "title", Type: "text"}, {Name: "price", Type: "integer"}},
 	}, "127.0.0.1")
@@ -52,7 +52,7 @@ func TestCreateAppTableForUser_DuplicateNameRejected(t *testing.T) {
 	ctx := context.Background()
 
 	// appsHandlerTestPool seeds a table named "test_table" already.
-	_, err := h.CreateAppTableForUser(ctx, actors["loner"], appID, tableRequestBody{
+	_, err := h.CreateAppTableForUser(ctx, actors["loner"], appID, TableRequestBody{
 		Name:    "test_table",
 		Columns: []config.ColumnConfig{{Name: "x", Type: "text"}},
 	}, "127.0.0.1")
@@ -70,7 +70,7 @@ func TestCreateAppTableForUser_DuplicateColumnNameRejected(t *testing.T) {
 	defer pool.Close()
 	ctx := context.Background()
 
-	_, err := h.CreateAppTableForUser(ctx, actors["loner"], appID, tableRequestBody{
+	_, err := h.CreateAppTableForUser(ctx, actors["loner"], appID, TableRequestBody{
 		Name:    "dupcol_table",
 		Columns: []config.ColumnConfig{{Name: "x", Type: "text"}, {Name: "x", Type: "int"}},
 	}, "127.0.0.1")
@@ -88,7 +88,7 @@ func TestCreateAppTableForUser_UnsupportedColumnTypeRejected(t *testing.T) {
 	defer pool.Close()
 	ctx := context.Background()
 
-	_, err := h.CreateAppTableForUser(ctx, actors["loner"], appID, tableRequestBody{
+	_, err := h.CreateAppTableForUser(ctx, actors["loner"], appID, TableRequestBody{
 		Name:    "badtype_table",
 		Columns: []config.ColumnConfig{{Name: "x", Type: "not-a-real-type"}},
 	}, "127.0.0.1")
@@ -107,7 +107,7 @@ func TestCreateAppTableForUser_NonWriterForbidden(t *testing.T) {
 	defer pool.Close()
 	ctx := context.Background()
 
-	_, err := h.CreateAppTableForUser(ctx, actors["appviewer"], appID, tableRequestBody{
+	_, err := h.CreateAppTableForUser(ctx, actors["appviewer"], appID, TableRequestBody{
 		Name:    "viewer_table",
 		Columns: []config.ColumnConfig{{Name: "x", Type: "text"}},
 	}, "127.0.0.1")

@@ -29,7 +29,7 @@ func TestGetAppSchemaForUser_TwoTablesWithAndWithoutPolicy(t *testing.T) {
 	defer pool.Close()
 	ctx := context.Background()
 
-	app, err := h.CreateAppForUser(ctx, actors["loner"], appRequestBody{
+	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{
 		Name:             uniqueAppName(t, "schema-app"),
 		AuthEmailEnabled: true,
 	}, "127.0.0.1")
@@ -37,7 +37,7 @@ func TestGetAppSchemaForUser_TwoTablesWithAndWithoutPolicy(t *testing.T) {
 		t.Fatalf("CreateAppForUser: %v", err)
 	}
 
-	openTable, err := h.CreateAppTableForUser(ctx, actors["loner"], app.ID, tableRequestBody{
+	openTable, err := h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
 		Name:    "open_table",
 		Columns: []config.ColumnConfig{{Name: "title", Type: "text", Required: true}},
 	}, "127.0.0.1")
@@ -45,7 +45,7 @@ func TestGetAppSchemaForUser_TwoTablesWithAndWithoutPolicy(t *testing.T) {
 		t.Fatalf("CreateAppTableForUser(open_table): %v", err)
 	}
 
-	policyTable, err := h.CreateAppTableForUser(ctx, actors["loner"], app.ID, tableRequestBody{
+	policyTable, err := h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
 		Name:    "secured_table",
 		RLS:     "policy",
 		Columns: []config.ColumnConfig{{Name: "owner_id", Type: "uuid"}, {Name: "note", Type: "text"}},
@@ -115,7 +115,7 @@ func TestGetAppSchemaForUser_EmptyAppReturnsEmptyTablesArray(t *testing.T) {
 	defer pool.Close()
 	ctx := context.Background()
 
-	app, err := h.CreateAppForUser(ctx, actors["loner"], appRequestBody{Name: uniqueAppName(t, "empty-app")}, "127.0.0.1")
+	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{Name: uniqueAppName(t, "empty-app")}, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("CreateAppForUser: %v", err)
 	}

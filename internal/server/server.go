@@ -174,7 +174,7 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 	// group's handlers use. Rate limited per-PAT-id (mcpserver.NewHandler),
 	// same rationale as the webhook route above.
 	mcpLimiter := dashboard.NewRateLimiter(120, time.Minute)
-	r.Handle("/dashboard/mcp", mcpserver.NewHandler(pool, mcpLimiter))
+	r.Handle("/dashboard/mcp", mcpserver.NewHandler(pool, dashH, mcpLimiter))
 
 	dh := docs.NewHandler(reg)
 	r.Get("/docs/", dh.HandleIndex)
