@@ -140,12 +140,12 @@ T15 depends on T10, T11, T12 (needs every tool registered to exercise the full P
 
 **Done when**:
 
-- [ ] A request with a valid PAT reaches the wrapped handler with `dashboard.UserFromContext(ctx)` returning the correct user
-- [ ] A request with no `Authorization` header, a non-`Bearer` scheme, or an unresolvable token all return `401` before the wrapped handler runs (assert via a spy handler that must never be called)
-- [ ] `TouchLastUsed` failure (simulate via a closed pool or similar) does not change the response — request still succeeds
-- [ ] Gate check passes: `go test ./internal/mcpserver/...`
+- [x] A request with a valid PAT reaches the wrapped handler with `dashboard.UserFromContext(ctx)` returning the correct user
+- [x] A request with no `Authorization` header, a non-`Bearer` scheme, or an unresolvable token all return `401` before the wrapped handler runs (assert via a spy handler that must never be called)
+- [x] `TouchLastUsed` failure (simulate via a closed pool or similar) does not change the response — request still succeeds
+- [x] Gate check passes: `go test ./internal/mcpserver/...`
 
-**Status**: Not Started
+**Status**: Complete
 
 **Tests**: integration
 **Gate**: quick

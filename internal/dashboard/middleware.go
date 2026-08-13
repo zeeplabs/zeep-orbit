@@ -23,6 +23,16 @@ func UserFromContext(ctx context.Context) (*DashboardUser, bool) {
 	return u, ok
 }
 
+// ContextWithUser injects user under the same context key RequireAuth uses,
+// so a value it sets is readable by UserFromContext regardless of which
+// middleware produced it. Exported so a sibling auth middleware in another
+// package (internal/mcpserver's RequirePAT) can inject the same shape
+// RequireAuth does — userCtxKey/dashCtxKey stay unexported, this is the one
+// interop seam (design.md: RequirePAT component).
+func ContextWithUser(ctx context.Context, user *DashboardUser) context.Context {
+	return context.WithValue(ctx, userCtxKey, user)
+}
+
 // Returns 401 JSON if missing, invalid, or expired.
 func RequireAuth(pool *db.Pool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

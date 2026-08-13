@@ -161,8 +161,8 @@ Both need the same thing: a stable, scoped, auditable set of tools an LLM can ca
 | Requirement ID | Story | Phase | Status |
 |---|---|---|---|
 | MCP-01 | P1 AC1: PAT created, shown once, stored hashed | Tasks (T1) | Verified |
-| MCP-02 | P1 AC2: valid PAT resolves to admin identity, authorizes as that admin | Tasks (T1) | Verified |
-| MCP-03 | P1 AC3: invalid/expired/revoked PAT rejected before tool execution | Tasks (T1) | Verified |
+| MCP-02 | P1 AC2: valid PAT resolves to admin identity, authorizes as that admin | Tasks (T1, T2) | Verified |
+| MCP-03 | P1 AC3: invalid/expired/revoked PAT rejected before tool execution | Tasks (T1, T2) | Verified |
 | MCP-04 | P1 AC4: revoked PAT rejected on next request | Tasks (T1) | Verified |
 | MCP-05 | P1 AC5: PAT create/revoke audited | Tasks (T13) | Pending |
 | MCP-19 | P1 (OAuth) AC1: authorization server metadata discoverable | Design | Pending |

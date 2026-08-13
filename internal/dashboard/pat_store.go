@@ -96,35 +96,46 @@ func CreatePAT(ctx context.Context, pool *db.Pool, userID, name, kind string, ex
 // rule: revocation and owning-user deletion must take effect immediately,
 // with no propagation delay.
 func ResolvePAT(ctx context.Context, pool *db.Pool, presentedToken string) (*DashboardUser, error) {
+	user, _, err := ResolvePATWithID(ctx, pool, presentedToken)
+	return user, err
+}
+
+// ResolvePATWithID is ResolvePAT plus the resolved PAT row's own id — used by
+// internal/mcpserver's RequirePAT, which needs the id both to fire
+// TouchLastUsed and (from T9 on) to key its per-PAT rate limiter. Kept as a
+// separate exported function rather than changing ResolvePAT's signature so
+// every existing ResolvePAT caller/test is unaffected; both share the same
+// validation logic below.
+func ResolvePATWithID(ctx context.Context, pool *db.Pool, presentedToken string) (*DashboardUser, string, error) {
 	tokenHash := hashPATToken(presentedToken)
 
 	var revokedAt, expiresAt *time.Time
-	var userID string
+	var patID, userID string
 	err := pool.QueryRow(ctx,
-		`SELECT user_id, revoked_at, expires_at FROM zeep_system.dashboard_pats WHERE token_hash = $1`,
+		`SELECT id, user_id, revoked_at, expires_at FROM zeep_system.dashboard_pats WHERE token_hash = $1`,
 		tokenHash,
-	).Scan(&userID, &revokedAt, &expiresAt)
+	).Scan(&patID, &userID, &revokedAt, &expiresAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrPATNotFound
+			return nil, "", ErrPATNotFound
 		}
-		return nil, fmt.Errorf("dashboard: resolve PAT: %w", err)
+		return nil, "", fmt.Errorf("dashboard: resolve PAT: %w", err)
 	}
 	if revokedAt != nil {
-		return nil, ErrPATRevoked
+		return nil, "", ErrPATRevoked
 	}
 	if expiresAt != nil && expiresAt.Before(time.Now()) {
-		return nil, ErrPATExpired
+		return nil, "", ErrPATExpired
 	}
 
 	user, err := GetUser(ctx, pool, userID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			return nil, ErrPATNotFound
+			return nil, "", ErrPATNotFound
 		}
-		return nil, fmt.Errorf("dashboard: resolve PAT owning user: %w", err)
+		return nil, "", fmt.Errorf("dashboard: resolve PAT owning user: %w", err)
 	}
-	return user, nil
+	return user, patID, nil
 }
 
 // ListPATs returns every PAT belonging to userID, newest first. Never
