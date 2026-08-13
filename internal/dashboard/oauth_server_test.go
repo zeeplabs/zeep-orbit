@@ -260,4 +260,74 @@ func TestAuthorize_ActiveSessionHandsOffToConsent(t *testing.T) {
 	if locURL.Query().Get("code_challenge") != "abc123" {
 		t.Fatalf("expected code_challenge to be preserved in the consent handoff, got %q", locURL.Query().Get("code_challenge"))
 	}
+	// P1-OAuth AC3 / design.md Risks & Concerns: the consent screen must
+	// name the requesting client, not just show the redirect target — the
+	// handoff carries the registered client's name for OAuthConsent.tsx to
+	// render.
+	if locURL.Query().Get("client_name") != client.Name {
+		t.Fatalf("expected client_name to be preserved in the consent handoff, got %q, want %q", locURL.Query().Get("client_name"), client.Name)
+	}
+}
+
+// TestDecide_DenyRedirectsWithAccessDeniedAndNoCodeIssued covers T19's
+// Done-when: denying redirects to redirect_uri with error=access_denied,
+// confirmed no code row was created (spec.md P1-OAuth edge case: admin
+// denies consent).
+func TestDecide_DenyRedirectsWithAccessDeniedAndNoCodeIssued(t *testing.T) {
+	pool := oauthClientTestPool(t)
+	h := NewOAuthHandler(pool)
+	client, err := RegisterClient(context.Background(), pool, RegisterClientInput{
+		Name:         "cli",
+		RedirectURIs: []string{"https://example.com/cb"},
+	})
+	if err != nil {
+		t.Fatalf("RegisterClient: %v", err)
+	}
+	admin, err := CreateUser(context.Background(), pool, "decide-deny@example.com", "e2e admin", "hash", "admin")
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	decideBody, _ := json.Marshal(map[string]any{
+		"client_id":             client.ID,
+		"redirect_uri":          "https://example.com/cb",
+		"code_challenge":        "abc123",
+		"code_challenge_method": "S256",
+		"state":                 "xyz",
+		"decision":              "deny",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/dashboard/oauth/authorize", bytes.NewReader(decideBody))
+	req = req.WithContext(ContextWithUser(req.Context(), admin))
+	rr := httptest.NewRecorder()
+
+	h.Decide(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("decide (deny): expected 200, got %d, body=%s", rr.Code, rr.Body.String())
+	}
+	var resp decideResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal decide response: %v", err)
+	}
+	redirectURL, err := url.Parse(resp.RedirectURL)
+	if err != nil {
+		t.Fatalf("parse redirect_url: %v", err)
+	}
+	if redirectURL.Query().Get("error") != "access_denied" {
+		t.Fatalf("expected error=access_denied in the deny redirect, got %q", resp.RedirectURL)
+	}
+	if redirectURL.Query().Get("code") != "" {
+		t.Fatalf("expected no code param on a denied consent, got %q", resp.RedirectURL)
+	}
+	if redirectURL.Query().Get("state") != "xyz" {
+		t.Fatalf("expected state to be preserved on the deny redirect, got %q", resp.RedirectURL)
+	}
+
+	var codeCount int
+	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM zeep_system.oauth_auth_codes WHERE client_id = $1`, client.ID).Scan(&codeCount); err != nil {
+		t.Fatalf("count oauth_auth_codes: %v", err)
+	}
+	if codeCount != 0 {
+		t.Fatalf("expected zero auth code rows after a deny, got %d", codeCount)
+	}
 }
