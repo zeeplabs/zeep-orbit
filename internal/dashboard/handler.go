@@ -1147,6 +1147,67 @@ func (h *Handler) DeleteApp(w http.ResponseWriter, r *http.Request) {
 	h.audit(r.Context(), user.ID, user.Email, "app.delete", "app", appID, existing.Name, nil, r.RemoteAddr)
 }
 
+// errLoadSystemConfigFailed / errAppTableInternalFailed distinguish
+// CreateAppTableForUser's internal (500-class) failure points, so the HTTP
+// handler keeps returning the same distinct public message each point
+// returned before the extraction.
+var (
+	errLoadSystemConfigFailed = errors.New("dashboard: load system config failed")
+	errAppTableInternalFailed = errors.New("dashboard: app table internal failure")
+)
+
+// CreateAppTableForUser is the shared operation behind CreateAppTable — the
+// exact validation/store/provisioner/audit path a MCP tool call
+// (orbit_create_table) will call into identically (mcp-server spec,
+// MCP-07/MCP-08/MCP-10). Extracted verbatim from the former CreateAppTable
+// handler body; behavior is unchanged.
+func (h *Handler) CreateAppTableForUser(ctx context.Context, user *DashboardUser, appID string, body tableRequestBody, ip string) (*AppTableRow, error) {
+	app, role, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, err
+	}
+	if !role.CanWrite() {
+		return nil, ErrForbidden
+	}
+
+	sysCfg, err := GetSystemConfig(ctx, h.pool)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errLoadSystemConfigFailed, err)
+	}
+	body.RLS = resolveTableRLS(body.RLS, sysCfg.RequireRLSDefault, app.AuthEmailEnabled)
+
+	table := AppTableRow{Name: body.Name, RLS: body.RLS, Columns: body.Columns, Indexes: body.Indexes}
+	if err := validateTableInput(table, app.AuthEmailEnabled, app.Tables); err != nil {
+		return nil, &ValidationError{msg: err.Error()}
+	}
+
+	// Provision the physical table before persisting its metadata row — if
+	// Apply fails, nothing should be left behind for the dashboard to think
+	// exists (a metadata row with no matching physical table blocks retrying
+	// with the same name and shows a table that errors on every operation).
+	cfg := buildAppConfig(app)
+	cfg.Tables = []config.TableConfig{{Name: table.Name, RLS: table.RLS, Columns: table.Columns, Indexes: table.Indexes}}
+	if _, err := h.prov.Apply(ctx, &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
+		// Returned raw: may be *provisioner.TypeChangeError, unwrapped by the
+		// caller via errors.As the same way the pre-extraction handler did.
+		return nil, err
+	}
+
+	row, err := InsertAppTable(ctx, h.pool, appID, table)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+	}
+
+	updated, _, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+	}
+	h.reg.Register(appRowToRegistryApp(updated))
+
+	h.audit(ctx, user.ID, user.Email, "app.table.create", "app_table", row.ID, app.Name+"/"+row.Name, nil, ip)
+	return &row, nil
+}
+
 // CreateAppTable handles POST /dashboard/api/apps/{id}/tables. Tables are
 // created one at a time — the request only ever describes a single table,
 // applied to the provisioner without touching the app's other tables.
@@ -1158,19 +1219,6 @@ func (h *Handler) CreateAppTable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appID := chi.URLParam(r, "id")
-	app, role, err := GetApp(r.Context(), h.pool, appID, user)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
-			return
-		}
-		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
-		return
-	}
-	if !role.CanWrite() {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
-		return
-	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
 	var body tableRequestBody
@@ -1178,50 +1226,30 @@ func (h *Handler) CreateAppTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sysCfg, err := GetSystemConfig(r.Context(), h.pool)
+	row, err := h.CreateAppTableForUser(r.Context(), user, appID, body, r.RemoteAddr)
 	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "failed to load system config", err)
-		return
-	}
-	body.RLS = resolveTableRLS(body.RLS, sysCfg.RequireRLSDefault, app.AuthEmailEnabled)
-
-	table := AppTableRow{Name: body.Name, RLS: body.RLS, Columns: body.Columns, Indexes: body.Indexes}
-	if err := validateTableInput(table, app.AuthEmailEnabled, app.Tables); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
-	}
-
-	// Provision the physical table before persisting its metadata row — if
-	// Apply fails, nothing should be left behind for the dashboard to think
-	// exists (a metadata row with no matching physical table blocks retrying
-	// with the same name and shows a table that errors on every operation).
-	cfg := buildAppConfig(app)
-	cfg.Tables = []config.TableConfig{{Name: table.Name, RLS: table.RLS, Columns: table.Columns, Indexes: table.Indexes}}
-	if _, err := h.prov.Apply(r.Context(), &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
+		var valErr *ValidationError
 		var typeErr *provisioner.TypeChangeError
-		if errors.As(err, &typeErr) {
+		switch {
+		case errors.Is(err, ErrNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		case errors.Is(err, ErrForbidden):
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		case errors.Is(err, errLoadSystemConfigFailed):
+			h.writeError(w, r, http.StatusInternalServerError, "failed to load system config", err)
+		case errors.As(err, &valErr):
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": valErr.Error()})
+		case errors.As(err, &typeErr):
 			h.writeError(w, r, http.StatusBadRequest, typeErr.Error(), err)
-		} else {
+		case errors.Is(err, errAppTableInternalFailed):
+			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		default:
 			h.writeError(w, r, http.StatusInternalServerError, "provisioning failed — check server logs for details", err)
 		}
 		return
 	}
 
-	row, err := InsertAppTable(r.Context(), h.pool, appID, table)
-	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
-		return
-	}
-
-	updated, _, err := GetApp(r.Context(), h.pool, appID, user)
-	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
-		return
-	}
-	h.reg.Register(appRowToRegistryApp(updated))
-
 	writeJSON(w, http.StatusCreated, row)
-	h.audit(r.Context(), user.ID, user.Email, "app.table.create", "app_table", row.ID, app.Name+"/"+row.Name, nil, r.RemoteAddr)
 }
 
 // UpdateAppTable handles PUT /dashboard/api/apps/{id}/tables/{tableId}. Table

@@ -227,11 +227,11 @@ T15 depends on T10, T11, T12 (needs every tool registered to exercise the full P
 
 **Done when**:
 
-- [ ] Every existing test for `CreateAppTable` passes unmodified
-- [ ] New test calls `CreateAppTableForUser` directly for success + the existing validation-failure cases (duplicate name, reserved column, bad type)
-- [ ] Gate check passes: `go test ./internal/dashboard/...`
+- [x] Every existing test for `CreateAppTable` passes unmodified
+- [x] New test calls `CreateAppTableForUser` directly for success + the existing validation-failure cases (duplicate name, reserved column, bad type)
+- [x] Gate check passes: `go test ./internal/dashboard/...`
 
-**Status**: Not Started
+**Status**: Complete
 
 **Tests**: integration
 **Gate**: quick
