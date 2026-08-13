@@ -3,6 +3,7 @@ import { Navigate, Outlet } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import ChangePasswordModal from "./ChangePasswordModal";
+import PersonalAccessTokens from "../components/PersonalAccessTokens";
 import { setLanguage } from "../lib/i18n";
 import { Icon } from "@/components/ui/icon";
 import { ConfirmDialog } from "@/components/patterns/ConfirmDialog";
@@ -57,6 +58,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const [showManagePATs, setShowManagePATs] = useState(false);
 
   const { data: brandConfig } = useQuery({
     queryKey: ["brand-config"],
@@ -121,6 +123,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
       user={user}
       currentLang={i18n.language}
       onChangePassword={() => setShowChangePassword(true)}
+      onManagePATs={() => setShowManagePATs(true)}
       onSaveLanguage={saveLanguage}
       onLogout={() => setShowLogoutDialog(true)}
       version={pkg.version}
@@ -144,6 +147,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
         user={user}
         currentLang={i18n.language}
         onChangePassword={() => setShowChangePassword(true)}
+        onManagePATs={() => setShowManagePATs(true)}
         onSaveLanguage={saveLanguage}
         onLogout={() => setShowLogoutDialog(true)}
         version={pkg.version}
@@ -164,6 +168,11 @@ export default function DashboardShell({ user }: { user: User | null }) {
       <ChangePasswordModal
         open={showChangePassword}
         onClose={() => setShowChangePassword(false)}
+      />
+
+      <PersonalAccessTokens
+        open={showManagePATs}
+        onClose={() => setShowManagePATs(false)}
       />
     </div>
   );

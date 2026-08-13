@@ -16,6 +16,7 @@ interface MobileNavProps {
   user: { email: string; name?: string; role: string }
   currentLang: string
   onChangePassword: () => void
+  onManagePATs: () => void
   onSaveLanguage: (lang: string) => void
   onLogout: () => void
   version?: string
@@ -31,6 +32,7 @@ export function MobileNav({
   user,
   currentLang,
   onChangePassword,
+  onManagePATs,
   onSaveLanguage,
   onLogout,
   version,
@@ -113,6 +115,7 @@ export function MobileNav({
               user={user}
               currentLang={currentLang}
               onChangePassword={() => { setSheetOpen(false); onChangePassword() }}
+              onManagePATs={() => { setSheetOpen(false); onManagePATs() }}
               onSaveLanguage={onSaveLanguage}
               onLogout={() => { setSheetOpen(false); onLogout() }}
               version={version}

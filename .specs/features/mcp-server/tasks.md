@@ -638,13 +638,13 @@ T15 depends on T10, T11, T12 (needs every tool registered to exercise the full P
 
 **Done when**:
 
-- [ ] Creating a token shows the plaintext exactly once in a dismissible dialog; after dismissal, no UI surface shows it again (only refetching `usePATs()` would, and that never includes the value)
-- [ ] Revoking a token prompts `ConfirmDialog`; confirming removes it from the list without a manual reload
-- [ ] Mutation failures surface via `toast.error`
-- [ ] All new strings present in `en.json` and `pt-BR.json`
-- [ ] Gate check passes: `cd internal/dashboard/ui && npx tsc -b && npm run build`
+- [x] Creating a token shows the plaintext exactly once in a dismissible dialog; after dismissal, no UI surface shows it again (only refetching `usePATs()` would, and that never includes the value)
+- [x] Revoking a token prompts `ConfirmDialog`; confirming removes it from the list without a manual reload
+- [x] Mutation failures surface via `toast.error`
+- [x] All new strings present in `en.json` and `pt-BR.json`
+- [x] Gate check passes: `cd internal/dashboard/ui && npx tsc -b && npm run build`
 
-**Status**: Not Started
+**Status**: Complete
 
 **Tests**: none — merge-forward to T16 (needs to be reachable through a real browser session to test create/list/revoke meaningfully)
 **Gate**: full
