@@ -187,6 +187,7 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 	r.With(oauthRegisterLimiter.Middleware).Post("/dashboard/oauth/register", oauthH.RegisterClient)
 	r.Get("/dashboard/oauth/authorize", oauthH.Authorize)
 	r.With(dashboard.RequireAuth(pool)).Post("/dashboard/oauth/authorize", oauthH.Decide)
+	r.Post("/dashboard/oauth/token", oauthH.Token)
 
 	dh := docs.NewHandler(reg)
 	r.Get("/docs/", dh.HandleIndex)

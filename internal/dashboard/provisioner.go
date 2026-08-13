@@ -558,6 +558,14 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_oauth_auth_codes_expires_at ON zeep_system.oauth_auth_codes(expires_at)`,
+		// family_id groups every dashboard_pats row descended from one OAuth
+		// grant (the original authorization_code exchange, plus every
+		// refresh rotation since) — mcp-server spec T20, so refresh-token-
+		// reuse detection can revoke the whole lineage in one UPDATE
+		// (design.md Tech Decisions: refresh token rotation + reuse
+		// detection), not just the single reused row.
+		`ALTER TABLE zeep_system.dashboard_pats ADD COLUMN IF NOT EXISTS family_id UUID`,
+		`CREATE INDEX IF NOT EXISTS idx_dashboard_pats_family_id ON zeep_system.dashboard_pats(family_id) WHERE family_id IS NOT NULL`,
 	}
 
 	for _, stmt := range stmts {

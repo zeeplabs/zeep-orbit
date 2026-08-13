@@ -196,3 +196,138 @@ func TouchLastUsed(ctx context.Context, pool *db.Pool, patID string) error {
 	}
 	return nil
 }
+
+// ErrRefreshTokenNotFound is returned by RotateOAuthRefreshToken when a
+// presented refresh token's hash matches no row.
+var ErrRefreshTokenNotFound = errors.New("dashboard: refresh token not found")
+
+// ErrRefreshTokenReused is returned by RotateOAuthRefreshToken when a
+// presented refresh token matches a row that was already superseded by an
+// earlier rotation (or otherwise revoked) — the standard refresh-token-
+// reuse signal (design.md Tech Decisions). The entire token family sharing
+// that row's family_id is revoked as a side effect before this error is
+// returned, so the caller doesn't need a separate revocation step.
+var ErrRefreshTokenReused = errors.New("dashboard: refresh token reused; token family revoked")
+
+// oauthAccessTokenTTL is how long an OAuth-issued access token (PAT
+// kind="oauth") is valid before Token's refresh_token grant (T20) must be
+// used to obtain a new one — short by design (design.md Data Models:
+// "set for ephemeral and oauth tokens"), unlike a manual PAT's no forced
+// expiry.
+const oauthAccessTokenTTL = time.Hour
+
+// CreateOAuthAccessToken mints a kind="oauth" PAT row for oauthClientID,
+// stamped with familyID — the lineage every row descended from the same
+// OAuth grant (the original code exchange, plus every refresh rotation
+// since) shares, so RotateOAuthRefreshToken can revoke the whole family in
+// one UPDATE on reuse detection. Pass familyID="" for a brand-new grant (a
+// fresh family_id is generated); pass the existing family's id when minting
+// a rotated replacement. Returns the plaintext access token exactly once,
+// same one-way-hash contract as CreatePAT.
+func CreateOAuthAccessToken(ctx context.Context, pool *db.Pool, userID, oauthClientID, familyID string, expiresAt time.Time) (string, PATRow, error) {
+	token, err := generateToken()
+	if err != nil {
+		return "", PATRow{}, fmt.Errorf("dashboard: generate oauth access token: %w", err)
+	}
+	tokenHash := hashPATToken(token)
+
+	var family *string
+	if familyID != "" {
+		family = &familyID
+	}
+
+	var row PATRow
+	err = pool.QueryRow(ctx,
+		`INSERT INTO zeep_system.dashboard_pats (user_id, name, token_hash, kind, oauth_client_id, family_id, expires_at)
+		 VALUES ($1, 'oauth', $2, 'oauth', $3, COALESCE($4, gen_random_uuid()), $5)
+		 RETURNING id, user_id, name, kind, oauth_client_id, expires_at, revoked_at, last_used_at, created_at`,
+		userID, tokenHash, oauthClientID, family, expiresAt,
+	).Scan(&row.ID, &row.UserID, &row.Name, &row.Kind, &row.OAuthClientID, &row.ExpiresAt, &row.RevokedAt, &row.LastUsedAt, &row.CreatedAt)
+	if err != nil {
+		return "", PATRow{}, fmt.Errorf("dashboard: create oauth access token: %w", err)
+	}
+	return token, row, nil
+}
+
+// SetRefreshToken generates a new refresh token (via generateToken, same
+// entropy source every other token in this design uses) and stores its
+// hash on patID's row — the "follow-up call" design.md's OAuthServer
+// component describes attaching a refresh token onto the access-token PAT
+// row CreateOAuthAccessToken just created. Returns the plaintext exactly
+// once.
+func SetRefreshToken(ctx context.Context, pool *db.Pool, patID string) (string, error) {
+	token, err := generateToken()
+	if err != nil {
+		return "", fmt.Errorf("dashboard: generate refresh token: %w", err)
+	}
+	tokenHash := hashPATToken(token)
+
+	if _, err := pool.Exec(ctx,
+		`UPDATE zeep_system.dashboard_pats SET refresh_token_hash = $1 WHERE id = $2`,
+		tokenHash, patID,
+	); err != nil {
+		return "", fmt.Errorf("dashboard: set refresh token for PAT %s: %w", patID, err)
+	}
+	return token, nil
+}
+
+// RotateOAuthRefreshToken implements OAuth 2.1 refresh-token rotation with
+// reuse detection (design.md Tech Decisions). Looks up presentedRefreshToken
+// by hash:
+//   - unknown hash -> ErrRefreshTokenNotFound.
+//   - hash belongs to a row that's already revoked (superseded by an
+//     earlier rotation, or otherwise revoked) -> this is reuse of a leaked
+//     or replayed refresh token; every row sharing that family_id is
+//     revoked (the access token issued alongside it, and any tokens minted
+//     from later rotations), then ErrRefreshTokenReused is returned.
+//   - hash belongs to the current, unrevoked row -> standard rotation: that
+//     row is revoked (superseded), and a brand-new PAT row is minted in the
+//     same family with fresh access+refresh tokens.
+func RotateOAuthRefreshToken(ctx context.Context, pool *db.Pool, presentedRefreshToken string) (accessToken, refreshToken string, row PATRow, err error) {
+	tokenHash := hashPATToken(presentedRefreshToken)
+
+	var patID, userID string
+	var oauthClientID, familyID *string
+	var revokedAt *time.Time
+	err = pool.QueryRow(ctx,
+		`SELECT id, user_id, oauth_client_id, family_id, revoked_at FROM zeep_system.dashboard_pats WHERE refresh_token_hash = $1`,
+		tokenHash,
+	).Scan(&patID, &userID, &oauthClientID, &familyID, &revokedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", "", PATRow{}, ErrRefreshTokenNotFound
+		}
+		return "", "", PATRow{}, fmt.Errorf("dashboard: rotate refresh token lookup: %w", err)
+	}
+	if familyID == nil {
+		return "", "", PATRow{}, fmt.Errorf("dashboard: oauth PAT %s has no family_id", patID)
+	}
+
+	if revokedAt != nil {
+		if _, revokeErr := pool.Exec(ctx,
+			`UPDATE zeep_system.dashboard_pats SET revoked_at = now() WHERE family_id = $1 AND revoked_at IS NULL`,
+			*familyID,
+		); revokeErr != nil {
+			return "", "", PATRow{}, fmt.Errorf("dashboard: revoke oauth family %s: %w", *familyID, revokeErr)
+		}
+		return "", "", PATRow{}, ErrRefreshTokenReused
+	}
+
+	if _, err := pool.Exec(ctx, `UPDATE zeep_system.dashboard_pats SET revoked_at = now() WHERE id = $1`, patID); err != nil {
+		return "", "", PATRow{}, fmt.Errorf("dashboard: supersede oauth PAT %s: %w", patID, err)
+	}
+
+	clientID := ""
+	if oauthClientID != nil {
+		clientID = *oauthClientID
+	}
+	newAccessToken, newRow, err := CreateOAuthAccessToken(ctx, pool, userID, clientID, *familyID, time.Now().Add(oauthAccessTokenTTL))
+	if err != nil {
+		return "", "", PATRow{}, err
+	}
+	newRefreshToken, err := SetRefreshToken(ctx, pool, newRow.ID)
+	if err != nil {
+		return "", "", PATRow{}, err
+	}
+	return newAccessToken, newRefreshToken, newRow, nil
+}

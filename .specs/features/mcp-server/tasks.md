@@ -549,13 +549,13 @@ T15 depends on T10, T11, T12 (needs every tool registered to exercise the full P
 
 **Done when**:
 
-- [ ] Valid code + matching PKCE verifier exchanges for an access token that `ResolvePAT` resolves to the consenting admin (same identity path a manual PAT resolves through)
-- [ ] Reused code, expired code, or mismatched PKCE verifier all return `400 invalid_grant`, no token issued
-- [ ] Valid refresh token exchange issues a new access+refresh pair and invalidates the old refresh token
-- [ ] Reusing an already-rotated refresh token is rejected AND revokes the access token issued alongside it (confirm a subsequent `orbit_list_apps` call with that access token now fails)
-- [ ] Gate check passes: `go test ./internal/dashboard/...`
+- [x] Valid code + matching PKCE verifier exchanges for an access token that `ResolvePAT` resolves to the consenting admin (same identity path a manual PAT resolves through)
+- [x] Reused code, expired code, or mismatched PKCE verifier all return `400 invalid_grant`, no token issued
+- [x] Valid refresh token exchange issues a new access+refresh pair and invalidates the old refresh token
+- [x] Reusing an already-rotated refresh token is rejected AND revokes the access token issued alongside it (confirm a subsequent `orbit_list_apps` call with that access token now fails)
+- [x] Gate check passes: `go test ./internal/dashboard/...`
 
-**Status**: Not Started
+**Status**: Complete
 
 **Tests**: integration
 **Gate**: quick

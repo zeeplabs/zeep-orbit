@@ -8,11 +8,14 @@
 package dashboard
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
@@ -293,6 +296,124 @@ func (h *OAuthHandler) Decide(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeOAuthError(w, http.StatusBadRequest, "invalid_request")
 	}
+}
+
+// tokenResponse is OAuth 2.1's standard successful token response shape.
+type tokenResponse struct {
+	AccessToken  string `json:"access_token"`
+	TokenType    string `json:"token_type"`
+	ExpiresIn    int    `json:"expires_in"`
+	RefreshToken string `json:"refresh_token"`
+}
+
+// pkceVerify implements RFC 7636's S256 check: codeChallenge must equal
+// BASE64URL(SHA256(codeVerifier)) — the only method this server advertises
+// (metadata's code_challenge_methods_supported, GetMetadata above).
+func pkceVerify(codeChallenge, codeVerifier string) bool {
+	sum := sha256.Sum256([]byte(codeVerifier))
+	return base64.RawURLEncoding.EncodeToString(sum[:]) == codeChallenge
+}
+
+// Token handles POST /dashboard/oauth/token (spec MCP-22/MCP-23/MCP-24).
+// Standard OAuth form-encoded body (application/x-www-form-urlencoded),
+// per RFC 6749 — the content type every real OAuth client (MCP or
+// otherwise) sends to a token endpoint. Dispatches on grant_type;
+// unsupported values are rejected without touching any store.
+func (h *OAuthHandler) Token(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
+	if err := r.ParseForm(); err != nil {
+		writeOAuthError(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+
+	switch r.FormValue("grant_type") {
+	case "authorization_code":
+		h.tokenAuthorizationCode(w, r)
+	case "refresh_token":
+		h.tokenRefresh(w, r)
+	default:
+		writeOAuthError(w, http.StatusBadRequest, "unsupported_grant_type")
+	}
+}
+
+// tokenAuthorizationCode implements the authorization_code grant: consumes
+// the presented code exactly once (ConsumeAuthCode, T18 — rejects
+// unknown/already-used/expired codes as invalid_grant, no token issued),
+// checks the PKCE verifier against the code's stored challenge, and mints
+// a fresh access+refresh token pair resolvable through the same
+// ResolvePAT path a manually-created PAT uses (spec MCP-23). The code is
+// consumed before PKCE is checked — its single-use guarantee holds
+// regardless of whether the exchange ultimately succeeds, so a verifier
+// mismatch can't be retried against the same code (matches "exchangeable
+// exactly once" from spec.md P1-OAuth AC4).
+func (h *OAuthHandler) tokenAuthorizationCode(w http.ResponseWriter, r *http.Request) {
+	code := r.FormValue("code")
+	verifier := r.FormValue("code_verifier")
+	if code == "" || verifier == "" {
+		writeOAuthError(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+
+	authCode, err := ConsumeAuthCode(r.Context(), h.pool, code)
+	if err != nil {
+		writeOAuthError(w, http.StatusBadRequest, "invalid_grant")
+		return
+	}
+
+	if redirectURI := r.FormValue("redirect_uri"); redirectURI != "" && redirectURI != authCode.RedirectURI {
+		writeOAuthError(w, http.StatusBadRequest, "invalid_grant")
+		return
+	}
+	if !pkceVerify(authCode.CodeChallenge, verifier) {
+		writeOAuthError(w, http.StatusBadRequest, "invalid_grant")
+		return
+	}
+
+	accessToken, row, err := CreateOAuthAccessToken(r.Context(), h.pool, authCode.UserID, authCode.ClientID, "", time.Now().Add(oauthAccessTokenTTL))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	refreshToken, err := SetRefreshToken(r.Context(), h.pool, row.ID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, tokenResponse{
+		AccessToken:  accessToken,
+		TokenType:    "Bearer",
+		ExpiresIn:    int(oauthAccessTokenTTL.Seconds()),
+		RefreshToken: refreshToken,
+	})
+}
+
+// tokenRefresh implements the refresh_token grant: rotates the presented
+// refresh token via RotateOAuthRefreshToken (T20's reuse-detection +
+// rotation primitive), returning a fresh access+refresh pair on success or
+// invalid_grant on any failure — including reuse of an already-rotated
+// token, which additionally revokes the whole token family as a side
+// effect of RotateOAuthRefreshToken itself (spec P1-OAuth AC7, design.md
+// Error Handling Strategy).
+func (h *OAuthHandler) tokenRefresh(w http.ResponseWriter, r *http.Request) {
+	presented := r.FormValue("refresh_token")
+	if presented == "" {
+		writeOAuthError(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+
+	accessToken, refreshToken, _, err := RotateOAuthRefreshToken(r.Context(), h.pool, presented)
+	if err != nil {
+		writeOAuthError(w, http.StatusBadRequest, "invalid_grant")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, tokenResponse{
+		AccessToken:  accessToken,
+		TokenType:    "Bearer",
+		ExpiresIn:    int(oauthAccessTokenTTL.Seconds()),
+		RefreshToken: refreshToken,
+	})
 }
 
 // oauthRedirectURIRegistered reports whether redirectURI exactly matches
