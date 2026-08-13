@@ -169,12 +169,12 @@ T15 depends on T10, T11, T12 (needs every tool registered to exercise the full P
 
 **Done when**:
 
-- [ ] Every builder's output, given the same inputs used in `policyTemplates.ts`'s own doc comments (e.g. `BuildOwnerOnlyPolicies(["select","update"], []string{"member"})`), matches the TS function's documented output field-for-field (column/operator/value_source/value, roles, generated name)
-- [ ] `List()` returns the same 6 template ids in the same order as `TEMPLATE_DEFINITIONS`
-- [ ] A comment at the top of the file points to `policyTemplates.ts` by path and states explicitly: "keep these in sync manually — see design.md Risks & Concerns" (the drift-prevention documentation the design flagged as a manual obligation)
-- [ ] Gate check passes: `go test ./internal/policytemplates/...`
+- [x] Every builder's output, given the same inputs used in `policyTemplates.ts`'s own doc comments (e.g. `BuildOwnerOnlyPolicies(["select","update"], []string{"member"})`), matches the TS function's documented output field-for-field (column/operator/value_source/value, roles, generated name)
+- [x] `List()` returns the same 6 template ids in the same order as `TEMPLATE_DEFINITIONS`
+- [x] A comment at the top of the file points to `policyTemplates.ts` by path and states explicitly: "keep these in sync manually — see design.md Risks & Concerns" (the drift-prevention documentation the design flagged as a manual obligation)
+- [x] Gate check passes: `go test ./internal/policytemplates/...`
 
-**Status**: Not Started
+**Status**: Complete
 
 **Tests**: unit
 **Gate**: quick
