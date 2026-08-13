@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/zeeplabs/zeep-orbit/internal/auth"
+	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 	"github.com/zeeplabs/zeep-orbit/internal/query"
 	"github.com/zeeplabs/zeep-orbit/internal/registry"
@@ -25,9 +26,16 @@ func NewHandler(pool *db.Pool, reg *registry.Registry) *Handler {
 	return &Handler{pool: pool, reg: reg}
 }
 
-// Returns ok=false when RLS is enabled but no authenticated user is in context.
+// resolveOwner returns the owner_id value to write/filter with. It reports
+// ok=false when the table needs an owner_id column but no authenticated user
+// is in context. The returned ownerID is always the real user.ID for
+// "owner"/"enabled"/"policy" tables (config.HasOwnerColumn) — callers that
+// only want the automatic list/get/update/delete filter must additionally
+// check config.AutoScopesByOwner(table.RLS) before passing this value to a
+// query.Build* filter argument; query.BuildInsert always receives it as-is,
+// since owner_id must be populated on every INSERT regardless of RLS mode.
 func resolveOwner(ctx context.Context, table *registry.Table) (ownerID string, ok bool) {
-	if table.RLS != "owner" && table.RLS != "enabled" {
+	if !config.HasOwnerColumn(table.RLS) {
 		return "", true
 	}
 	user, hasUser := auth.UserFromContext(ctx)
@@ -35,6 +43,17 @@ func resolveOwner(ctx context.Context, table *registry.Table) (ownerID string, o
 		return "", false
 	}
 	return user.ID, true
+}
+
+// filterOwner returns ownerID unchanged when table.RLS auto-scopes by owner
+// ("owner"/"enabled"), or "" otherwise — including "policy" mode, where
+// visibility is left entirely to native Postgres table policies and no
+// owner_id filter is ever applied by the application.
+func filterOwner(ownerID string, table *registry.Table) string {
+	if config.AutoScopesByOwner(table.RLS) {
+		return ownerID
+	}
+	return ""
 }
 
 // rlsClaimsFromContext builds the claims WithRLSContext exposes as session
@@ -78,7 +97,7 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	q, err := query.BuildList(app.SchemaName, tableName, table, params, ownerID, h.reg.SystemConfig().SoftDeleteEnabled)
+	q, err := query.BuildList(app.SchemaName, tableName, table, params, filterOwner(ownerID, table), h.reg.SystemConfig().SoftDeleteEnabled)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -200,7 +219,7 @@ func (h *Handler) HandleGetByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	q := query.BuildGetByID(app.SchemaName, tableName, id, ownerID)
+	q := query.BuildGetByID(app.SchemaName, tableName, id, filterOwner(ownerID, table))
 
 	var row map[string]any
 	err := h.pool.WithRLSContext(r.Context(), rlsClaimsFromContext(r.Context()), h.reg.SystemConfig().StatementTimeoutMs, func(qx db.Querier) error {
@@ -256,7 +275,7 @@ func (h *Handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	q, err := query.BuildUpdate(app.SchemaName, tableName, table, id, body, ownerID)
+	q, err := query.BuildUpdate(app.SchemaName, tableName, table, id, body, filterOwner(ownerID, table))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -310,7 +329,7 @@ func (h *Handler) HandleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	q := query.BuildDelete(app.SchemaName, tableName, id, ownerID, h.reg.SystemConfig().SoftDeleteEnabled)
+	q := query.BuildDelete(app.SchemaName, tableName, id, filterOwner(ownerID, table), h.reg.SystemConfig().SoftDeleteEnabled)
 
 	var affected int64
 	err := h.pool.WithRLSContext(r.Context(), rlsClaimsFromContext(r.Context()), h.reg.SystemConfig().StatementTimeoutMs, func(qx db.Querier) error {

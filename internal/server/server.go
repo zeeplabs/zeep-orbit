@@ -154,11 +154,18 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 	// (see design.md); registered with HandleFunc (not a verb-specific
 	// method) since the webhook's configured HTTP method is a per-webhook
 	// setting the handler itself checks, not a routing-level constraint.
-	// Per-IP rate limited (webhookLimiter) since the webhookId is visible in
-	// the dashboard URL and this route sits ahead of the token check.
+	// Rate limited per webhookId (not per source IP): this service runs
+	// multiple replicas behind a non-sticky load balancer, so remoteIP would
+	// be the LB's address, sharing one budget across every tenant's webhooks
+	// on that replica — a single noisy provider would 429 everyone else's
+	// deliveries too. Keying by webhookId (visible in the URL, ahead of the
+	// token check) scopes the budget to one webhook subscription instead.
 	webhookH := NewWebhookHandler(pool, reg)
 	webhookLimiter := dashboard.NewRateLimiter(120, time.Minute)
-	r.With(webhookLimiter.Middleware).HandleFunc("/hooks/{webhookId}/{token}", webhookH.HandleWebhookDelivery)
+	webhookLimiterMW := webhookLimiter.MiddlewareKeyedBy(func(r *http.Request) string {
+		return chi.URLParam(r, "webhookId")
+	})
+	r.With(webhookLimiterMW).HandleFunc("/hooks/{webhookId}/{token}", webhookH.HandleWebhookDelivery)
 
 	dh := docs.NewHandler(reg)
 	r.Get("/docs/", dh.HandleIndex)
@@ -188,6 +195,7 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Get("/api/apps/{id}/webhooks", dashH.ListWebhooks)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/apps/{id}/webhooks", dashH.CreateWebhook)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/apps/{id}/webhooks/{webhookId}", dashH.GetWebhook)
+		r.With(dashboard.RequireAuth(pool)).Patch("/api/apps/{id}/webhooks/{webhookId}", dashH.UpdateWebhook)
 		r.With(dashboard.RequireAuth(pool)).Delete("/api/apps/{id}/webhooks/{webhookId}", dashH.DeleteWebhook)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/apps/{id}/webhooks/{webhookId}/rotate-token", dashH.RotateWebhookToken)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/apps/{id}/webhooks/{webhookId}/mappings", dashH.ListEventMappings)
@@ -376,7 +384,7 @@ func logMiddleware(logger *zap.Logger, buf *dashboard.RingBuffer) func(http.Hand
 				ContentType: contentType,
 			}
 
-			if isTextContent(contentType) && !isWebhookPath(r.URL.Path) {
+			if isTextContent(contentType) && !isWebhookPath(r.URL.Path) && !isDashboardWebhookTokenPath(r.URL.Path) {
 				if cw.body.Len() > 0 {
 					entry.ResBody = cw.body.String()
 				}
@@ -396,6 +404,32 @@ func logMiddleware(logger *zap.Logger, buf *dashboard.RingBuffer) func(http.Hand
 
 func isWebhookPath(path string) bool {
 	return strings.HasPrefix(path, "/hooks/")
+}
+
+// isDashboardWebhookTokenPath reports whether path is one of the dashboard's
+// webhook subscription CRUD endpoints (list/create/get/update/delete/rotate)
+// whose response body embeds the plaintext webhook token (toWebhookResponse)
+// — never the mappings/deliveries sub-resources, which carry no token. These
+// must never land in request/response log capture: a global auditor role can
+// read /dashboard/api/logs despite webhookRBACGate denying it direct webhook
+// access (this is the exact regression the B1 fix closed for the public
+// /hooks/ route; dashboard API responses need the same exclusion).
+func isDashboardWebhookTokenPath(path string) bool {
+	parts := strings.Split(path, "/")
+	// ["", "dashboard", "api", "apps", "{id}", "webhooks", ...]
+	if len(parts) < 6 || parts[1] != "dashboard" || parts[2] != "api" || parts[3] != "apps" || parts[5] != "webhooks" {
+		return false
+	}
+	switch len(parts) {
+	case 6: // .../webhooks (list, create)
+		return true
+	case 7: // .../webhooks/{webhookId} (get, update, delete)
+		return true
+	case 8: // .../webhooks/{webhookId}/rotate-token
+		return parts[7] == "rotate-token"
+	default:
+		return false
+	}
 }
 
 func redactWebhookToken(path string) string {

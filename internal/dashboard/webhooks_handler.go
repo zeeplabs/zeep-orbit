@@ -152,6 +152,62 @@ func (h *Handler) CreateWebhook(w http.ResponseWriter, r *http.Request) {
 	h.audit(r.Context(), user.ID, user.Email, "webhook.create", "webhook", row.ID, app.Name+"/"+row.Name, nil, r.RemoteAddr)
 }
 
+type updateWebhookRequest struct {
+	Name          string `json:"name"`
+	Method        string `json:"method"`
+	EventTypePath string `json:"event_type_path"`
+	EventIDPath   string `json:"event_id_path"`
+}
+
+// UpdateWebhook handles PATCH /dashboard/api/apps/{id}/webhooks/{webhookId}.
+// Full-replace: name, method, and both event-shape paths must all be sent
+// (mirrors CreateWebhook's required-fields shape, not a partial patch).
+// Token, status, and captured_sample are untouched.
+func (h *Handler) UpdateWebhook(w http.ResponseWriter, r *http.Request) {
+	appID := chi.URLParam(r, "id")
+	app, ok := h.webhookRBACGate(w, r, appID)
+	if !ok {
+		return
+	}
+	webhookID := chi.URLParam(r, "webhookId")
+	wh, ok := h.getScopedWebhook(w, r, appID, webhookID)
+	if !ok {
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
+	var body updateWebhookRequest
+	if !h.decodeJSONBody(w, r, &body) {
+		return
+	}
+	if body.Name == "" || body.EventTypePath == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name and event_type_path are required"})
+		return
+	}
+
+	updated, err := UpdateWebhook(r.Context(), h.pool, wh.ID, UpdateWebhookInput{
+		Name:          body.Name,
+		Method:        body.Method,
+		EventTypePath: body.EventTypePath,
+		EventIDPath:   body.EventIDPath,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidWebhookMethod):
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "method must be one of GET, POST, PUT, PATCH"})
+		case errors.Is(err, ErrWebhookNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "webhook not found"})
+		default:
+			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, toWebhookResponse(updated))
+	user, _ := UserFromContext(r.Context())
+	h.audit(r.Context(), user.ID, user.Email, "webhook.update", "webhook", wh.ID, app.Name+"/"+updated.Name, nil, r.RemoteAddr)
+}
+
 // ListWebhooks handles GET /dashboard/api/apps/{id}/webhooks.
 func (h *Handler) ListWebhooks(w http.ResponseWriter, r *http.Request) {
 	appID := chi.URLParam(r, "id")
@@ -382,7 +438,7 @@ func (h *Handler) DeleteEventMapping(w http.ResponseWriter, r *http.Request) {
 	}
 	mappingID := chi.URLParam(r, "mappingId")
 
-	if err := DeleteEventMapping(r.Context(), h.pool, mappingID); err != nil {
+	if err := DeleteEventMapping(r.Context(), h.pool, wh.ID, mappingID); err != nil {
 		if errors.Is(err, ErrMappingNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "mapping not found"})
 			return

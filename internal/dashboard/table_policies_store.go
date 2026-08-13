@@ -138,10 +138,8 @@ func CreateTablePolicy(ctx context.Context, pool *db.Pool, appID, schemaName, ta
 		return TablePolicyRow{}, fmt.Errorf("dashboard: create policy count existing: %w", err)
 	}
 	if existingCount == 0 {
-		if _, err := tx.Exec(ctx,
-			fmt.Sprintf(`ALTER TABLE %q.%q ENABLE ROW LEVEL SECURITY`, schemaName, tableName),
-		); err != nil {
-			return TablePolicyRow{}, fmt.Errorf("dashboard: enable row level security on %q.%q: %w", schemaName, tableName, err)
+		if err := provisioner.EnsureRowLevelSecurity(ctx, tx, schemaName, tableName); err != nil {
+			return TablePolicyRow{}, err
 		}
 	}
 

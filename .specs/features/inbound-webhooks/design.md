@@ -46,7 +46,7 @@ graph TD
 | `table_policies_store.go` CRUD shape | `internal/dashboard/table_policies_store.go` | Structural template for `webhook_subscriptions`/`webhook_event_mappings` stores — catalog row + `created_by`/`updated_by`, same error-sentinel pattern (`ErrPolicyNotFound`-style). |
 | Provisioner migration pattern | `internal/dashboard/provisioner.go` (`CREATE TABLE IF NOT EXISTS` + `ALTER TABLE ADD COLUMN IF NOT EXISTS`) | New catalog tables added the same way, no versioned migration framework introduced. |
 | Periodic purge ticker | `cmd/zeep/main.go:116-134` | Extended with one more call (`PurgeExpiredWebhookDeliveries`) inside the existing 6-hour tick — no new goroutine. |
-| Random token generation | `internal/dashboard/handler.go:1794` (`generateToken`, `crypto/rand`, 32 bytes) | Reused verbatim for the webhook token; hashing before storage is new (see Tech Decisions). |
+| Random token generation | `internal/dashboard/handler.go:1794` (`generateToken`, `crypto/rand`, 32 bytes) | Reused verbatim for the webhook token; ~~hashing before storage is new~~ storing it AES-256-GCM encrypted (reusing `internal/crypto`, already used for GitHub App/S3 config secrets) is new — see Tech Decisions. |
 
 ### Integration Points
 
@@ -65,7 +65,7 @@ graph TD
 - **Purpose**: CRUD for webhook subscriptions and their per-event-type mappings.
 - **Location**: `internal/dashboard/webhooks_store.go`
 - **Interfaces**:
-  - `CreateWebhook(ctx, pool, input CreateWebhookInput) (WebhookRow, plaintextToken string, error)` — generates token, stores its SHA-256 hash only.
+  - `CreateWebhook(ctx, pool, input CreateWebhookInput) (WebhookRow, plaintextToken string, error)` — generates token, ~~stores its SHA-256 hash only~~ stores it AES-256-GCM encrypted (superseded post-launch — see Tech Decisions — so the dashboard can always decrypt and display the full callback URL, not just once at creation).
   - `GetWebhookByID(ctx, pool, appID, webhookID string) (WebhookRow, error)`
   - `ListWebhooks(ctx, pool, appID string) ([]WebhookRow, error)`
   - `StoreCapturedSample(ctx, pool, webhookID string, payload []byte) error` — capture-mode overwrite.
@@ -136,7 +136,7 @@ interface WebhookSubscription {
   app_id: string
   name: string
   method: "GET" | "POST" | "PUT" | "PATCH"
-  token_hash: string        // sha256 hex, never the plaintext token
+  token_secret: string      // AES-256-GCM ciphertext, base64 (superseded: was token_hash/sha256 hex — see Tech Decisions)
   event_type_path: string   // dot-path into payload, e.g. "eventType"
   event_id_path: string | null  // dot-path used for dedup, optional
   status: "capture" | "active"
@@ -204,6 +204,8 @@ interface WebhookDelivery {
 | Any other DB write failure | `500`, delivery logged as `write_error`, generic message returned | Same as above. |
 | Call to a deleted webhook's URL | `404` | Provider sees plain `404`; no delivery logged (subscription itself is gone from the routable set). |
 | Activate with zero mappings | `400` from the dashboard handler, `ErrNoMappings` | App owner sees a validation error in the dashboard, not a silent no-op activation. |
+| Provider verification handshake (**added post-launch**, WEBHOOK-24): payload carries a top-level non-empty string field named `challenge` (Slack Events API convention, and others following it) | `200`, echoes `{"challenge": "..."}` verbatim, delivery logged as `verification_challenge`, bypasses capture/mapping entirely regardless of webhook status | Provider's URL-verification step succeeds instead of failing "challenge_failed"; app owner sees the handshake in the delivery log. Only covers the top-level-`challenge`-field convention — variants like Facebook's `hub.challenge` GET query string are explicitly out of scope. |
+| Ambiguous match key (**added post-launch**, found in review): update/delete's match-key column resolves to more than one row | `409`, delivery logged as `ambiguous_match`, no write applied | Provider sees a clear conflict instead of an arbitrary row being silently written/deleted; app owner is told the match column isn't actually unique for this table. |
 
 ---
 
@@ -212,7 +214,7 @@ interface WebhookDelivery {
 | Concern | Location (file:line) | Impact | Mitigation |
 |---|---|---|---|
 | Webhook writes require the target table's `table_policies` to explicitly permit role `"webhook"` — easy to forget, silent `write_error` otherwise | `internal/dashboard/table_policies_store.go` (RLS role model) | App owner maps fields, activates, then every real call 500s until they separately edit the table's RLS policy | Dashboard mapping editor checks the target table's current policies when a mapping is saved and shows an inline warning if `"webhook"` isn't yet permitted — non-blocking, but visible before activation. |
-| No existing bearer-token-hash pattern in the codebase (existing tokens are JWTs verified by signature, not raw secrets compared by value) | `internal/dashboard/handler.go:1794`, `internal/dashboard/app_tokens_store.go:15` | First hashed-secret-at-rest pattern in this codebase; a future reviewer might assume plaintext storage is the convention | Documented explicitly in Tech Decisions below; `token_hash` column name makes the convention obvious at the schema level. |
+| ~~No existing bearer-token-hash pattern in the codebase~~ Superseded: token storage moved from a one-way SHA-256 hash to reversible AES-256-GCM encryption (see Tech Decisions) so the dashboard can always decrypt and show the full callback URL, not just once at creation/rotation | `internal/crypto/aes.go`, `internal/dashboard/webhooks_store.go` | DB+encryption-key compromise makes tokens recoverable (vs. the original hash design, which was irreversible even then) — an explicit, user-confirmed security-posture tradeoff, not an oversight | Encrypted under a dedicated `WEBHOOK_TOKEN_ENCRYPTION_KEY` (falls back to `DASHBOARD_BOOTSTRAP_SECRET`, documented in `README.md`), independent from `GOOGLE_OAUTH_ENCRYPTION_KEY` so rotating one doesn't invalidate the other's ciphertexts. `DecryptWebhookToken`/`VerifyWebhookToken` treat a decrypt failure (e.g. a pre-migration legacy hash) as "rotate the token," never a hard failure. |
 | Fully synchronous delivery handling — no queue, no retry on our side | Confirmed: no queue/worker infra exists in the repo today | A burst of concurrent deliveries is bound by normal request-level DB pool concurrency; very high-throughput providers aren't well served | Accepted for V1 given expected traffic (admin-event-style providers, not high-frequency streams); revisit with an async/queue design only if real usage data shows it's needed. |
 | Match-key lookup and the subsequent update/delete run as two statements inside one `WithRLSContext` transaction | New: `internal/server/webhook_handler.go` | Two concurrent deliveries for the same match-key value could race between lookup and write | Both statements run inside the same transaction opened by `WithRLSContext`; Postgres's normal transaction isolation bounds this to the same level of risk the generic `HandleUpdate`/`HandleDelete` paths already accept — not a new class of race introduced by this feature. |
 
@@ -222,7 +224,7 @@ interface WebhookDelivery {
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| Token storage | SHA-256 hash of a 32-byte `crypto/rand` token, never the plaintext, after creation/rotation | Token is high-entropy (256 bits), not a human password — a slow hash (bcrypt, used for user passwords at `internal/auth/handler.go:97`) buys nothing here and adds latency to every inbound call; SHA-256 + constant-time compare is the right tool for a random secret. |
+| Token storage | ~~SHA-256 hash of a 32-byte `crypto/rand` token, never the plaintext, after creation/rotation~~ **Superseded post-launch**: AES-256-GCM encryption of the same 32-byte `crypto/rand` token (`token_secret` column, was `token_hash`), decrypted on every dashboard read so the full callback URL can always be shown — the original hash design only ever revealed the token once, at creation/rotation, which turned out to be a real product blocker (re-pasting a webhook URL into a provider's admin panel weeks later required rotating first). `VerifyWebhookToken` still does a constant-time compare of the decrypted value against the presented token, same as before. | Token is high-entropy (256 bits), not a human password — a slow hash (bcrypt, used for user passwords at `internal/auth/handler.go:97`) would have bought nothing here anyway. The tradeoff (DB+key compromise → tokens recoverable) was surfaced to and confirmed by the user before implementing, per `AGENTS.md` §8. |
 | RLS identity for webhook writes | `RLSClaims{Role: "webhook", Sub: <webhook_id>}` inside `WithRLSContext` | Reuses the exact mechanism `table_policies` already checks (`app.jwt_role`) instead of introducing a second, parallel authorization path or bypassing RLS outright. |
 | Field path resolution | Custom dot-notation resolver (`a.b.0.c`), not a JSONPath library | Target payloads (Google Workspace-style admin events) are shallow/flat; a full JSONPath engine is an unjustified new dependency for this shape of data. |
 | Webhook deletion | Soft-delete (`deleted_at`), no hard `DELETE` | `webhook_deliveries` has no cascade; the delivery log must survive its parent's deletion until the independent 30-day purge (WEBHOOK-22). |

@@ -9,11 +9,13 @@ import {
   useCreateWebhook,
   useDeleteWebhook,
   useRotateWebhookToken,
+  useUpdateWebhook,
   useWebhookDeliveries,
   useWebhooks,
 } from "../lib/api";
 import { Icon } from "@/components/ui/icon";
 import { EmptyState, LoadingState } from "@/components/patterns/states";
+import { ConfirmDialog } from "@/components/patterns";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -56,10 +58,12 @@ export default function Webhooks({ appId, tables }: WebhooksProps) {
   const { t } = useTranslation();
   const { data: webhooks, isLoading } = useWebhooks(appId);
   const createWebhook = useCreateWebhook(appId);
+  const updateWebhook = useUpdateWebhook(appId);
   const rotateToken = useRotateWebhookToken(appId);
   const deleteWebhook = useDeleteWebhook(appId);
 
   const [showForm, setShowForm] = useState(false);
+  const [editingWebhookId, setEditingWebhookId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [method, setMethod] = useState<CreateWebhookInput["method"]>("POST");
   const [eventTypePath, setEventTypePath] = useState("");
@@ -69,12 +73,25 @@ export default function Webhooks({ appId, tables }: WebhooksProps) {
   const [mappingWebhookId, setMappingWebhookId] = useState<string | null>(null);
 
   const resetForm = () => {
+    setEditingWebhookId(null);
     setName("");
     setMethod("POST");
     setEventTypePath("");
     setEventIdPath("");
     setFormError(null);
   };
+
+  const startEdit = (webhook: WebhookSubscription) => {
+    setEditingWebhookId(webhook.id);
+    setName(webhook.name);
+    setMethod(webhook.method);
+    setEventTypePath(webhook.event_type_path);
+    setEventIdPath(webhook.event_id_path ?? "");
+    setFormError(null);
+    setShowForm(true);
+  };
+
+  const isSaving = createWebhook.isPending || updateWebhook.isPending;
 
   const submit = async () => {
     setFormError(null);
@@ -87,21 +104,38 @@ export default function Webhooks({ appId, tables }: WebhooksProps) {
       return;
     }
     try {
-      await createWebhook.mutateAsync({
-        name: name.trim(),
-        method,
-        event_type_path: eventTypePath.trim(),
-        ...(eventIdPath.trim() ? { event_id_path: eventIdPath.trim() } : {}),
-      });
+      if (editingWebhookId) {
+        await updateWebhook.mutateAsync({
+          webhookId: editingWebhookId,
+          name: name.trim(),
+          method,
+          event_type_path: eventTypePath.trim(),
+          event_id_path: eventIdPath.trim(),
+        });
+      } else {
+        await createWebhook.mutateAsync({
+          name: name.trim(),
+          method,
+          event_type_path: eventTypePath.trim(),
+          event_id_path: eventIdPath.trim(),
+        });
+      }
       setShowForm(false);
       resetForm();
     } catch {
-      // useCreateWebhook's onError already shows toast.error(error.message)
+      // useCreateWebhook/useUpdateWebhook's onError already shows toast.error(error.message)
     }
   };
 
-  const rotate = async (webhook: WebhookSubscription) => {
-    if (!confirm(t("webhooks.rotateConfirm", { name: webhook.name }))) return;
+  const [rotateTarget, setRotateTarget] = useState<WebhookSubscription | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<WebhookSubscription | null>(null);
+
+  const rotate = (webhook: WebhookSubscription) => setRotateTarget(webhook);
+
+  const confirmRotate = async () => {
+    if (!rotateTarget) return;
+    const webhook = rotateTarget;
+    setRotateTarget(null);
     try {
       await rotateToken.mutateAsync(webhook.id);
       toast.success(t("webhooks.rotateSuccess"));
@@ -110,9 +144,12 @@ export default function Webhooks({ appId, tables }: WebhooksProps) {
     }
   };
 
-  const remove = (webhook: WebhookSubscription) => {
-    if (!confirm(t("webhooks.deleteConfirm", { name: webhook.name }))) return;
-    deleteWebhook.mutate(webhook.id);
+  const remove = (webhook: WebhookSubscription) => setDeleteTarget(webhook);
+
+  const confirmRemove = () => {
+    if (!deleteTarget) return;
+    deleteWebhook.mutate(deleteTarget.id);
+    setDeleteTarget(null);
   };
 
   if (isLoading) return <LoadingState />;
@@ -121,7 +158,14 @@ export default function Webhooks({ appId, tables }: WebhooksProps) {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
         <p className="text-[11px] text-[var(--text-secondary)]">{t("webhooks.explainer")}</p>
-        <Button className="shrink-0 gap-1.5" size="sm" onClick={() => setShowForm(true)}>
+        <Button
+          className="shrink-0 gap-1.5"
+          size="sm"
+          onClick={() => {
+            resetForm();
+            setShowForm(true);
+          }}
+        >
           <Icon name="add" size={15} />
           {t("webhooks.addWebhook")}
         </Button>
@@ -135,7 +179,7 @@ export default function Webhooks({ appId, tables }: WebhooksProps) {
             resetForm();
           }
         }}
-        title={t("webhooks.addWebhook")}
+        title={editingWebhookId ? t("webhooks.editWebhook") : t("webhooks.addWebhook")}
         description={t("webhooks.explainer")}
         footer={
           <div className="flex w-full gap-2.5">
@@ -146,11 +190,11 @@ export default function Webhooks({ appId, tables }: WebhooksProps) {
                 setShowForm(false);
                 resetForm();
               }}
-              disabled={createWebhook.isPending}
+              disabled={isSaving}
             >
               {t("webhooks.cancel")}
             </Button>
-            <Button className="flex-1" disabled={createWebhook.isPending} onClick={submit}>
+            <Button className="flex-1" disabled={isSaving} onClick={submit}>
               {t("webhooks.save")}
             </Button>
           </div>
@@ -247,6 +291,9 @@ export default function Webhooks({ appId, tables }: WebhooksProps) {
                       ? t("webhooks.hideDeliveries")
                       : t("webhooks.viewDeliveries")}
                   </Button>
+                  <Button variant="ghost" size="sm" onClick={() => startEdit(webhook)} title={t("webhooks.edit")}>
+                    <Icon name="edit" size={15} />
+                  </Button>
                   <Button variant="ghost" size="sm" onClick={() => rotate(webhook)} title={t("webhooks.rotateToken")}>
                     <Icon name="refresh" size={15} />
                   </Button>
@@ -282,6 +329,30 @@ export default function Webhooks({ appId, tables }: WebhooksProps) {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={rotateTarget !== null}
+        title={t("webhooks.rotateTitle")}
+        message={t("webhooks.rotateConfirm", { name: rotateTarget?.name ?? "" })}
+        confirmLabel={t("webhooks.rotateToken")}
+        cancelLabel={t("webhooks.cancel")}
+        icon="refresh"
+        loading={rotateToken.isPending}
+        onConfirm={confirmRotate}
+        onCancel={() => setRotateTarget(null)}
+      />
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title={t("webhooks.deleteTitle")}
+        message={t("webhooks.deleteConfirm", { name: deleteTarget?.name ?? "" })}
+        confirmLabel={t("webhooks.delete")}
+        cancelLabel={t("webhooks.cancel")}
+        destructive
+        icon="delete"
+        loading={deleteWebhook.isPending}
+        onConfirm={confirmRemove}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }
@@ -336,7 +407,7 @@ function WebhookDeliveryLog({ appId, webhookId }: WebhookDeliveryLogProps) {
           >
             <span className="text-[var(--text-tertiary)]">{new Date(d.received_at).toLocaleString()}</span>
             <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${outcomeBadgeClass(d.outcome)}`}>
-              {d.outcome}
+              {t(`webhooks.outcome.${d.outcome}`)}
             </span>
             <span className="truncate font-mono text-[var(--text-secondary)]">{d.event_type_value ?? "—"}</span>
           </button>

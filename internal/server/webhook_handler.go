@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
@@ -23,7 +24,23 @@ import (
 type WebhookHandler struct {
 	pool *db.Pool
 	reg  *registry.Registry
+
+	// dedupLockPool is a small pool dedicated to lockEventID's held
+	// connections, separate from pool so a burst of concurrent deliveries
+	// with distinct event ids can't tie up every connection the actual
+	// dedup-check/write/log queries need — see lockEventID and
+	// dedupLockPoolMaxConns. Created lazily (first delivery that carries an
+	// event id) since NewWebhookHandler isn't given a context to dial with.
+	dedupLockOnce sync.Once
+	dedupLockPool *db.Pool
+	dedupLockErr  error
 }
+
+// dedupLockPoolMaxConns caps the dedup lock pool well below the main pool's
+// capacity (internal/db/client.go, currently 10) so lock-holding deliveries
+// can never starve the connections the main pool's writes/reads need to
+// finish (and thereby release the lock) — see lockEventID.
+const dedupLockPoolMaxConns = 4
 
 // NewWebhookHandler creates a WebhookHandler with injected dependencies.
 func NewWebhookHandler(pool *db.Pool, reg *registry.Registry) *WebhookHandler {
@@ -94,7 +111,13 @@ func (h *WebhookHandler) HandleWebhookDelivery(w http.ResponseWriter, r *http.Re
 	// {"challenge": "..."} — not treated as a real event, so it bypasses
 	// capture/mapping entirely regardless of the webhook's current status.
 	if challenge, ok := verificationChallenge(payload); ok {
-		h.logDelivery(ctx, wh.ID, http.StatusOK, "verification_challenge", rawPayload, "", "", "")
+		// Store only the challenge value, not the full rawPayload -- some
+		// providers following this convention (Slack's legacy Events API
+		// shape) include a separate verification "token" field alongside
+		// "challenge", which has no reason to sit in webhook_deliveries for
+		// 30 days.
+		minimal, _ := json.Marshal(map[string]string{"challenge": challenge})
+		h.logDelivery(ctx, wh.ID, http.StatusOK, "verification_challenge", minimal, "", "", "")
 		writeJSON(w, http.StatusOK, map[string]string{"challenge": challenge})
 		return
 	}
@@ -181,6 +204,25 @@ func (h *WebhookHandler) handleActiveDelivery(ctx context.Context, w http.Respon
 		}
 	}
 	if eventID != "" {
+		// idx_webhook_deliveries_dedup isn't a unique index (write_error/
+		// row_not_found deliveries must be allowed to share an event_id with
+		// a later retry, see processedOutcomes), so the check below and the
+		// eventual write are only safe from a check-then-act race if
+		// something else serializes concurrent deliveries of the same event
+		// id — a provider retrying while the first attempt is still in
+		// flight is the normal at-least-once case this feature exists for,
+		// made more likely by running multiple replicas. The advisory lock
+		// closes that window: a second concurrent request blocks here until
+		// the first has committed its write and delivery log row, then sees
+		// seen=true and takes the duplicate_skipped path correctly.
+		unlock, err := h.lockEventID(ctx, wh.ID, eventID)
+		if err != nil {
+			h.logDelivery(ctx, wh.ID, http.StatusInternalServerError, "write_error", rawPayload, eventTypeValue, eventID, err.Error())
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		defer unlock()
+
 		seen, err := dashboard.HasProcessedEventID(ctx, h.pool, wh.ID, eventID)
 		if err != nil {
 			h.logDelivery(ctx, wh.ID, http.StatusInternalServerError, "write_error", rawPayload, eventTypeValue, eventID, err.Error())
@@ -251,19 +293,13 @@ var errWebhookRowNotFound = errors.New("server: webhook match key matched no row
 var errWebhookAmbiguousMatch = errors.New("server: webhook match key matched more than one row")
 
 // matchColumnCast returns the same ::uuid/::timestamptz cast
-// query.BuildInsert/Update apply internally (that helper is package-private
-// in internal/query, so this is a minimal local duplicate) — needed because
-// pgx's extended protocol doesn't auto-cast a text parameter into a uuid
-// column for a bare WHERE col = $1.
+// query.BuildInsert/Update apply internally (via the shared query.PgCast) —
+// needed because pgx's extended protocol doesn't auto-cast a text parameter
+// into a uuid column for a bare WHERE col = $1.
 func matchColumnCast(table *registry.Table, column string) string {
 	for _, c := range table.Columns {
 		if c.Name == column {
-			switch c.Type {
-			case "uuid":
-				return "::uuid"
-			case "timestamptz":
-				return "::timestamptz"
-			}
+			return query.PgCast(c.Type)
 		}
 	}
 	return ""
@@ -296,8 +332,20 @@ func (h *WebhookHandler) dispatchUpdateOrDelete(ctx context.Context, w http.Resp
 	// a second row means this key is ambiguous for this table — caught here
 	// instead of silently applying the write to whichever row Postgres
 	// happened to return first.
-	lookupSQL := fmt.Sprintf(`SELECT id FROM %s.%s WHERE %s = $1%s LIMIT 2`,
-		app.SchemaName, mapping.TargetTable, matchColumn, matchColumnCast(table, matchColumn))
+	//
+	// Excludes soft-deleted rows when soft delete is on, matching
+	// query.BuildDelete/BuildUpdate's own filter — without this, a
+	// soft-deleted row sharing a match key value with a live one always
+	// looks ambiguous (false-positive ambiguous_match), and on the update
+	// path with zero live matches, the lookup would still find the deleted
+	// row and resurrect its content instead of correctly reporting
+	// row_not_found.
+	deletedFilter := ""
+	if h.reg.SystemConfig().SoftDeleteEnabled {
+		deletedFilter = " AND deleted_at IS NULL"
+	}
+	lookupSQL := fmt.Sprintf(`SELECT id FROM %s.%s WHERE %s = $1%s%s LIMIT 2`,
+		app.SchemaName, mapping.TargetTable, matchColumn, matchColumnCast(table, matchColumn), deletedFilter)
 
 	var targetRowID string
 	var outcome string
@@ -438,6 +486,43 @@ func parseWebhookPayload(r *http.Request) (map[string]any, error) {
 		return nil, err
 	}
 	return payload, nil
+}
+
+// lockEventID takes a Postgres session-level advisory lock keyed by
+// (webhookID, eventID), blocking until any other concurrent delivery for
+// the same pair has released it. Returns a func that unlocks and releases
+// the held connection back to the pool — call it via defer. The lock is
+// visible across every connection/replica talking to the same database,
+// not just within this process.
+func (h *WebhookHandler) lockEventID(ctx context.Context, webhookID, eventID string) (func(), error) {
+	h.dedupLockOnce.Do(func() {
+		h.dedupLockPool, h.dedupLockErr = h.pool.NewLockPool(ctx, dedupLockPoolMaxConns)
+	})
+	if h.dedupLockErr != nil {
+		return nil, fmt.Errorf("webhook: dedup lock pool: %w", h.dedupLockErr)
+	}
+
+	conn, err := h.dedupLockPool.Acquire(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("webhook: acquire connection for dedup lock: %w", err)
+	}
+	// lock_timeout bounds how long this connection waits on
+	// pg_advisory_lock below — without it, a stuck/misbehaving holder
+	// (or a bug) blocks this connection, and every other request racing
+	// for the same key, forever instead of failing loudly.
+	if _, err := conn.Exec(ctx, `SET lock_timeout = '5s'`); err != nil {
+		conn.Release()
+		return nil, fmt.Errorf("webhook: set lock_timeout: %w", err)
+	}
+	key := webhookID + ":" + eventID
+	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock(hashtextextended($1, 0))`, key); err != nil {
+		conn.Release()
+		return nil, fmt.Errorf("webhook: acquire dedup lock: %w", err)
+	}
+	return func() {
+		_, _ = conn.Exec(context.Background(), `SELECT pg_advisory_unlock(hashtextextended($1, 0))`, key)
+		conn.Release()
+	}, nil
 }
 
 // logDelivery records one call to a webhook. Logging failures are

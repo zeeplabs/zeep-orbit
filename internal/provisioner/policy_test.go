@@ -1,6 +1,7 @@
 package provisioner
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -75,6 +76,82 @@ func TestBuildPolicySQL_InsertHasWithCheck(t *testing.T) {
 	}
 	if !strings.Contains(sql, "WITH CHECK") {
 		t.Fatalf("insert policy must include WITH CHECK, got %q", sql)
+	}
+}
+
+// TestBuildPolicySQL_InsertHasNoUsingClause: Postgres rejects a USING clause
+// on an INSERT policy outright ("only WITH CHECK expression allowed for
+// INSERT") — this generated DDL never executed against real Postgres before
+// this test existed, so a table's first insert policy would fail at
+// CREATE POLICY time with a raw Postgres error surfacing wherever the
+// caller didn't already catch it (see provisioner_test.go's
+// TestBuildPolicySQL_GeneratedDDLExecutesForEveryAction for the actual
+// execution proof against real Postgres).
+func TestBuildPolicySQL_InsertHasNoUsingClause(t *testing.T) {
+	def := PolicyDef{
+		Name:   "insert_policy",
+		Action: "insert",
+		Roles:  []string{"member"},
+		Clauses: []PolicyClause{
+			{Column: "status", Operator: "=", ValueSource: "literal", Value: "active"},
+		},
+	}
+	sql, err := BuildPolicySQL("app_schema", "requests", def, testColumns())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(sql, "USING") {
+		t.Fatalf("insert policy must not include USING (Postgres rejects it), got %q", sql)
+	}
+}
+
+// TestBuildPolicySQL_DeleteHasUsingAndNoWithCheck: F20 (independent Verifier
+// addendum) — the DDL-execution test only proves the generated SQL executes,
+// not that the delete branch actually still emits its USING clause; a
+// mutant dropping USING for "delete" would produce a fully-permissive
+// delete policy (`CREATE POLICY ... FOR DELETE TO role` with no condition)
+// that still executes without error, silently passing the suite.
+func TestBuildPolicySQL_DeleteHasUsingAndNoWithCheck(t *testing.T) {
+	def := PolicyDef{
+		Name:   "delete_policy",
+		Action: "delete",
+		Roles:  []string{"member"},
+		Clauses: []PolicyClause{
+			{Column: "status", Operator: "=", ValueSource: "literal", Value: "active"},
+		},
+	}
+	sql, err := BuildPolicySQL("app_schema", "requests", def, testColumns())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(sql, "USING (") {
+		t.Fatalf("delete policy must include USING, got %q", sql)
+	}
+	if strings.Contains(sql, "WITH CHECK") {
+		t.Fatalf("delete policy must not include WITH CHECK, got %q", sql)
+	}
+}
+
+// TestBuildPolicySQL_UpdateHasBothUsingAndWithCheck: same coverage gap as
+// above, for the one action that legitimately needs both clauses.
+func TestBuildPolicySQL_UpdateHasBothUsingAndWithCheck(t *testing.T) {
+	def := PolicyDef{
+		Name:   "update_policy",
+		Action: "update",
+		Roles:  []string{"member"},
+		Clauses: []PolicyClause{
+			{Column: "status", Operator: "=", ValueSource: "literal", Value: "active"},
+		},
+	}
+	sql, err := BuildPolicySQL("app_schema", "requests", def, testColumns())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(sql, "USING (") {
+		t.Fatalf("update policy must include USING, got %q", sql)
+	}
+	if !strings.Contains(sql, "WITH CHECK (") {
+		t.Fatalf("update policy must include WITH CHECK, got %q", sql)
 	}
 }
 
@@ -529,6 +606,79 @@ func TestBuildPolicySQL_RejectsInvalidValueSource(t *testing.T) {
 	_, err := BuildPolicySQL("app_schema", "requests", def, testColumns())
 	if err == nil {
 		t.Fatal("expected error for invalid value_source, got nil")
+	}
+}
+
+// TestBuildPolicySQL_OwnerIDReferenceableInClause covers rls-policy-mode
+// RLSP-05: owner_id is not part of testColumns() (it's a system column
+// injected only into the DDL, never into tableColumns) yet a clause
+// referencing it must translate successfully, cast to UUID — enabling
+// policies like "role = 'admin' OR owner_id = claim.sub".
+func TestBuildPolicySQL_OwnerIDReferenceableInClause(t *testing.T) {
+	def := PolicyDef{
+		Name:   "owner_or_admin",
+		Action: "select",
+		Roles:  []string{"member"},
+		Clauses: []PolicyClause{
+			{Column: "owner_id", Operator: "=", ValueSource: "claim", Value: "sub"},
+		},
+	}
+	sql, err := BuildPolicySQL("app_schema", "requests", def, testColumns())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := `"owner_id" = current_setting('app.jwt_sub', true)::UUID`
+	if !strings.Contains(sql, want) {
+		t.Fatalf("sql = %q, want it to contain %q", sql, want)
+	}
+}
+
+// TestBuildPolicySQL_OwnerIDRejectsIncompatibleOperator covers RLSP-06:
+// owner_id gets the same uuid type-validation as any other uuid column —
+// LIKE (a text-only operator) must still be rejected.
+func TestBuildPolicySQL_OwnerIDRejectsIncompatibleOperator(t *testing.T) {
+	def := PolicyDef{
+		Name:   "p",
+		Action: "select",
+		Roles:  []string{"member"},
+		Clauses: []PolicyClause{
+			{Column: "owner_id", Operator: "LIKE", ValueSource: "literal", Value: "x"},
+		},
+	}
+	_, err := BuildPolicySQL("app_schema", "requests", def, testColumns())
+	if err == nil {
+		t.Fatal("expected error for owner_id with LIKE (operator outside allowlist), got nil")
+	}
+	if !strings.Contains(err.Error(), `invalid operator "LIKE"`) {
+		t.Fatalf("err = %q, want it to contain %q", err.Error(), `invalid operator "LIKE"`)
+	}
+}
+
+// TestBuildPolicySQL_OtherSystemColumnsStillRejected covers RLSP-05/06's
+// boundary: only owner_id becomes referenceable — other system columns not
+// present in tableColumns (id/updated_at/deleted_at) are still rejected as
+// "unknown column", same as before this feature. created_at is
+// deliberately excluded here: testColumns() already includes it as a
+// regular table column, so it is legitimately accepted independent of this
+// feature.
+func TestBuildPolicySQL_OtherSystemColumnsStillRejected(t *testing.T) {
+	for _, col := range []string{"id", "updated_at", "deleted_at"} {
+		def := PolicyDef{
+			Name:   "p",
+			Action: "select",
+			Roles:  []string{"member"},
+			Clauses: []PolicyClause{
+				{Column: col, Operator: "IS NOT NULL"},
+			},
+		}
+		_, err := BuildPolicySQL("app_schema", "requests", def, testColumns())
+		if err == nil {
+			t.Fatalf("column %q: expected error (still not referenceable), got nil", col)
+		}
+		wantMsg := fmt.Sprintf(`unknown column %q`, col)
+		if !strings.Contains(err.Error(), wantMsg) {
+			t.Fatalf("column %q: err = %q, want it to contain %q", col, err.Error(), wantMsg)
+		}
 	}
 }
 

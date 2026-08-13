@@ -126,11 +126,15 @@ func validateTableInput(t AppTableRow, authEmailEnabled bool, otherTables []AppT
 		}
 	}
 
+	if !config.ValidRLS(t.RLS) {
+		return errors.New("table " + t.Name + " has an invalid rls value: " + t.RLS + " (must be one of \"\", \"owner\", \"enabled\", \"policy\")")
+	}
+
 	// owner_id FK points at "_auth_users", which the provisioner only
 	// creates when email auth is on — restricted access without it is a
 	// guaranteed provisioning failure, not a soft misconfiguration.
-	if (t.RLS == "enabled" || t.RLS == "owner") && !authEmailEnabled {
-		return errors.New("table " + t.Name + " uses restricted access (RLS), which requires 'Autenticação por e-mail' to be enabled for this app")
+	if config.HasOwnerColumn(t.RLS) && !authEmailEnabled {
+		return errors.New("table " + t.Name + " uses restricted access (RLS), which requires 'Email Authentication' to be enabled for this app")
 	}
 
 	seenColumns := make(map[string]bool, len(t.Columns))
@@ -1240,7 +1244,7 @@ func (h *Handler) UpdateAppTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	row, err := UpdateAppTable(r.Context(), h.pool, appID, tableID, body.RLS, body.Columns, body.Indexes)
+	row, err := UpdateAppTable(r.Context(), h.pool, appID, tableID, schemaNameForDB(app.Name), body.RLS, body.Columns, body.Indexes)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
@@ -1298,7 +1302,7 @@ func (h *Handler) DeleteAppTable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.prov.DropTable(r.Context(), schemaNameForDB(app.Name), tableName); err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "failed to drop table: "+err.Error(), err)
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
@@ -1896,7 +1900,7 @@ func (h *Handler) ListDataBrowserApps(w http.ResponseWriter, r *http.Request) {
 			}
 			cols = append(cols, DataBrowserTableColumn{Name: "created_at", Type: "timestamptz"})
 			cols = append(cols, DataBrowserTableColumn{Name: "updated_at", Type: "timestamptz"})
-			if t.RLS == "owner" {
+			if config.HasOwnerColumn(t.RLS) {
 				cols = append(cols, DataBrowserTableColumn{Name: "owner_id", Type: "uuid"})
 			}
 
@@ -2195,12 +2199,12 @@ func (h *Handler) DataBrowserCreate(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.pool.Query(r.Context(), q.SQL, q.Args...)
 	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "failed to insert row: "+err.Error(), err)
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 	row, err := pgx.CollectOneRow(rows, pgx.RowToMap)
 	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "failed to read inserted row: "+err.Error(), err)
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
@@ -2256,12 +2260,12 @@ func (h *Handler) DataBrowserUpdate(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.pool.Query(r.Context(), q.SQL, q.Args...)
 	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "failed to update row: "+err.Error(), err)
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 	row, err := pgx.CollectOneRow(rows, pgx.RowToMap)
 	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "failed to read updated row: "+err.Error(), err)
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
@@ -2310,7 +2314,7 @@ func (h *Handler) DataBrowserDelete(w http.ResponseWriter, r *http.Request) {
 	q := query.BuildDelete(app.SchemaName, tableName, id, "", h.reg.SystemConfig().SoftDeleteEnabled)
 	tag, err := h.pool.Exec(r.Context(), q.SQL, q.Args...)
 	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "failed to delete row: "+err.Error(), err)
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 	if tag.RowsAffected() == 0 {

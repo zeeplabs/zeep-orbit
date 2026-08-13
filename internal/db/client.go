@@ -43,6 +43,32 @@ func (p *Pool) Close() {
 	p.Pool.Close()
 }
 
+// NewLockPool creates a small secondary pool, cloned from this pool's
+// connection config but capped at maxConns, for callers that need to hold a
+// connection open for an extended critical section (e.g. a Postgres
+// advisory lock spanning a check-then-write sequence) without competing
+// with this pool's connections for ordinary reads/writes — holding both
+// from the same pool risks exhausting it under concurrent load, since every
+// held "lock" connection is one fewer connection available to do the actual
+// write the lock is protecting.
+func (p *Pool) NewLockPool(ctx context.Context, maxConns int32) (*Pool, error) {
+	cfg := p.Pool.Config()
+	cfg.MaxConns = maxConns
+	cfg.MinConns = 0
+
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("db: failed to create lock pool: %w", err)
+	}
+
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("db: lock pool ping failed: %w", err)
+	}
+
+	return &Pool{Pool: pool}, nil
+}
+
 // Querier is the subset of query methods shared by *pgxpool.Pool and pgx.Tx,
 // so a caller can run the same query with or without a timeout transaction.
 type Querier interface {

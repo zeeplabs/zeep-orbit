@@ -3,11 +3,13 @@ package server
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -212,6 +214,98 @@ func TestWebhookActive_DuplicateEventIDSkipsSecondWrite(t *testing.T) {
 	}
 }
 
+// TestWebhookActive_ConcurrentDuplicateEventIDInsertsOnlyOnce proves the
+// check-then-act dedup race is actually closed by lockEventID: two
+// deliveries with the same event id fired at once (the normal
+// provider-retries-a-slow-request pattern) must still produce exactly one
+// row, not two — idx_webhook_deliveries_dedup alone can't guarantee this,
+// since it isn't a unique index.
+func TestWebhookActive_ConcurrentDuplicateEventIDInsertsOnlyOnce(t *testing.T) {
+	f := setupWebhookActiveFixture(t)
+	f.activateWithInsertMapping(t)
+	h := NewWebhookHandler(testPool, testReg)
+	router := buildActiveWebhookRouter(h)
+
+	body := `{"eventType":"user.created","eventId":"evt-race-1","user":{"id":"u-race","name":"Ana"}}`
+
+	var wg sync.WaitGroup
+	results := make([]int, 2)
+	for i := range results {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			results[i] = postWebhook(router, f.wh, f.token, body).Code
+		}(i)
+	}
+	wg.Wait()
+
+	for _, code := range results {
+		if code != http.StatusOK {
+			t.Fatalf("expected both concurrent calls to return 200, got %v", results)
+		}
+	}
+
+	var count int
+	if err := testPool.QueryRow(context.Background(), `SELECT COUNT(*) FROM `+f.schema+`.employees`).Scan(&count); err != nil {
+		t.Fatalf("count employees: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected exactly 1 row despite 2 concurrent calls with the same event id, got %d", count)
+	}
+}
+
+// TestWebhookActive_ConcurrentDistinctEventIDsDoNotExhaustPool proves
+// lockEventID's held connection no longer competes with the main pool
+// (internal/db/client.go MaxConns=10) for the connections the dedup
+// check/write/log queries need to finish and release the lock. Before the
+// dedicated dedupLockPool fix, this many concurrent deliveries — each with
+// a distinct event id, so the lock itself never serializes them — deadlocked
+// the whole process: every main-pool connection ended up held by a
+// lockEventID call waiting on a connection the writes needed to release.
+func TestWebhookActive_ConcurrentDistinctEventIDsDoNotExhaustPool(t *testing.T) {
+	f := setupWebhookActiveFixture(t)
+	f.activateWithInsertMapping(t)
+	h := NewWebhookHandler(testPool, testReg)
+	router := buildActiveWebhookRouter(h)
+
+	const n = 15 // above db.MaxConns (10) so a per-connection lock would starve the pool
+	var wg sync.WaitGroup
+	results := make([]int, n)
+	done := make(chan struct{})
+	for i := range results {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			body := fmt.Sprintf(`{"eventType":"user.created","eventId":"evt-pool-%d","user":{"id":"u-pool-%d","name":"Ana"}}`, i, i)
+			results[i] = postWebhook(router, f.wh, f.token, body).Code
+		}(i)
+	}
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(20 * time.Second):
+		t.Fatal("deliveries with distinct event ids deadlocked — pool likely exhausted by lockEventID")
+	}
+
+	for i, code := range results {
+		if code != http.StatusOK {
+			t.Fatalf("delivery %d: expected 200, got %d", i, code)
+		}
+	}
+
+	var count int
+	if err := testPool.QueryRow(context.Background(), `SELECT COUNT(*) FROM `+f.schema+`.employees`).Scan(&count); err != nil {
+		t.Fatalf("count employees: %v", err)
+	}
+	if count != n {
+		t.Fatalf("expected %d rows (one per distinct event id), got %d", n, count)
+	}
+}
+
 func TestWebhookActive_InsertHappyPathCreatesRow(t *testing.T) {
 	f := setupWebhookActiveFixture(t)
 	f.activateWithInsertMapping(t)
@@ -277,6 +371,67 @@ func TestWebhookActive_InsertRLSDeniedReturns500WriteErrorNoRawErrorLeaked(t *te
 	}
 	if list[0].ErrorDetail == nil || *list[0].ErrorDetail == "" {
 		t.Fatal("expected the real error to be captured server-side in error_detail")
+	}
+}
+
+// TestWebhookActive_InsertIntoPolicyModeTableWithGrantSucceeds reproduces the
+// real, documented use case (CHANGELOG: "Writes run under a dedicated RLS
+// role (webhook, via table_policies)") that TestWebhookActive_InsertHappyPathCreatesRow
+// doesn't actually cover — that fixture's "employees" table has no owner_id
+// column at all, so it never exercises a policy-mode table provisioned the
+// real way. Here owner_id exists and is nullable (RelaxOwnerColumn /
+// provisioner.createTable's "policy" branch): the webhook role has no
+// end-user identity to put there, and the insert must still succeed.
+func TestWebhookActive_InsertIntoPolicyModeTableWithGrantSucceeds(t *testing.T) {
+	f := setupWebhookActiveFixture(t)
+	f.activateWithInsertMapping(t)
+	ctx := context.Background()
+
+	if _, err := testPool.Exec(ctx,
+		`ALTER TABLE `+f.schema+`.employees ADD COLUMN owner_id UUID`,
+	); err != nil {
+		t.Fatalf("add owner_id: %v", err)
+	}
+	if _, err := testPool.Exec(ctx, "ALTER TABLE "+f.schema+".employees ENABLE ROW LEVEL SECURITY"); err != nil {
+		t.Fatalf("enable RLS: %v", err)
+	}
+	// Mirrors provisioner.BuildPolicySQL's actual output: every policy runs
+	// "TO zeep_app_enduser" (the one Postgres role every request switches to
+	// via WithRLSContext) and gates by role through the app.jwt_role GUC,
+	// not a literal "webhook" Postgres role/grantee.
+	if _, err := testPool.Exec(ctx,
+		`CREATE POLICY webhook_insert ON `+f.schema+`.employees FOR INSERT TO zeep_app_enduser
+		 WITH CHECK (current_setting('app.jwt_role', true) = 'webhook')`,
+	); err != nil {
+		t.Fatalf("create policy: %v", err)
+	}
+	if _, err := testPool.Exec(ctx,
+		`CREATE POLICY webhook_select ON `+f.schema+`.employees FOR SELECT TO zeep_app_enduser
+		 USING (current_setting('app.jwt_role', true) = 'webhook')`,
+	); err != nil {
+		t.Fatalf("create select policy: %v", err)
+	}
+
+	h := NewWebhookHandler(testPool, testReg)
+	router := buildActiveWebhookRouter(h)
+
+	rec := postWebhook(router, f.wh, f.token, `{"eventType":"user.created","eventId":"evt-1","user":{"id":"u-42","name":"Ana Souza"}}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 inserting into a policy-mode table granted to role webhook, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var externalID string
+	var ownerID *string
+	if err := testPool.QueryRow(ctx,
+		`SELECT external_id, owner_id FROM `+f.schema+`.employees LIMIT 1`,
+	).Scan(&externalID, &ownerID); err != nil {
+		t.Fatalf("query inserted row: %v", err)
+	}
+	if externalID != "u-42" {
+		t.Fatalf("expected external_id=u-42, got %q", externalID)
+	}
+	if ownerID != nil {
+		t.Fatalf("expected owner_id to be NULL for a webhook-originated row, got %q", *ownerID)
 	}
 }
 

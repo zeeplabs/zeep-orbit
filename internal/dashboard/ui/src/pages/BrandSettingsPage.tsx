@@ -16,6 +16,7 @@ import {
   EnterpriseBadge,
   UpgradeModal,
   AboutPanel,
+  ConfirmDialog,
 } from "@/components/patterns";
 import type { StatusTone } from "@/components/patterns";
 import { useBrandConfig, useUpdateBrandConfig, useSystemConfig } from "../lib/api";
@@ -183,6 +184,7 @@ function SoftDeleteCard() {
   const [requireRlsDefault, setRequireRlsDefault] = useState(false);
   const [retentionDays, setRetentionDays] = useState(0);
   const hydratedRetentionDays = useRef(0);
+  const [confirmingRetention, setConfirmingRetention] = useState(false);
 
   useEffect(() => {
     if (!sysCfg) return;
@@ -196,9 +198,13 @@ function SoftDeleteCard() {
 
   const handleSave = async () => {
     if (retentionDays > 0 && retentionDays !== hydratedRetentionDays.current) {
-      const confirmed = window.confirm(t("settings.retentionDaysConfirm", { days: retentionDays }));
-      if (!confirmed) return;
+      setConfirmingRetention(true);
+      return;
     }
+    await doSave();
+  };
+
+  const doSave = async () => {
     setSaving(true);
     try {
       const res = await fetch("/dashboard/api/config/system", {
@@ -221,6 +227,11 @@ function SoftDeleteCard() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const confirmRetentionChange = () => {
+    setConfirmingRetention(false);
+    void doSave();
   };
 
   if (loading) return <p className="text-[13px] text-[var(--text-secondary)]">{t("app.loading")}</p>;
@@ -292,6 +303,16 @@ function SoftDeleteCard() {
       <AboutPanel
         title={t("settings.aboutDatabaseTitle")}
         lines={[t("settings.aboutDatabaseLine1"), t("settings.aboutDatabaseLine2"), t("settings.aboutDatabaseLine3")]}
+      />
+      <ConfirmDialog
+        open={confirmingRetention}
+        title={t("settings.retentionDaysConfirmTitle")}
+        message={t("settings.retentionDaysConfirm", { days: retentionDays })}
+        confirmLabel={t("system.save")}
+        cancelLabel={t("brand.cancel")}
+        icon="warning"
+        onConfirm={confirmRetentionChange}
+        onCancel={() => setConfirmingRetention(false)}
       />
     </div>
   );

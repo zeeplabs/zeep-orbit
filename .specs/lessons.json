@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 14,
+  "next_id": 19,
   "lessons": [
     {
       "id": "L-001",
@@ -238,6 +238,96 @@
       ],
       "created": "2026-08-11T12:16:01Z",
       "last_seen": "2026-08-11T12:16:01Z"
+    },
+    {
+      "id": "L-014",
+      "key": "surviving_mutant::when a helper is applied at several call sites assert the behavior at every call site through the public entry point not just the helper in isolation",
+      "text": "When a helper is applied at several call sites, assert the behavior at every call site through the public entry point, not just the helper in isolation.",
+      "signal": "surviving_mutant",
+      "scope": "routes",
+      "status": "candidate",
+      "features": [
+        "rls-policy-mode"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "internal/server/handler.go:278,:332 (sensor mutation 6) (routes)"
+      ],
+      "created": "2026-08-12T15:01:13Z",
+      "last_seen": "2026-08-12T15:01:13Z"
+    },
+    {
+      "id": "L-015",
+      "key": "ac_gap::cover every http verb an acceptance criterion names not only the read path that is easiest to assert",
+      "text": "Cover every HTTP verb an acceptance criterion names, not only the read path that is easiest to assert.",
+      "signal": "ac_gap",
+      "scope": "routes",
+      "status": "candidate",
+      "features": [
+        "rls-policy-mode"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "spec.md AC P1-2 + Edge Cases (UPDATE/DELETE deny) (routes)"
+      ],
+      "created": "2026-08-12T15:01:13Z",
+      "last_seen": "2026-08-12T15:01:13Z"
+    },
+    {
+      "id": "L-016",
+      "key": "spec_precision_gap::when the spec requires a clear error assert the error message content not just that the error is non nil",
+      "text": "When the spec requires a clear error, assert the error message content, not just that the error is non-nil.",
+      "signal": "spec_precision_gap",
+      "scope": "validation",
+      "status": "candidate",
+      "features": [
+        "rls-policy-mode"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "internal/dashboard/handler_test.go:114; internal/provisioner/policy_test.go:650 (validation)"
+      ],
+      "created": "2026-08-12T15:01:13Z",
+      "last_seen": "2026-08-12T15:01:13Z"
+    },
+    {
+      "id": "L-017",
+      "key": "spec_precision_gap::before writing an acceptance criterion that leans on an existing validation confirm that validation actually exists in the code path it names",
+      "text": "Before writing an acceptance criterion that leans on an existing validation, confirm that validation actually exists in the code path it names.",
+      "signal": "spec_precision_gap",
+      "scope": "validation",
+      "status": "candidate",
+      "features": [
+        "rls-policy-mode"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "spec.md AC P2-2; internal/provisioner/policy.go:231-233 (global policyOperators allowlist, no per-type check) (validation)"
+      ],
+      "created": "2026-08-12T15:32:07Z",
+      "last_seen": "2026-08-12T15:32:07Z"
+    },
+    {
+      "id": "L-018",
+      "key": "spec_precision_gap::when a criterion promises unchanged generated output assert the generated string itself not only that behavior still passes",
+      "text": "When a criterion promises unchanged generated output, assert the generated string itself, not only that behavior still passes.",
+      "signal": "spec_precision_gap",
+      "scope": "provisioner",
+      "status": "candidate",
+      "features": [
+        "rls-policy-mode"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "spec.md AC P1-6 / tasks.md T2 Done-when; no generated-SQL comparison test exists (provisioner)"
+      ],
+      "created": "2026-08-12T15:32:07Z",
+      "last_seen": "2026-08-12T15:32:07Z"
     }
   ]
 }

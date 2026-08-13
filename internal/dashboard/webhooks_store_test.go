@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -276,6 +277,70 @@ func TestRotateToken_InvalidatesOldToken(t *testing.T) {
 	}
 	if VerifyWebhookToken(got.TokenSecret, oldToken) {
 		t.Fatal("expected the old token to no longer verify after rotation")
+	}
+}
+
+func TestUpdateWebhook_ChangesNameMethodAndPaths(t *testing.T) {
+	pool := webhooksTestPool(t)
+	appID, userID := webhooksTestApp(t, pool)
+	ctx := context.Background()
+
+	created, token, err := CreateWebhook(ctx, pool, CreateWebhookInput{
+		AppID: appID, Name: "old name", Method: "POST", EventTypePath: "eventType", CreatedBy: userID,
+	})
+	if err != nil {
+		t.Fatalf("CreateWebhook: %v", err)
+	}
+
+	updated, err := UpdateWebhook(ctx, pool, created.ID, UpdateWebhookInput{
+		Name: "new name", Method: "PUT", EventTypePath: "type", EventIDPath: "id",
+	})
+	if err != nil {
+		t.Fatalf("UpdateWebhook: %v", err)
+	}
+	if updated.Name != "new name" || updated.Method != "PUT" || updated.EventTypePath != "type" {
+		t.Fatalf("expected updated fields, got name=%q method=%q event_type_path=%q", updated.Name, updated.Method, updated.EventTypePath)
+	}
+	if updated.EventIDPath == nil || *updated.EventIDPath != "id" {
+		t.Fatalf("expected event_id_path 'id', got %v", updated.EventIDPath)
+	}
+
+	decrypted, err := DecryptWebhookToken(updated)
+	if err != nil {
+		t.Fatalf("DecryptWebhookToken: %v", err)
+	}
+	if decrypted != token {
+		t.Fatal("expected the token to be untouched by UpdateWebhook")
+	}
+}
+
+func TestUpdateWebhook_InvalidMethodRejected(t *testing.T) {
+	pool := webhooksTestPool(t)
+	appID, userID := webhooksTestApp(t, pool)
+	ctx := context.Background()
+
+	created, _, err := CreateWebhook(ctx, pool, CreateWebhookInput{
+		AppID: appID, Name: "hook", Method: "POST", EventTypePath: "eventType", CreatedBy: userID,
+	})
+	if err != nil {
+		t.Fatalf("CreateWebhook: %v", err)
+	}
+
+	if _, err := UpdateWebhook(ctx, pool, created.ID, UpdateWebhookInput{
+		Name: "hook", Method: "DELETE", EventTypePath: "eventType",
+	}); !errors.Is(err, ErrInvalidWebhookMethod) {
+		t.Fatalf("expected ErrInvalidWebhookMethod, got %v", err)
+	}
+}
+
+func TestUpdateWebhook_UnknownIDReturnsNotFound(t *testing.T) {
+	pool := webhooksTestPool(t)
+	ctx := context.Background()
+
+	if _, err := UpdateWebhook(ctx, pool, "00000000-0000-0000-0000-000000000000", UpdateWebhookInput{
+		Name: "hook", Method: "POST", EventTypePath: "eventType",
+	}); !errors.Is(err, ErrWebhookNotFound) {
+		t.Fatalf("expected ErrWebhookNotFound, got %v", err)
 	}
 }
 

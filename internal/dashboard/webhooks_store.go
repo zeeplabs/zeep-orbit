@@ -26,6 +26,10 @@ var ErrNoMappings = errors.New("dashboard: webhook has no saved mappings")
 // live (non-soft-deleted) row, scoped to appID when appID is non-empty.
 var ErrWebhookNotFound = errors.New("dashboard: webhook not found")
 
+// ErrInvalidWebhookMethod is returned by CreateWebhook/UpdateWebhook when
+// method is outside GET/POST/PUT/PATCH.
+var ErrInvalidWebhookMethod = errors.New("dashboard: invalid webhook method")
+
 // WebhookRow is a row from zeep_system.webhook_subscriptions.
 type WebhookRow struct {
 	ID             string
@@ -97,10 +101,8 @@ func VerifyWebhookToken(tokenSecret, presentedToken string) bool {
 // (AES-256-GCM, recoverable — see DecryptWebhookToken), and returns the
 // plaintext token for immediate display.
 func CreateWebhook(ctx context.Context, pool *db.Pool, input CreateWebhookInput) (WebhookRow, string, error) {
-	switch input.Method {
-	case "GET", "POST", "PUT", "PATCH":
-	default:
-		return WebhookRow{}, "", fmt.Errorf("dashboard: invalid webhook method %q", input.Method)
+	if !isValidWebhookMethod(input.Method) {
+		return WebhookRow{}, "", ErrInvalidWebhookMethod
 	}
 
 	token, err := generateWebhookToken()
@@ -131,6 +133,15 @@ func CreateWebhook(ctx context.Context, pool *db.Pool, input CreateWebhookInput)
 		return WebhookRow{}, "", fmt.Errorf("dashboard: create webhook: %w", err)
 	}
 	return row, token, nil
+}
+
+func isValidWebhookMethod(method string) bool {
+	switch method {
+	case "GET", "POST", "PUT", "PATCH":
+		return true
+	default:
+		return false
+	}
 }
 
 func scanWebhookRow(row pgx.Row) (WebhookRow, error) {
@@ -296,6 +307,49 @@ func RotateToken(ctx context.Context, pool *db.Pool, webhookID string) (string, 
 		return "", ErrWebhookNotFound
 	}
 	return token, nil
+}
+
+// UpdateWebhookInput is the edit-webhook request payload. EventIDPath uses
+// a pointer to distinguish "clear the field" (non-nil, empty string) from
+// "leave it untouched" would require a separate partial-update mechanism;
+// this endpoint instead always overwrites all four fields (full-replace,
+// not merge-on-absent-key), matching CreateWebhook's own all-fields-required
+// shape.
+type UpdateWebhookInput struct {
+	Name          string
+	Method        string
+	EventTypePath string
+	EventIDPath   string // empty means no dedup path configured
+}
+
+// UpdateWebhook edits a webhook's name, method, and event-shape paths.
+// Token, status, and captured_sample are untouched — this is not a
+// recreate. Full-replace semantics: every field in input is written as
+// given, so callers must send the complete desired state, not a partial
+// patch.
+func UpdateWebhook(ctx context.Context, pool *db.Pool, webhookID string, input UpdateWebhookInput) (WebhookRow, error) {
+	if !isValidWebhookMethod(input.Method) {
+		return WebhookRow{}, ErrInvalidWebhookMethod
+	}
+
+	var eventIDPath *string
+	if input.EventIDPath != "" {
+		eventIDPath = &input.EventIDPath
+	}
+
+	tag, err := pool.Exec(ctx,
+		`UPDATE zeep_system.webhook_subscriptions
+		 SET name = $1, method = $2, event_type_path = $3, event_id_path = $4, updated_at = now()
+		 WHERE id = $5 AND deleted_at IS NULL`,
+		input.Name, input.Method, input.EventTypePath, eventIDPath, webhookID,
+	)
+	if err != nil {
+		return WebhookRow{}, fmt.Errorf("dashboard: update webhook %s: %w", webhookID, err)
+	}
+	if tag.RowsAffected() == 0 {
+		return WebhookRow{}, ErrWebhookNotFound
+	}
+	return GetWebhookByID(ctx, pool, "", webhookID)
 }
 
 // SoftDeleteWebhook sets deleted_at — never a hard DELETE, since
@@ -522,11 +576,13 @@ func GetEventMappingByType(ctx context.Context, pool *db.Pool, webhookID, eventT
 	return m, nil
 }
 
-// DeleteEventMapping removes a single mapping row by id.
-func DeleteEventMapping(ctx context.Context, pool *db.Pool, mappingID string) error {
+// DeleteEventMapping removes a single mapping row by id, scoped to the
+// owning webhook so one app can never delete another app's mapping by
+// guessing/reusing a mapping UUID.
+func DeleteEventMapping(ctx context.Context, pool *db.Pool, webhookID, mappingID string) error {
 	tag, err := pool.Exec(ctx,
-		`DELETE FROM zeep_system.webhook_event_mappings WHERE id = $1`,
-		mappingID,
+		`DELETE FROM zeep_system.webhook_event_mappings WHERE id = $1 AND webhook_id = $2`,
+		mappingID, webhookID,
 	)
 	if err != nil {
 		return fmt.Errorf("dashboard: delete event mapping %s: %w", mappingID, err)

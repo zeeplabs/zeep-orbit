@@ -44,8 +44,12 @@ func columnTypes(table *registry.Table) map[string]string {
 	return m
 }
 
-// uuid and timestamptz do not have auto-cast from text in pgx extended protocol.
-func pgCast(colType string) string {
+// PgCast returns the explicit cast pgx's extended protocol needs for a text
+// parameter bound to a uuid/timestamptz column (no auto-cast from text) —
+// exported so callers outside this package building their own bare
+// `WHERE col = $1`-style SQL (e.g. internal/server's webhook match-key
+// lookup) don't have to duplicate this switch.
+func PgCast(colType string) string {
 	switch colType {
 	case "uuid":
 		return "::uuid"
@@ -89,7 +93,7 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 	if raw, ok := params["limit"]; ok {
 		v, err := strconv.Atoi(raw)
 		if err != nil || v < 0 {
-			return nil, fmt.Errorf("query: parâmetro 'limit' inválido: %q", raw)
+			return nil, fmt.Errorf("query: invalid 'limit' parameter: %q", raw)
 		}
 		if v > maxLimit {
 			v = maxLimit
@@ -101,7 +105,7 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 	if raw, ok := params["offset"]; ok {
 		v, err := strconv.Atoi(raw)
 		if err != nil || v < 0 {
-			return nil, fmt.Errorf("query: parâmetro 'offset' inválido: %q", raw)
+			return nil, fmt.Errorf("query: invalid 'offset' parameter: %q", raw)
 		}
 		offset = v
 	}
@@ -120,7 +124,7 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 			continue
 		}
 		if _, ok := known[key]; !ok {
-			return nil, fmt.Errorf("query: campo desconhecido no filtro: %q", key)
+			return nil, fmt.Errorf("query: unknown field in filter: %q", key)
 		}
 
 		if strings.HasPrefix(val, "in.") {
@@ -129,7 +133,7 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 			var placeholders []string
 			for _, p := range parts {
 				args = append(args, p)
-				placeholders = append(placeholders, fmt.Sprintf("$%d%s", len(args), pgCast(types[key])))
+				placeholders = append(placeholders, fmt.Sprintf("$%d%s", len(args), PgCast(types[key])))
 			}
 			whereClauses = append(whereClauses, fmt.Sprintf("%s IN (%s)", key, strings.Join(placeholders, ", ")))
 			continue
@@ -141,13 +145,13 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 				op = sqlOp
 				filterVal := strings.TrimPrefix(val, prefix)
 				args = append(args, filterVal)
-				whereClauses = append(whereClauses, fmt.Sprintf("%s %s $%d%s", key, op, len(args), pgCast(types[key])))
+				whereClauses = append(whereClauses, fmt.Sprintf("%s %s $%d%s", key, op, len(args), PgCast(types[key])))
 				found = true
 				break
 			}
 		}
 		if !found {
-			return nil, fmt.Errorf("query: operador não suportado em filtro '%s=%s' (use eq./ne./gt./gte./lt./lte./like./ilike./in.)", key, val)
+			return nil, fmt.Errorf("query: unsupported operator in filter '%s=%s' (use eq./ne./gt./gte./lt./lte./like./ilike./in.)", key, val)
 		}
 	}
 
@@ -165,14 +169,14 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 	if raw, ok := params["order"]; ok {
 		parts := strings.Split(raw, ".")
 		if len(parts) != 2 {
-			return nil, fmt.Errorf("query: formato de 'order' inválido: %q (use field.asc ou field.desc)", raw)
+			return nil, fmt.Errorf("query: invalid 'order' format: %q (use field.asc or field.desc)", raw)
 		}
 		field, direction := parts[0], strings.ToUpper(parts[1])
 		if direction != "ASC" && direction != "DESC" {
-			return nil, fmt.Errorf("query: direção de ordenação inválida: %q (use asc ou desc)", parts[1])
+			return nil, fmt.Errorf("query: invalid sort direction: %q (use asc or desc)", parts[1])
 		}
 		if _, ok := known[field]; !ok {
-			return nil, fmt.Errorf("query: campo desconhecido em 'order': %q", field)
+			return nil, fmt.Errorf("query: unknown field in 'order': %q", field)
 		}
 		orderClause = fmt.Sprintf(" ORDER BY %s %s", field, direction)
 	}
@@ -207,7 +211,7 @@ func BuildInsert(schemaName, tableName string, table *registry.Table, body map[s
 			continue
 		}
 		if _, ok := known[key]; !ok {
-			return nil, fmt.Errorf("query: campo desconhecido no body: %q", key)
+			return nil, fmt.Errorf("query: unknown field in body: %q", key)
 		}
 	}
 
@@ -217,7 +221,7 @@ func BuildInsert(schemaName, tableName string, table *registry.Table, body map[s
 		}
 		val, present := body[col.Name]
 		if !present || val == nil {
-			return nil, fmt.Errorf("query: campo %q é obrigatório", col.Name)
+			return nil, fmt.Errorf("query: field %q is required", col.Name)
 		}
 	}
 
@@ -236,7 +240,7 @@ func BuildInsert(schemaName, tableName string, table *registry.Table, body map[s
 		}
 		cols = append(cols, col.Name)
 		args = append(args, val)
-		placeholders = append(placeholders, fmt.Sprintf("$%d%s", len(args), pgCast(types[col.Name])))
+		placeholders = append(placeholders, fmt.Sprintf("$%d%s", len(args), PgCast(types[col.Name])))
 	}
 
 	if ownerID != "" {
@@ -246,7 +250,7 @@ func BuildInsert(schemaName, tableName string, table *registry.Table, body map[s
 	}
 
 	if len(cols) == 0 {
-		return nil, fmt.Errorf("query: nenhum campo válido fornecido para INSERT")
+		return nil, fmt.Errorf("query: no valid field provided for INSERT")
 	}
 
 	sql := fmt.Sprintf(
@@ -268,7 +272,7 @@ func BuildUpdate(schemaName, tableName string, table *registry.Table, id string,
 			continue
 		}
 		if _, ok := known[key]; !ok {
-			return nil, fmt.Errorf("query: campo desconhecido no body: %q", key)
+			return nil, fmt.Errorf("query: unknown field in body: %q", key)
 		}
 	}
 
@@ -285,11 +289,11 @@ func BuildUpdate(schemaName, tableName string, table *registry.Table, id string,
 			continue
 		}
 		args = append(args, val)
-		setClauses = append(setClauses, fmt.Sprintf("%s = $%d%s", col.Name, len(args), pgCast(types[col.Name])))
+		setClauses = append(setClauses, fmt.Sprintf("%s = $%d%s", col.Name, len(args), PgCast(types[col.Name])))
 	}
 
 	if len(setClauses) == 0 {
-		return nil, fmt.Errorf("query: nenhum campo válido fornecido para UPDATE")
+		return nil, fmt.Errorf("query: no valid field provided for UPDATE")
 	}
 
 	setClauses = append(setClauses, "updated_at = now()")

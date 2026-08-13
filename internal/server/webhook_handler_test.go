@@ -275,6 +275,15 @@ func TestWebhookDelivery_VerificationChallengeEchoedBeforeCapture(t *testing.T) 
 	if len(list) != 1 || list[0].Outcome != "verification_challenge" {
 		t.Fatalf("expected 1 delivery logged with outcome=verification_challenge, got %+v", list)
 	}
+	// Only the challenge value is persisted -- Slack's legacy verification
+	// "token" field in the same payload has no reason to sit in
+	// webhook_deliveries for 30 days.
+	if _, hasToken := list[0].RawPayload["token"]; hasToken {
+		t.Fatalf("expected the legacy verification token to NOT be persisted in raw_payload, got %+v", list[0].RawPayload)
+	}
+	if list[0].RawPayload["challenge"] != "3eZbrw1aBm2rZgRNFdxV2595E9CY3gmdALWMmHkvFXO7tYXAYM8P" {
+		t.Fatalf("expected raw_payload to still record the challenge value, got %+v", list[0].RawPayload)
+	}
 }
 
 func TestWebhookDelivery_UnknownWebhookIDReturns404(t *testing.T) {
@@ -291,6 +300,82 @@ func TestWebhookDelivery_UnknownWebhookIDReturns404(t *testing.T) {
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for an unknown webhook id, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestWebhookDelivery_OversizedBodyRejectedAsMalformed: F3/B2 (Opus
+// pre-release review) — the public route caps the request body at 1 MiB
+// (maxWebhookBodyBytes) via http.MaxBytesReader; before that fix, an
+// unbounded io.ReadAll let anyone who knew a webhookId submit an arbitrarily
+// large body straight into captured_sample. Exercised through
+// HandleWebhookDelivery directly (this handler alone owns the MaxBytesReader
+// call — the rate limiter around it is a router-level concern, tested
+// separately below against the real server).
+func TestWebhookDelivery_OversizedBodyRejectedAsMalformed(t *testing.T) {
+	wh, _, token := webhookTestSetup(t, "POST")
+	h := NewWebhookHandler(testPool, testReg)
+	router := buildWebhookRouter(h)
+
+	// Must be VALID JSON, not just an oversized byte slice: an invalid body
+	// already 400s as "malformed" regardless of size, which would let a
+	// mutant removing MaxBytesReader entirely still pass this test (the
+	// independent Verifier's F12 finding). A well-formed payload over the
+	// cap only fails if the cap itself is enforced -- without it, the
+	// handler would happily parse and capture it (200).
+	oversized := []byte(`{"eventType":"x","eventId":"y","padding":"` + strings.Repeat("a", maxWebhookBodyBytes+1024) + `"}`)
+	req := httptest.NewRequest(http.MethodPost, "/hooks/"+wh.ID+"/"+token, bytes.NewReader(oversized))
+	req.Header.Set("Content-Type", "application/json")
+	req.ContentLength = int64(len(oversized))
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for an oversized body, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	list, err := dashboard.ListDeliveries(context.Background(), testPool, wh.ID, 50, 0)
+	if err != nil {
+		t.Fatalf("ListDeliveries: %v", err)
+	}
+	if len(list) != 1 || list[0].Outcome != "malformed" {
+		t.Fatalf("expected 1 delivery logged with outcome=malformed, got %+v", list)
+	}
+}
+
+// TestWebhookDelivery_RateLimitedAfter120RequestsPerMinute: F3/B2 (Opus
+// pre-release review) — the public /hooks/ route is wrapped with a 120
+// req/min per-IP limiter (server.go's webhookLimiter) so an unauthenticated
+// caller can't flood webhook_deliveries. Hits the real router built by
+// New() (not buildWebhookRouter's bare handler-only router, which has no
+// rate limiter) — the independent Verifier's mutation sensor found that
+// removing this middleware from server.go still passed the full suite,
+// because nothing exercised the route through the real server.
+func TestWebhookDelivery_RateLimitedAfter120RequestsPerMinute(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+	s, err := New(testReg, testPool, 0)
+	if err != nil {
+		t.Fatalf("New(): %v", err)
+	}
+	ts := httptest.NewServer(s.Router())
+	defer ts.Close()
+
+	url := ts.URL + "/hooks/00000000-0000-0000-0000-000000000000/whatever"
+	var lastStatus int
+	for i := 1; i <= 121; i++ {
+		resp, err := http.Post(url, "application/json", bytes.NewBufferString(`{}`))
+		if err != nil {
+			t.Fatalf("request %d: %v", i, err)
+		}
+		lastStatus = resp.StatusCode
+		resp.Body.Close()
+		if i < 121 && lastStatus == http.StatusTooManyRequests {
+			t.Fatalf("request %d: got 429 before the 120-request budget was exhausted", i)
+		}
+	}
+	if lastStatus != http.StatusTooManyRequests {
+		t.Fatalf("request 121: status = %d, want 429 (rate limit exceeded)", lastStatus)
 	}
 }
 

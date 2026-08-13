@@ -2,10 +2,15 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { ColumnDef, PolicyClause, TablePolicyRow, useApp, useCreateTablePolicy, useDeleteTablePolicy, useTablePolicies, useUpdateTablePolicy } from "../lib/api";
+import { RoleChipPicker } from "./RoleChipPicker";
+import { PolicyTemplatePicker } from "./PolicyTemplatePicker";
+import { PolicyHelpContent } from "./PolicyHelpContent";
+import { FormDrawer } from "@/components/patterns/FormDrawer";
 import { Icon } from "@/components/ui/icon";
-import { EmptyState } from "@/components/patterns";
+import { EmptyState, ConfirmDialog } from "@/components/patterns";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -43,6 +48,7 @@ interface TablePoliciesTabProps {
   appId: string;
   tableName: string;
   columns: ColumnDef[];
+  rls: string;
 }
 
 function clauseSummary(clause: TablePolicyRow["clauses"][number]): string {
@@ -56,7 +62,7 @@ function clauseSummary(clause: TablePolicyRow["clauses"][number]): string {
   return `${prefix}${clause.column} ${clause.operator}${value}`.trim();
 }
 
-export default function TablePoliciesTab({ appId, tableName, columns }: TablePoliciesTabProps) {
+export default function TablePoliciesTab({ appId, tableName, columns, rls }: TablePoliciesTabProps) {
   const { t } = useTranslation();
   const { data: app } = useApp(appId);
   const availableRoles = app?.enduser_roles_config ?? [];
@@ -64,6 +70,15 @@ export default function TablePoliciesTab({ appId, tableName, columns }: TablePol
   const deletePolicy = useDeleteTablePolicy(appId, tableName);
   const createPolicy = useCreateTablePolicy(appId, tableName);
   const updatePolicy = useUpdateTablePolicy(appId, tableName);
+
+  // T8: templates is the default entry point (spec P1 AC1); "Modo avançado"
+  // reveals the pre-existing technical form below, unchanged in behavior.
+  const [mode, setMode] = useState<"templates" | "advanced">("templates");
+  const [showHelp, setShowHelp] = useState(false);
+  // Tracks the template picker's in-progress role selection so switching to
+  // "Modo avançado" can hand it off to the advanced form instead of losing
+  // it (spec Edge Cases: fields that translate directly aren't lost).
+  const [templateDraftRoles, setTemplateDraftRoles] = useState<string[]>([]);
 
   const [showForm, setShowForm] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<TablePolicyRow | null>(null);
@@ -74,17 +89,17 @@ export default function TablePoliciesTab({ appId, tableName, columns }: TablePol
   const [clauses, setClauses] = useState<ClauseDraft[]>([emptyClause(firstColumn)]);
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Roles offered as chips: the app's configured list, plus any role
-  // already selected but no longer in that list (orphaned) — always shown,
-  // never silently dropped (ROLECFG-16).
-  const chipRoles = Array.from(new Set([...availableRoles, ...selectedRoles]));
-
   const toggleRole = (role: string) =>
     setSelectedRoles((prev) => (prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]));
 
-  const remove = (policy: TablePolicyRow) => {
-    if (!confirm(t("tablePolicies.deleteConfirm", { name: policy.pg_policy_name }))) return;
-    deletePolicy.mutate(policy.id);
+  const [deleteTarget, setDeleteTarget] = useState<TablePolicyRow | null>(null);
+
+  const remove = (policy: TablePolicyRow) => setDeleteTarget(policy);
+
+  const confirmRemove = () => {
+    if (!deleteTarget) return;
+    deletePolicy.mutate(deleteTarget.id);
+    setDeleteTarget(null);
   };
 
   const resetForm = () => {
@@ -101,10 +116,32 @@ export default function TablePoliciesTab({ appId, tableName, columns }: TablePol
     setShowForm(true);
   };
 
+  // Toggling "Modo avançado" on takes the user straight to the technical
+  // form, carrying over any roles already picked in the template picker
+  // (spec Edge Cases) — a column/value choice from value_match has no
+  // direct advanced-form equivalent, so only roles are transferred.
+  const enterAdvancedMode = () => {
+    setMode("advanced");
+    resetForm();
+    if (templateDraftRoles.length > 0) setSelectedRoles(templateDraftRoles);
+    setEditingPolicy(null);
+    setShowForm(true);
+  };
+
+  const enterTemplatesMode = () => {
+    setMode("templates");
+    setShowForm(false);
+    setEditingPolicy(null);
+  };
+
   // Pre-populates the form from an existing policy — including any role no
   // longer in enduser_roles_config, which chipRoles already keeps visible
   // as a selected chip (ROLECFG-16, now exercised via edit).
   const openEditForm = (policy: TablePolicyRow) => {
+    // Editing an existing policy always uses the advanced form (spec Out of
+    // Scope: "Edição de policy existente via template") — force the mode
+    // even if the picker view was showing when "Edit" was clicked.
+    setMode("advanced");
     setName(policy.pg_policy_name);
     setAction(policy.action);
     setSelectedRoles(policy.roles);
@@ -177,15 +214,56 @@ export default function TablePoliciesTab({ appId, tableName, columns }: TablePol
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
         <p className="text-[11px] text-[var(--text-secondary)]">{t("tablePolicies.explainer")}</p>
-        {!showForm && (
-          <Button className="shrink-0 gap-1.5" size="sm" onClick={openForm}>
-            <Icon name="add" size={15} />
-            {t("tablePolicies.addPolicy")}
-          </Button>
-        )}
+        <div className="flex shrink-0 items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setShowHelp(true)}
+            className="flex items-center gap-1 text-[12px] font-medium text-[var(--text-secondary)] hover:text-[var(--primary)] bg-transparent border-none cursor-pointer transition-colors"
+          >
+            <Icon name="help" size={14} />
+            {t("tablePolicies.helpButton")}
+          </button>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-medium text-[var(--text-secondary)]">
+              {t("tablePolicies.advancedModeLabel")}
+            </span>
+            <Switch
+              checked={mode === "advanced"}
+              onCheckedChange={(checked) => (checked ? enterAdvancedMode() : enterTemplatesMode())}
+              className="h-5 w-9"
+            />
+          </div>
+          {mode === "advanced" && !showForm && (
+            <Button className="shrink-0 gap-1.5" size="sm" onClick={openForm}>
+              <Icon name="add" size={15} />
+              {t("tablePolicies.addPolicy")}
+            </Button>
+          )}
+        </div>
       </div>
 
-      {showForm && (
+      <FormDrawer
+        open={showHelp}
+        onOpenChange={setShowHelp}
+        title={t("tablePolicies.help.title")}
+      >
+        <PolicyHelpContent />
+      </FormDrawer>
+
+      {mode === "templates" && (
+        <PolicyTemplatePicker
+          appId={appId}
+          tableName={tableName}
+          rls={rls}
+          availableRoles={availableRoles}
+          columns={columns}
+          existingPolicies={policies ?? []}
+          onDone={() => {}}
+          onRolesChange={setTemplateDraftRoles}
+        />
+      )}
+
+      {mode === "advanced" && showForm && (
         <div className="flex flex-col gap-3 rounded-[10px] border border-[var(--border)] bg-[var(--sunken)] p-3">
           <div className="flex flex-wrap items-center gap-2">
             <Input
@@ -208,32 +286,14 @@ export default function TablePoliciesTab({ appId, tableName, columns }: TablePol
             </Select>
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5" title={t("tablePolicies.rolesChipsHint")}>
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
-              {t("tablePolicies.rolesChipsLabel")}
-            </span>
-            {chipRoles.length === 0 ? (
-              <span className="text-[12px] text-[var(--text-tertiary)]">{t("tablePolicies.rolesPlaceholder")}</span>
-            ) : (
-              chipRoles.map((role) => {
-                const selected = selectedRoles.includes(role);
-                return (
-                  <button
-                    key={role}
-                    type="button"
-                    onClick={() => toggleRole(role)}
-                    className={
-                      selected
-                        ? "rounded-full border border-[var(--primary)] bg-[var(--primary)] px-2.5 py-1 text-[12px] font-semibold text-white cursor-pointer"
-                        : "rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[12px] font-semibold text-[var(--text-secondary)] cursor-pointer hover:bg-[var(--hover-surface)]"
-                    }
-                  >
-                    {role}
-                  </button>
-                );
-              })
-            )}
-          </div>
+          <RoleChipPicker
+            availableRoles={availableRoles}
+            selected={selectedRoles}
+            onToggle={toggleRole}
+            label={t("tablePolicies.rolesChipsLabel")}
+            placeholder={t("tablePolicies.rolesPlaceholder")}
+            hint={t("tablePolicies.rolesChipsHint")}
+          />
 
           <div className="flex flex-col gap-2">
             {clauses.map((clause, ci) => (
@@ -434,6 +494,19 @@ export default function TablePoliciesTab({ appId, tableName, columns }: TablePol
           </div>
         ))}
       </div>
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title={t("tablePolicies.deleteTitle")}
+        message={t("tablePolicies.deleteConfirm", { name: deleteTarget?.pg_policy_name ?? "" })}
+        confirmLabel={t("tablePolicies.delete")}
+        cancelLabel={t("tablePolicies.cancel")}
+        destructive
+        icon="delete"
+        loading={deletePolicy.isPending}
+        onConfirm={confirmRemove}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

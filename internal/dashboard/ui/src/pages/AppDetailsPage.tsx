@@ -190,7 +190,7 @@ function DatabaseTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data
 
   const { data: sysCfg } = useSystemConfig();
   const requireRls = Boolean(sysCfg?.require_rls_default) && app.auth_email_enabled;
-  const defaultRls = requireRls ? "enabled" : "disabled";
+  const defaultRls = requireRls ? "enabled" : "";
 
   const addTable = () => {
     setDraftTable(emptyDraftTable(defaultRls));

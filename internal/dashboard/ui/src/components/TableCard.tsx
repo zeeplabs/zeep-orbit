@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { useTranslation, Trans } from "react-i18next";
+import { useTranslation } from "react-i18next";
 import { TableDef, ColumnDef, IndexDef, ReferenceDef } from "../lib/api";
+import { hasOwnerColumn } from "../lib/rls";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon";
-import { StatusPill } from "@/components/patterns";
+import { StatusPill, ConfirmDialog, FormDrawer, MarkdownContent } from "@/components/patterns";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -13,13 +14,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TablePoliciesTab from "@/components/TablePolicies";
 
@@ -79,9 +73,25 @@ const BASE_AUTO_COLUMNS = [
 
 const OWNER_ID_AUTO_COLUMN = { name: "owner_id", type: "uuid", required: true, unique: false };
 
-// owner_id só existe quando RLS está ativo (provisioner.go: rls == "owner" || rls == "enabled").
+// owner_id só existe quando RLS está ativo (config.HasOwnerColumn: rls == "owner" || rls == "enabled" || rls == "policy").
 const autoColumnsFor = (rls: string) =>
-  rls === "enabled" || rls === "owner" ? [...BASE_AUTO_COLUMNS, OWNER_ID_AUTO_COLUMN] : BASE_AUTO_COLUMNS;
+  hasOwnerColumn(rls) ? [...BASE_AUTO_COLUMNS, OWNER_ID_AUTO_COLUMN] : BASE_AUTO_COLUMNS;
+
+// Mirrors config.AutoScopesByOwner: "policy" mode is a different group from
+// ""/"owner"/"enabled" — switching a saved table between the two groups
+// changes which rows each role can see (RLSP-07), so the UI must confirm
+// before applying it. Switching within the same group (e.g. "owner" ->
+// "enabled") does not change row visibility semantics and needs no warning.
+const isPolicyRLS = (rls: string) => rls === "policy";
+
+// Radix Select reserves the empty string as its internal placeholder sentinel
+// (shouldShowPlaceholder in @radix-ui/react-select) — a SelectItem with
+// value="" never renders its label into the trigger. rls: "" is the real,
+// backend-valid "Public"/no-RLS value (config.ValidRLS), so the Select UI
+// maps it to this sentinel and back; nothing outside the Select ever sees it.
+const RLS_PUBLIC_SENTINEL = "public";
+const toSelectValue = (rls: string) => (rls === "" ? RLS_PUBLIC_SENTINEL : rls);
+const fromSelectValue = (val: string) => (val === RLS_PUBLIC_SENTINEL ? "" : val);
 
 const emptyColumn = (): ColumnDef => ({
   name: "",
@@ -150,6 +160,8 @@ export default function TableCard({
   const [error, setError] = useState<string | null>(null);
   const [showRelationshipsInfo, setShowRelationshipsInfo] = useState(false);
   const [showIndexInfo, setShowIndexInfo] = useState(false);
+  const [pendingRlsValue, setPendingRlsValue] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const enterEdit = () => {
     setName(table.name);
@@ -166,6 +178,23 @@ export default function TableCard({
     setEditing(false);
     onExitEdit();
     if (isDraft) onDiscardDraft();
+  };
+
+  // Only warns on a saved table (isDraft === false) crossing between the
+  // ""/"owner"/"enabled" group and "policy" — a brand-new table has no rows
+  // yet, so there is nothing to warn about (spec.md RLSP-07 AC1).
+  const changeRls = (val: string) => {
+    if (!isDraft && isPolicyRLS(val) !== isPolicyRLS(rls)) {
+      setPendingRlsValue(val);
+      return;
+    }
+    setRls(val);
+  };
+
+  const confirmRlsChange = () => {
+    if (pendingRlsValue === null) return;
+    setRls(pendingRlsValue);
+    setPendingRlsValue(null);
   };
 
   const addColumn = () => setColumns((prev) => [...prev, emptyColumn()]);
@@ -227,8 +256,12 @@ export default function TableCard({
     }
   }
 
-  async function remove() {
-    if (!confirm(t("tableCard.deleteConfirm", { name: table.name }))) return;
+  function remove() {
+    setConfirmingDelete(true);
+  }
+
+  async function confirmRemove() {
+    setConfirmingDelete(false);
     setDeleting(true);
     setError(null);
     try {
@@ -283,12 +316,12 @@ export default function TableCard({
           placeholder={t("appForm.tableName")}
           className="h-8 px-3 py-1.5 text-[13px] bg-[var(--sunken)] border-[var(--border)] rounded-md text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] brand-focus"
         />
-        <Select value={rls} onValueChange={setRls}>
+        <Select value={toSelectValue(rls)} onValueChange={(val) => changeRls(fromSelectValue(val))}>
           <SelectTrigger className="h-8 w-[100px] shrink-0 text-[12px] bg-[var(--sunken)] border-[var(--border)] text-[var(--text-primary)] rounded-md px-3 brand-focus">
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="bg-[var(--surface-raised)] border-[var(--border)] text-[var(--text-primary)]">
-            <SelectItem value="disabled" className="text-[12px] focus:bg-[var(--hover-surface)] focus:text-[var(--text-primary)]">
+            <SelectItem value={RLS_PUBLIC_SENTINEL} className="text-[12px] focus:bg-[var(--hover-surface)] focus:text-[var(--text-primary)]">
               {t("appForm.tablePublic")}
             </SelectItem>
             <SelectItem
@@ -297,6 +330,13 @@ export default function TableCard({
               className="text-[12px] focus:bg-[var(--hover-surface)] focus:text-[var(--text-primary)]"
             >
               {t("appForm.tableRestricted")}
+            </SelectItem>
+            <SelectItem
+              value="policy"
+              disabled={!authEmailEnabled}
+              className="text-[12px] focus:bg-[var(--hover-surface)] focus:text-[var(--text-primary)]"
+            >
+              {t("appForm.tablePolicy")}
             </SelectItem>
           </SelectContent>
         </Select>
@@ -388,10 +428,33 @@ export default function TableCard({
             />
           </TabsContent>
           <TabsContent value="policies" className="mt-0 px-4 pb-4">
-            <TablePoliciesTab appId={appId} tableName={table.name} columns={table.columns} />
+            <TablePoliciesTab appId={appId} tableName={table.name} columns={table.columns} rls={table.rls} />
           </TabsContent>
         </Tabs>
       )}
+
+      <ConfirmDialog
+        open={pendingRlsValue !== null}
+        title={t("tableCard.rlsModeSwitchTitle")}
+        message={t("tableCard.rlsModeSwitchConfirm")}
+        confirmLabel={t("tableCard.continue")}
+        cancelLabel={t("tableCard.cancel")}
+        icon="warning"
+        onConfirm={confirmRlsChange}
+        onCancel={() => setPendingRlsValue(null)}
+      />
+      <ConfirmDialog
+        open={confirmingDelete}
+        title={t("tableCard.deleteTitle")}
+        message={t("tableCard.deleteConfirm", { name: table.name })}
+        confirmLabel={t("tableCard.deleteTable")}
+        cancelLabel={t("tableCard.cancel")}
+        destructive
+        icon="delete"
+        loading={deleting}
+        onConfirm={confirmRemove}
+        onCancel={() => setConfirmingDelete(false)}
+      />
     </div>
   );
 }
@@ -846,61 +909,21 @@ function SchemaEditor({
         </div>
       </div>
 
-      <Dialog open={showRelationshipsInfo} onOpenChange={setShowRelationshipsInfo}>
-        <DialogContent className="max-w-[480px] border border-[var(--border)] bg-[var(--surface-raised)] backdrop-blur-xl rounded-[18px] p-0 gap-0">
-          <div className="bg-[var(--surface)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.10)] rounded-[calc(1rem-2px)] px-7 pb-6 pt-7">
-            <DialogHeader className="mb-0">
-              <div className="w-11 h-11 rounded-[12px] bg-[var(--hover-surface)] border border-[var(--border)] flex items-center justify-center mb-[18px]">
-                <Icon name="link" size={18} className="text-[var(--text-secondary)]" />
-              </div>
-              <DialogTitle className="text-base font-bold text-[var(--text-primary)] mb-2">
-                {t("tableCard.relationshipsInfoBtn")}
-              </DialogTitle>
-              <DialogDescription className="text-[13px] text-[var(--text-secondary)] leading-relaxed">
-                <Trans
-                  i18nKey="tableCard.relationshipsExplainer"
-                  components={{
-                    1: <code className="text-[var(--primary)]" />,
-                    3: <code className="text-[var(--primary)]" />,
-                    5: <code className="text-[var(--primary)]" />,
-                    7: <strong className="text-[var(--primary)] font-medium" />,
-                    9: <strong className="text-[var(--primary)] font-medium" />,
-                    11: <strong className="text-[var(--primary)] font-medium" />,
-                    13: <strong className="text-[var(--primary)] font-medium" />,
-                  }}
-                />
-              </DialogDescription>
-            </DialogHeader>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <FormDrawer
+        open={showRelationshipsInfo}
+        onOpenChange={setShowRelationshipsInfo}
+        title={t("tableCard.relationshipsInfoBtn")}
+      >
+        <MarkdownContent content={t("tableCard.relationshipsExplainer")} />
+      </FormDrawer>
 
-      <Dialog open={showIndexInfo} onOpenChange={setShowIndexInfo}>
-        <DialogContent className="max-w-[480px] border border-[var(--border)] bg-[var(--surface-raised)] backdrop-blur-xl rounded-[18px] p-0 gap-0">
-          <div className="bg-[var(--surface)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.10)] rounded-[calc(1rem-2px)] px-7 pb-6 pt-7">
-            <DialogHeader className="mb-0">
-              <div className="w-11 h-11 rounded-[12px] bg-[var(--hover-surface)] border border-[var(--border)] flex items-center justify-center mb-[18px]">
-                <Icon name="error" size={18} className="text-[var(--text-secondary)]" />
-              </div>
-              <DialogTitle className="text-base font-bold text-[var(--text-primary)] mb-2">
-                {t("tableCard.indexInfoBtn")}
-              </DialogTitle>
-              <DialogDescription className="text-[13px] text-[var(--text-secondary)] leading-relaxed">
-                <Trans
-                  i18nKey="tableCard.indexExplainer"
-                  components={{
-                    1: <strong className="text-[var(--primary)] font-medium" />,
-                    3: <strong className="text-[var(--primary)] font-medium" />,
-                    5: <code className="text-[var(--primary)]" />,
-                    7: <code className="text-[var(--primary)]" />,
-                    9: <strong className="text-[var(--primary)] font-medium" />,
-                  }}
-                />
-              </DialogDescription>
-            </DialogHeader>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <FormDrawer
+        open={showIndexInfo}
+        onOpenChange={setShowIndexInfo}
+        title={t("tableCard.indexInfoBtn")}
+      >
+        <MarkdownContent content={t("tableCard.indexExplainer")} />
+      </FormDrawer>
     </>
   );
 }
