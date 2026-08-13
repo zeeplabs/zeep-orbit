@@ -280,6 +280,67 @@ func TestWebhookActive_InsertRLSDeniedReturns500WriteErrorNoRawErrorLeaked(t *te
 	}
 }
 
+// TestWebhookActive_InsertIntoPolicyModeTableWithGrantSucceeds reproduces the
+// real, documented use case (CHANGELOG: "Writes run under a dedicated RLS
+// role (webhook, via table_policies)") that TestWebhookActive_InsertHappyPathCreatesRow
+// doesn't actually cover — that fixture's "employees" table has no owner_id
+// column at all, so it never exercises a policy-mode table provisioned the
+// real way. Here owner_id exists and is nullable (RelaxOwnerColumn /
+// provisioner.createTable's "policy" branch): the webhook role has no
+// end-user identity to put there, and the insert must still succeed.
+func TestWebhookActive_InsertIntoPolicyModeTableWithGrantSucceeds(t *testing.T) {
+	f := setupWebhookActiveFixture(t)
+	f.activateWithInsertMapping(t)
+	ctx := context.Background()
+
+	if _, err := testPool.Exec(ctx,
+		`ALTER TABLE `+f.schema+`.employees ADD COLUMN owner_id UUID`,
+	); err != nil {
+		t.Fatalf("add owner_id: %v", err)
+	}
+	if _, err := testPool.Exec(ctx, "ALTER TABLE "+f.schema+".employees ENABLE ROW LEVEL SECURITY"); err != nil {
+		t.Fatalf("enable RLS: %v", err)
+	}
+	// Mirrors provisioner.BuildPolicySQL's actual output: every policy runs
+	// "TO zeep_app_enduser" (the one Postgres role every request switches to
+	// via WithRLSContext) and gates by role through the app.jwt_role GUC,
+	// not a literal "webhook" Postgres role/grantee.
+	if _, err := testPool.Exec(ctx,
+		`CREATE POLICY webhook_insert ON `+f.schema+`.employees FOR INSERT TO zeep_app_enduser
+		 WITH CHECK (current_setting('app.jwt_role', true) = 'webhook')`,
+	); err != nil {
+		t.Fatalf("create policy: %v", err)
+	}
+	if _, err := testPool.Exec(ctx,
+		`CREATE POLICY webhook_select ON `+f.schema+`.employees FOR SELECT TO zeep_app_enduser
+		 USING (current_setting('app.jwt_role', true) = 'webhook')`,
+	); err != nil {
+		t.Fatalf("create select policy: %v", err)
+	}
+
+	h := NewWebhookHandler(testPool, testReg)
+	router := buildActiveWebhookRouter(h)
+
+	rec := postWebhook(router, f.wh, f.token, `{"eventType":"user.created","eventId":"evt-1","user":{"id":"u-42","name":"Ana Souza"}}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 inserting into a policy-mode table granted to role webhook, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var externalID string
+	var ownerID *string
+	if err := testPool.QueryRow(ctx,
+		`SELECT external_id, owner_id FROM `+f.schema+`.employees LIMIT 1`,
+	).Scan(&externalID, &ownerID); err != nil {
+		t.Fatalf("query inserted row: %v", err)
+	}
+	if externalID != "u-42" {
+		t.Fatalf("expected external_id=u-42, got %q", externalID)
+	}
+	if ownerID != nil {
+		t.Fatalf("expected owner_id to be NULL for a webhook-originated row, got %q", *ownerID)
+	}
+}
+
 func TestWebhookActive_InsertMissingMappedFieldReturns500WriteError(t *testing.T) {
 	f := setupWebhookActiveFixture(t)
 	f.activateWithInsertMapping(t)

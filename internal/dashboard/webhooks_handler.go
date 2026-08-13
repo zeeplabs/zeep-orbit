@@ -438,7 +438,7 @@ func (h *Handler) DeleteEventMapping(w http.ResponseWriter, r *http.Request) {
 	}
 	mappingID := chi.URLParam(r, "mappingId")
 
-	if err := DeleteEventMapping(r.Context(), h.pool, mappingID); err != nil {
+	if err := DeleteEventMapping(r.Context(), h.pool, wh.ID, mappingID); err != nil {
 		if errors.Is(err, ErrMappingNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "mapping not found"})
 			return

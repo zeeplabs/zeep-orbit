@@ -42,12 +42,15 @@ func (w *captureResponseWriter) Status() int {
 	return w.statusCode
 }
 
-// readBody reads r.Body without consuming the original (replaces it after read).
+// readBody captures up to maxBodyCapture bytes of r.Body for logging, then
+// restores r.Body so the handler still sees the full, untruncated stream —
+// only the log entry is capped, never the request the handler acts on.
 func readBody(r *http.Request) string {
 	if r.Body == nil {
 		return ""
 	}
-	body, _ := io.ReadAll(io.LimitReader(r.Body, maxBodyCapture))
-	r.Body = io.NopCloser(bytes.NewReader(body))
-	return string(body)
+	var captured bytes.Buffer
+	_, _ = io.CopyN(&captured, r.Body, maxBodyCapture)
+	r.Body = io.NopCloser(io.MultiReader(bytes.NewReader(captured.Bytes()), r.Body))
+	return captured.String()
 }

@@ -205,8 +205,11 @@ func TestCreateTable_PolicyModeEnablesRLSAtCreation(t *testing.T) {
 }
 
 // TestCreateTable_PolicyModeCreatesOwnerColumn covers T4 / RLSP-02's DDL
-// requirement: owner_id must exist and be NOT NULL for "policy", same as
-// "owner"/"enabled" (spec: DDL is identical across the three modes).
+// requirement: owner_id must exist for "policy", same as "owner"/"enabled".
+// Unlike those two, it's nullable — "policy" never auto-populates or filters
+// by owner_id (config.AutoScopesByOwner is false for it), and a row with no
+// end-user identity behind it (e.g. an inbound webhook delivery) has no
+// value to put there.
 func TestCreateTable_PolicyModeCreatesOwnerColumn(t *testing.T) {
 	pool := ensureRLSTestPool(t)
 	defer pool.Close()
@@ -234,8 +237,8 @@ func TestCreateTable_PolicyModeCreatesOwnerColumn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected owner_id column to exist on a rls:policy table: %v", err)
 	}
-	if isNullable != "NO" {
-		t.Fatalf("owner_id is_nullable = %q, want %q (NOT NULL)", isNullable, "NO")
+	if isNullable != "YES" {
+		t.Fatalf("owner_id is_nullable = %q, want %q (nullable)", isNullable, "YES")
 	}
 }
 

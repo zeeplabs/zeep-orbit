@@ -538,6 +538,9 @@ func UpdateAppTable(ctx context.Context, pool *db.Pool, appID, tableID, schemaNa
 		if err := provisioner.EnsureRowLevelSecurity(ctx, pool, schemaName, row.Name); err != nil {
 			return AppTableRow{}, fmt.Errorf("dashboard: enable row level security for table %s: %w", tableID, err)
 		}
+		if err := provisioner.RelaxOwnerColumn(ctx, pool, schemaName, row.Name); err != nil {
+			return AppTableRow{}, fmt.Errorf("dashboard: relax owner_id for table %s: %w", tableID, err)
+		}
 	}
 
 	return row, nil

@@ -306,10 +306,20 @@ func TestDeleteEventMapping(t *testing.T) {
 		t.Fatalf("SaveEventMapping: %v", err)
 	}
 
-	if err := DeleteEventMapping(ctx, pool, row.ID); err != nil {
+	otherWh, _, err := CreateWebhook(ctx, pool, CreateWebhookInput{
+		AppID: appID, Name: "other-hook", Method: "POST", EventTypePath: "eventType", CreatedBy: userID,
+	})
+	if err != nil {
+		t.Fatalf("CreateWebhook (other): %v", err)
+	}
+	if err := DeleteEventMapping(ctx, pool, otherWh.ID, row.ID); err != ErrMappingNotFound {
+		t.Fatalf("expected ErrMappingNotFound deleting mapping scoped to a different webhook, got %v", err)
+	}
+
+	if err := DeleteEventMapping(ctx, pool, wh.ID, row.ID); err != nil {
 		t.Fatalf("DeleteEventMapping: %v", err)
 	}
-	if err := DeleteEventMapping(ctx, pool, row.ID); err != ErrMappingNotFound {
+	if err := DeleteEventMapping(ctx, pool, wh.ID, row.ID); err != ErrMappingNotFound {
 		t.Fatalf("expected ErrMappingNotFound on second delete, got %v", err)
 	}
 

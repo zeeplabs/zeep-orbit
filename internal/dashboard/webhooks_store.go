@@ -576,11 +576,13 @@ func GetEventMappingByType(ctx context.Context, pool *db.Pool, webhookID, eventT
 	return m, nil
 }
 
-// DeleteEventMapping removes a single mapping row by id.
-func DeleteEventMapping(ctx context.Context, pool *db.Pool, mappingID string) error {
+// DeleteEventMapping removes a single mapping row by id, scoped to the
+// owning webhook so one app can never delete another app's mapping by
+// guessing/reusing a mapping UUID.
+func DeleteEventMapping(ctx context.Context, pool *db.Pool, webhookID, mappingID string) error {
 	tag, err := pool.Exec(ctx,
-		`DELETE FROM zeep_system.webhook_event_mappings WHERE id = $1`,
-		mappingID,
+		`DELETE FROM zeep_system.webhook_event_mappings WHERE id = $1 AND webhook_id = $2`,
+		mappingID, webhookID,
 	)
 	if err != nil {
 		return fmt.Errorf("dashboard: delete event mapping %s: %w", mappingID, err)

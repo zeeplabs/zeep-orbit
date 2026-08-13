@@ -3,4 +3,3 @@ dist/
 test-results/
 playwright-report/
 tsconfig.tsbuildinfo
-package-lock.json
