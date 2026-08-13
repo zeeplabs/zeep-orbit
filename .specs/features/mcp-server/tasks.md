@@ -461,12 +461,12 @@ T15 depends on T10, T11, T12 (needs every tool registered to exercise the full P
 
 **Done when**:
 
-- [ ] `GET /.well-known/oauth-authorization-server` returns a valid discovery document with all 3 endpoint URLs
-- [ ] `POST /dashboard/oauth/register` with a name and redirect URI returns a `client_id`; no prior manual setup required
-- [ ] Registration endpoint rejects a request once its per-IP rate limit is exceeded
-- [ ] Gate check passes: `go test ./internal/dashboard/...`
+- [x] `GET /.well-known/oauth-authorization-server` returns a valid discovery document with all 3 endpoint URLs
+- [x] `POST /dashboard/oauth/register` with a name and redirect URI returns a `client_id`; no prior manual setup required
+- [x] Registration endpoint rejects a request once its per-IP rate limit is exceeded
+- [x] Gate check passes: `go test ./internal/dashboard/...`
 
-**Status**: Not Started
+**Status**: Complete
 
 **Tests**: integration
 **Gate**: quick

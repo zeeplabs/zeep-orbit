@@ -496,6 +496,50 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_dashboard_pats_user_id ON zeep_system.dashboard_pats(user_id)`,
+		// Dynamically-registered OAuth clients (mcp-server spec, T17) — id is
+		// the client_id handed back at registration, generated via
+		// generateToken (a hex string, not a UUID) per design.md's
+		// OAuthClientStore component, so it's TEXT rather than this
+		// codebase's usual UUID PRIMARY KEY.
+		`CREATE TABLE IF NOT EXISTS zeep_system.oauth_clients (
+			id            TEXT        PRIMARY KEY,
+			name          TEXT        NOT NULL,
+			redirect_uris JSONB       NOT NULL,
+			created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		// dashboard_pats.oauth_client_id was added in T1 as a plain UUID
+		// column (oauth_clients didn't exist yet, per that migration's own
+		// comment) — retyped to TEXT now that oauth_clients.id is TEXT
+		// (generateToken's hex output, not a UUID). Guarded so this is a
+		// no-op once applied.
+		`DO $do$
+		 BEGIN
+		   IF EXISTS (
+		     SELECT 1 FROM information_schema.columns
+		     WHERE table_schema = 'zeep_system' AND table_name = 'dashboard_pats'
+		       AND column_name = 'oauth_client_id' AND data_type = 'uuid'
+		   ) THEN
+		     ALTER TABLE zeep_system.dashboard_pats ALTER COLUMN oauth_client_id TYPE TEXT;
+		   END IF;
+		 END
+		 $do$`,
+		// FK deferred until now since oauth_clients didn't exist at T1.
+		// Guarded so this is a no-op once applied.
+		`DO $do$
+		 BEGIN
+		   IF NOT EXISTS (
+		     SELECT 1 FROM pg_constraint c
+		     JOIN pg_class t ON t.oid = c.conrelid
+		     JOIN pg_namespace n ON n.oid = t.relnamespace
+		     WHERE n.nspname = 'zeep_system' AND t.relname = 'dashboard_pats'
+		       AND c.conname = 'dashboard_pats_oauth_client_id_fkey'
+		   ) THEN
+		     ALTER TABLE zeep_system.dashboard_pats
+		       ADD CONSTRAINT dashboard_pats_oauth_client_id_fkey
+		       FOREIGN KEY (oauth_client_id) REFERENCES zeep_system.oauth_clients(id) ON DELETE CASCADE;
+		   END IF;
+		 END
+		 $do$`,
 	}
 
 	for _, stmt := range stmts {

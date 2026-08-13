@@ -176,6 +176,16 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 	mcpLimiter := dashboard.NewRateLimiter(120, time.Minute)
 	r.Handle("/dashboard/mcp", mcpserver.NewHandler(pool, dashH, mcpLimiter))
 
+	// OAuth 2.1 authorization-code-with-PKCE front door (mcp-server spec):
+	// unauthenticated by nature (metadata discovery and registration
+	// precede any credential). Registration is rate limited per-IP —
+	// registration alone grants no data access, so there's no logical
+	// caller identity to key by yet (design.md Risks & Concerns).
+	oauthH := dashboard.NewOAuthHandler(pool)
+	oauthRegisterLimiter := dashboard.NewRateLimiter(20, time.Minute)
+	r.Get("/.well-known/oauth-authorization-server", oauthH.GetMetadata)
+	r.With(oauthRegisterLimiter.Middleware).Post("/dashboard/oauth/register", oauthH.RegisterClient)
+
 	dh := docs.NewHandler(reg)
 	r.Get("/docs/", dh.HandleIndex)
 	r.Get("/docs/{app}", dh.HandleUI)
