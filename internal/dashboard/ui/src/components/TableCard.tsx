@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { useTranslation, Trans } from "react-i18next";
+import { useTranslation } from "react-i18next";
 import { TableDef, ColumnDef, IndexDef, ReferenceDef } from "../lib/api";
 import { hasOwnerColumn } from "../lib/rls";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon";
-import { StatusPill, ConfirmDialog } from "@/components/patterns";
+import { StatusPill, ConfirmDialog, FormDrawer, MarkdownContent } from "@/components/patterns";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -14,13 +14,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TablePoliciesTab from "@/components/TablePolicies";
 
@@ -916,61 +909,21 @@ function SchemaEditor({
         </div>
       </div>
 
-      <Dialog open={showRelationshipsInfo} onOpenChange={setShowRelationshipsInfo}>
-        <DialogContent className="max-w-[480px] border border-[var(--border)] bg-[var(--surface-raised)] backdrop-blur-xl rounded-[18px] p-0 gap-0">
-          <div className="bg-[var(--surface)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.10)] rounded-[calc(1rem-2px)] px-7 pb-6 pt-7">
-            <DialogHeader className="mb-0">
-              <div className="w-11 h-11 rounded-[12px] bg-[var(--hover-surface)] border border-[var(--border)] flex items-center justify-center mb-[18px]">
-                <Icon name="link" size={18} className="text-[var(--text-secondary)]" />
-              </div>
-              <DialogTitle className="text-base font-bold text-[var(--text-primary)] mb-2">
-                {t("tableCard.relationshipsInfoBtn")}
-              </DialogTitle>
-              <DialogDescription className="text-[13px] text-[var(--text-secondary)] leading-relaxed">
-                <Trans
-                  i18nKey="tableCard.relationshipsExplainer"
-                  components={{
-                    1: <code className="text-[var(--primary)]" />,
-                    3: <code className="text-[var(--primary)]" />,
-                    5: <code className="text-[var(--primary)]" />,
-                    7: <strong className="text-[var(--primary)] font-medium" />,
-                    9: <strong className="text-[var(--primary)] font-medium" />,
-                    11: <strong className="text-[var(--primary)] font-medium" />,
-                    13: <strong className="text-[var(--primary)] font-medium" />,
-                  }}
-                />
-              </DialogDescription>
-            </DialogHeader>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <FormDrawer
+        open={showRelationshipsInfo}
+        onOpenChange={setShowRelationshipsInfo}
+        title={t("tableCard.relationshipsInfoBtn")}
+      >
+        <MarkdownContent content={t("tableCard.relationshipsExplainer")} />
+      </FormDrawer>
 
-      <Dialog open={showIndexInfo} onOpenChange={setShowIndexInfo}>
-        <DialogContent className="max-w-[480px] border border-[var(--border)] bg-[var(--surface-raised)] backdrop-blur-xl rounded-[18px] p-0 gap-0">
-          <div className="bg-[var(--surface)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.10)] rounded-[calc(1rem-2px)] px-7 pb-6 pt-7">
-            <DialogHeader className="mb-0">
-              <div className="w-11 h-11 rounded-[12px] bg-[var(--hover-surface)] border border-[var(--border)] flex items-center justify-center mb-[18px]">
-                <Icon name="error" size={18} className="text-[var(--text-secondary)]" />
-              </div>
-              <DialogTitle className="text-base font-bold text-[var(--text-primary)] mb-2">
-                {t("tableCard.indexInfoBtn")}
-              </DialogTitle>
-              <DialogDescription className="text-[13px] text-[var(--text-secondary)] leading-relaxed">
-                <Trans
-                  i18nKey="tableCard.indexExplainer"
-                  components={{
-                    1: <strong className="text-[var(--primary)] font-medium" />,
-                    3: <strong className="text-[var(--primary)] font-medium" />,
-                    5: <code className="text-[var(--primary)]" />,
-                    7: <code className="text-[var(--primary)]" />,
-                    9: <strong className="text-[var(--primary)] font-medium" />,
-                  }}
-                />
-              </DialogDescription>
-            </DialogHeader>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <FormDrawer
+        open={showIndexInfo}
+        onOpenChange={setShowIndexInfo}
+        title={t("tableCard.indexInfoBtn")}
+      >
+        <MarkdownContent content={t("tableCard.indexExplainer")} />
+      </FormDrawer>
     </>
   );
 }
