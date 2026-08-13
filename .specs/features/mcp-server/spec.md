@@ -165,12 +165,12 @@ Both need the same thing: a stable, scoped, auditable set of tools an LLM can ca
 | MCP-03 | P1 AC3: invalid/expired/revoked PAT rejected before tool execution | Tasks (T1, T2) | Verified |
 | MCP-04 | P1 AC4: revoked PAT rejected on next request | Tasks (T1) | Verified |
 | MCP-05 | P1 AC5: PAT create/revoke audited | Tasks (T13) | Pending |
-| MCP-19 | P1 (OAuth) AC1: authorization server metadata discoverable | Tasks (T17) | Verified |
-| MCP-20 | P1 (OAuth) AC2: dynamic client registration issues a client_id with no manual setup | Tasks (T17) | Verified |
-| MCP-21 | P1 (OAuth) AC3: authorize endpoint requires login then shows consent, naming the client | Tasks (T18, T19) | Implementing |
-| MCP-22 | P1 (OAuth) AC4: PKCE-bound authorization code, single-use | Tasks (T18, T19, T20) | Verified |
-| MCP-23 | P1 (OAuth) AC5: token exchange resolves through the same identity path as a manual PAT | Tasks (T20) | Verified |
-| MCP-24 | P1 (OAuth) AC6/AC7: refresh token renewal; reused/expired/mismatched-PKCE code rejected | Tasks (T20) | Verified |
+| MCP-19 | P1 (OAuth) AC1: authorization server metadata discoverable | Tasks (T17, T21) | Verified |
+| MCP-20 | P1 (OAuth) AC2: dynamic client registration issues a client_id with no manual setup | Tasks (T17, T21) | Verified |
+| MCP-21 | P1 (OAuth) AC3: authorize endpoint requires login then shows consent, naming the client | Tasks (T18, T19, T21) | Verified |
+| MCP-22 | P1 (OAuth) AC4: PKCE-bound authorization code, single-use | Tasks (T18, T19, T20, T21) | Verified |
+| MCP-23 | P1 (OAuth) AC5: token exchange resolves through the same identity path as a manual PAT | Tasks (T20, T21) | Verified |
+| MCP-24 | P1 (OAuth) AC6/AC7: refresh token renewal; reused/expired/mismatched-PKCE code rejected | Tasks (T20, T21) | Verified |
 | MCP-06 | P2 (app/table) AC1: `orbit_create_app` matches `POST /dashboard/api/apps` behavior | Tasks (T4, T11) | Verified |
 | MCP-07 | P2 (app/table) AC2: `orbit_create_table` matches `POST /dashboard/api/apps/{id}/tables` behavior/validation | Tasks (T5, T11) | Verified |
 | MCP-08 | P2 (app/table) AC3: validation failure returns structured tool error | Tasks (T11) | Verified |

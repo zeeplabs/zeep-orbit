@@ -579,12 +579,12 @@ T15 depends on T10, T11, T12 (needs every tool registered to exercise the full P
 
 **Done when**:
 
-- [ ] Full sequence above passes against a real ephemeral Postgres
-- [ ] The access token obtained via OAuth drives `orbit_list_apps` identically to a manually-created PAT would for the same admin
-- [ ] Refresh rotation succeeds once; reusing the superseded refresh token is rejected and the associated access token stops working immediately after
-- [ ] Gate check passes (Build): `go build ./... && go test ./... && go vet ./... && gofmt -l $(git diff --name-only -- '*.go')`
+- [x] Full sequence above passes against a real ephemeral Postgres
+- [x] The access token obtained via OAuth drives `orbit_list_apps` identically to a manually-created PAT would for the same admin
+- [x] Refresh rotation succeeds once; reusing the superseded refresh token is rejected and the associated access token stops working immediately after
+- [x] Gate check passes (Build): `go build ./... && go test ./... && go vet ./... && gofmt -l $(git diff --name-only -- '*.go')`
 
-**Status**: Not Started
+**Status**: Complete
 
 **Tests**: integration
 **Gate**: build
