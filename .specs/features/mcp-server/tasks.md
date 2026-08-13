@@ -431,13 +431,13 @@ T15 depends on T10, T11, T12 (needs every tool registered to exercise the full P
 
 **Done when**:
 
-- [ ] `orbit_list_policy_templates` returns the same 6 templates `policytemplates.List()` does, with enough structure (id, description, required inputs) for an LLM to pick one without free-form clause syntax
-- [ ] `orbit_create_policy_from_template` for a single-action template (e.g. `owner_only`) creates the expected policy via `CreateTablePolicyForUser`
-- [ ] `orbit_create_policy_from_template` for the composite template (`open_read_owner_write`) creates all 3 policies in sequence; forcing the 2nd to fail (pre-existing colliding policy name) stops before the 3rd and reports created/failed/pending per policy, matching the design's Error Handling Strategy
-- [ ] Missing/invalid required input (e.g. no roles for `owner_only`) returns a structured tool error naming the missing input, zero policies created
-- [ ] Gate check passes: `go test ./internal/mcpserver/...`
+- [x] `orbit_list_policy_templates` returns the same 6 templates `policytemplates.List()` does, with enough structure (id, description, required inputs) for an LLM to pick one without free-form clause syntax
+- [x] `orbit_create_policy_from_template` for a single-action template (e.g. `owner_only`) creates the expected policy via `CreateTablePolicyForUser`
+- [x] `orbit_create_policy_from_template` for the composite template (`open_read_owner_write`) creates all 3 policies in sequence; forcing the 2nd to fail (pre-existing colliding policy name) stops before the 3rd and reports created/failed/pending per policy, matching the design's Error Handling Strategy
+- [x] Missing/invalid required input (e.g. no roles for `owner_only`) returns a structured tool error naming the missing input, zero policies created
+- [x] Gate check passes: `go test ./internal/mcpserver/...`
 
-**Status**: Not Started
+**Status**: Complete
 
 **Tests**: integration, real MCP client roundtrip
 **Gate**: quick

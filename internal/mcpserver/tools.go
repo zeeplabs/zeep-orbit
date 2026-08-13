@@ -19,6 +19,7 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/dashboard"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
+	"github.com/zeeplabs/zeep-orbit/internal/policytemplates"
 	"github.com/zeeplabs/zeep-orbit/internal/provisioner"
 )
 
@@ -48,6 +49,7 @@ var errUnauthorized = errors.New("unauthorized")
 func RegisterTools(server *mcp.Server, deps ToolDeps) {
 	registerReadTools(server, deps)
 	registerWriteTools(server, deps)
+	registerTemplateTools(server, deps)
 }
 
 // orbitListAppsInput takes no arguments — the tool always lists the calling
@@ -155,6 +157,10 @@ func mapWriteError(err error) error {
 		return errors.New("not found")
 	case errors.Is(err, dashboard.ErrForbidden):
 		return errors.New("forbidden")
+	case errors.Is(err, dashboard.ErrTableNotFound):
+		return errors.New("table not found")
+	case errors.Is(err, dashboard.ErrPolicyAlreadyExists):
+		return dashboard.ErrPolicyAlreadyExists
 	case errors.As(err, &valErr):
 		return valErr
 	case errors.As(err, &typeErr):
@@ -220,5 +226,208 @@ func registerWriteTools(server *mcp.Server, deps ToolDeps) {
 			return nil, nil, mapWriteError(err)
 		}
 		return nil, row, nil
+	})
+}
+
+// orbitListPolicyTemplatesInput takes no arguments — the template catalog
+// is fixed and global, not per-app.
+type orbitListPolicyTemplatesInput struct{}
+
+// orbitPolicyTemplateInfo describes one template for orbit_list_policy_templates
+// — policytemplates.TemplateDefinition alone (id/requires-owner-column/kind/
+// fixed-actions) isn't enough for an LLM to pick a template without guessing
+// free-form clause syntax (mcp-server spec T12/MCP-12), so this adds a
+// human-readable description and the exact input names
+// orbit_create_policy_from_template requires for that template.
+type orbitPolicyTemplateInfo struct {
+	ID                  string   `json:"id"`
+	Description         string   `json:"description"`
+	RequiresOwnerColumn bool     `json:"requires_owner_column"`
+	Kind                string   `json:"kind"`
+	ActionsFixed        []string `json:"actions_fixed,omitempty"`
+	RequiredInputs      []string `json:"required_inputs"`
+}
+
+// policyTemplateDescriptions/policyTemplateRequiredInputs are MCP-tool-level
+// metadata only — policytemplates itself stays pure per its own package doc
+// ("Dependencies: none"); this mapping is not persisted or reused elsewhere.
+var policyTemplateDescriptions = map[string]string{
+	policytemplates.TemplateIDOwnerOnly:          "Only the row's own owner can access it, for the chosen actions.",
+	policytemplates.TemplateIDOpenRead:           "Any of the given roles can read every row; no write access granted.",
+	policytemplates.TemplateIDReadOnly:           "Alias of open_read — nobody can write, matching roles can read every row.",
+	policytemplates.TemplateIDValueMatch:         "Read access restricted to rows where a chosen column equals a fixed value.",
+	policytemplates.TemplateIDOpenReadOwnerWrite: "Any of the given roles can read every row; only the row's owner can update or delete it.",
+	policytemplates.TemplateIDBlockedByDefault:   "Informational only — creates no policy. Set the table's rls mode to deny access by default instead.",
+}
+
+var policyTemplateRequiredInputs = map[string][]string{
+	policytemplates.TemplateIDOwnerOnly:          {"actions", "roles"},
+	policytemplates.TemplateIDOpenRead:           {"roles"},
+	policytemplates.TemplateIDReadOnly:           {"roles"},
+	policytemplates.TemplateIDValueMatch:         {"roles", "column", "value"},
+	policytemplates.TemplateIDOpenReadOwnerWrite: {"roles"},
+	policytemplates.TemplateIDBlockedByDefault:   {},
+}
+
+// orbitCreatePolicyFromTemplateInput is the input for
+// orbit_create_policy_from_template. Actions/Column/Value are only required
+// for specific templates (owner_only, value_match respectively) — see
+// policyTemplateRequiredInputs.
+type orbitCreatePolicyFromTemplateInput struct {
+	AppID      string   `json:"app_id" jsonschema:"id of the app that owns the table"`
+	TableName  string   `json:"table_name" jsonschema:"name of the table to create the policy/policies on"`
+	TemplateID string   `json:"template_id" jsonschema:"one of the ids returned by orbit_list_policy_templates"`
+	Actions    []string `json:"actions,omitempty" jsonschema:"required for owner_only: the actions to restrict to the row's owner (e.g. select, update)"`
+	Roles      []string `json:"roles,omitempty" jsonschema:"the end-user roles this policy applies to"`
+	Column     string   `json:"column,omitempty" jsonschema:"required for value_match: the column to filter on"`
+	Value      string   `json:"value,omitempty" jsonschema:"required for value_match: the literal value the column must equal"`
+}
+
+// orbitCreatePolicyFromTemplateResult reports which policies were created
+// and, on a partial failure, which policy failed and which were never
+// attempted — the same partial-failure contract the frontend template
+// picker already has (mcp-server spec MCP-13, design.md Error Handling
+// Strategy: "stop at first error, report which policies succeeded and
+// which step failed").
+type orbitCreatePolicyFromTemplateResult struct {
+	Created       []*dashboard.TablePolicyRow `json:"created"`
+	FailedPolicy  string                      `json:"failed_policy,omitempty"`
+	FailureReason string                      `json:"failure_reason,omitempty"`
+	Pending       []string                    `json:"pending_policies,omitempty"`
+}
+
+// missingInputError builds the structured error orbit_create_policy_from_template
+// returns for a missing/invalid required input (mcp-server spec MCP-14):
+// names the specific input, so the LLM knows exactly what to re-ask for.
+func missingInputError(name string) error {
+	return errors.New("missing or invalid input: " + name)
+}
+
+// toDashboardPolicyDef converts a policytemplates.PolicyDef (the pure,
+// dependency-free package's own type) into dashboard.PolicyDef — the two
+// are a deliberate field-for-field mirror (see policytemplates' package
+// doc), so this is a plain field copy, not a transformation.
+func toDashboardPolicyDef(p policytemplates.PolicyDef) dashboard.PolicyDef {
+	clauses := make([]dashboard.PolicyClause, 0, len(p.Clauses))
+	for _, c := range p.Clauses {
+		clauses = append(clauses, dashboard.PolicyClause{
+			Column:      c.Column,
+			Operator:    c.Operator,
+			ValueSource: c.ValueSource,
+			Value:       c.Value,
+			Logic:       c.Logic,
+		})
+	}
+	return dashboard.PolicyDef{
+		Name:    p.Name,
+		Action:  p.Action,
+		Roles:   p.Roles,
+		Clauses: clauses,
+	}
+}
+
+// buildTemplatePolicies resolves in.TemplateID + its inputs into the
+// PolicyDef(s) that template produces, or a missingInputError if a
+// template-specific required input is missing/empty (mcp-server spec
+// MCP-14) — evaluated entirely before any policy is created.
+func buildTemplatePolicies(in orbitCreatePolicyFromTemplateInput) ([]policytemplates.PolicyDef, error) {
+	switch in.TemplateID {
+	case policytemplates.TemplateIDOwnerOnly:
+		if len(in.Roles) == 0 {
+			return nil, missingInputError("roles")
+		}
+		if len(in.Actions) == 0 {
+			return nil, missingInputError("actions")
+		}
+		return policytemplates.BuildOwnerOnlyPolicies(in.Actions, in.Roles), nil
+	case policytemplates.TemplateIDOpenRead:
+		if len(in.Roles) == 0 {
+			return nil, missingInputError("roles")
+		}
+		return []policytemplates.PolicyDef{policytemplates.BuildOpenReadPolicy(in.Roles)}, nil
+	case policytemplates.TemplateIDReadOnly:
+		if len(in.Roles) == 0 {
+			return nil, missingInputError("roles")
+		}
+		return []policytemplates.PolicyDef{policytemplates.BuildReadOnlyPolicy(in.Roles)}, nil
+	case policytemplates.TemplateIDValueMatch:
+		if len(in.Roles) == 0 {
+			return nil, missingInputError("roles")
+		}
+		if in.Column == "" {
+			return nil, missingInputError("column")
+		}
+		if in.Value == "" {
+			return nil, missingInputError("value")
+		}
+		return []policytemplates.PolicyDef{policytemplates.BuildValueMatchPolicy(in.Column, in.Value, in.Roles)}, nil
+	case policytemplates.TemplateIDOpenReadOwnerWrite:
+		if len(in.Roles) == 0 {
+			return nil, missingInputError("roles")
+		}
+		return policytemplates.BuildOpenReadOwnerWritePolicies(in.Roles), nil
+	case policytemplates.TemplateIDBlockedByDefault:
+		return nil, errors.New("template blocked_by_default creates no policy — set the table's rls mode instead")
+	default:
+		return nil, missingInputError("template_id")
+	}
+}
+
+// registerTemplateTools registers orbit_list_policy_templates and
+// orbit_create_policy_from_template (mcp-server spec T12).
+func registerTemplateTools(server *mcp.Server, deps ToolDeps) {
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_list_policy_templates",
+		Description: "List the named row-policy templates available for orbit_create_policy_from_template.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ orbitListPolicyTemplatesInput) (*mcp.CallToolResult, any, error) {
+		defs := policytemplates.List()
+		out := make([]orbitPolicyTemplateInfo, 0, len(defs))
+		for _, d := range defs {
+			out = append(out, orbitPolicyTemplateInfo{
+				ID:                  d.ID,
+				Description:         policyTemplateDescriptions[d.ID],
+				RequiresOwnerColumn: d.RequiresOwnerColumn,
+				Kind:                d.Kind,
+				ActionsFixed:        d.ActionsFixed,
+				RequiredInputs:      policyTemplateRequiredInputs[d.ID],
+			})
+		}
+		return nil, struct {
+			Templates []orbitPolicyTemplateInfo `json:"templates"`
+		}{Templates: out}, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_create_policy_from_template",
+		Description: "Create a row policy (or set of policies) on a table from a named template.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitCreatePolicyFromTemplateInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+
+		defs, err := buildTemplatePolicies(in)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		created := make([]*dashboard.TablePolicyRow, 0, len(defs))
+		for i, def := range defs {
+			row, err := deps.DashH.CreateTablePolicyForUser(ctx, user, in.AppID, in.TableName, toDashboardPolicyDef(def), "mcp")
+			if err != nil {
+				pending := make([]string, 0, len(defs)-i-1)
+				for _, remaining := range defs[i+1:] {
+					pending = append(pending, remaining.Name)
+				}
+				return nil, orbitCreatePolicyFromTemplateResult{
+					Created:       created,
+					FailedPolicy:  def.Name,
+					FailureReason: mapWriteError(err).Error(),
+					Pending:       pending,
+				}, nil
+			}
+			created = append(created, row)
+		}
+		return nil, orbitCreatePolicyFromTemplateResult{Created: created}, nil
 	})
 }

@@ -177,9 +177,9 @@ Both need the same thing: a stable, scoped, auditable set of tools an LLM can ca
 | MCP-09 | P2 (app/table) AC4: `orbit_get_app_schema` reflects current state | Tasks (T8, T10) | Verified |
 | MCP-10 | P2 (app/table) AC5: tool calls produce the same audit_log entries as REST | Tasks (T4-T7, T11) | Verified |
 | MCP-11 | P2 (RLS/policy) AC1: `orbit_set_table_rls_mode` matches existing validation | Tasks (T6, T11) | Verified |
-| MCP-12 | P2 (RLS/policy) AC2: `orbit_list_policy_templates` matches UI's template set | Design | Pending |
-| MCP-13 | P2 (RLS/policy) AC3: `orbit_create_policy_from_template` matches UI's sequential-create + partial-failure behavior | Design | Pending |
-| MCP-14 | P2 (RLS/policy) AC4: missing/invalid template input rejected before any policy is created | Design | Pending |
+| MCP-12 | P2 (RLS/policy) AC2: `orbit_list_policy_templates` matches UI's template set | Tasks (T3, T12) | Verified |
+| MCP-13 | P2 (RLS/policy) AC3: `orbit_create_policy_from_template` matches UI's sequential-create + partial-failure behavior | Tasks (T7, T12) | Verified |
+| MCP-14 | P2 (RLS/policy) AC4: missing/invalid template input rejected before any policy is created | Tasks (T12) | Verified |
 | MCP-15 | P3 AC1: chat drawer backend calls the same tools an external client would | Design | Pending |
 | MCP-16 | P3 AC2: server-minted PAT is short-lived and never exposed | Design | Pending |
 | MCP-17 | P3 AC3: Apps list reflects the new app without manual reload | Design | Pending |
