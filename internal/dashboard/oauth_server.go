@@ -12,6 +12,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
@@ -188,8 +189,110 @@ func (h *OAuthHandler) Authorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	consentURL := "/dashboard/oauth/consent?" + q.Encode()
+	// client_name travels in the handoff so OAuthConsent.tsx can name the
+	// requesting client without a second round-trip — the frontend already
+	// has redirect_uri from this same query string, so it derives the
+	// redirect origin locally (design.md Risks & Concerns: "display the
+	// redirect URI's origin alongside the client's self-declared name").
+	consentQuery := q
+	consentQuery.Set("client_name", client.Name)
+	consentURL := "/dashboard/oauth/consent?" + consentQuery.Encode()
 	http.Redirect(w, r, consentURL, http.StatusFound)
+}
+
+// decideRequest is POST /dashboard/oauth/authorize's JSON body — submitted
+// by OAuthConsent.tsx (T19) after the admin grants or denies. Session-
+// authenticated (RequireAuth, mounted in server.go), so Decide always knows
+// which DashboardUser is granting consent without trusting a client-
+// supplied identity.
+type decideRequest struct {
+	ClientID            string `json:"client_id"`
+	RedirectURI         string `json:"redirect_uri"`
+	CodeChallenge       string `json:"code_challenge"`
+	CodeChallengeMethod string `json:"code_challenge_method"`
+	State               string `json:"state"`
+	Decision            string `json:"decision"` // "grant" | "deny"
+}
+
+// decideResponse carries the URL the frontend must navigate the browser to
+// next — a fetch/XHR POST can't perform a cross-origin browser redirect
+// itself, so Decide returns the target instead of an HTTP 302.
+type decideResponse struct {
+	RedirectURL string `json:"redirect_url"`
+}
+
+// oauthCallbackURL appends code/error + state (if present) to redirectURI,
+// the same way any OAuth authorization endpoint reports the outcome back
+// to the client's own redirect handler.
+func oauthCallbackURL(redirectURI, param, value, state string) string {
+	sep := "?"
+	if strings.Contains(redirectURI, "?") {
+		sep = "&"
+	}
+	callback := redirectURI + sep + param + "=" + url.QueryEscape(value)
+	if state != "" {
+		callback += "&state=" + url.QueryEscape(state)
+	}
+	return callback
+}
+
+// Decide handles POST /dashboard/oauth/authorize (spec MCP-21/MCP-22,
+// P1-OAuth AC4/AC7; design.md Error Handling Strategy consent-denial and
+// code-issuance rows) — the grant/deny branches T19 adds onto Authorize.
+// Re-validates client_id/redirect_uri exactly as the GET branch (T18) does
+// (defense in depth: the consent screen's own submission is still an
+// untrusted client-side request). On "deny", redirects back with
+// error=access_denied and issues no code. On "grant", issues a single-use
+// PKCE-bound code (CreateAuthCode, T18) and redirects back with it.
+func (h *OAuthHandler) Decide(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeUnauthorized(w)
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
+	var body decideRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeOAuthError(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+
+	if body.ClientID == "" {
+		writeOAuthError(w, http.StatusBadRequest, "invalid_client")
+		return
+	}
+	client, err := GetClient(r.Context(), h.pool, body.ClientID)
+	if err != nil {
+		writeOAuthError(w, http.StatusBadRequest, "invalid_client")
+		return
+	}
+	if body.RedirectURI == "" || !oauthRedirectURIRegistered(client, body.RedirectURI) {
+		writeOAuthError(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+
+	switch body.Decision {
+	case "deny":
+		writeJSON(w, http.StatusOK, decideResponse{
+			RedirectURL: oauthCallbackURL(body.RedirectURI, "error", "access_denied", body.State),
+		})
+	case "grant":
+		if body.CodeChallenge == "" || body.CodeChallengeMethod != "S256" {
+			writeOAuthError(w, http.StatusBadRequest, "invalid_request")
+			return
+		}
+		code, _, err := CreateAuthCode(r.Context(), h.pool, client.ID, user.ID, body.CodeChallenge, body.RedirectURI)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+			return
+		}
+		writeJSON(w, http.StatusOK, decideResponse{
+			RedirectURL: oauthCallbackURL(body.RedirectURI, "code", code, body.State),
+		})
+	default:
+		writeOAuthError(w, http.StatusBadRequest, "invalid_request")
+	}
 }
 
 // oauthRedirectURIRegistered reports whether redirectURI exactly matches

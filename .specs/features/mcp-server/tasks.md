@@ -519,13 +519,13 @@ T15 depends on T10, T11, T12 (needs every tool registered to exercise the full P
 
 **Done when**:
 
-- [ ] Consent screen displays the client's declared name and the redirect URI's origin
-- [ ] Granting issues a single-use code, redirects to `redirect_uri` with `code` param, code row stores the presented `code_challenge`
-- [ ] Denying redirects to `redirect_uri` with `error=access_denied`, confirmed no code row was created
-- [ ] All new strings present in `en.json`/`pt-BR.json`
-- [ ] Gate check passes: `cd internal/dashboard/ui && npx tsc -b && npm run build`
+- [x] Consent screen displays the client's declared name and the redirect URI's origin
+- [x] Granting issues a single-use code, redirects to `redirect_uri` with `code` param, code row stores the presented `code_challenge`
+- [x] Denying redirects to `redirect_uri` with `error=access_denied`, confirmed no code row was created
+- [x] All new strings present in `en.json`/`pt-BR.json`
+- [x] Gate check passes: `cd internal/dashboard/ui && npx tsc -b && npm run build`
 
-**Status**: Not Started
+**Status**: Complete
 
 **Tests**: none — merge-forward to T21 (needs a real browser session to test the redirect chain meaningfully)
 **Gate**: full

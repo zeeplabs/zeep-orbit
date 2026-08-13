@@ -18,6 +18,7 @@ import SdkPage from './pages/SdkPage'
 import ChangelogPage from './pages/ChangelogPage'
 import DataBrowserPage from './pages/DataBrowserPage'
 import AccessDenied from './pages/AccessDenied'
+import OAuthConsent from './components/OAuthConsent'
 import { RequireRole } from './components/patterns/RequireRole'
 import { Toaster } from 'sonner'
 import { useBootstrapStatus } from './lib/api'
@@ -101,6 +102,9 @@ function App() {
           !user ? <Navigate to="/login" replace /> :
           user.needs_setup ? <GoogleSetupPage /> :
           <Navigate to="/apps" replace />
+        } />
+        <Route path="/oauth/consent" element={
+          !user ? <Navigate to="/login" replace /> : <OAuthConsent />
         } />
         <Route
           element={<DashboardShell user={user} />}
