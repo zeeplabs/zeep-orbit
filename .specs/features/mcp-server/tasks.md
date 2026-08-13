@@ -668,12 +668,12 @@ T15 depends on T10, T11, T12 (needs every tool registered to exercise the full P
 
 **Done when**:
 
-- [ ] Full sequence above passes against a real ephemeral Postgres, same setup convention as `enduser-roles.spec.ts`/`webhooks.spec.ts` at the Go-test level
-- [ ] Final `orbit_get_app_schema` result matches exactly what was created across the sequence (table present, `rls_mode: "policy"`, one policy named `tpl_owner_only_<action>` per action)
-- [ ] Post-revoke call with the same client's token fails auth (401-equivalent tool-call rejection)
-- [ ] Gate check passes (Build): `go build ./... && go test ./... && go vet ./... && gofmt -l $(git diff --name-only -- '*.go')`
+- [x] Full sequence above passes against a real ephemeral Postgres, same setup convention as `enduser-roles.spec.ts`/`webhooks.spec.ts` at the Go-test level
+- [x] Final `orbit_get_app_schema` result matches exactly what was created across the sequence (table present, `rls_mode: "policy"`, one policy named `tpl_owner_only_<action>` per action)
+- [x] Post-revoke call with the same client's token fails auth (401-equivalent tool-call rejection)
+- [x] Gate check passes (Build): `go build ./... && go test ./... && go vet ./... && gofmt -l $(git diff --name-only -- '*.go')`
 
-**Status**: Not Started
+**Status**: Complete
 
 **Tests**: integration, real MCP client roundtrip
 **Gate**: build
