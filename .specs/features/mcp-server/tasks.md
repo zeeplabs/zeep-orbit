@@ -697,11 +697,11 @@ T15 depends on T10, T11, T12 (needs every tool registered to exercise the full P
 
 **Done when**:
 
-- [ ] Full sequence above passes against a running `zeep` binary with `DATABASE_URL`/`DASHBOARD_BOOTSTRAP_SECRET` set
-- [ ] The UI-created token is confirmed to authenticate a real (non-MCP-client) HTTP request to `/dashboard/mcp` before revocation, and to fail the same request after revocation
-- [ ] Gate check passes (Build): `cd internal/dashboard/ui && npx tsc -b && npm run build && npx playwright test personal-access-tokens`, plus `go build ./... && go vet ./...` from repo root as a backend-regression sanity check
+- [x] Full sequence above passes against a running `zeep` binary with `DATABASE_URL`/`DASHBOARD_BOOTSTRAP_SECRET` set
+- [x] The UI-created token is confirmed to authenticate a real (non-MCP-client) HTTP request to `/dashboard/mcp` before revocation, and to fail the same request after revocation
+- [x] Gate check passes (Build): `cd internal/dashboard/ui && npx tsc -b && npm run build && npx playwright test personal-access-tokens`, plus `go build ./... && go vet ./...` from repo root as a backend-regression sanity check
 
-**Status**: Not Started
+**Status**: Complete
 
 **Tests**: e2e
 **Gate**: build

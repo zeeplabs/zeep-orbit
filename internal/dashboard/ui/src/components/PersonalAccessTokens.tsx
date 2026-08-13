@@ -26,7 +26,11 @@ interface PersonalAccessTokensProps {
 // mutation + ConfirmDialog + toast.error pattern (AGENTS.md §5).
 export default function PersonalAccessTokens({ open, onClose }: PersonalAccessTokensProps) {
   const { t } = useTranslation();
-  const { data: pats, isLoading } = usePATs();
+  const { data: allPats, isLoading } = usePATs();
+  // ListPATs returns every token including revoked ones (design.md: kept
+  // for auditability) — the active list only shows tokens still usable, so
+  // revoking one visibly removes it here without a manual reload.
+  const pats = allPats?.filter((pat) => !pat.revoked_at);
   const createPAT = useCreatePAT();
   const revokePAT = useRevokePAT();
 
