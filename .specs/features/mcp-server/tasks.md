@@ -312,13 +312,13 @@ T15 depends on T10, T11, T12 (needs every tool registered to exercise the full P
 
 **Done when**:
 
-- [ ] `GetAppSchemaForUser` on an app with 2 tables (one `rls: "policy"` with 1 policy, one `rls: ""` with none) returns both tables with correct `rls_mode`, `columns`, and `policies` (empty array, not null, for the second table)
-- [ ] `GetAppSchemaForUser` on an app with zero tables returns `tables: []`, not an error
-- [ ] `GetAppSchemaForUser` for an app the user has no access to returns the same authorization error `GetApp` already returns for that case
-- [ ] `ListAppsForUser` output matches the existing `ListApps` handler's output for the same user (extraction, no behavior change)
-- [ ] Gate check passes: `go test ./internal/dashboard/...`
+- [x] `GetAppSchemaForUser` on an app with 2 tables (one `rls: "policy"` with 1 policy, one `rls: ""` with none) returns both tables with correct `rls_mode`, `columns`, and `policies` (empty array, not null, for the second table)
+- [x] `GetAppSchemaForUser` on an app with zero tables returns `tables: []`, not an error
+- [x] `GetAppSchemaForUser` for an app the user has no access to returns the same authorization error `GetApp` already returns for that case
+- [x] `ListAppsForUser` output matches the existing `ListApps` handler's output for the same user (extraction, no behavior change)
+- [x] Gate check passes: `go test ./internal/dashboard/...`
 
-**Status**: Not Started
+**Status**: Complete
 
 **Tests**: integration
 **Gate**: quick
