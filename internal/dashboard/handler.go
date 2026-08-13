@@ -872,6 +872,76 @@ type tableRequestBody struct {
 	Indexes []config.IndexConfig  `json:"indexes"`
 }
 
+// ValidationError signals a client-input validation failure — safe to
+// expose verbatim to the caller (same "safe to expose" exception AGENTS.md
+// §4 carves out for provisioner.ValidationError). Extracted *ForUser
+// functions return this for input the shared struct's own validation
+// rejects, so both the REST handler and an MCP tool caller (mcp-server
+// spec, MCP-08) can distinguish "bad input" from an internal failure.
+type ValidationError struct {
+	msg string
+}
+
+func (e *ValidationError) Error() string { return e.msg }
+
+// Sentinels distinguishing CreateAppForUser's internal (500-class) failure
+// points from one another, so the HTTP handler can keep returning the same
+// distinct public message each point returned before the extraction
+// (AGENTS.md §4: fixed public message, real error logged server-side only).
+var (
+	errAppCreateFailed         = errors.New("dashboard: create app failed")
+	errSaveAuthProvidersFailed = errors.New("dashboard: save auth providers failed")
+	errResolveStorageFailed    = errors.New("dashboard: resolve storage config failed")
+	errSaveStorageFailed       = errors.New("dashboard: save storage config failed")
+)
+
+// CreateAppForUser is the shared operation behind CreateApp — the exact
+// validation/store/provisioner/audit path a MCP tool call (orbit_create_app)
+// will call into identically (mcp-server spec, MCP-06/MCP-10). Extracted
+// verbatim from the former CreateApp handler body; behavior is unchanged.
+func (h *Handler) CreateAppForUser(ctx context.Context, user *DashboardUser, body appRequestBody, ip string) (*AppRow, error) {
+	if err := validateAppInput(body.Name); err != nil {
+		return nil, &ValidationError{msg: err.Error()}
+	}
+
+	app, err := CreateApp(ctx, h.pool, body.Name, user.ID, body.AuthEmailEnabled)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errAppCreateFailed, err)
+	}
+
+	if len(body.AuthProviders) > 0 {
+		if err := UpdateAppAuthProvidersRaw(ctx, h.pool, app.ID, body.AuthProviders); err != nil {
+			return nil, fmt.Errorf("%w: %v", errSaveAuthProvidersFailed, err)
+		}
+		app.AuthProviders = body.AuthProviders
+	}
+
+	if body.StorageConfig != nil && body.StorageConfig.Bucket != "" {
+		sc, err := resolveAppStorage(ctx, h.pool, body.StorageConfig)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", errResolveStorageFailed, err)
+		}
+		if err := UpdateAppStorageConfig(ctx, h.pool, app.ID, sc); err != nil {
+			return nil, fmt.Errorf("%w: %v", errSaveStorageFailed, err)
+		}
+		app.StorageConfig = sc
+	}
+
+	cfg := buildAppConfig(app)
+	if _, err := h.prov.Apply(ctx, &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
+		// Returned raw (not wrapped in a local sentinel): may be
+		// *provisioner.TypeChangeError, which the caller unwraps via
+		// errors.As the same way the pre-extraction handler did.
+		return nil, err
+	}
+
+	h.reg.Register(appRowToRegistryApp(app))
+
+	app.JWTSecret = ""
+	h.audit(ctx, user.ID, user.Email, "app.create", "app", app.ID, app.Name, nil, ip)
+	return app, nil
+}
+
 // CreateApp handles POST /dashboard/api/apps
 func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
@@ -885,54 +955,31 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 	if !h.decodeJSONBody(w, r, &body) {
 		return
 	}
-	if err := validateAppInput(body.Name); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
-	}
 
-	app, err := CreateApp(r.Context(), h.pool, body.Name, user.ID, body.AuthEmailEnabled)
+	app, err := h.CreateAppForUser(r.Context(), user, body, r.RemoteAddr)
 	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
-		return
-	}
-
-	if len(body.AuthProviders) > 0 {
-		if err := UpdateAppAuthProvidersRaw(r.Context(), h.pool, app.ID, body.AuthProviders); err != nil {
-			h.writeError(w, r, http.StatusInternalServerError, "failed to save auth providers", err)
-			return
-		}
-		app.AuthProviders = body.AuthProviders
-	}
-
-	if body.StorageConfig != nil && body.StorageConfig.Bucket != "" {
-		sc, err := resolveAppStorage(r.Context(), h.pool, body.StorageConfig)
-		if err != nil {
-			h.writeError(w, r, http.StatusInternalServerError, "failed to resolve storage config", err)
-			return
-		}
-		if err := UpdateAppStorageConfig(r.Context(), h.pool, app.ID, sc); err != nil {
-			h.writeError(w, r, http.StatusInternalServerError, "failed to save storage config", err)
-			return
-		}
-		app.StorageConfig = sc
-	}
-
-	cfg := buildAppConfig(app)
-	if _, err := h.prov.Apply(r.Context(), &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
+		var valErr *ValidationError
 		var typeErr *provisioner.TypeChangeError
-		if errors.As(err, &typeErr) {
+		switch {
+		case errors.As(err, &valErr):
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": valErr.Error()})
+		case errors.As(err, &typeErr):
 			h.writeError(w, r, http.StatusBadRequest, typeErr.Error(), err)
-		} else {
+		case errors.Is(err, errAppCreateFailed):
+			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		case errors.Is(err, errSaveAuthProvidersFailed):
+			h.writeError(w, r, http.StatusInternalServerError, "failed to save auth providers", err)
+		case errors.Is(err, errResolveStorageFailed):
+			h.writeError(w, r, http.StatusInternalServerError, "failed to resolve storage config", err)
+		case errors.Is(err, errSaveStorageFailed):
+			h.writeError(w, r, http.StatusInternalServerError, "failed to save storage config", err)
+		default:
 			h.writeError(w, r, http.StatusInternalServerError, "provisioning failed — check server logs for details", err)
 		}
 		return
 	}
 
-	h.reg.Register(appRowToRegistryApp(app))
-
-	app.JWTSecret = ""
 	writeJSON(w, http.StatusCreated, app)
-	h.audit(r.Context(), user.ID, user.Email, "app.create", "app", app.ID, app.Name, nil, r.RemoteAddr)
 }
 
 // GetApp handles GET /dashboard/api/apps/{id}

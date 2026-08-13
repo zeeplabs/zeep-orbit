@@ -198,12 +198,12 @@ T15 depends on T10, T11, T12 (needs every tool registered to exercise the full P
 
 **Done when**:
 
-- [ ] Every existing test for `CreateApp` (`internal/dashboard/handler_test.go`) passes unmodified — zero test file changes, confirming behavior preservation
-- [ ] New test calls `CreateAppForUser` directly (no `httptest.Request`) for the same success/validation-failure cases the HTTP-level tests already cover, confirming the extraction is callable without an HTTP layer
-- [ ] `CreateAppForUser` still calls `h.audit(...)` (or the store-level equivalent) exactly where `CreateApp` did — same `audit_log` row shape
-- [ ] Gate check passes: `go test ./internal/dashboard/...`
+- [x] Every existing test for `CreateApp` (`internal/dashboard/handler_test.go`) passes unmodified — zero test file changes, confirming behavior preservation
+- [x] New test calls `CreateAppForUser` directly (no `httptest.Request`) for the same success/validation-failure cases the HTTP-level tests already cover, confirming the extraction is callable without an HTTP layer
+- [x] `CreateAppForUser` still calls `h.audit(...)` (or the store-level equivalent) exactly where `CreateApp` did — same `audit_log` row shape
+- [x] Gate check passes: `go test ./internal/dashboard/...`
 
-**Status**: Not Started
+**Status**: Complete
 
 **Tests**: integration (existing, unmodified expectations + new direct-call tests)
 **Gate**: quick
