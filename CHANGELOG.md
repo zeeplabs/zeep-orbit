@@ -9,6 +9,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-08-13
+
 ### Added
 
 - **`rls: "policy"` — a third Row-Level Security mode that removes the automatic `owner_id = $sub` filter entirely.** Until now, `rls: "enabled"` behaved exactly like `rls: "owner"`: every list/get/update/delete got an automatic `owner_id = $sub` filter applied on top of any table policy, so a policy could only narrow what a user saw within their own rows — never widen it to another user's (e.g. "an admin role sees every post", "an RH role sees every employee"). A table with `rls: "policy"` gets `ENABLE ROW LEVEL SECURITY` at creation, before any policy exists (native Postgres fail-closed: zero policies denies all reads/writes for the end-user role, with no app-layer check backing it up), and from then on visibility and write permission are 100% delegated to the table's own policies — `owner_id` still gets populated automatically on every `INSERT` made by an authenticated end-user, and is now referenceable inside a policy clause (`owner_id = claim.sub`), but it is never injected as an automatic filter. Unlike `"owner"`/`"enabled"`, the column is nullable for `"policy"` — a write with no end-user identity behind it (e.g. an inbound webhook delivery, below) leaves it `NULL` rather than failing. Existing `rls: ""`/`"owner"`/`"enabled"` tables are unaffected. The Dashboard lets an existing table switch between `"enabled"` and `"policy"` without recreating it or losing data, with an explicit warning that the switch changes who sees which rows.
