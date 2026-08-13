@@ -1340,6 +1340,70 @@ func (h *Handler) UpdateAppTable(w http.ResponseWriter, r *http.Request) {
 	h.audit(r.Context(), user.ID, user.Email, "app.table.update", "app_table", row.ID, app.Name+"/"+row.Name, nil, r.RemoteAddr)
 }
 
+// UpdateTableRLSModeForUser is the shared operation behind
+// orbit_set_table_rls_mode (mcp-server spec, MCP-11) — narrower than
+// UpdateAppTable's HTTP handler above, which this leaves untouched: that
+// endpoint's request body always carries a full columns/indexes replace
+// alongside rls, so there is no existing "RLS-only" REST code path to
+// extract from. This is new, additive code addressing the table by name
+// (matching how table-policy routes already do, via findAppTableByName)
+// rather than by id, changing only rls while leaving the table's existing
+// columns/indexes untouched, then applying/persisting/auditing through the
+// same provisioner+store+audit calls UpdateAppTable's handler uses.
+func (h *Handler) UpdateTableRLSModeForUser(ctx context.Context, user *DashboardUser, appID, tableName, rlsMode, ip string) (*AppTableRow, error) {
+	app, role, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, err
+	}
+	if !role.CanWrite() {
+		return nil, ErrForbidden
+	}
+
+	existingTable := findAppTableByName(app, tableName)
+	if existingTable == nil {
+		return nil, ErrNotFound
+	}
+
+	if !config.ValidRLS(rlsMode) {
+		return nil, &ValidationError{msg: fmt.Sprintf(
+			"table %s has an invalid rls value: %s (must be one of \"\", \"owner\", \"enabled\", \"policy\")",
+			tableName, rlsMode,
+		)}
+	}
+	if config.HasOwnerColumn(rlsMode) && !app.AuthEmailEnabled {
+		return nil, &ValidationError{msg: fmt.Sprintf(
+			"table %s uses restricted access (RLS), which requires 'Email Authentication' to be enabled for this app",
+			tableName,
+		)}
+	}
+
+	// Provision the physical change before persisting metadata — same
+	// ordering rationale as UpdateAppTable's handler: if Apply fails, the
+	// stored rls must still match what's actually in Postgres.
+	cfg := buildAppConfig(app)
+	cfg.Tables = []config.TableConfig{{Name: existingTable.Name, RLS: rlsMode, Columns: existingTable.Columns, Indexes: existingTable.Indexes}}
+	if _, err := h.prov.Apply(ctx, &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
+		return nil, err
+	}
+
+	row, err := UpdateAppTable(ctx, h.pool, appID, existingTable.ID, schemaNameForDB(app.Name), rlsMode, existingTable.Columns, existingTable.Indexes)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+	}
+
+	updated, _, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+	}
+	h.reg.Register(appRowToRegistryApp(updated))
+
+	h.audit(ctx, user.ID, user.Email, "app.table.update", "app_table", row.ID, app.Name+"/"+row.Name, nil, ip)
+	return &row, nil
+}
+
 // DeleteAppTable handles DELETE /dashboard/api/apps/{id}/tables/{tableId}.
 // Removes the metadata row and drops the physical table — unlike the old
 // bulk UpdateApp flow, a removed table is never left behind in the database.

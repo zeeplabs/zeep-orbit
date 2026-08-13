@@ -255,12 +255,12 @@ T15 depends on T10, T11, T12 (needs every tool registered to exercise the full P
 
 **Done when**:
 
-- [ ] Every existing test for `UpdateAppTable` (including its column/index-change paths, untouched by this extraction) passes unmodified
-- [ ] New test calls `UpdateTableRLSModeForUser` directly for all 4 valid RLS values and the invalid-value rejection case
-- [ ] `UpdateAppTable`'s non-RLS behavior (column/index updates) is unchanged — confirmed by the existing tests covering those paths still passing
-- [ ] Gate check passes: `go test ./internal/dashboard/...`
+- [x] Every existing test for `UpdateAppTable` (including its column/index-change paths, untouched by this extraction) passes unmodified
+- [x] New test calls `UpdateTableRLSModeForUser` directly for all 4 valid RLS values and the invalid-value rejection case
+- [x] `UpdateAppTable`'s non-RLS behavior (column/index updates) is unchanged — confirmed by the existing tests covering those paths still passing
+- [x] Gate check passes: `go test ./internal/dashboard/...`
 
-**Status**: Not Started
+**Status**: Complete
 
 **Tests**: integration
 **Gate**: quick
