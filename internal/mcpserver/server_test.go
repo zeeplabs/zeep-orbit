@@ -38,8 +38,11 @@ func connectClient(ctx context.Context, url, token string) (*mcp.ClientSession, 
 
 // TestNewHandler_ValidPAT_InitializeHandshakeSucceeds covers T9's Done-when:
 // "/dashboard/mcp responds to an MCP client's initialize handshake with a
-// valid PAT, using the SDK's own streamable-HTTP client", and "Zero tools
-// are registered yet".
+// valid PAT, using the SDK's own streamable-HTTP client". T9's original
+// "zero tools registered" assertion was scoped to that task only (its own
+// Done-when says "this task only proves transport+auth") — superseded now
+// that T10 registers the first tools; tool-registry coverage moved to
+// tools_test.go.
 func TestNewHandler_ValidPAT_InitializeHandshakeSucceeds(t *testing.T) {
 	pool := authTestPool(t)
 	owner := authTestUser(t, pool, "mcp-handshake@example.com")
@@ -58,12 +61,8 @@ func TestNewHandler_ValidPAT_InitializeHandshakeSucceeds(t *testing.T) {
 	}
 	defer sess.Close()
 
-	tools, err := sess.ListTools(context.Background(), nil)
-	if err != nil {
+	if _, err := sess.ListTools(context.Background(), nil); err != nil {
 		t.Fatalf("ListTools: %v", err)
-	}
-	if len(tools.Tools) != 0 {
-		t.Fatalf("expected zero tools registered (T9 scope), got %d", len(tools.Tools))
 	}
 }
 

@@ -174,7 +174,7 @@ Both need the same thing: a stable, scoped, auditable set of tools an LLM can ca
 | MCP-06 | P2 (app/table) AC1: `orbit_create_app` matches `POST /dashboard/api/apps` behavior | Design | Pending |
 | MCP-07 | P2 (app/table) AC2: `orbit_create_table` matches `POST /dashboard/api/apps/{id}/tables` behavior/validation | Design | Pending |
 | MCP-08 | P2 (app/table) AC3: validation failure returns structured tool error | Design | Pending |
-| MCP-09 | P2 (app/table) AC4: `orbit_get_app_schema` reflects current state | Design | Pending |
+| MCP-09 | P2 (app/table) AC4: `orbit_get_app_schema` reflects current state | Tasks (T8, T10) | Verified |
 | MCP-10 | P2 (app/table) AC5: tool calls produce the same audit_log entries as REST | Design | Pending |
 | MCP-11 | P2 (RLS/policy) AC1: `orbit_set_table_rls_mode` matches existing validation | Design | Pending |
 | MCP-12 | P2 (RLS/policy) AC2: `orbit_list_policy_templates` matches UI's template set | Design | Pending |

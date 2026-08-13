@@ -28,6 +28,7 @@ import (
 // every-time design.
 func NewHandler(pool *db.Pool, rl *dashboard.RateLimiter) http.Handler {
 	server := mcp.NewServer(&mcp.Implementation{Name: "zeep-orbit", Version: "1.0.0"}, nil)
+	RegisterTools(server, ToolDeps{Pool: pool})
 
 	streamable := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
 		return server

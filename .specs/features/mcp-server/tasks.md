@@ -372,12 +372,12 @@ T15 depends on T10, T11, T12 (needs every tool registered to exercise the full P
 
 **Done when**:
 
-- [ ] Calling `orbit_list_apps` via a real MCP client returns the same apps `ListAppsForUser` would for that PAT's owning user
-- [ ] Calling `orbit_get_app_schema` for a known app id returns the same shape T8's tests already verified
-- [ ] Calling `orbit_get_app_schema` for an app the caller can't access returns a structured tool error, not a raw Go error string
-- [ ] Gate check passes: `go test ./internal/mcpserver/...`
+- [x] Calling `orbit_list_apps` via a real MCP client returns the same apps `ListAppsForUser` would for that PAT's owning user
+- [x] Calling `orbit_get_app_schema` for a known app id returns the same shape T8's tests already verified
+- [x] Calling `orbit_get_app_schema` for an app the caller can't access returns a structured tool error, not a raw Go error string
+- [x] Gate check passes: `go test ./internal/mcpserver/...`
 
-**Status**: Not Started
+**Status**: Complete
 
 **Tests**: integration, real MCP client roundtrip
 **Gate**: quick
