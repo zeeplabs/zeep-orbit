@@ -134,7 +134,7 @@ func validateTableInput(t AppTableRow, authEmailEnabled bool, otherTables []AppT
 	// creates when email auth is on — restricted access without it is a
 	// guaranteed provisioning failure, not a soft misconfiguration.
 	if config.HasOwnerColumn(t.RLS) && !authEmailEnabled {
-		return errors.New("table " + t.Name + " uses restricted access (RLS), which requires 'Autenticação por e-mail' to be enabled for this app")
+		return errors.New("table " + t.Name + " uses restricted access (RLS), which requires 'Email Authentication' to be enabled for this app")
 	}
 
 	seenColumns := make(map[string]bool, len(t.Columns))
@@ -1302,7 +1302,7 @@ func (h *Handler) DeleteAppTable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.prov.DropTable(r.Context(), schemaNameForDB(app.Name), tableName); err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "failed to drop table: "+err.Error(), err)
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
@@ -2199,12 +2199,12 @@ func (h *Handler) DataBrowserCreate(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.pool.Query(r.Context(), q.SQL, q.Args...)
 	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "failed to insert row: "+err.Error(), err)
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 	row, err := pgx.CollectOneRow(rows, pgx.RowToMap)
 	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "failed to read inserted row: "+err.Error(), err)
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
@@ -2260,12 +2260,12 @@ func (h *Handler) DataBrowserUpdate(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.pool.Query(r.Context(), q.SQL, q.Args...)
 	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "failed to update row: "+err.Error(), err)
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 	row, err := pgx.CollectOneRow(rows, pgx.RowToMap)
 	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "failed to read updated row: "+err.Error(), err)
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
@@ -2314,7 +2314,7 @@ func (h *Handler) DataBrowserDelete(w http.ResponseWriter, r *http.Request) {
 	q := query.BuildDelete(app.SchemaName, tableName, id, "", h.reg.SystemConfig().SoftDeleteEnabled)
 	tag, err := h.pool.Exec(r.Context(), q.SQL, q.Args...)
 	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "failed to delete row: "+err.Error(), err)
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 	if tag.RowsAffected() == 0 {

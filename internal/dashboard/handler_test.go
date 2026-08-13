@@ -137,7 +137,7 @@ func TestValidateTableInputRejectsPolicyWithoutEmailAuth(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for rls:policy table without email auth, got nil")
 	}
-	wantMsg := `table posts uses restricted access (RLS), which requires 'Autenticação por e-mail' to be enabled for this app`
+	wantMsg := `table posts uses restricted access (RLS), which requires 'Email Authentication' to be enabled for this app`
 	if err.Error() != wantMsg {
 		t.Fatalf("err = %q, want %q", err.Error(), wantMsg)
 	}

@@ -216,7 +216,7 @@ export function PolicyTemplatePicker({
                           : "rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[12px] font-semibold text-[var(--text-secondary)] cursor-pointer hover:bg-[var(--hover-surface)]"
                       }
                     >
-                      {action}
+                      {t(`tablePolicies.action.${action}`)}
                     </button>
                   );
                 })}
@@ -323,7 +323,7 @@ export function PolicyTemplatePicker({
                     if (!entry) return null;
                     return (
                       <span key={action}>
-                        {action}: {t(`tablePolicies.templates.composite.status.${entry.status}`)}
+                        {t(`tablePolicies.action.${action}`)}: {t(`tablePolicies.templates.composite.status.${entry.status}`)}
                         {entry.status === "failed" && entry.reason ? ` (${entry.reason})` : ""}
                       </span>
                     );

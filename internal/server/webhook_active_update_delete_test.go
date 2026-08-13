@@ -138,6 +138,62 @@ func TestWebhookActive_UpdateWithAmbiguousMatchKeyIsRejected(t *testing.T) {
 	}
 }
 
+// TestWebhookActive_UpdateMatchKeyIgnoresSoftDeletedRow proves the match-key
+// lookup excludes soft-deleted rows when soft delete is on, same as
+// query.BuildDelete/BuildUpdate. Without that filter, a live row sharing its
+// match key value with a soft-deleted one always looks ambiguous — a
+// false-positive 409 that would otherwise block every legitimate update.
+func TestWebhookActive_UpdateMatchKeyIgnoresSoftDeletedRow(t *testing.T) {
+	f := setupWebhookActiveFixture(t)
+	f.activateWithFullLifecycleMappings(t)
+	ctx := context.Background()
+
+	orig := testReg.SystemConfig()
+	t.Cleanup(func() { testReg.SetSystemConfig(orig) })
+	cfg := orig
+	cfg.SoftDeleteEnabled = true
+	testReg.SetSystemConfig(cfg)
+
+	if _, err := testPool.Exec(ctx,
+		`INSERT INTO `+f.schema+`.employees (external_id, full_name, deleted_at) VALUES ('u-dup', 'Old (soft-deleted)', now())`,
+	); err != nil {
+		t.Fatalf("seed soft-deleted row: %v", err)
+	}
+	if _, err := testPool.Exec(ctx,
+		`INSERT INTO `+f.schema+`.employees (external_id, full_name) VALUES ('u-dup', 'Original')`,
+	); err != nil {
+		t.Fatalf("seed live row: %v", err)
+	}
+
+	h := NewWebhookHandler(testPool, testReg)
+	router := buildActiveWebhookRouter(h)
+
+	rec := postWebhook(router, f.wh, f.token, `{"eventType":"user.updated","eventId":"evt-1","user":{"id":"u-dup","name":"Updated"}}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 (soft-deleted row must not count toward ambiguity), got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var liveFullName string
+	if err := testPool.QueryRow(ctx,
+		`SELECT full_name FROM `+f.schema+`.employees WHERE external_id = 'u-dup' AND deleted_at IS NULL`,
+	).Scan(&liveFullName); err != nil {
+		t.Fatalf("query live row: %v", err)
+	}
+	if liveFullName != "Updated" {
+		t.Fatalf("expected the live row to be updated, got full_name=%q", liveFullName)
+	}
+
+	var deletedFullName string
+	if err := testPool.QueryRow(ctx,
+		`SELECT full_name FROM `+f.schema+`.employees WHERE external_id = 'u-dup' AND deleted_at IS NOT NULL`,
+	).Scan(&deletedFullName); err != nil {
+		t.Fatalf("query soft-deleted row: %v", err)
+	}
+	if deletedFullName != "Old (soft-deleted)" {
+		t.Fatalf("expected the soft-deleted row untouched, got full_name=%q", deletedFullName)
+	}
+}
+
 func TestWebhookActive_DeleteHappyPathRemovesRow(t *testing.T) {
 	f := setupWebhookActiveFixture(t)
 	f.activateWithFullLifecycleMappings(t)

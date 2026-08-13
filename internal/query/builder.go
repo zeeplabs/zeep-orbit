@@ -93,7 +93,7 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 	if raw, ok := params["limit"]; ok {
 		v, err := strconv.Atoi(raw)
 		if err != nil || v < 0 {
-			return nil, fmt.Errorf("query: parâmetro 'limit' inválido: %q", raw)
+			return nil, fmt.Errorf("query: invalid 'limit' parameter: %q", raw)
 		}
 		if v > maxLimit {
 			v = maxLimit
@@ -105,7 +105,7 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 	if raw, ok := params["offset"]; ok {
 		v, err := strconv.Atoi(raw)
 		if err != nil || v < 0 {
-			return nil, fmt.Errorf("query: parâmetro 'offset' inválido: %q", raw)
+			return nil, fmt.Errorf("query: invalid 'offset' parameter: %q", raw)
 		}
 		offset = v
 	}
@@ -124,7 +124,7 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 			continue
 		}
 		if _, ok := known[key]; !ok {
-			return nil, fmt.Errorf("query: campo desconhecido no filtro: %q", key)
+			return nil, fmt.Errorf("query: unknown field in filter: %q", key)
 		}
 
 		if strings.HasPrefix(val, "in.") {
@@ -151,7 +151,7 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 			}
 		}
 		if !found {
-			return nil, fmt.Errorf("query: operador não suportado em filtro '%s=%s' (use eq./ne./gt./gte./lt./lte./like./ilike./in.)", key, val)
+			return nil, fmt.Errorf("query: unsupported operator in filter '%s=%s' (use eq./ne./gt./gte./lt./lte./like./ilike./in.)", key, val)
 		}
 	}
 
@@ -169,14 +169,14 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 	if raw, ok := params["order"]; ok {
 		parts := strings.Split(raw, ".")
 		if len(parts) != 2 {
-			return nil, fmt.Errorf("query: formato de 'order' inválido: %q (use field.asc ou field.desc)", raw)
+			return nil, fmt.Errorf("query: invalid 'order' format: %q (use field.asc or field.desc)", raw)
 		}
 		field, direction := parts[0], strings.ToUpper(parts[1])
 		if direction != "ASC" && direction != "DESC" {
-			return nil, fmt.Errorf("query: direção de ordenação inválida: %q (use asc ou desc)", parts[1])
+			return nil, fmt.Errorf("query: invalid sort direction: %q (use asc or desc)", parts[1])
 		}
 		if _, ok := known[field]; !ok {
-			return nil, fmt.Errorf("query: campo desconhecido em 'order': %q", field)
+			return nil, fmt.Errorf("query: unknown field in 'order': %q", field)
 		}
 		orderClause = fmt.Sprintf(" ORDER BY %s %s", field, direction)
 	}
@@ -211,7 +211,7 @@ func BuildInsert(schemaName, tableName string, table *registry.Table, body map[s
 			continue
 		}
 		if _, ok := known[key]; !ok {
-			return nil, fmt.Errorf("query: campo desconhecido no body: %q", key)
+			return nil, fmt.Errorf("query: unknown field in body: %q", key)
 		}
 	}
 
@@ -221,7 +221,7 @@ func BuildInsert(schemaName, tableName string, table *registry.Table, body map[s
 		}
 		val, present := body[col.Name]
 		if !present || val == nil {
-			return nil, fmt.Errorf("query: campo %q é obrigatório", col.Name)
+			return nil, fmt.Errorf("query: field %q is required", col.Name)
 		}
 	}
 
@@ -250,7 +250,7 @@ func BuildInsert(schemaName, tableName string, table *registry.Table, body map[s
 	}
 
 	if len(cols) == 0 {
-		return nil, fmt.Errorf("query: nenhum campo válido fornecido para INSERT")
+		return nil, fmt.Errorf("query: no valid field provided for INSERT")
 	}
 
 	sql := fmt.Sprintf(
@@ -272,7 +272,7 @@ func BuildUpdate(schemaName, tableName string, table *registry.Table, id string,
 			continue
 		}
 		if _, ok := known[key]; !ok {
-			return nil, fmt.Errorf("query: campo desconhecido no body: %q", key)
+			return nil, fmt.Errorf("query: unknown field in body: %q", key)
 		}
 	}
 
@@ -293,7 +293,7 @@ func BuildUpdate(schemaName, tableName string, table *registry.Table, id string,
 	}
 
 	if len(setClauses) == 0 {
-		return nil, fmt.Errorf("query: nenhum campo válido fornecido para UPDATE")
+		return nil, fmt.Errorf("query: no valid field provided for UPDATE")
 	}
 
 	setClauses = append(setClauses, "updated_at = now()")

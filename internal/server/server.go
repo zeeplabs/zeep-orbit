@@ -154,11 +154,18 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 	// (see design.md); registered with HandleFunc (not a verb-specific
 	// method) since the webhook's configured HTTP method is a per-webhook
 	// setting the handler itself checks, not a routing-level constraint.
-	// Per-IP rate limited (webhookLimiter) since the webhookId is visible in
-	// the dashboard URL and this route sits ahead of the token check.
+	// Rate limited per webhookId (not per source IP): this service runs
+	// multiple replicas behind a non-sticky load balancer, so remoteIP would
+	// be the LB's address, sharing one budget across every tenant's webhooks
+	// on that replica — a single noisy provider would 429 everyone else's
+	// deliveries too. Keying by webhookId (visible in the URL, ahead of the
+	// token check) scopes the budget to one webhook subscription instead.
 	webhookH := NewWebhookHandler(pool, reg)
 	webhookLimiter := dashboard.NewRateLimiter(120, time.Minute)
-	r.With(webhookLimiter.Middleware).HandleFunc("/hooks/{webhookId}/{token}", webhookH.HandleWebhookDelivery)
+	webhookLimiterMW := webhookLimiter.MiddlewareKeyedBy(func(r *http.Request) string {
+		return chi.URLParam(r, "webhookId")
+	})
+	r.With(webhookLimiterMW).HandleFunc("/hooks/{webhookId}/{token}", webhookH.HandleWebhookDelivery)
 
 	dh := docs.NewHandler(reg)
 	r.Get("/docs/", dh.HandleIndex)

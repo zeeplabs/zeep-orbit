@@ -3,11 +3,13 @@ package server
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -209,6 +211,98 @@ func TestWebhookActive_DuplicateEventIDSkipsSecondWrite(t *testing.T) {
 	}
 	if list[1].Outcome != "inserted" {
 		t.Fatalf("expected the first delivery outcome=inserted, got %q", list[1].Outcome)
+	}
+}
+
+// TestWebhookActive_ConcurrentDuplicateEventIDInsertsOnlyOnce proves the
+// check-then-act dedup race is actually closed by lockEventID: two
+// deliveries with the same event id fired at once (the normal
+// provider-retries-a-slow-request pattern) must still produce exactly one
+// row, not two — idx_webhook_deliveries_dedup alone can't guarantee this,
+// since it isn't a unique index.
+func TestWebhookActive_ConcurrentDuplicateEventIDInsertsOnlyOnce(t *testing.T) {
+	f := setupWebhookActiveFixture(t)
+	f.activateWithInsertMapping(t)
+	h := NewWebhookHandler(testPool, testReg)
+	router := buildActiveWebhookRouter(h)
+
+	body := `{"eventType":"user.created","eventId":"evt-race-1","user":{"id":"u-race","name":"Ana"}}`
+
+	var wg sync.WaitGroup
+	results := make([]int, 2)
+	for i := range results {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			results[i] = postWebhook(router, f.wh, f.token, body).Code
+		}(i)
+	}
+	wg.Wait()
+
+	for _, code := range results {
+		if code != http.StatusOK {
+			t.Fatalf("expected both concurrent calls to return 200, got %v", results)
+		}
+	}
+
+	var count int
+	if err := testPool.QueryRow(context.Background(), `SELECT COUNT(*) FROM `+f.schema+`.employees`).Scan(&count); err != nil {
+		t.Fatalf("count employees: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected exactly 1 row despite 2 concurrent calls with the same event id, got %d", count)
+	}
+}
+
+// TestWebhookActive_ConcurrentDistinctEventIDsDoNotExhaustPool proves
+// lockEventID's held connection no longer competes with the main pool
+// (internal/db/client.go MaxConns=10) for the connections the dedup
+// check/write/log queries need to finish and release the lock. Before the
+// dedicated dedupLockPool fix, this many concurrent deliveries — each with
+// a distinct event id, so the lock itself never serializes them — deadlocked
+// the whole process: every main-pool connection ended up held by a
+// lockEventID call waiting on a connection the writes needed to release.
+func TestWebhookActive_ConcurrentDistinctEventIDsDoNotExhaustPool(t *testing.T) {
+	f := setupWebhookActiveFixture(t)
+	f.activateWithInsertMapping(t)
+	h := NewWebhookHandler(testPool, testReg)
+	router := buildActiveWebhookRouter(h)
+
+	const n = 15 // above db.MaxConns (10) so a per-connection lock would starve the pool
+	var wg sync.WaitGroup
+	results := make([]int, n)
+	done := make(chan struct{})
+	for i := range results {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			body := fmt.Sprintf(`{"eventType":"user.created","eventId":"evt-pool-%d","user":{"id":"u-pool-%d","name":"Ana"}}`, i, i)
+			results[i] = postWebhook(router, f.wh, f.token, body).Code
+		}(i)
+	}
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(20 * time.Second):
+		t.Fatal("deliveries with distinct event ids deadlocked — pool likely exhausted by lockEventID")
+	}
+
+	for i, code := range results {
+		if code != http.StatusOK {
+			t.Fatalf("delivery %d: expected 200, got %d", i, code)
+		}
+	}
+
+	var count int
+	if err := testPool.QueryRow(context.Background(), `SELECT COUNT(*) FROM `+f.schema+`.employees`).Scan(&count); err != nil {
+		t.Fatalf("count employees: %v", err)
+	}
+	if count != n {
+		t.Fatalf("expected %d rows (one per distinct event id), got %d", n, count)
 	}
 }
 
