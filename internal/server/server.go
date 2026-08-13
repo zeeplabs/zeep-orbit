@@ -21,6 +21,7 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/dashboard"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 	"github.com/zeeplabs/zeep-orbit/internal/docs"
+	"github.com/zeeplabs/zeep-orbit/internal/mcpserver"
 	"github.com/zeeplabs/zeep-orbit/internal/registry"
 )
 
@@ -166,6 +167,14 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		return chi.URLParam(r, "webhookId")
 	})
 	r.With(webhookLimiterMW).HandleFunc("/hooks/{webhookId}/{token}", webhookH.HandleWebhookDelivery)
+
+	// MCP transport (mcp-server spec): sibling to the /dashboard route
+	// group, not nested inside it — it authenticates with a bearer PAT via
+	// mcpserver.RequirePAT, not the zeep_session cookie the /dashboard
+	// group's handlers use. Rate limited per-PAT-id (mcpserver.NewHandler),
+	// same rationale as the webhook route above.
+	mcpLimiter := dashboard.NewRateLimiter(120, time.Minute)
+	r.Handle("/dashboard/mcp", mcpserver.NewHandler(pool, mcpLimiter))
 
 	dh := docs.NewHandler(reg)
 	r.Get("/docs/", dh.HandleIndex)

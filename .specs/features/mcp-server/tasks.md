@@ -342,13 +342,13 @@ T15 depends on T10, T11, T12 (needs every tool registered to exercise the full P
 
 **Done when**:
 
-- [ ] `/dashboard/mcp` responds to an MCP client's initialize handshake with a valid PAT, using the SDK's own streamable-HTTP client in the test (not a hand-rolled HTTP fixture)
-- [ ] The same handshake without a valid PAT is rejected before reaching the MCP protocol layer (401, per T2)
-- [ ] A PAT that exceeds its rate-limit window is rejected on the Nth call within the window, keyed by PAT id (two different PATs each get their own budget)
-- [ ] Zero tools are registered yet — this task only proves transport+auth
-- [ ] Gate check passes: `go build ./... && go test ./internal/mcpserver/...`
+- [x] `/dashboard/mcp` responds to an MCP client's initialize handshake with a valid PAT, using the SDK's own streamable-HTTP client in the test (not a hand-rolled HTTP fixture)
+- [x] The same handshake without a valid PAT is rejected before reaching the MCP protocol layer (401, per T2)
+- [x] A PAT that exceeds its rate-limit window is rejected on the Nth call within the window, keyed by PAT id (two different PATs each get their own budget)
+- [x] Zero tools are registered yet — this task only proves transport+auth
+- [x] Gate check passes: `go build ./... && go test ./internal/mcpserver/...`
 
-**Status**: Not Started
+**Status**: Complete
 
 **Tests**: integration
 **Gate**: quick
