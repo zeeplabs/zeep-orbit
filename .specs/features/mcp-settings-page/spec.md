@@ -27,8 +27,8 @@ The MCP server (`.specs/features/mcp-server/`) is implemented and reachable at `
 | Assumption / decision | Chosen default | Rationale | Confirmed? |
 |---|---|---|---|
 | Where the new "MCP" nav item lives | `NAV_SECTIONS`' `nav.sectionDeployment` group, alongside SDKs | Same audience (developers connecting external tooling to Orbit), same mental model as the SDKs page | n |
-| Old sidebar-footer key icon + `PersonalAccessTokens` modal | Removed entirely from `SidebarFooter.tsx`/`MobileNav.tsx`/`DashboardShell.tsx`; PAT management only exists on the new `/mcp` page | User asked to "migrate," not duplicate, the PAT UI | n |
-| Route path | `/mcp` | Short, matches the sidebar label, consistent with `/sdks`, `/logs` | n |
+| Old sidebar-footer key icon + `PersonalAccessTokens` modal | Removed entirely from `SidebarFooter.tsx`/`MobileNav.tsx`/`DashboardShell.tsx`; PAT management only exists on the new `/mcp-settings` page | User asked to "migrate," not duplicate, the PAT UI | n |
+| Route path | `/mcp-settings` (not `/mcp`) | `/mcp` would resolve to browser path `/dashboard/mcp` (router `basename="/dashboard"`, `src/main.tsx:28`), which collides with the backend's reserved `/dashboard/mcp` MCP transport route (`internal/server/server.go:177`, registered outside the `/dashboard` SPA route group specifically so it isn't nested there). Direct navigation/refresh at that URL would hit the MCP protocol handler instead of the SPA shell. Caught during implementation, corrected before the e2e task | y |
 | Endpoint URL shown to the user | Computed from `window.location.origin + '/dashboard/mcp'` at render time, not a static placeholder | Matches the existing `Webhooks.tsx` pattern (`base = window.location.origin`) for showing a real, copy-pasteable URL instead of `<host>` | n |
 | Access gating on the new page | None (`platformAction` omitted) — any authenticated dashboard user can reach it | PATs are personal (`ResolvePAT` scopes by dashboard user), matching current modal's ungated behavior; no platform-permission matrix entry exists for "mcp" today | n |
 | Whether the page documents Claude Desktop / OAuth at all | Yes — one short explanatory block (no interactive flow, see Out of Scope), so the page is accurate about both auth methods Orbit supports | Documenting only what exists (PAT tutorial) but omitting OAuth entirely would misrepresent how Claude Desktop actually connects | n |
@@ -49,11 +49,11 @@ The MCP server (`.specs/features/mcp-server/`) is implemented and reachable at `
 **Acceptance Criteria**:
 
 1. WHEN a dashboard user views the sidebar THEN the system SHALL render a nav item labeled with the translated string for `nav.mcp` (not a raw key) under the Deployment section, alongside SDKs.
-2. WHEN the user clicks the "MCP" nav item THEN the system SHALL navigate to `/mcp` and render the MCP settings page.
+2. WHEN the user clicks the "MCP" nav item THEN the system SHALL navigate to `/mcp-settings` and render the MCP settings page.
 3. The system SHALL NOT render the previous unlabeled key-icon button in `SidebarFooter` or `MobileNav`.
-4. WHEN the user is on a narrow/mobile viewport THEN the system SHALL provide equivalent access to `/mcp` from the mobile navigation.
+4. WHEN the user is on a narrow/mobile viewport THEN the system SHALL provide equivalent access to `/mcp-settings` from the mobile navigation.
 
-**Independent Test**: Log into the dashboard, look at the sidebar without prior knowledge, click "MCP", land on `/mcp`.
+**Independent Test**: Log into the dashboard, look at the sidebar without prior knowledge, click "MCP", land on `/mcp-settings`.
 
 ---
 
@@ -71,7 +71,7 @@ The MCP server (`.specs/features/mcp-server/`) is implemented and reachable at `
 4. The system SHALL include a short explanatory block distinguishing PAT (bearer token, used by the four CLI-style clients above) from OAuth 2.1 + PKCE (used by Claude Desktop's interactive connect, discovery at `/.well-known/oauth-authorization-server`), without providing an interactive OAuth "connect" action (Out of Scope).
 5. WHEN the user clicks the copy icon on a client's config snippet THEN the system SHALL copy that exact snippet text to the clipboard and show a success toast.
 
-**Independent Test**: Open `/mcp`, read the endpoint URL, switch to the "Codex" snippet, copy it, paste into `~/.codex/config.toml`, confirm it matches the README's Codex block content (with the real URL substituted for `<host>`).
+**Independent Test**: Open `/mcp-settings`, read the endpoint URL, switch to the "Codex" snippet, copy it, paste into `~/.codex/config.toml`, confirm it matches the README's Codex block content (with the real URL substituted for `<host>`).
 
 ---
 
@@ -90,7 +90,7 @@ The MCP server (`.specs/features/mcp-server/`) is implemented and reachable at `
 5. IF create or revoke fails THEN the system SHALL show `toast.error(error.message)` and SHALL NOT close the create form or optimistically remove the token from the list.
 6. The system SHALL render every string on this page (migrated `pats.*` strings, the existing `common.copyToClipboard` key, and new `mcp.*`/`nav.mcp` keys) from `en.json` and `pt-BR.json` — no key falls back to being displayed literally.
 
-**Independent Test**: On `/mcp`, create a token, copy it, confirm it disappears from view after dismissal, then revoke it and confirm it no longer appears in the active list.
+**Independent Test**: On `/mcp-settings`, create a token, copy it, confirm it disappears from view after dismissal, then revoke it and confirm it no longer appears in the active list.
 
 ---
 
@@ -99,7 +99,7 @@ The MCP server (`.specs/features/mcp-server/`) is implemented and reachable at `
 - IF `usePATs` is loading THEN the system SHALL show a loading state (reuse `LoadingState`) instead of an empty-state flash.
 - IF the clipboard API is unavailable (permissions denied, insecure context) THEN the system SHALL leave the copied value visible/selectable on screen rather than failing silently (matches existing `PersonalAccessTokens.tsx` catch-and-ignore behavior).
 - IF a token name is empty or whitespace-only THEN the system SHALL disable the create submit action (matches existing `!name.trim()` guard).
-- WHEN the user navigates to `/mcp` directly via URL (not through the sidebar click) THEN the system SHALL render the same page — no state depends on modal-open props since it's no longer a modal.
+- WHEN the user navigates to `/mcp-settings` directly via URL (not through the sidebar click) THEN the system SHALL render the same page — no state depends on modal-open props since it's no longer a modal.
 
 ---
 
@@ -130,5 +130,5 @@ The MCP server (`.specs/features/mcp-server/`) is implemented and reachable at `
 ## Success Criteria
 
 - [ ] Sidebar shows a labeled "MCP" entry; the old unlabeled key icon is gone
-- [ ] `/mcp` renders endpoint URL, auth explanation, 4 client tutorials, and full PAT CRUD with zero raw i18n keys visible
-- [ ] `npx tsc -b` and `npm run build` (internal/dashboard/ui) pass; existing PAT e2e test (T16, from commit `6349d64`) still passes after relocation, updated to target `/mcp` instead of the modal trigger
+- [ ] `/mcp-settings` renders endpoint URL, auth explanation, 4 client tutorials, and full PAT CRUD with zero raw i18n keys visible
+- [ ] `npx tsc -b` and `npm run build` (internal/dashboard/ui) pass; existing PAT e2e test (T16, from commit `6349d64`) still passes after relocation, updated to target `/mcp-settings` instead of the modal trigger

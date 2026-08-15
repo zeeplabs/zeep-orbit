@@ -135,7 +135,7 @@ function App() {
             element={<RequireRole allow={['superadmin']}><GitHubIntegrationPage /></RequireRole>}
           />
           <Route path="/sdks" element={<SdkPage />} />
-          <Route path="/mcp" element={<MCPPage />} />
+          <Route path="/mcp-settings" element={<MCPPage />} />
           <Route path="/changelog" element={<ChangelogPage />} />
           <Route path="/403" element={<AccessDenied />} />
         </Route>
