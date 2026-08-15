@@ -170,6 +170,7 @@ function ClientTutorials({ t }: { t: (key: string) => string }) {
           return (
             <div
               key={client.name}
+              data-testid={`mcp-client-card-${client.name}`}
               className="flex flex-col gap-2 rounded-[14px] border p-4"
               style={{ background: "var(--surface)", borderColor: "var(--border)" }}
             >

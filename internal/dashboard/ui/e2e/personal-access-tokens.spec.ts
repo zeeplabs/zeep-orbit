@@ -35,6 +35,13 @@ import { bootstrapOrSkip, login } from './helpers'
  * resolve to /dashboard/mcp under the router's basename, colliding with
  * the backend's own MCP transport route at that exact path.
  */
+// Copy-to-clipboard assertions below need the browser's clipboard
+// permission granted up front -- headless Chromium denies it by default,
+// and MCPPage's copyToClipboard() silently swallows a denied write (same
+// as Webhooks.tsx's pattern), so without this the toast would never fire
+// and the test would fail for the wrong reason.
+test.use({ permissions: ['clipboard-read', 'clipboard-write'] })
+
 let storageState: Awaited<ReturnType<import('@playwright/test').BrowserContext['storageState']>>
 
 test.beforeAll(async ({ browser }) => {
@@ -77,6 +84,10 @@ test('create, reload, authenticate, and revoke a personal access token', async (
   await expect(page.getByText(tokenName)).toBeVisible()
   await expect(page.getByTestId('revealed-pat-token')).toHaveCount(0)
 
+  // MCPUI-10: a token that has never authenticated a request shows "Never
+  // used", not a last-used date.
+  await expect(page.getByText('Never used')).toBeVisible()
+
   // Stage 3: the UI-created token must actually authenticate a raw HTTP
   // request to /dashboard/mcp (not via a full MCP client -- a bearer-auth'd
   // request reaches the MCP protocol layer and gets a non-401 response,
@@ -90,6 +101,11 @@ test('create, reload, authenticate, and revoke a personal access token', async (
     data: {},
   })
   expect(authedRes.status()).not.toBe(401)
+
+  // MCPUI-10: once a token has authenticated a request, its row switches
+  // from "Never used" to a "Last used" date.
+  await page.reload()
+  await expect(page.getByText(/^Last used /)).toBeVisible()
 
   // Stage 4: revoke the token -- it must disappear from the list without a
   // manual reload.
@@ -129,9 +145,14 @@ test('renders MCP discovery and per-client connection tutorials', async ({ page 
   const endpoint = await page.getByTestId('mcp-endpoint-url').innerText()
   expect(endpoint).toBe(`${new URL(page.url()).origin}/dashboard/mcp`)
 
-  // MCPUI-08: both auth methods are explained.
+  // MCPUI-08: both auth methods are explained, and there is no interactive
+  // control that would drive the OAuth flow from the dashboard itself
+  // (Out of Scope in spec.md -- this page only documents OAuth, Claude
+  // Desktop's own client performs it).
   await expect(page.getByText('Personal Access Token (PAT)')).toBeVisible()
   await expect(page.getByText('OAuth 2.1 + PKCE')).toBeVisible()
+  await expect(page.getByRole('button', { name: /connect/i })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: /connect/i })).toHaveCount(0)
 
   // MCPUI-07: all 4 clients are present, and each one's snippet embeds the
   // live endpoint (not the README's <host> placeholder) plus the
@@ -144,6 +165,36 @@ test('renders MCP discovery and per-client connection tutorials', async ({ page 
     expect(snippet).toContain('${ZEEP_ORBIT_PAT}')
     expect(snippet).not.toContain('<host>')
   }
+
+  // MCPUI-06/09: clicking each of the two distinct CopyButton call sites
+  // (endpoint, and one client snippet) must show the real "copied" toast,
+  // not the button's own title/tooltip text -- guards against regressing
+  // the copy-success-toast bug fixed in aecece1.
+  await page.getByTitle('Copy endpoint URL').click()
+  await expect(page.getByText('Copied to clipboard')).toBeVisible()
+
+  await page.getByTestId('mcp-client-card-Claude Code').getByTitle('Copy config').click()
+  await expect(page.getByText('Copied to clipboard')).toBeVisible()
+})
+
+test('MCP nav link navigates to the settings page and is reachable on mobile', async ({ page }) => {
+  // MCPUI-02: click-through navigation, not just a direct URL load --
+  // guards against reintroducing the exact /mcp route collision fixed in
+  // 6ec4add (a regression there would 404/misbehave rather than land on
+  // this page).
+  await page.goto('/dashboard/apps')
+  await page.getByRole('link', { name: 'MCP' }).click()
+  await expect(page).toHaveURL(/\/dashboard\/mcp-settings$/)
+  await expect(page.getByRole('heading', { name: 'MCP', level: 1 })).toBeVisible()
+
+  // MCPUI-04: the mobile "More" bottom sheet surfaces the same nav model
+  // (NAV_SECTIONS), so the MCP entry is reachable on a narrow viewport too.
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/dashboard/apps')
+  await page.getByRole('button', { name: 'More' }).click()
+  await expect(
+    page.getByTestId('mobile-nav-sheet').getByRole('link', { name: 'MCP' }),
+  ).toBeVisible()
 })
 
 test('shows an error and keeps the form open when token creation fails', async ({ page }) => {
