@@ -108,20 +108,20 @@ The MCP server (`.specs/features/mcp-server/`) is implemented and reachable at `
 | Requirement ID | Story | Phase | Status |
 |---|---|---|---|
 | MCPUI-01 | P1: Discover and open MCP setup | Execute | Implementing |
-| MCPUI-02 | P1: Discover and open MCP setup | Execute | Pending |
+| MCPUI-02 | P1: Discover and open MCP setup | Execute | Implementing |
 | MCPUI-03 | P1: Discover and open MCP setup | Execute | Pending |
-| MCPUI-04 | P1: Discover and open MCP setup | Execute | Pending |
-| MCPUI-05 | P2: Understand how to connect | Execute | Pending |
-| MCPUI-06 | P2: Understand how to connect | Execute | Pending |
-| MCPUI-07 | P2: Understand how to connect | Execute | Pending |
-| MCPUI-08 | P2: Understand how to connect | Execute | Pending |
-| MCPUI-09 | P2: Understand how to connect | Execute | Pending |
-| MCPUI-10 | P3: Manage PATs | Execute | Pending |
-| MCPUI-11 | P3: Manage PATs | Execute | Pending |
-| MCPUI-12 | P3: Manage PATs | Execute | Pending |
-| MCPUI-13 | P3: Manage PATs | Execute | Pending |
-| MCPUI-14 | P3: Manage PATs | Execute | Pending |
-| MCPUI-15 | P3: Manage PATs | Execute | Pending |
+| MCPUI-04 | P1: Discover and open MCP setup | Execute | Implementing |
+| MCPUI-05 | P2: Understand how to connect | Execute | Implementing |
+| MCPUI-06 | P2: Understand how to connect | Execute | Implementing |
+| MCPUI-07 | P2: Understand how to connect | Execute | Implementing |
+| MCPUI-08 | P2: Understand how to connect | Execute | Implementing |
+| MCPUI-09 | P2: Understand how to connect | Execute | Implementing |
+| MCPUI-10 | P3: Manage PATs | Execute | Implementing |
+| MCPUI-11 | P3: Manage PATs | Execute | Implementing |
+| MCPUI-12 | P3: Manage PATs | Execute | Implementing |
+| MCPUI-13 | P3: Manage PATs | Execute | Implementing |
+| MCPUI-14 | P3: Manage PATs | Execute | Implementing |
+| MCPUI-15 | P3: Manage PATs | Execute | Implementing |
 
 **Coverage:** 15 total, 0 mapped to tasks (Tasks phase skipped — Medium scope, ≤8 implicit steps in Execute), 15 unmapped until Execute's inline task list ⚠️
 

@@ -15,6 +15,7 @@ import LogsPage from './pages/LogsPage'
 import AuditLogPage from './pages/AuditLogPage'
 import GitHubIntegrationPage from './pages/GitHubIntegrationPage'
 import SdkPage from './pages/SdkPage'
+import MCPPage from './pages/MCPPage'
 import ChangelogPage from './pages/ChangelogPage'
 import DataBrowserPage from './pages/DataBrowserPage'
 import AccessDenied from './pages/AccessDenied'
@@ -134,6 +135,7 @@ function App() {
             element={<RequireRole allow={['superadmin']}><GitHubIntegrationPage /></RequireRole>}
           />
           <Route path="/sdks" element={<SdkPage />} />
+          <Route path="/mcp" element={<MCPPage />} />
           <Route path="/changelog" element={<ChangelogPage />} />
           <Route path="/403" element={<AccessDenied />} />
         </Route>
