@@ -31,7 +31,15 @@ async function copyToClipboard(value: string, successMessage: string) {
   }
 }
 
-function CopyButton({ value, label }: { value: string; label: string }) {
+function CopyButton({
+  value,
+  label,
+  successMessage,
+}: {
+  value: string;
+  label: string;
+  successMessage: string;
+}) {
   return (
     <Button
       variant="outline"
@@ -39,7 +47,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
       className="size-8 shrink-0"
       title={label}
       aria-label={label}
-      onClick={() => copyToClipboard(value, label)}
+      onClick={() => copyToClipboard(value, successMessage)}
     >
       <Icon name="content_copy" size={15} />
     </Button>
@@ -121,7 +129,7 @@ function EndpointBlock({ t }: { t: (key: string) => string }) {
         <code className="flex-1 overflow-x-auto break-all font-mono text-sm text-[var(--primary)]">
           {endpoint}
         </code>
-        <CopyButton value={endpoint} label={t("mcp.copyEndpoint")} />
+        <CopyButton value={endpoint} label={t("mcp.copyEndpoint")} successMessage={t("mcp.copySuccess")} />
       </div>
     </div>
   );
@@ -181,7 +189,7 @@ function ClientTutorials({ t }: { t: (key: string) => string }) {
                   <code dangerouslySetInnerHTML={{ __html: highlight(snippet, client.lang) }} />
                 </pre>
                 <div className="absolute right-2 top-2">
-                  <CopyButton value={snippet} label={t("mcp.copyConfig")} />
+                  <CopyButton value={snippet} label={t("mcp.copyConfig")} successMessage={t("mcp.copySuccess")} />
                 </div>
               </div>
             </div>
@@ -242,7 +250,7 @@ function PersonalAccessTokensSection() {
             >
               {createdToken}
             </code>
-            <CopyButton value={createdToken} label={t("common.copyToClipboard")} />
+            <CopyButton value={createdToken} label={t("common.copyToClipboard")} successMessage={t("pats.copySuccess")} />
           </div>
           <Button className="w-fit" onClick={() => setCreatedToken(null)}>{t("pats.done")}</Button>
         </div>
