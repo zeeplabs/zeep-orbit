@@ -122,6 +122,18 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: spec.md AC P1-6 / tasks.md T2 Done-when; no generated-SQL comparison test exists (provisioner)
 - last seen: 2026-08-12T15:32:07Z
 
+### L-019 - When migrating a modal's functionality into a new dedicated page, add e2e assertions for the new page's own surface (nav label, route, static content, copy actions) — don't assume the migrated flow's existing test covers it.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `dashboard-ui-e2e` · harmful: 0
+- features: mcp-settings-page
+- evidence: MCPUI-01..09 (spec.md P1/P2); validation.md AC table (dashboard-ui-e2e)
+- last seen: 2026-08-15T23:38:47Z
+
+### L-020 - A single happy-path e2e test that always has data in the list will never exercise empty-state or error-toast branches — add an explicit test case that drives the list to empty and one that forces a mutation failure.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `dashboard-ui-e2e` · harmful: 0
+- features: mcp-settings-page
+- evidence: MCPUI-13, MCPUI-14 (spec.md P3 edge cases); validation.md AC table (dashboard-ui-e2e)
+- last seen: 2026-08-15T23:38:47Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

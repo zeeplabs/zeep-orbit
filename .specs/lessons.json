@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 19,
+  "next_id": 21,
   "lessons": [
     {
       "id": "L-001",
@@ -328,6 +328,42 @@
       ],
       "created": "2026-08-12T15:32:07Z",
       "last_seen": "2026-08-12T15:32:07Z"
+    },
+    {
+      "id": "L-019",
+      "key": "ac_gap::when migrating a modal s functionality into a new dedicated page add e2e assertions for the new page s own surface nav label route static content copy actions don t assume the migrated flow s existing test covers it",
+      "text": "When migrating a modal's functionality into a new dedicated page, add e2e assertions for the new page's own surface (nav label, route, static content, copy actions) — don't assume the migrated flow's existing test covers it.",
+      "signal": "ac_gap",
+      "scope": "dashboard-ui-e2e",
+      "status": "candidate",
+      "features": [
+        "mcp-settings-page"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "MCPUI-01..09 (spec.md P1/P2); validation.md AC table (dashboard-ui-e2e)"
+      ],
+      "created": "2026-08-15T23:38:47Z",
+      "last_seen": "2026-08-15T23:38:47Z"
+    },
+    {
+      "id": "L-020",
+      "key": "ac_gap::a single happy path e2e test that always has data in the list will never exercise empty state or error toast branches add an explicit test case that drives the list to empty and one that forces a mutation failure",
+      "text": "A single happy-path e2e test that always has data in the list will never exercise empty-state or error-toast branches — add an explicit test case that drives the list to empty and one that forces a mutation failure.",
+      "signal": "ac_gap",
+      "scope": "dashboard-ui-e2e",
+      "status": "candidate",
+      "features": [
+        "mcp-settings-page"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "MCPUI-13, MCPUI-14 (spec.md P3 edge cases); validation.md AC table (dashboard-ui-e2e)"
+      ],
+      "created": "2026-08-15T23:38:47Z",
+      "last_seen": "2026-08-15T23:38:47Z"
     }
   ]
 }
