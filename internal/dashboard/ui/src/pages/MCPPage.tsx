@@ -236,7 +236,10 @@ function PersonalAccessTokensSection() {
         <div className="flex flex-col gap-3">
           <p className="text-[12px] font-semibold text-[var(--warning)]">{t("pats.createdWarning")}</p>
           <div className="flex items-center gap-2 rounded-[10px] border border-[var(--border)] bg-[var(--sunken)] px-4 py-3">
-            <code className="max-h-32 flex-1 overflow-y-auto break-all font-mono text-sm text-[var(--primary)]">
+            <code
+              data-testid="revealed-pat-token"
+              className="max-h-32 flex-1 overflow-y-auto break-all font-mono text-sm text-[var(--primary)]"
+            >
               {createdToken}
             </code>
             <CopyButton value={createdToken} label={t("common.copyToClipboard")} />
