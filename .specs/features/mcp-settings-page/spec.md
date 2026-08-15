@@ -109,7 +109,7 @@ The MCP server (`.specs/features/mcp-server/`) is implemented and reachable at `
 |---|---|---|---|
 | MCPUI-01 | P1: Discover and open MCP setup | Execute | Implementing |
 | MCPUI-02 | P1: Discover and open MCP setup | Execute | Implementing |
-| MCPUI-03 | P1: Discover and open MCP setup | Execute | Pending |
+| MCPUI-03 | P1: Discover and open MCP setup | Execute | Implementing |
 | MCPUI-04 | P1: Discover and open MCP setup | Execute | Implementing |
 | MCPUI-05 | P2: Understand how to connect | Execute | Implementing |
 | MCPUI-06 | P2: Understand how to connect | Execute | Implementing |

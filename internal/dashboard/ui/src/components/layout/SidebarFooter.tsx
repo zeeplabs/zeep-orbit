@@ -62,7 +62,6 @@ interface SidebarFooterProps {
   user: FooterUser
   currentLang: string
   onChangePassword: () => void
-  onManagePATs: () => void
   onSaveLanguage: (lang: string) => void
   onLogout: () => void
   className?: string
@@ -71,12 +70,11 @@ interface SidebarFooterProps {
   onNavigate?: () => void
 }
 
-/** Rodapé da sidebar: usuário + toggles de tema/idioma + change-pw + PATs + github + logout. */
+/** Rodapé da sidebar: usuário + toggles de tema/idioma + change-pw + github + logout. */
 export function SidebarFooter({
   user,
   currentLang,
   onChangePassword,
-  onManagePATs,
   onSaveLanguage,
   onLogout,
   className,
@@ -124,7 +122,6 @@ export function SidebarFooter({
           <span className="text-[15px] leading-none">{isPt ? '🇧🇷' : '🇺🇸'}</span>
         </IconBtn>
         <IconBtn icon="lock" title={t('nav.changePassword')} onClick={onChangePassword} />
-        <IconBtn icon="key" title={t('pats.title')} onClick={onManagePATs} />
         <IconBtn icon="logout" title={t('nav.logout')} onClick={onLogout} />
       </div>
       {version && (
