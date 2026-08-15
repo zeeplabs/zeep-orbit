@@ -51,6 +51,7 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/myapp/tasks
 - [REST API](#-rest-api)
 - [SDK Clients](#-sdk-clients)
 - [CLI](#-cli)
+- [MCP Server](#-mcp-server)
 - [Observability](#-observability)
 - [Deployment](#-deployment)
   - [Docker](#docker)
@@ -117,6 +118,7 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/myapp/tasks
 | **i18n**                | Dashboard in pt-BR / English, language switcher          |
 | **Changelog**           | In-app release history, shipped with the binary          |
 | **Update Notifications**| Sidebar alert when a new release is available on GitHub  |
+| **MCP Server**          | Model Context Protocol server — manage apps, tables, and row policies from Claude Code, Codex, Cursor, OpenCode (PAT) or Claude Desktop (OAuth 2.1) |
 
 ---
 
@@ -372,6 +374,76 @@ Apps and tables are created and managed entirely through the Dashboard (or, goin
 
 ---
 
+## 🔌 MCP Server
+
+Zeep Orbit ships a [Model Context Protocol](https://modelcontextprotocol.io) server so AI coding assistants can manage apps, tables, and row policies directly — no dashboard clicks needed.
+
+- **Endpoint:** `https://<host>/dashboard/mcp` — Streamable HTTP, stateless (safe behind a non-sticky load balancer / multiple replicas)
+- **Auth:** two methods, both resolved against the same Personal Access Token store:
+  - **Personal Access Token (PAT)** — generate one in **Dashboard → MCP**, then send it as a bearer token. This is what Claude Code, Codex, Cursor, and OpenCode use.
+  - **OAuth 2.1 + PKCE** — dynamic client registration, authorization code flow, refresh token rotation, discovery at `/.well-known/oauth-authorization-server`. This is what Claude Desktop uses for its interactive connect flow.
+- **Tools exposed:** `orbit_list_apps`, `orbit_get_app_schema`, `orbit_create_app`, `orbit_create_table`, `orbit_set_table_rls_mode`, `orbit_list_policy_templates`, `orbit_create_policy_from_template` — same validation, provisioning, and audit path as the REST API and dashboard, no shortcuts.
+
+### Client configuration
+
+Generate a PAT first (**Dashboard → MCP**), export it as an environment variable, then configure your client:
+
+**Claude Code** — `.mcp.json`:
+```json
+{
+  "mcpServers": {
+    "zeep-orbit": {
+      "type": "http",
+      "url": "https://<host>/dashboard/mcp",
+      "headers": {
+        "Authorization": "Bearer ${ZEEP_ORBIT_PAT}"
+      }
+    }
+  }
+}
+```
+
+**Codex** — `~/.codex/config.toml`:
+```toml
+[mcp_servers.zeep-orbit]
+url = "https://<host>/dashboard/mcp"
+bearer_token_env_var = "ZEEP_ORBIT_PAT"
+```
+
+**Cursor** — `.cursor/mcp.json`:
+```json
+{
+  "mcpServers": {
+    "zeep-orbit": {
+      "url": "https://<host>/dashboard/mcp",
+      "headers": {
+        "Authorization": "Bearer ${ZEEP_ORBIT_PAT}"
+      }
+    }
+  }
+}
+```
+
+**OpenCode** — `opencode.json`:
+```json
+{
+  "mcp": {
+    "zeep-orbit": {
+      "type": "remote",
+      "url": "https://<host>/dashboard/mcp",
+      "headers": {
+        "Authorization": "Bearer ${ZEEP_ORBIT_PAT}"
+      },
+      "enabled": true
+    }
+  }
+}
+```
+
+> Treat the PAT like a password — never commit it. If your client doesn't support `${VAR}` environment interpolation in its config file, keep that file out of version control.
+
+---
+
 ## 📊 Observability
 
 - **Prometheus metrics** at `/metrics`: request count, latency, active apps
@@ -519,7 +591,6 @@ Some of these already appear in the dashboard as disabled controls or "Soon" bad
 - Sign in with Apple (per-app)
 - TypeScript SDK code generator (`@zeeptech/orbit-generate`)
 - Official prompt snippets for Claude Code / Cursor / Lovable
-- MCP server for zeep-orbit operations
 - GraphQL auto-generation
 - Realtime subscriptions (WebSockets)
 - Edge functions
