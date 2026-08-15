@@ -134,6 +134,18 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: MCPUI-13, MCPUI-14 (spec.md P3 edge cases); validation.md AC table (dashboard-ui-e2e)
 - last seen: 2026-08-15T23:38:47Z
 
+### L-021 - For any nav-item feature, add an e2e test that clicks the nav link and asserts the resulting URL, not just that the link is visible -- direct page.goto() in beforeEach hides route-path regressions in the nav config from ever being exercised.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `dashboard-ui/e2e` · harmful: 0
+- features: mcp-settings-page
+- evidence: internal/dashboard/ui/src/components/layout/nav.ts:46 (dashboard-ui/e2e)
+- last seen: 2026-08-15T23:56:05Z
+
+### L-022 - When an AC requires a copy-to-clipboard action plus a specific success-toast string, add a test that actually clicks the copy control and asserts the toast text -- reading the copied value from a data attribute without clicking the button leaves the exact bug class (wrong toast message) uncaught by any test.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `dashboard-ui/e2e` · harmful: 0
+- features: mcp-settings-page
+- evidence: MCPUI-06,MCPUI-09 (dashboard-ui/e2e)
+- last seen: 2026-08-15T23:56:05Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

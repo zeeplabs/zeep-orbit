@@ -1,99 +1,132 @@
 # MCP Settings Page Validation
 
-## Validation: MCP Settings Page - FAIL ❌
+## Validation: MCP Settings Page — Round 2 — FAIL ❌
 
 **Date**: 2026-08-15
 **Spec**: `.specs/features/mcp-settings-page/spec.md`
-**Diff range**: `28290f5^..9efdc83` (5 commits, develop)
-**Verifier**: independent sub-agent (author ≠ verifier)
+**Diff range (full feature)**: `28290f5^..cdce3e5` (9 commits, `develop`)
+**Fix-round commits reviewed**: `aecece1`, `c8765a6`, `eb0db4f`, `cdce3e5` (all after round-1's report at `9efdc83`)
+**Verifier**: independent sub-agent (author ≠ verifier), round 2 of a max-3 fix→re-verify bound
 
 ---
 
-## Task Completion
+## Round 1 (for history)
 
-No `tasks.md` exists (Tasks phase skipped — Medium scope, per spec.md's own traceability note). Verified against spec.md's 15 requirement IDs (MCPUI-01..15) and inline "Independent Test" descriptions instead.
+Round 1 (`.specs/features/mcp-settings-page/validation.md` as of `9efdc83`) returned **FAIL** with 5 ranked gaps:
 
-| Commit | Content | Status |
+1. Zero test coverage for P1/P2 (MCPUI-01..09)
+2. P3 empty-state/error-path untested (MCPUI-13/14)
+3. `CHANGELOG.md` not updated
+4. Discrimination sensor blocked — 0/3 mutations executed (sandbox Docker instability)
+5. Stale README PAT-location text (`README.md:383`/`:389`, cited as saying "Dashboard → Settings → Personal Access Tokens")
+6. A real bug, found by direct code inspection: `CopyButton` reused its title/aria-label text as the `toast.success` message instead of a dedicated "Copied to clipboard" string.
+
+**Correction to the historical record**: gap 5's citation does not hold up. `git log --oneline --all -- README.md` shows the *only* commit that ever touched README.md's MCP/PAT content is `c8765a6` (this fix round) — at `9efdc83`, the commit round 1 validated, `README.md` had **zero** occurrences of "MCP Server", "Personal Access Tokens", or "Dashboard →" (confirmed via `git show 9efdc83:README.md | grep -in mcp`, only line 522's roadmap bullet "MCP server for zeep-orbit operations" matched). There was no README prose to be stale — round 1 cited line numbers and quoted text that were never in the repository at that commit. This doesn't change the outcome (the fix round added a complete, correct section regardless — see below) but it means round 1's gap 5 evidence was fabricated, not a real finding. Flagged as a lesson.
+
+---
+
+## Fix-Round Commit Audit
+
+| Commit | Content | Verified |
 | --- | --- | --- |
-| `28290f5` feat: add MCP nav item to sidebar | `nav.ts` | ✅ Present |
-| `ca44ee7` feat: add MCP settings page | `MCPPage.tsx`, `App.tsx`, locales | ✅ Present |
-| `7595428` refactor: remove PAT modal in favor of MCP page | `DashboardShell.tsx`, `SidebarFooter.tsx`, `MobileNav.tsx`, deletes `PersonalAccessTokens.tsx` | ✅ Present |
-| `6ec4add` fix: avoid MCP page route colliding with backend endpoint | `App.tsx`, `nav.ts` (`/mcp` → `/mcp-settings`) | ✅ Present |
-| `9efdc83` test: move PAT e2e coverage to MCP settings page | `e2e/personal-access-tokens.spec.ts` | ✅ Present |
+| `aecece1` fix: copy-success toast | `CopyButton` split into `label`/`successMessage` props; all 3 call sites updated | ✅ Confirmed by reading `MCPPage.tsx` — see below |
+| `c8765a6` docs: CHANGELOG + README | `## [Unreleased]` entry added; full "🔌 MCP Server" section added to README.md and mirrored in all 3 translations | ✅ Confirmed |
+| `eb0db4f` test: MCP discovery + error paths | 3 new e2e tests + empty-state assertion appended to the lifecycle test + `data-testid`/`data-snippet` attrs | ✅ Confirmed |
+| `cdce3e5` docs: persist round-1 report + lessons | `.specs/features/mcp-settings-page/validation.md`, `.specs/LESSONS.md`, `.specs/lessons.json` | ✅ Present |
+
+### Copy-success toast bug — genuinely fixed
+
+`internal/dashboard/ui/src/pages/MCPPage.tsx:34-55` — `CopyButton` now takes `value`, `label`, and `successMessage` as three distinct props; `label` drives `title`/`aria-label` only, `successMessage` is passed to `copyToClipboard` (`MCPPage.tsx:24-32`) and used in the `toast.success` call. All 3 call sites pass a dedicated string, not the label:
+
+- `MCPPage.tsx:135` — endpoint copy: `successMessage={t("mcp.copySuccess")}`
+- `MCPPage.tsx:197` — per-client snippet copy: `successMessage={t("mcp.copySuccess")}`
+- `MCPPage.tsx:258` — revealed-PAT copy: `successMessage={t("pats.copySuccess")}`
+
+Locale check (`src/locales/en.json`): `mcp.copySuccess` = `"Copied to clipboard"`, `pats.copySuccess` = `"Copied to clipboard"` — distinct from `mcp.copyEndpoint` (`"Copy endpoint URL"`) and `mcp.copyConfig` (`"Copy config"`). Both keys present in `en.json` and `pt-BR.json` (static check, `python3 -c "import json; ..."`). The bug is closed at the code and locale level. **No test clicks a `CopyButton` and asserts the toast text** — the fix is code-verified only, not test-covered (see MCPUI-06/09 below).
 
 ---
 
-## Spec-Anchored Acceptance Criteria
-
-**Important caveat before the table**: this project has **no frontend unit-test framework** (no vitest; `package.json` scripts are only `dev`/`build`/`preview`/`test:e2e`, `internal/dashboard/ui/package.json:10-12`). The only test asset touching this feature is one Playwright e2e file, `e2e/personal-access-tokens.spec.ts`, and it exercises **only** the P3 (PAT CRUD) story. P1 (nav discovery) and P2 (client tutorials) have **zero** test files referencing them — confirmed via `grep -rln "mcp\|MCP" e2e/*.spec.ts` returning only `personal-access-tokens.spec.ts`. Per the evidence-or-zero rule, criteria with no test file:line are marked GAP even where direct code inspection shows the behavior is implemented correctly — that distinction is called out per row.
+## Spec-Anchored Acceptance Criteria (re-derived, round 2)
 
 ### P1: Discover and open MCP setup
 
 | Criterion | Spec-defined outcome | `file:line` + assertion | Result |
 | --- | --- | --- | --- |
-| MCPUI-01: nav item labeled `nav.mcp` under Deployment | Sidebar renders "MCP" (not raw key) alongside SDKs | `internal/dashboard/ui/src/components/layout/nav.ts:46` — `{ icon: 'key', labelKey: 'nav.mcp', path: '/mcp-settings' }`; `en.json:12`/`pt-BR.json:12` define `nav.mcp`. No test asserts this renders. | ❌ GAP (no test) — code correct on inspection |
-| MCPUI-02: click navigates to `/mcp-settings` | Route renders `MCPPage` | `internal/dashboard/ui/src/App.tsx:138` — `<Route path="/mcp-settings" element={<MCPPage />} />`. No test clicks the nav item and asserts the URL. | ❌ GAP (no test) — code correct on inspection |
-| MCPUI-03: old unlabeled key icon removed from `SidebarFooter`/`MobileNav` | Icon button gone from both | `internal/dashboard/ui/src/components/layout/SidebarFooter.tsx` diff removes `<IconBtn icon="key" ... onClick={onManagePATs} />` and the `onManagePATs` prop; `MobileNav.tsx` diff removes the same prop/passthrough. `grep -rn "onManagePATs\|showManagePATs\|PersonalAccessTokens\b"` across `src/` and `e2e/` returns only a stale code comment (`MCPPage.tsx:337`, prose, not a reference) — no dangling wiring. No test asserts the icon's absence. | ❌ GAP (no test) — code correct on inspection |
-| MCPUI-04: mobile viewport has equivalent access | Mobile nav can reach `/mcp-settings` | `internal/dashboard/ui/src/components/layout/MobileNav.tsx:7` imports `NAV_SECTIONS` from the same `nav.ts` the desktop `Sidebar` uses, `MobileNav.tsx:94` maps over it — the new MCP entry is included automatically, no separate mobile nav config to update. No test exercises the mobile breakpoint. | ❌ GAP (no test) — code correct on inspection |
+| MCPUI-01: nav item labeled `nav.mcp` | Sidebar renders "MCP" text | `e2e/personal-access-tokens.spec.ts:124` — `expect(page.getByRole('link', { name: 'MCP' })).toBeVisible()` | ✅ PASS — test evidence closes round 1's gap |
+| MCPUI-02: click navigates to `/mcp-settings` | Route renders `MCPPage` after a nav click | No test clicks the nav link; the only navigation to `/mcp-settings` is a direct `page.goto('/dashboard/mcp-settings')` in `beforeEach` (`spec.ts:51`). `App.tsx:138` route registration is code-verified but the click→navigate behavior itself is untested. | ❌ GAP — still open, round 1 did not flag this distinctly but it is the exact behavior MCPUI-02 states ("WHEN the user clicks... THEN... navigate") |
+| MCPUI-03: old key-icon button gone | No button with that identity remains | `spec.ts:125` — `expect(page.getByRole('button', { name: 'Personal Access Tokens' })).toHaveCount(0)` | ✅ PASS — reasonable proxy (the label now only exists on the page's `<h3>` section heading, not a button); round 1 gap closed |
+| MCPUI-04: mobile nav equivalent access | `/mcp-settings` reachable from mobile nav | No test exercises a mobile viewport/breakpoint. `MobileNav.tsx` sharing `NAV_SECTIONS` with desktop remains code-verified only. | ❌ GAP — unchanged from round 1, not addressed by the fix round |
 
-**Status**: ❌ Gaps present — 0/4 criteria have any test evidence; all 4 are implemented correctly per direct code/diff inspection.
+**Status**: ⚠️ 2/4 closed (MCPUI-01, -03), 2/4 still open (MCPUI-02, -04) — improvement from 0/4, not full closure.
 
 ### P2: Understand how to connect an MCP client
 
 | Criterion | Spec-defined outcome | `file:line` + assertion | Result |
 | --- | --- | --- | --- |
-| MCPUI-05: endpoint URL = `window.location.origin + '/dashboard/mcp'` | Exact computed value shown | `internal/dashboard/ui/src/pages/MCPPage.tsx:19-22` — `endpointUrl()` returns exactly that string; rendered at `MCPPage.tsx:121-123`. No test asserts the rendered text. | ❌ GAP (no test) — code correct on inspection |
-| MCPUI-06: copy icon copies URL + success toast | Clipboard write + `toast.success` | `MCPPage.tsx:24-32` (`copyToClipboard`), wired at `MCPPage.tsx:124` via `<CopyButton value={endpoint} label={t("mcp.copyEndpoint")} />`. No test clicks it. | ❌ GAP (no test) — code correct on inspection |
-| MCPUI-07: 4 client sections (Claude Code/Codex/Cursor/OpenCode), snippet matches README, `<host>` replaced, PAT kept as `${ZEEP_ORBIT_PAT}` | Snippet content byte-matches README's blocks modulo host substitution | `MCPPage.tsx:56-113` (`CLIENTS` array) — manually diffed against `README.md:391-441`; JSON/TOML shape is identical for all 4 clients, `<host>` → live `endpoint`, `${ZEEP_ORBIT_PAT}` preserved verbatim. No test asserts snippet content. | ❌ GAP (no test) — code correct on inspection (manual cross-check by Verifier) |
-| MCPUI-08: explains PAT vs OAuth 2.1+PKCE, no interactive connect action | Explanatory copy only, no button that drives OAuth | `MCPPage.tsx:130-146` (`AuthExplainer`) — two static text blocks (`mcp.authPatDesc`, `mcp.authOAuthDesc`), no OAuth-triggering control anywhere in the file (`grep -n "authorize\|oauth" MCPPage.tsx` → only the `mcp.authOAuthDesc` prose string). No test asserts this. | ❌ GAP (no test) — code correct on inspection |
-| MCPUI-09: copy icon on a client snippet copies that exact snippet + toast | Clipboard write of `snippet`, not endpoint | `MCPPage.tsx:184` — `<CopyButton value={snippet} label={t("mcp.copyConfig")} />` inside the per-client map. No test clicks it. | ❌ GAP (no test) — code correct on inspection |
+| MCPUI-05: endpoint URL = `origin + '/dashboard/mcp'` | Exact computed value shown | `spec.ts:129-130` — `expect(endpoint).toBe(`${new URL(page.url()).origin}/dashboard/mcp`)` | ✅ PASS — exact-value assertion, closes round 1's gap |
+| MCPUI-06: copy icon on endpoint → clipboard + success toast | Clipboard write + `toast.success` | No test clicks the endpoint `CopyButton`. Code-verified only (`MCPPage.tsx:135`). | ❌ GAP — unchanged; the underlying bug this criterion covers *was* fixed (see above) but no regression test exists for either the copy action or the toast text |
+| MCPUI-07: 4 client sections, snippet = README content with host substituted, PAT var kept | Snippet text matches spec | `spec.ts:139-146` — loops all 4 clients, asserts `data-snippet` attribute `toContain(endpoint)`, `toContain('${ZEEP_ORBIT_PAT}')`, `not.toContain('<host>')` | ✅ PASS — precise, closes round 1's gap |
+| MCPUI-08: explains PAT vs OAuth 2.1+PKCE, no interactive connect action | Explanatory text present; no OAuth-driving control | `spec.ts:133-134` — asserts both explainer strings visible. The "no interactive OAuth connect action" negative clause is **not** asserted (no test checks the absence of such a button); code-verified only via `grep -n "authorize\|oauth" MCPPage.tsx` (only prose string) | ⚠️ Partial — main clause closed, negative sub-clause still a code-inspection-only gap |
+| MCPUI-09: copy icon on client snippet → clipboard + toast | Clipboard write of exact snippet + toast | No test clicks a per-client `CopyButton`. Code-verified only (`MCPPage.tsx:197`). | ❌ GAP — unchanged |
 
-**Status**: ❌ Gaps present — 0/5 criteria have any test evidence.
+**Status**: ⚠️ 2/5 closed (MCPUI-05, -07), 1/5 partial (MCPUI-08), 2/5 still open (MCPUI-06, -09).
 
 ### P3: Manage personal access tokens from the same page
 
 | Criterion | Spec-defined outcome | `file:line` + assertion | Result |
 | --- | --- | --- | --- |
-| MCPUI-10: list non-revoked PATs, name + last-used/never-used | `pats?.filter(pat => !pat.revoked_at)` filter; per-row name + date-or-"never used" | Filter: `MCPPage.tsx:201` — `allPats?.filter((pat) => !pat.revoked_at)`. Name/date rendering: `MCPPage.tsx:296-301`. Test: `e2e/personal-access-tokens.spec.ts:59,65` asserts token name appears after create and after reload — **does not** assert the last-used/never-used text specifically. | ⚠️ Partial — filter+name path tested (unexecuted, see Gate), last-used/never-used text untested |
-| MCPUI-11: create → reveal raw token once → never again after dismiss | `createdToken` state shown once, cleared on "Done", not persisted | State machine: `MCPPage.tsx:207,215,235-247`. Test: `e2e/personal-access-tokens.spec.ts:50-58` (create, assert reveal + warning text), `:61-66` (reload, assert `revealed-pat-token` has count 0). | ✅ Test present, spec-matched — see Gate Check for execution status |
-| MCPUI-12: revoke shows destructive confirm, only revokes after confirm | `ConfirmDialog` gate before `revokePAT.mutate` | `MCPPage.tsx:222-226` (`confirmRevoke` only called from dialog `onConfirm`), `MCPPage.tsx:320-331` (`ConfirmDialog` wiring). Test: `e2e/personal-access-tokens.spec.ts:84-86` clicks row "Revoke" (opens dialog) then clicks confirm dialog's "Revoke" (`exact: true`, `.last()`), then asserts token gone. | ✅ Test present, spec-matched — see Gate Check for execution status |
-| MCPUI-13: empty list → empty state, not blank | `EmptyState` render when `!pats?.length` | `MCPPage.tsx:286-287` — `!pats?.length ? <EmptyState icon="key" title=... description={t("pats.emptyDesc")} /> : ...`. No test ever exercises an empty list (the one e2e test always has at least the just-created token present, and never asserts the empty-state copy). | ❌ GAP (no test) — code correct on inspection |
-| MCPUI-14: create/revoke failure → `toast.error(error.message)`, no optimistic removal, form stays open | On error, list/form state unchanged | `MCPPage.tsx:210-219` — `handleCreate`'s catch is empty with comment "useCreatePAT's onError already shows toast.error"; `useCreatePAT`/`useRevokePAT` themselves are out of scope (`src/lib/api.ts`, pre-existing, untouched by this diff) and were not re-verified here. No test simulates a failure (mocked 4xx/5xx) for either action. | ❌ GAP (no test); underlying error-toast wiring assumed unchanged from prior feature — not re-verified |
-| MCPUI-15: every string (`pats.*`, `common.copyToClipboard`, `mcp.*`, `nav.mcp`) present in **both** `en.json` and `pt-BR.json` | No key falls back to literal display | Key-by-key static check (this Verifier): all 12 new `mcp.*` keys present in both `en.json:889-902` / `pt-BR.json:889-902`; `nav.mcp` in both at line 12; all `pats.*` keys referenced in `MCPPage.tsx` (`pats.title`, `pats.explainer`, `pats.createdWarning`, `pats.done`, `pats.nameLabel`, `pats.namePlaceholder`, `pats.cancel`, `pats.creating`, `pats.create`, `pats.newToken`, `pats.empty`, `pats.emptyDesc`, `pats.lastUsed`, `pats.neverUsed`, `pats.revoke`, `pats.revokeTitle`, `pats.revokeConfirm`) pre-exist in both locale files unchanged by this diff; `common.copyToClipboard` present both at line 862. One unused key found: `mcp.copySuccess` is defined in both locales but never referenced in `MCPPage.tsx` (dead key, not a visible-raw-key bug). | ✅ PASS (static/deterministic check, not a runtime test) |
+| MCPUI-10: list non-revoked PATs, name + last-used/never-used | Filter `!pat.revoked_at`; name + date-or-"never used" | Filter: `MCPPage.tsx:214`. Name: `spec.ts:71,77` (token name visible after create/reload). Last-used/never-used text (`pats.lastUsed`/`pats.neverUsed`) is **still not asserted** by any test — `grep -n "Never used\|neverUsed\|lastUsed" e2e/personal-access-tokens.spec.ts` returns nothing. | ⚠️ Partial — same partial state as round 1, not improved |
+| MCPUI-11: create → reveal once → never again | `createdToken` shown once, cleared, never re-shown | `spec.ts:60-78` — creates, asserts reveal + warning, reloads, asserts `revealed-pat-token` count 0 | ✅ PASS — now executable-in-principle (was "present but unexecuted" in round 1; test logic unchanged, still correct) |
+| MCPUI-12: revoke requires confirm dialog | Confirm gate before mutation | `spec.ts:96-98` (lifecycle), plus `spec.ts:184-197` (revoke-failure test) — both click the row action then a separate confirm-dialog "Revoke" button | ✅ PASS |
+| MCPUI-13: empty list → `EmptyState` | Render `EmptyState`, not blank | `spec.ts:116` — `expect(page.getByText('No personal access tokens')).toBeVisible()` after the lifecycle test's final revoke | ✅ PASS — round 1 gap closed |
+| MCPUI-14: create/revoke failure → `toast.error(error.message)`, no optimistic removal, form stays open | Exact error text shown; state unchanged | Create: `spec.ts:149-167` — mocks `POST .../pats` → 500 `{error:'internal error'}`; asserts `'internal error'` text visible, `revealed-pat-token` count 0, name input retains value (form still open). Revoke: `spec.ts:169-198` — mocks `DELETE .../pats/*` → 500; asserts error text visible and token name still listed. | ✅ PASS — round 1 gap closed, and the asserted values (`'internal error'` = the mocked `error.message`) precisely match the spec-defined outcome |
+| MCPUI-15: all strings in both locales | No raw key rendered | Static check (this session): `mcp.copySuccess`, `pats.copySuccess`, `common.copyToClipboard`, `nav.mcp` all present in both `en.json` and `pt-BR.json` | ✅ PASS (static, unchanged from round 1) |
 
-**Status**: ⚠️ Gaps present — 2/6 criteria (MCPUI-11, -12) have matching test code, but the sandbox could not execute it (see Gate Check); 2/6 (MCPUI-13, -14) have no test at all; MCPUI-10 partially tested; MCPUI-15 verified by direct static file inspection.
+**Status**: ✅ 4/6 closed or already-passing (MCPUI-11, -12, -13, -14, -15 — 5 of 6), 1/6 partial (MCPUI-10, last-used/never-used text still untested).
+
+### Aggregate
+
+- Round 1: 1/15 ACs test-evidenced (static), 2/15 test-code-present-but-unexecuted, 12/15 no test evidence at all.
+- Round 2: **9/15 ACs now have file:line test evidence with spec-matched assertions** (MCPUI-01, -03, -05, -07, -11, -12, -13, -14, -15), **1/15 partial** (MCPUI-08 — main clause tested, negative sub-clause not), **1/15 still partial as before** (MCPUI-10 — filter+name tested, last-used/never-used text not), **4/15 still have zero test evidence** (MCPUI-02, -04, -06, -09).
+
+This is real, substantial progress (0/15 → 9/15 fully closed) but **not full closure** — 4 ACs remain completely untested and 2 are partial.
 
 ---
 
 ## Edge Cases
 
-- [x] `usePATs` loading → `LoadingState` instead of blank flash — `MCPPage.tsx:284-285` (`isLoading ? <LoadingState rows={2} /> : ...`). Code-verified, not test-covered.
-- [x] Clipboard API unavailable → value stays visible, no silent failure of the *display* — `MCPPage.tsx:24-32` catch swallows only the copy action; the token/snippet was already rendered in the DOM independent of clipboard success. Code-verified, not test-covered.
-- [x] Empty/whitespace token name → create disabled — `MCPPage.tsx:271` `disabled={!name.trim() || createPAT.isPending}`. Code-verified, not test-covered.
-- [x] Direct navigation to `/mcp-settings` via URL → same page, no modal-open props — `App.tsx:138` mounts `<MCPPage />` with zero props; `e2e/personal-access-tokens.spec.ts:39` `beforeEach` navigates directly via `page.goto('/dashboard/mcp-settings')`, exercising exactly this path (test present, execution blocked — see Gate Check).
+- [x] `usePATs` loading → `LoadingState` — code-verified (`MCPPage.tsx:297-298`), not test-covered (unchanged from round 1).
+- [x] Clipboard API unavailable → value stays visible — code-verified (`MCPPage.tsx:24-32` catch), not test-covered (unchanged).
+- [x] Empty/whitespace token name → create disabled — code-verified (`MCPPage.tsx:284` `disabled={!name.trim()...}`), not test-covered (unchanged).
+- [x] Direct navigation to `/mcp-settings` via URL → same page — **now exercised by every test** via `beforeEach`'s `page.goto('/dashboard/mcp-settings')` (`spec.ts:51`), though still not executed live this session (see Gate Check).
 
 ---
 
 ## Discrimination Sensor
 
-**Attempted live e2e run first** (per task instructions, since this project has no unit-test framework and the only behavior coverage is the e2e file): spun up a throwaway `postgres:16-alpine` container (`zorbit-verify-pg`, port 15499), built `./cmd/zeep` cleanly, and tried to start the server against it 3 times (env var `DATABASE_URL`, then explicit `127.0.0.1`, then `--db` flag). All 3 attempts failed at the DB layer — `error: db: ping failed: context deadline exceeded` and, on the third attempt, `read: connection reset by peer` — despite `docker exec ... pg_isready` and a direct `psql` query against the same container succeeding from the host. This matches the author's own documented finding in spec.md's Success Criteria ("testcontainers `ryuk` reaper... intermittent request hangs... unrelated to this feature's code") — the sandbox's Docker networking is unreliable for this kind of ad-hoc container regardless of which side initiates it. Cleaned up (`docker rm -f zorbit-verify-pg`) and did not spend further time chasing it, per the 1-2-honest-attempts guidance.
+**Live e2e attempt (2 independent tries, per the 1-2-honest-attempts guidance)**:
 
-**Fell back to static fault-injection** in a scratch git worktree (never the real tree):
+1. Confirmed Docker is available (`docker info`); noted a long-running `zeep-orbit-db-1` (this repo's own `docker-compose.yml` db, up 27 min, healthy) — **not used**, to avoid running e2e tests against what looked like a live/shared dev database rather than a disposable one.
+2. Spun up a fresh throwaway `postgres:16-alpine` (`zorbit-verify-pg2`, port 15501). `pg_isready` and `docker exec ... psql -c "select 1"` both succeeded — Postgres itself is healthy and reachable from *inside* the container's own network namespace.
+3. Built `go build -o /tmp/zeep-verify ./cmd/zeep` — clean, exit 0.
+4. **Attempt 1**: ran the binary with `DATABASE_URL=postgres://zeep:zeep@127.0.0.1:15501/zeep?sslmode=disable`, `DASHBOARD_BOOTSTRAP_SECRET=test-secret`. Failed: `error: db: ping failed: ... read: connection reset by peer`.
+5. **Attempt 2**: waited 5s, retried identically. Same exact failure.
+6. Cleaned up (`docker rm -f zorbit-verify-pg2`).
 
-1. `git worktree add <scratch> 9efdc83` (detached HEAD, isolated from the real working tree, which had only pre-existing unrelated README diffs — captured as baseline via `git status --porcelain`).
-2. Injected 3 mutations into the scratch copy:
+This is the identical failure signature round 1 (and the feature's own author, per `eb0db4f`'s commit message) hit — host→container port-forwarded Postgres connections reset mid-handshake in this sandbox, while the container is internally healthy. Confirmed as a **reproducible environment limitation**, not something this pass could work around in the allotted attempts. Stopping here per instructions rather than continuing to retry.
 
-| # | File:line | Mutation | Killed? |
-| --- | --- | --- | --- |
-| 1 | `MCPPage.tsx:201` | `!pat.revoked_at` → `pat.revoked_at` (PAT list would show only revoked tokens, hiding all active ones) | ⚠️ Unable to execute — no runnable test harness reaches this line (e2e blocked, no unit tests) |
-| 2 | `nav.ts:46` | `path: '/mcp-settings'` → `path: '/mcp'` (reintroduces the exact route collision with the backend's `/dashboard/mcp` transport handler that commit `6ec4add` fixed) | ⚠️ Unable to execute — same blocker |
-| 3 | `MCPPage.tsx:21` | `` `${base}/dashboard/mcp` `` → `` `${base}/dashboard/mcp-x` `` (wrong endpoint URL shown to user, and copied snippets would point at a dead path) | ⚠️ Unable to execute — same blocker |
+**Fell back to static/reasoned fault-injection** in a scratch git worktree (`git worktree add /tmp/zorbit-verify-scratch cdce3e5 --detach`; real tree baseline `git status --porcelain` was empty before and confirmed empty after `git worktree remove --force`):
 
-3. Confirmed none of the 3 mutations produce a TypeScript error (`npx tsc -b` in the scratch worktree still compiles the mutated files — these are runtime/string-value bugs, not type errors, so the build gate structurally cannot catch this class of regression either).
-4. Removed the scratch worktree (`git worktree remove --force`) and confirmed `git status --porcelain` on the real tree is byte-identical to the pre-sensor baseline — isolation held.
+| # | File:line | Mutation | Reasoned against current test code | Result |
+| --- | --- | --- | --- | --- |
+| 1 | `MCPPage.tsx:214` | `allPats?.filter((pat) => !pat.revoked_at)` → `allPats?.filter((pat) => pat.revoked_at)` (list shows only *revoked* tokens, hides active ones) | The lifecycle test creates a token, dismisses the reveal, then asserts `expect(page.getByText(tokenName)).toBeVisible()` (`spec.ts:71`) *before* any revoke — a freshly created token has `revoked_at = null`, so the mutated filter (`pat.revoked_at` truthy-check on `null`) would exclude it, and this assertion would fail. Additionally, the mutated filter would make the post-revoke empty-state assertion (`spec.ts:116`) fail too (revoked token would now *pass* the filter and render, so the empty state would never show). | ✅ Reasoned-killed (2 independent assertions would fail) |
+| 2 | `nav.ts:46` | `path: '/mcp-settings'` → `path: '/mcp'` (reintroduces the exact route collision with the backend's `/dashboard/mcp` MCP transport route that `6ec4add` fixed) | The new discovery test only asserts the nav link is *visible* (`spec.ts:124`), never clicks it or checks the resulting URL/href. Every test's actual navigation to the page goes through `page.goto('/dashboard/mcp-settings')` directly (`spec.ts:51`), which is unaffected by `nav.ts`. No assertion anywhere reads the link's target path. | ❌ Reasoned-survived — confirmed gap, matches MCPUI-02's untested state above |
+| 3 | `MCPPage.tsx:21` | `` `${base}/dashboard/mcp` `` → `` `${base}/dashboard/mcp-x` `` (wrong endpoint URL) | `spec.ts:129-130` asserts `expect(endpoint).toBe(`${origin}/dashboard/mcp`)` — an exact-string equality check against the spec's literal path, independent of the mutated value. This would fail immediately. | ✅ Reasoned-killed |
 
-**Sensor depth**: lightweight (3 targeted mutations attempted, per default tiering)
-**Result**: 0/3 executed, 0/3 confirmed killed — FAIL. There is currently no automated mechanism in this repository that would catch a regression in the PAT filter, the route path, or the endpoint URL string. This is a real gap, not an environment artifact to wave away: even outside this sandbox, on a machine with working Docker, none of the 3 targeted lines are covered by the existing `personal-access-tokens.spec.ts` (it never asserts the endpoint URL text, never asserts the route differs from `/mcp`, and — while it does read the PAT list — a filter that shows revoked-only tokens would still pass the existing assertions as written, since the test only checks that the freshly-created token's name is present, not that revoked ones are absent).
+`npx tsc -b` was attempted in the scratch worktree but the worktree has no `node_modules` (a fresh git worktree doesn't carry installed dependencies) and picked up a newer globally-installed `tsc` (7.0.2) that rejects this project's pinned `tsconfig.json` (`baseUrl` removed in that version) — an environment artifact of the scratch copy, not a finding about the mutations themselves. Not pursued further since these are runtime string/logic mutations, not type-level changes, and the real working tree's `tsc -b`/`build` already passed clean before mutation (see Gate Check) confirming these exact lines type-check fine as-is.
+
+**Sensor depth**: lightweight (3 targeted mutations, reasoned since live execution is blocked)
+**Result**: 2/3 reasoned-killed, 1/3 reasoned-survived — the route-path mutation (`nav.ts:46`) is not caught by any current test. This directly corresponds to the still-open MCPUI-02 gap above (no click-through navigation test) and should be the top priority for a third fix round.
 
 ---
 
@@ -104,100 +137,94 @@ No `tasks.md` exists (Tasks phase skipped — Medium scope, per spec.md's own tr
 | No features beyond what was asked | ✅ |
 | No abstractions for single-use code | ✅ |
 | No unnecessary "flexibility" added | ✅ |
-| Only touched files required for task | ✅ |
+| Only touched files required for task | ✅ — `aecece1` touches only `MCPPage.tsx`; `eb0db4f` touches only the spec file + 2 test-id attributes on `MCPPage.tsx`; `c8765a6` touches only `CHANGELOG.md` + the 4 READMEs |
 | Didn't "improve" unrelated code | ✅ |
-| Matches existing patterns/style | ✅ — mirrors `Webhooks.tsx` copy pattern, `ConfirmDialog` usage, `PageHeader`/`EmptyState`/`LoadingState` patterns as the spec's Assumptions table intended |
-| Tests map to acceptance criteria and are non-shallow (spot-check one story) | ⚠️ P3's test is non-shallow where it exists (creates a real token, authenticates a real HTTP request to `/dashboard/mcp`, revokes, re-checks 401) — but P1/P2 have no tests at all, and P3 itself skips empty-state and error-path criteria |
-| Spec-anchored outcome check: each test's asserted value matches the spec-defined outcome (or gap flagged) | ⚠️ Where tests exist (MCPUI-11, -12) the assertions match the spec-defined outcome; flagged above where they don't (MCPUI-10 partial, -13/-14 absent) |
-| Per-layer Coverage Expectation met: domain logic has 1:1 AC mapping; routes/e2e cover happy + edge + error paths for every route in scope | ❌ — the one route in scope (`/mcp-settings`) has only a happy-path PAT test; no error-path test (create/revoke failure), no empty-state test, no coverage at all for the nav/discovery or client-tutorial routes' behavior |
-| Every test in scope maps to a spec AC, listed edge case, or Done-when criterion (no unclaimed tests) | ✅ — the single e2e file's 5 stages all map cleanly to MCPUI-10/11/12 and the "direct navigation" edge case |
-| Documented project quality/testing guidelines followed (cite guideline file, or "none - strong defaults applied") | ❌ — `AGENTS.md` §6 requires a `CHANGELOG.md` entry under `## [Unreleased]` "in the same change that ships the fix/feature. Don't defer this to release day." `git diff 28290f5^..9efdc83 -- CHANGELOG.md` is empty — no entry was added across any of the 5 commits. |
-
----
-
-## Interactive UAT Results
-
-Not performed — the Verifier was scoped to automated/static validation for this pass (frontend build gate + sensor + AC/code-quality checks); no user was available in this session to walk through the flows. This should be run before the feature's status moves past "Implementing" given how much of the AC table above rests on code inspection rather than test evidence.
+| Matches existing patterns/style | ✅ — `data-testid`/`data-snippet` convention matches other pages' test-hook patterns; mocked-failure tests use Playwright's `page.route` the same way other specs in this repo likely would |
+| Tests map to acceptance criteria and are non-shallow (spot-check one story) | ✅ — spot-checked P3: the create-failure and revoke-failure tests each mock exactly one endpoint/verb, assert the real `error.message` text (not a placeholder), and assert the negative (no optimistic removal / form stays open) rather than just the positive toast |
+| Spec-anchored outcome check: each test's asserted value matches the spec-defined outcome (or gap flagged) | ✅ where tests exist — flagged above (MCPUI-02, -04, -06, -09 no test; MCPUI-08, -10 partial) |
+| Per-layer Coverage Expectation met: domain logic has 1:1 AC mapping; routes/e2e cover happy + edge + error paths for every route in scope | ❌ — the one route in scope (`/mcp-settings`) now has happy-path, empty-state, and 2 error-path tests (real improvement), but still no click-through-navigation test and no copy-action tests |
+| Every test in scope maps to a spec AC, listed edge case, or Done-when criterion (no unclaimed tests) | ✅ — every new assertion traces to a named MCPUI-* in code comments (`spec.ts:120,127,132,136,162,187`) |
+| Documented project quality/testing guidelines followed (cite guideline file, or "none - strong defaults applied") | ✅ — `AGENTS.md` §6 CHANGELOG requirement now satisfied (`CHANGELOG.md`'s `## [Unreleased]` → `### Added` has the MCP page entry, `git diff 9efdc83..cdce3e5 -- CHANGELOG.md` shows the addition); §6 translation-parity rule satisfied (all 4 READMEs carry the identical "Dashboard → MCP" phrasing, confirmed via grep across `README.md` + 3 `i18n/README.*.md`) |
 
 ---
 
 ## Gate Check
 
 - **Gate command**: `cd internal/dashboard/ui && npx tsc -b && npm run build`
-- **Result**: both commands exited 0. `tsc -b` produced no output (clean). `vite build` succeeded — 489 modules transformed, standard pre-existing "chunk larger than 500kB" advisory warning only (unrelated to this feature, present before it too).
-- **Test count before feature**: 10 e2e spec files (`app-members`, `app-users`, `apps`, `auth`, `data-browser`, `enduser-roles`, `personal-access-tokens` [pre-existing, modal-based], `policy-templates`, `users`, `webhooks`)
-- **Test count after feature**: 10 e2e spec files (`personal-access-tokens.spec.ts` modified in place, not added/removed)
-- **Delta**: 0 new spec files; the existing PAT spec was retargeted from the modal to `/mcp-settings` (same 1 test, same 5 stages, updated navigation and comments) — no new assertions added for the new P1/P2 surface (nav item, endpoint display, client tutorials, auth explainer)
-- **Skipped tests**: none skipped in the suite definition; however the entire e2e suite could not be **executed** in this sandbox (Docker/Postgres networking instability — see Discrimination Sensor), so "10 passed" cannot be claimed for this session. Only the static build gate (tsc/vite) ran to completion.
-- **Failures**: none observed in the commands that could run (tsc, vite build); the e2e suite's pass/fail status is genuinely unknown in this environment.
+- **Result**: both exited 0 this session. `tsc -b`: no output (clean). `vite build`: 489 modules transformed, same pre-existing "chunk larger than 500kB" advisory (unrelated, present before this feature too).
+- **Test count before feature** (round 1's baseline): 10 e2e spec files, `personal-access-tokens.spec.ts` had 1 test.
+- **Test count after this fix round**: still 10 e2e spec files; `personal-access-tokens.spec.ts` now has **4 tests** (lifecycle + empty-state assertion appended, MCP discovery/tutorials, create-failure, revoke-failure).
+- **Delta**: +3 new test cases in the existing file (no new spec files created).
+- **Skipped tests**: none in the suite definition.
+- **Live execution**: still not achieved in this sandbox — see Discrimination Sensor for the 2 attempts and the exact failure signature. The e2e suite's real pass/fail status remains genuinely unknown in this environment across two independent Verifier sessions now.
+- **Failures**: none in the commands that could run (`tsc -b`, `vite build`).
 
 ---
 
-## Fix Plans
+## Fix Plans (remaining after round 2)
 
-### Fix 1: No automated coverage for P1 (nav discovery) or P2 (client tutorials)
+### Fix 1 (was round-1 Fix 1, now narrower): No click-through nav test — MCPUI-02, and the one confirmed-surviving mutant
 
-- **Root cause**: the implementation added the nav item, route, endpoint display, and 4 client snippets, but the only test file touched (`personal-access-tokens.spec.ts`) covers exclusively the pre-existing PAT flow it was migrating. No new test asserts the nav item renders as "MCP", that clicking it navigates to `/mcp-settings`, that the old key icon is gone, that the endpoint URL/copy buttons work, or that each of the 4 client snippets renders with the substituted host.
-- **Fix task**: Add e2e coverage (new spec file or extend `personal-access-tokens.spec.ts`) asserting: (a) sidebar shows a "MCP" link and no unlabeled key-icon button exists in the footer; (b) clicking it lands on `/mcp-settings`; (c) the endpoint code block shows `<origin>/dashboard/mcp`; (d) each of the 4 client tabs/sections is present and its rendered snippet text contains the live endpoint URL (not `<host>`) and `${ZEEP_ORBIT_PAT}`.
-- **Priority**: Major
+- **Root cause**: the new discovery test asserts the nav link is visible but never clicks it and checks the resulting URL. This is also exactly why the discrimination sensor's `nav.ts` route-path mutation survives.
+- **Fix task**: add `await page.getByRole('link', { name: 'MCP' }).click(); await page.waitForURL('**/mcp-settings')` (or equivalent) to the discovery test, replacing or supplementing the current direct `page.goto` in `beforeEach` for at least one test.
+- **Priority**: Major (this is the one gap directly tied to a confirmed-surviving mutant, i.e., a real regression this suite would currently miss).
 
-### Fix 2: P3 empty-state and error-path criteria (MCPUI-13, -14) untested
+### Fix 2: No test exercises either `CopyButton` (endpoint or per-client) — MCPUI-06, -09
 
-- **Root cause**: the existing e2e test's happy path always has a token in the list; it never drives the list to zero and asserts `EmptyState` text, and never forces a create/revoke API failure to assert `toast.error` + no optimistic UI change.
-- **Fix task**: Add a step (or a second test) that revokes down to zero tokens and asserts the empty-state copy renders; add a mocked-failure test (Playwright route interception on the PAT create/revoke endpoint) asserting the form stays open / the token isn't removed from the list, and that an error toast appears.
-- **Priority**: Minor (behavior is implemented correctly per code inspection; this is a coverage gap, not a known defect)
+- **Root cause**: the discovery test reads `data-snippet`/`innerText` directly rather than clicking the copy icons; no test asserts a clipboard write or the `toast.success("Copied to clipboard")` text.
+- **Fix task**: click each `CopyButton`, mock/stub `navigator.clipboard.writeText` (Playwright supports this via `page.evaluate` context injection or `context.grantPermissions(['clipboard-write'])` + reading `navigator.clipboard.readText()`), assert the toast text appears. This is also the only test-level guard against the exact bug round 1 found and `aecece1` fixed — right now a regression of that same bug would not be caught by any automated test.
+- **Priority**: Major (protects a bug that has already shipped once).
 
-### Fix 3: CHANGELOG.md not updated
+### Fix 3: MCPUI-10 last-used/never-used text untested; MCPUI-04 mobile nav untested; MCPUI-08 negative OAuth-button clause untested
 
-- **Root cause**: `AGENTS.md` §6 mandates a `## [Unreleased]` entry in the same change; none of the 5 commits touched `CHANGELOG.md`.
-- **Fix task**: Add a `### Changed` (or `### Fixed`, depending on how the team wants to frame "moved PAT management + added MCP discoverability") entry describing the sidebar MCP entry, the `/mcp-settings` page, and the PAT modal removal.
-- **Priority**: Minor (process/documentation gap, not a functional defect)
+- **Root cause**: not addressed by this fix round.
+- **Fix task**: (a) assert `pats.neverUsed` text for a freshly created token; (b) add a mobile-viewport test (`test.use({ viewport: ... })` or a dedicated project) asserting `/mcp-settings` is reachable from `MobileNav`; (c) assert no OAuth-triggering control exists near the auth explainer (e.g., no button/link with an "authorize"/"connect" accessible name).
+- **Priority**: Minor (all three are code-verified correct; coverage gaps, not known defects).
 
-### Fix 4 (informational, not blocking): stale README location text
+### Fix 4 (round 1's Fix 3 and Fix 4 — closed, no action needed)
 
-- **Observation**: `README.md:383` and `:389` still say "generate one in **Dashboard → Settings → Personal Access Tokens**" — that path no longer exists; PAT management now lives at the new "MCP" nav entry (`/mcp-settings`). This feature didn't touch `README.md`, so it wasn't flagged as a hard requirement violation, but the prose is now inaccurate.
-- **Fix task**: Update the two README mentions (and the 3 translated READMEs, per `AGENTS.md` §6's translation-parity rule, if they contain the same sentence) to point at the new location.
-- **Priority**: Cosmetic
+- CHANGELOG entry: ✅ present and substantive.
+- README stale text: round 1's specific citation didn't correspond to real content (see "Correction to the historical record" above); the fix round nonetheless added a complete, correct, 4-way-mirrored "🔌 MCP Server" section. No further action.
 
 ---
 
 ## Requirement Traceability Update
 
-| Requirement | Previous Status | New Status |
+| Requirement | Round 1 Status | Round 2 Status |
 | --- | --- | --- |
-| MCPUI-01 | Implementing | ⚠️ Implemented, untested |
-| MCPUI-02 | Implementing | ⚠️ Implemented, untested |
-| MCPUI-03 | Implementing | ⚠️ Implemented, untested |
-| MCPUI-04 | Implementing | ⚠️ Implemented, untested |
-| MCPUI-05 | Implementing | ⚠️ Implemented, untested |
-| MCPUI-06 | Implementing | ⚠️ Implemented, untested |
-| MCPUI-07 | Implementing | ⚠️ Implemented, untested |
-| MCPUI-08 | Implementing | ⚠️ Implemented, untested |
-| MCPUI-09 | Implementing | ⚠️ Implemented, untested |
-| MCPUI-10 | Implementing | ⚠️ Partially tested (test present, unexecuted this session) |
-| MCPUI-11 | Implementing | ⚠️ Test present, spec-matched, unexecuted this session |
-| MCPUI-12 | Implementing | ⚠️ Test present, spec-matched, unexecuted this session |
-| MCPUI-13 | Implementing | ❌ Needs Fix (test) |
-| MCPUI-14 | Implementing | ❌ Needs Fix (test) |
-| MCPUI-15 | Implementing | ✅ Verified (static check) |
+| MCPUI-01 | Implemented, untested | ✅ Verified |
+| MCPUI-02 | Implemented, untested | ❌ Needs Fix (test) — also the one confirmed-surviving mutant |
+| MCPUI-03 | Implemented, untested | ✅ Verified |
+| MCPUI-04 | Implemented, untested | ❌ Needs Fix (test) |
+| MCPUI-05 | Implemented, untested | ✅ Verified |
+| MCPUI-06 | Implemented, untested | ❌ Needs Fix (test) |
+| MCPUI-07 | Implemented, untested | ✅ Verified |
+| MCPUI-08 | Implemented, untested | ⚠️ Partially verified (negative clause untested) |
+| MCPUI-09 | Implemented, untested | ❌ Needs Fix (test) |
+| MCPUI-10 | Partially tested | ⚠️ Partially verified (unchanged) |
+| MCPUI-11 | Test present, unexecuted | ✅ Verified |
+| MCPUI-12 | Test present, unexecuted | ✅ Verified |
+| MCPUI-13 | Needs Fix | ✅ Verified |
+| MCPUI-14 | Needs Fix | ✅ Verified |
+| MCPUI-15 | Verified (static) | ✅ Verified (static, unchanged) |
 
 ---
 
 ## Summary
 
-**Overall**: FAIL ❌ (against this skill's evidence-or-zero and mandatory-sensor bar — not a functional failure: direct code inspection shows every AC's behavior is implemented as specified, but 12/15 ACs have no test evidence and the sensor could not confirm the tests that do exist)
+**Overall**: FAIL ❌ — genuine, measurable progress (0/15 → 9/15 fully test-evidenced ACs, the copy-toast bug fixed, CHANGELOG + README parity closed) but 3 concrete gaps remain, one of which is a confirmed-surviving mutant (not just "no test exists" but "a real regression here would currently ship unnoticed").
 
-**Spec-anchored check**: 1/15 ACs (MCPUI-15) independently confirmed via static evidence this session; 2/15 (MCPUI-11, -12) have spec-matched test code that could not be executed; the remaining 12/15 have no test evidence at all (implementation verified correct by direct code/diff inspection only)
-**Sensor**: 0/3 mutations executed/confirmed killed — blocked by sandbox Docker/network instability (matches the author's own documented finding), not by a passing test suite
-**Gate**: 2/2 static commands passed (`tsc -b`, `npm run build`); the actual e2e suite's pass/fail is unknown in this session
+**Spec-anchored check**: 9/15 ACs fully closed with spec-matched `file:line` assertions; 2/15 partial (MCPUI-08, -10); 4/15 still zero test evidence (MCPUI-02, -04, -06, -09)
+**Gate**: 2/2 static commands passed (`tsc -b`, `npm run build`); live e2e suite pass/fail still unknown in this sandbox (2 independent attempts, both blocked by the same reproducible Docker networking failure)
+**Sensor**: 3 mutations reasoned (live execution blocked) — 2/3 reasoned-killed, 1/3 reasoned-survived (`nav.ts:46` route path — no test currently catches a regression here)
 
-**What works**: The route-collision reasoning (`/mcp-settings` vs `/mcp`) is sound and independently verified against `internal/server/server.go:171-198` and `src/main.tsx:28` — `/dashboard/mcp` is registered as a sibling route outside the `/dashboard` SPA `chi.Router` group, so `/mcp` would indeed have collided. The old PAT modal is cleanly removed with no dangling references (`onManagePATs`/`showManagePATs`/component import all gone, verified by repo-wide grep). All new `mcp.*`/`nav.mcp` i18n keys exist in both `en.json` and `pt-BR.json`, key-for-key. The 4 client config snippets exactly match `README.md`'s existing content. The build gate is clean.
+**What works**: The copy-success toast bug is genuinely fixed at the code and locale level (`CopyButton`'s `label`/`successMessage` split, verified at all 3 call sites). CHANGELOG has a real, substantive `## [Unreleased]` entry. All 4 READMEs consistently say "Dashboard → MCP" (round 1's specific citation for this gap turned out not to correspond to any real prior content, but the fix round's addition is correct and complete regardless). 9 of 15 ACs now have precise, spec-matched test assertions, including both previously-flagged P3 gaps (empty-state, error-paths) fully closed with exact-text assertions.
 
-**Issues found**:
-1. Zero automated test coverage for P1 (discovery) and P2 (client tutorials) — Fix 1 above.
-2. P3's empty-state and error-handling criteria are untested — Fix 2 above.
-3. `CHANGELOG.md` wasn't updated per `AGENTS.md` §6 — Fix 3 above.
-4. The discrimination sensor could not confirm the existing tests (where they exist) actually catch regressions, because the sandbox cannot run the live e2e suite — this is an environment limitation, not a code defect, but it means this validation pass cannot claim the tests are proven to discriminate.
-5. (Cosmetic) README's PAT location prose is stale — Fix 4 above.
+**Issues found** (ranked):
+1. **(Major, confirmed regression risk)** No test clicks the "MCP" nav link and verifies navigation to `/mcp-settings` — MCPUI-02, and the discrimination sensor confirms a route-path regression in `nav.ts` would currently go undetected.
+2. **(Major, protects a shipped bug)** No test exercises either `CopyButton` (endpoint or per-client snippet) — MCPUI-06/-09 — meaning a regression of the exact toast bug this round fixed would not be caught.
+3. **(Minor, coverage only)** MCPUI-10's last-used/never-used text, MCPUI-04's mobile-nav reachability, and MCPUI-08's "no interactive OAuth action" negative clause remain code-verified-only.
+4. **(Process note, not a defect)** Round 1's README citation (gap 5) did not correspond to real file content at the commit it claimed to validate — recorded as a lesson about re-verifying a prior Verifier's specific citations rather than carrying them forward uncritically.
+5. **(Environment, unresolved across 2 sessions now)** Live e2e execution remains blocked in this sandbox by a reproducible Docker host→container networking failure (`connection reset by peer`) — not a code defect, but it means no session has yet produced a real green/red run of this suite.
 
-**Next steps**: Route Fixes 1-3 back to an implementer (Fix 4 optional/cosmetic). Re-verify by (a) running the strengthened e2e suite against a Docker environment outside this sandbox's apparent instability, and (b) re-running the discrimination sensor's 3 mutations against that suite to confirm they're actually killed before moving any MCPUI-* status past "Implementing."
+**Next steps**: Route Fix 1 and Fix 2 back to an implementer (this is fix→re-verify iteration 2 of 3; a round-3 pass focused narrowly on these 2 items, plus Fix 3's three minor items if time allows, should be sufficient to close out). Fix 3's items and the live-execution question can be deferred to round 3 or flagged to the user if the 3-iteration bound is reached first — the sensor's one confirmed-surviving mutant (Fix 1) is the one item that should not be waved through as "cosmetic."

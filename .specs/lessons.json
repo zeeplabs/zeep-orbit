@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 21,
+  "next_id": 23,
   "lessons": [
     {
       "id": "L-001",
@@ -364,6 +364,42 @@
       ],
       "created": "2026-08-15T23:38:47Z",
       "last_seen": "2026-08-15T23:38:47Z"
+    },
+    {
+      "id": "L-021",
+      "key": "surviving_mutant::for any nav item feature add an e2e test that clicks the nav link and asserts the resulting url not just that the link is visible direct page goto in beforeeach hides route path regressions in the nav config from ever being exercised",
+      "text": "For any nav-item feature, add an e2e test that clicks the nav link and asserts the resulting URL, not just that the link is visible -- direct page.goto() in beforeEach hides route-path regressions in the nav config from ever being exercised.",
+      "signal": "surviving_mutant",
+      "scope": "dashboard-ui/e2e",
+      "status": "candidate",
+      "features": [
+        "mcp-settings-page"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "internal/dashboard/ui/src/components/layout/nav.ts:46 (dashboard-ui/e2e)"
+      ],
+      "created": "2026-08-15T23:56:05Z",
+      "last_seen": "2026-08-15T23:56:05Z"
+    },
+    {
+      "id": "L-022",
+      "key": "ac_gap::when an ac requires a copy to clipboard action plus a specific success toast string add a test that actually clicks the copy control and asserts the toast text reading the copied value from a data attribute without clicking the button leaves the exact bug class wrong toast message uncaught by any test",
+      "text": "When an AC requires a copy-to-clipboard action plus a specific success-toast string, add a test that actually clicks the copy control and asserts the toast text -- reading the copied value from a data attribute without clicking the button leaves the exact bug class (wrong toast message) uncaught by any test.",
+      "signal": "ac_gap",
+      "scope": "dashboard-ui/e2e",
+      "status": "candidate",
+      "features": [
+        "mcp-settings-page"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "MCPUI-06,MCPUI-09 (dashboard-ui/e2e)"
+      ],
+      "created": "2026-08-15T23:56:05Z",
+      "last_seen": "2026-08-15T23:56:05Z"
     }
   ]
 }
