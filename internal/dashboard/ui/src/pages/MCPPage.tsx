@@ -126,7 +126,10 @@ function EndpointBlock({ t }: { t: (key: string) => string }) {
     <div className="flex flex-col gap-2">
       <Label>{t("mcp.endpointLabel")}</Label>
       <div className="flex items-center gap-2 rounded-[10px] border border-[var(--border)] bg-[var(--sunken)] px-4 py-3">
-        <code className="flex-1 overflow-x-auto break-all font-mono text-sm text-[var(--primary)]">
+        <code
+          data-testid="mcp-endpoint-url"
+          className="flex-1 overflow-x-auto break-all font-mono text-sm text-[var(--primary)]"
+        >
           {endpoint}
         </code>
         <CopyButton value={endpoint} label={t("mcp.copyEndpoint")} successMessage={t("mcp.copySuccess")} />
@@ -178,6 +181,8 @@ function ClientTutorials({ t }: { t: (key: string) => string }) {
               </div>
               <div className="relative">
                 <pre
+                  data-testid={`mcp-client-snippet-${client.name}`}
+                  data-snippet={snippet}
                   className="m-0 overflow-x-auto rounded-[10px] border p-3 text-[11px] leading-[1.5]"
                   style={{
                     background: "var(--bg-sunken)",
