@@ -76,10 +76,7 @@ func (h *GoogleOAuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	returnTo := r.URL.Query().Get("return_to")
-	if returnTo != "" && !isSafeDashboardReturnPath(returnTo) {
-		returnTo = ""
-	}
+	returnTo, _ := normalizeDashboardReturnPath(r.URL.Query().Get("return_to"))
 	state, err := signGoogleState([]byte(cfg.ClientSecret), returnTo)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -204,19 +201,38 @@ type googleStateClaims struct {
 	ReturnTo  string `json:"return_to,omitempty"`
 }
 
-// isSafeDashboardReturnPath guards ReturnTo the same way the frontend's
-// safeReturnTo (src/lib/returnTo.ts) does: only a same-origin path relative
-// to the SPA's /dashboard basename is ever honored, never an absolute URL
-// or a scheme-relative "//host/..." / "/\host/..." (browsers normalize the
-// latter to the former). This is the server-side half of that guard —
-// Login (below) receives return_to as an untrusted query param on a link
-// the frontend built, so it's re-validated here rather than trusted just
-// because the frontend already validated it once.
-func isSafeDashboardReturnPath(path string) bool {
+// normalizeDashboardReturnPath guards and normalizes a return_to value the
+// same way the frontend's safeReturnTo (src/lib/returnTo.ts) does: only a
+// same-origin path relative to the SPA's /dashboard basename is ever
+// honored (never an absolute URL or a scheme-relative "//host/..." /
+// "/\host/..." — browsers normalize the latter to the former), and any
+// accidental "/dashboard" prefix is stripped so every caller can uniformly
+// do "/dashboard"+path for a full-page navigation without re-deriving which
+// shape it got. This is the server-side twin of that TS function — Login
+// (below) receives return_to as an untrusted query param on a link the
+// frontend built, so it's re-validated here rather than trusted just
+// because the frontend already validated it once, and Callback trusts only
+// what verifyGoogleState hands back after re-checking this same guard.
+func normalizeDashboardReturnPath(path string) (normalized string, ok bool) {
 	if path == "" {
-		return false
+		return "", false
 	}
-	return strings.HasPrefix(path, "/") && !strings.HasPrefix(path, "//") && !strings.HasPrefix(path, `/\`)
+	isSafe := func(p string) bool {
+		return strings.HasPrefix(p, "/") && !strings.HasPrefix(p, "//") && !strings.HasPrefix(p, `/\`)
+	}
+	if !isSafe(path) {
+		return "", false
+	}
+	if path == "/dashboard" || strings.HasPrefix(path, "/dashboard/") || strings.HasPrefix(path, "/dashboard?") {
+		path = strings.TrimPrefix(path, "/dashboard")
+		if path == "" {
+			path = "/"
+		}
+	}
+	if !isSafe(path) {
+		return "", false
+	}
+	return path, true
 }
 
 func signGoogleState(secret []byte, returnTo string) (string, error) {
@@ -237,9 +253,10 @@ func signGoogleState(secret []byte, returnTo string) (string, error) {
 }
 
 // verifyGoogleState validates token and, on success, returns the ReturnTo
-// path it carried (already re-validated by isSafeDashboardReturnPath at
-// Login time, but checked again here in case the signing key or claims
-// shape ever changes — cheap, and this is the boundary Callback trusts).
+// path it carried, normalized (already re-validated by
+// normalizeDashboardReturnPath at Login time, but checked again here in
+// case the signing key or claims shape ever changes — cheap, and this is
+// the boundary Callback trusts).
 func verifyGoogleState(secret []byte, token string) (returnTo string, ok bool) {
 	encoded, sig, found := strings.Cut(token, ".")
 	if !found || encoded == "" || sig == "" {
@@ -264,10 +281,11 @@ func verifyGoogleState(secret []byte, token string) (returnTo string, ok bool) {
 	if time.Now().Unix() > claims.ExpiresAt {
 		return "", false
 	}
-	if claims.ReturnTo != "" && !isSafeDashboardReturnPath(claims.ReturnTo) {
+	if claims.ReturnTo == "" {
 		return "", true
 	}
-	return claims.ReturnTo, true
+	normalized, _ := normalizeDashboardReturnPath(claims.ReturnTo)
+	return normalized, true
 }
 
 type googleTokenResponse struct {

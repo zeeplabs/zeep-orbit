@@ -323,14 +323,12 @@ func RotateOAuthRefreshToken(ctx context.Context, pool *db.Pool, presentedRefres
 		return "", "", PATRow{}, fmt.Errorf("dashboard: oauth PAT %s has no family_id", patID)
 	}
 
-	tokenClientID := ""
-	if oauthClientID != nil {
-		tokenClientID = *oauthClientID
-	}
-	if expectedClientID == "" || expectedClientID != tokenClientID {
-		return "", "", PATRow{}, ErrRefreshTokenClientMismatch
-	}
-
+	// Reuse detection runs before the client_id check, deliberately: a
+	// replayed, already-superseded token is a compromise signal on its own
+	// merits, regardless of what client_id the replay happens to present.
+	// Checking client_id first would let an attacker who can only guess a
+	// wrong client_id dodge family-wide revocation entirely on a reused
+	// token — the opposite of what this branch exists to catch.
 	if revokedAt != nil {
 		if _, revokeErr := tx.Exec(ctx,
 			`UPDATE zeep_system.dashboard_pats SET revoked_at = now() WHERE family_id = $1 AND revoked_at IS NULL`,
@@ -342,6 +340,18 @@ func RotateOAuthRefreshToken(ctx context.Context, pool *db.Pool, presentedRefres
 			return "", "", PATRow{}, fmt.Errorf("dashboard: revoke oauth family %s commit: %w", *familyID, err)
 		}
 		return "", "", PATRow{}, ErrRefreshTokenReused
+	}
+
+	// Only reached for a live (not-yet-superseded) token: client_id must
+	// match before any mutation happens, so a mismatch neither rotates nor
+	// revokes anything — the legitimate owner can still use the token
+	// afterward.
+	tokenClientID := ""
+	if oauthClientID != nil {
+		tokenClientID = *oauthClientID
+	}
+	if expectedClientID == "" || expectedClientID != tokenClientID {
+		return "", "", PATRow{}, ErrRefreshTokenClientMismatch
 	}
 
 	if _, err := tx.Exec(ctx, `UPDATE zeep_system.dashboard_pats SET revoked_at = now() WHERE id = $1`, patID); err != nil {

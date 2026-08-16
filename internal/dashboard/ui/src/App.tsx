@@ -43,7 +43,7 @@ function ResumeReturnTo({ fallback }: { fallback: string }) {
     const returnTo = safeReturnTo(location.search)
     window.location.assign(returnTo ? `/dashboard${returnTo}` : fallback)
   }, [location.search, fallback])
-  return null
+  return <LoadingScreen />
 }
 
 function LoadingScreen() {
