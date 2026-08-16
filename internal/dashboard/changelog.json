@@ -1,6 +1,29 @@
 {
   "entries": [
     {
+      "version": "v1.3.0",
+      "release_date": "2026-08-13",
+      "title": {"en": "Inbound Webhooks, RLS \"Policy\" Mode & Policy Templates", "pt-BR": "Webhooks de Entrada, Modo \"Policy\" de RLS e Templates de Policy"},
+      "summary": {"en": "Apps can now receive events pushed by external providers straight into a table with no code, row policies gained a mode that hands full visibility control to policies instead of an automatic owner filter, and creating a policy no longer requires understanding RLS internals.", "pt-BR": "Apps agora podem receber eventos enviados por provedores externos direto numa tabela sem escrever código, row policies ganharam um modo que entrega o controle total de visibilidade às policies em vez de um filtro automático por owner, e criar uma policy não exige mais entender os detalhes internos de RLS."},
+      "sections": [
+        {
+          "type": "features",
+          "items": [
+            {"description": {"en": "Inbound webhooks — create a webhook that receives events from an external provider and writes them into an app table. Captures a real sample on first call, lets the owner map event fields to columns per event type (insert/update/delete), then activates for real deliveries. Every call is recorded in a 30-day delivery log, and provider verification handshakes (e.g. Slack-style challenge) are handled automatically.", "pt-BR": "Webhooks de entrada — crie um webhook que recebe eventos de um provedor externo e grava numa tabela do app. Captura uma amostra real na primeira chamada, deixa o owner mapear campos do evento para colunas por tipo de evento (insert/update/delete), depois ativa para entregas reais. Toda chamada é registrada num log de entregas de 30 dias, e handshakes de verificação de provedor (ex.: challenge estilo Slack) são tratados automaticamente."}},
+            {"description": {"en": "New `rls: \"policy\"` mode — removes the automatic owner_id filter entirely, delegating 100% of visibility and write permission to the table's own policies (fail-closed: zero policies denies everything). Existing owner/enabled modes are unaffected; an existing table can switch into it without recreating or losing data.", "pt-BR": "Novo modo `rls: \"policy\"` — remove totalmente o filtro automático por owner_id, delegando 100% da visibilidade e permissão de escrita às policies da própria tabela (fail-closed: zero policies nega tudo). Os modos owner/enabled existentes não são afetados; uma tabela existente pode migrar para este modo sem recriação ou perda de dados."}},
+            {"description": {"en": "Policy Templates — six named templates (\"Only the owner sees/edits\", \"All signed-in users with a role can view\", \"Nobody edits, read-only\", and others) now replace the technical Column/Operator/Claim/Logic form as the default way to create a row policy; the old form is still available behind an \"Advanced mode\" toggle.", "pt-BR": "Templates de Policy — seis templates nomeados (\"Só o owner vê/edita\", \"Todo usuário autenticado com um papel pode ver\", \"Ninguém edita, somente leitura\", entre outros) agora substituem o formulário técnico de Coluna/Operador/Claim/Lógica como forma padrão de criar uma row policy; o formulário antigo continua disponível atrás de um toggle \"Modo avançado\"."}}
+          ]
+        },
+        {
+          "type": "security",
+          "items": [
+            {"description": {"en": "Fixed: two concurrent deliveries with the same event id could both write instead of the second being deduplicated — now serialized with a Postgres advisory lock, held on a small dedicated connection pool so it can't exhaust the main pool under concurrent load.", "pt-BR": "Corrigido: duas entregas concorrentes com o mesmo event id podiam gravar as duas em vez da segunda ser deduplicada — agora serializadas com um advisory lock do Postgres, mantido num pool de conexões pequeno e dedicado para não esgotar o pool principal sob carga concorrente."}},
+            {"description": {"en": "Fixed: deleting an event mapping wasn't scoped to its own webhook, letting any app delete another app's mapping by guessing its id; the public delivery route's rate limit was shared across every tenant on the same replica instead of scoped per webhook; and six 500 responses leaked the raw Postgres error message to the client instead of a fixed generic message.", "pt-BR": "Corrigido: a exclusão de um mapeamento de evento não era restrita ao próprio webhook, permitindo que qualquer app apagasse o mapeamento de outro app adivinhando seu id; o rate limit da rota pública de entrega era compartilhado entre todos os tenants na mesma réplica em vez de por webhook; e seis respostas 500 vazavam a mensagem de erro crua do Postgres para o cliente em vez de uma mensagem genérica fixa."}}
+          ]
+        }
+      ]
+    },
+    {
       "version": "v1.2.0",
       "release_date": "2026-08-10",
       "title": {"en": "Table Policy Editing", "pt-BR": "Edição de Table Policies"},
