@@ -13,6 +13,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 - **A dedicated "MCP" page in the dashboard** (Deployment section of the sidebar) explains how to connect an AI coding agent (Claude Code, Codex, Cursor, OpenCode, or Claude Desktop) to this Orbit instance's MCP server: the live endpoint URL with a copy action, a plain-language explanation of the two supported auth methods (Personal Access Token vs OAuth 2.1 + PKCE), and copy-pasteable, syntax-highlighted config snippets for each of the four PAT-based clients. Personal access token management (create, list, revoke) moved here from its previous home behind an unlabeled key icon in the sidebar footer.
 
+### Fixed
+
+- **OAuth 2.1 client registration (`POST /dashboard/oauth/register`) no longer accepts a `redirect_uris` scheme other than `https://`, or `http://` on loopback (`localhost`/`127.0.0.1`/`::1`) for native/CLI clients.** Registration is unauthenticated by design (RFC 7591 dynamic client registration), and the consent screen (`OAuthConsent.tsx`) navigates the browser to the registered client's redirect URI via `window.location.href` once an admin grants or denies. Without a scheme allowlist, an attacker could register a `javascript:`/`data:` redirect URI, phish an authenticated admin into the consent flow, and run script on the dashboard origin with that admin's session — the denial path was equally exploitable, since it redirects too. The consent screen now also re-validates the scheme client-side before navigating, as defense in depth.
+- **The OAuth consent flow no longer strands an admin who isn't already logged in.** `/dashboard/oauth/authorize` has always redirected an unauthenticated admin to `/dashboard/login?return_to=...`, but nothing read `return_to` back — after logging in, the admin landed on the dashboard home with the original OAuth request lost and no error shown. Login now resumes to `return_to` when present (validated as a same-origin relative path to avoid it becoming an open-redirect vector itself), and hitting `/dashboard/oauth/consent` while logged out preserves the full request in `return_to` instead of dropping it.
+
 ## [1.3.0] — 2026-08-13
 
 ### Added

@@ -81,6 +81,75 @@ func TestRegisterClient_RequiresNameAndRedirectURIs(t *testing.T) {
 	}
 }
 
+// TestRegisterClient_RejectsUnsafeRedirectSchemes guards against a stored-XSS
+// path on the dashboard origin: OAuthConsent.tsx hands whatever redirect_uri
+// a client registered straight to window.location.href once an admin grants
+// or denies consent, so a scheme like "javascript:" registered here would
+// execute in the admin's authenticated session.
+func TestRegisterClient_RejectsUnsafeRedirectSchemes(t *testing.T) {
+	pool := oauthClientTestPool(t)
+	ctx := context.Background()
+
+	unsafe := []string{
+		"javascript:alert(document.cookie)",
+		"data:text/html,<script>alert(1)</script>",
+		"http://attacker.example.com/callback",
+		"not a url",
+		"",
+	}
+	for _, redirectURI := range unsafe {
+		var valErr *ValidationError
+		if _, err := RegisterClient(ctx, pool, RegisterClientInput{
+			Name:         "client",
+			RedirectURIs: []string{redirectURI},
+		}); !errors.As(err, &valErr) {
+			t.Fatalf("redirect_uri %q: expected *ValidationError, got %v", redirectURI, err)
+		}
+	}
+}
+
+// TestRegisterClient_AllowsLoopbackHTTP covers the RFC 8252 native-client
+// exception: a plain http:// redirect_uri is only safe (and only useful) on
+// loopback, where no network attacker can intercept it.
+func TestRegisterClient_AllowsLoopbackHTTP(t *testing.T) {
+	pool := oauthClientTestPool(t)
+	ctx := context.Background()
+
+	for _, redirectURI := range []string{
+		"http://localhost:51000/callback",
+		"http://127.0.0.1:51000/callback",
+	} {
+		if _, err := RegisterClient(ctx, pool, RegisterClientInput{
+			Name:         "client",
+			RedirectURIs: []string{redirectURI},
+		}); err != nil {
+			t.Fatalf("redirect_uri %q: expected no error, got %v", redirectURI, err)
+		}
+	}
+}
+
+func TestIsAllowedOAuthRedirectURI(t *testing.T) {
+	cases := []struct {
+		uri  string
+		want bool
+	}{
+		{"https://claude.ai/callback", true},
+		{"http://localhost:8080/callback", true},
+		{"http://127.0.0.1/callback", true},
+		{"http://[::1]/callback", true},
+		{"http://evil.example.com/callback", false},
+		{"javascript:alert(1)", false},
+		{"data:text/html,x", false},
+		{"", false},
+		{"https://", false},
+	}
+	for _, c := range cases {
+		if got := isAllowedOAuthRedirectURI(c.uri); got != c.want {
+			t.Errorf("isAllowedOAuthRedirectURI(%q) = %v, want %v", c.uri, got, c.want)
+		}
+	}
+}
+
 // TestGetClient_ResolvesRegisteredClient covers GetClient's happy path —
 // used by Authorize (T18) to validate a redirect_uri against what was
 // actually registered.

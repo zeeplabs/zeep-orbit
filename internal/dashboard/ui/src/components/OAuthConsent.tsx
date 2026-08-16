@@ -51,6 +51,20 @@ export default function OAuthConsent() {
         toast.error(data.error || t('oauthConsent.error'))
         return
       }
+      // Defense in depth: the backend now rejects non-https/non-loopback
+      // redirect_uris at registration, but this screen still guards the
+      // navigation itself before handing an untrusted URL to the browser.
+      let scheme = ''
+      try {
+        scheme = new URL(data.redirect_url).protocol
+      } catch {
+        toast.error(t('oauthConsent.error'))
+        return
+      }
+      if (scheme !== 'https:' && scheme !== 'http:') {
+        toast.error(t('oauthConsent.error'))
+        return
+      }
       window.location.href = data.redirect_url
     } catch {
       toast.error(t('common.connectionError'))

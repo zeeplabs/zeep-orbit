@@ -1,7 +1,8 @@
 import { lazy, Suspense } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Navigate, Routes, Route, useParams } from 'react-router-dom'
+import { Navigate, Routes, Route, useParams, useLocation } from 'react-router-dom'
+import { safeReturnTo } from '@/lib/returnTo'
 import LoginPage from './pages/LoginPage'
 import GoogleSetupPage from './pages/GoogleSetupPage'
 import DashboardShell from './pages/DashboardShell'
@@ -59,6 +60,8 @@ function RedirectToAppDetails({ tab }: { tab?: string }) {
 
 function App() {
   const qc = useQueryClient()
+  const location = useLocation()
+  const returnTo = encodeURIComponent(location.pathname + location.search)
 
   const { data: status, isLoading: statusLoading } = useBootstrapStatus()
 
@@ -98,14 +101,16 @@ function App() {
             }
           />
         )}
-        <Route path="/login" element={user ? <Navigate to="/apps" replace /> : <LoginPage />} />
+        <Route path="/login" element={
+          user ? <Navigate to={safeReturnTo(location.search) ?? '/apps'} replace /> : <LoginPage />
+        } />
         <Route path="/google-setup" element={
           !user ? <Navigate to="/login" replace /> :
           user.needs_setup ? <GoogleSetupPage /> :
           <Navigate to="/apps" replace />
         } />
         <Route path="/oauth/consent" element={
-          !user ? <Navigate to="/login" replace /> : <OAuthConsent />
+          !user ? <Navigate to={`/login?return_to=${returnTo}`} replace /> : <OAuthConsent />
         } />
         <Route
           element={<DashboardShell user={user} />}

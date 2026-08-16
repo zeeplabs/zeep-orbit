@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -45,6 +46,11 @@ func RegisterClient(ctx context.Context, pool *db.Pool, input RegisterClientInpu
 	if len(input.RedirectURIs) == 0 {
 		return OAuthClient{}, &ValidationError{msg: "redirect_uris is required"}
 	}
+	for _, redirectURI := range input.RedirectURIs {
+		if !isAllowedOAuthRedirectURI(redirectURI) {
+			return OAuthClient{}, &ValidationError{msg: fmt.Sprintf("redirect_uris: %q must be an https:// URL, or an http:// URL on localhost/127.0.0.1 (loopback clients only)", redirectURI)}
+		}
+	}
 
 	clientID, err := generateToken()
 	if err != nil {
@@ -71,6 +77,29 @@ func RegisterClient(ctx context.Context, pool *db.Pool, input RegisterClientInpu
 		return OAuthClient{}, fmt.Errorf("dashboard: unmarshal redirect_uris: %w", err)
 	}
 	return row, nil
+}
+
+// isAllowedOAuthRedirectURI rejects any scheme other than https, plus a
+// narrow http exception for loopback addresses (native/CLI clients binding
+// a local callback server per RFC 8252 — the same native-client case
+// design.md's Tech Decisions cites for going PKCE-only). Without this, a
+// registered redirect_uri like "javascript:..." would be handed straight to
+// window.location.href by OAuthConsent.tsx after a user grants or denies
+// consent, running attacker script on the dashboard origin with the admin's
+// live session.
+func isAllowedOAuthRedirectURI(redirectURI string) bool {
+	u, err := url.Parse(redirectURI)
+	if err != nil {
+		return false
+	}
+	switch u.Scheme {
+	case "https":
+		return u.Host != ""
+	case "http":
+		return u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1" || u.Hostname() == "::1"
+	default:
+		return false
+	}
 }
 
 // GetClient resolves a client_id to its registered OAuthClient — used by
