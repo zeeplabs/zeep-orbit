@@ -9,6 +9,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-08-16
+
 ### Added
 
 - **MCP server** — Zeep Orbit now exposes a Model Context Protocol endpoint (`/dashboard/mcp`) so an AI coding agent (Claude Code, Claude Desktop, Cursor, Codex, OpenCode) can create and manage apps, tables, RLS modes, and row policies through the same operations the dashboard's REST API already performs — one tool per existing endpoint, not a parallel code path. Two auth methods: **Personal Access Tokens** (bearer, created/listed/revoked from the dashboard) for CLI-style clients, and **OAuth 2.1 with PKCE + dynamic client registration** (RFC 7591) for clients like Claude Desktop that have no way to paste a static token. The OAuth flow restricts registered `redirect_uris` to `https://` (or `http://` on loopback, for native/CLI clients per RFC 8252), single-uses and PKCE-binds authorization codes, rotates refresh tokens with reuse detection (a replayed token revokes its whole token family), and verifies `client_id` at every token exchange (authorization_code and refresh_token grants alike).
