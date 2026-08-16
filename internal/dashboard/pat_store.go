@@ -201,6 +201,15 @@ func TouchLastUsed(ctx context.Context, pool *db.Pool, patID string) error {
 // presented refresh token's hash matches no row.
 var ErrRefreshTokenNotFound = errors.New("dashboard: refresh token not found")
 
+// ErrRefreshTokenClientMismatch is returned by RotateOAuthRefreshToken when
+// the presented client_id doesn't match the token's issuing client (RFC
+// 6749 §6 / OAuth 2.1 §4.3: a public client must identify itself at refresh
+// the same as at the initial token exchange). No rotation or revocation
+// happens on this path — an attacker presenting a stolen token under the
+// wrong client_id gets no signal either way, and the legitimate token stays
+// valid for the client that actually owns it.
+var ErrRefreshTokenClientMismatch = errors.New("dashboard: refresh token client_id mismatch")
+
 // ErrRefreshTokenReused is returned by RotateOAuthRefreshToken when a
 // presented refresh token matches a row that was already superseded by an
 // earlier rotation (or otherwise revoked) — the standard refresh-token-
@@ -283,7 +292,7 @@ func SetRefreshToken(ctx context.Context, q db.Querier, patID string) (string, e
 //   - hash belongs to the current, unrevoked row -> standard rotation: that
 //     row is revoked (superseded), and a brand-new PAT row is minted in the
 //     same family with fresh access+refresh tokens.
-func RotateOAuthRefreshToken(ctx context.Context, pool *db.Pool, presentedRefreshToken string) (accessToken, refreshToken string, row PATRow, err error) {
+func RotateOAuthRefreshToken(ctx context.Context, pool *db.Pool, presentedRefreshToken, expectedClientID string) (accessToken, refreshToken string, row PATRow, err error) {
 	tokenHash := hashPATToken(presentedRefreshToken)
 
 	tx, err := pool.Begin(ctx)
@@ -314,6 +323,14 @@ func RotateOAuthRefreshToken(ctx context.Context, pool *db.Pool, presentedRefres
 		return "", "", PATRow{}, fmt.Errorf("dashboard: oauth PAT %s has no family_id", patID)
 	}
 
+	tokenClientID := ""
+	if oauthClientID != nil {
+		tokenClientID = *oauthClientID
+	}
+	if expectedClientID == "" || expectedClientID != tokenClientID {
+		return "", "", PATRow{}, ErrRefreshTokenClientMismatch
+	}
+
 	if revokedAt != nil {
 		if _, revokeErr := tx.Exec(ctx,
 			`UPDATE zeep_system.dashboard_pats SET revoked_at = now() WHERE family_id = $1 AND revoked_at IS NULL`,
@@ -331,11 +348,7 @@ func RotateOAuthRefreshToken(ctx context.Context, pool *db.Pool, presentedRefres
 		return "", "", PATRow{}, fmt.Errorf("dashboard: supersede oauth PAT %s: %w", patID, err)
 	}
 
-	clientID := ""
-	if oauthClientID != nil {
-		clientID = *oauthClientID
-	}
-	newAccessToken, newRow, err := CreateOAuthAccessToken(ctx, tx, userID, clientID, *familyID, time.Now().Add(oauthAccessTokenTTL))
+	newAccessToken, newRow, err := CreateOAuthAccessToken(ctx, tx, userID, tokenClientID, *familyID, time.Now().Add(oauthAccessTokenTTL))
 	if err != nil {
 		return "", "", PATRow{}, err
 	}

@@ -72,7 +72,7 @@ func TestRotateOAuthRefreshToken_ValidTokenRotatesOnce(t *testing.T) {
 		t.Fatalf("SetRefreshToken: %v", err)
 	}
 
-	newAccessToken, newRefreshToken, newRow, err := RotateOAuthRefreshToken(ctx, pool, oldRefreshToken)
+	newAccessToken, newRefreshToken, newRow, err := RotateOAuthRefreshToken(ctx, pool, oldRefreshToken, client.ID)
 	if err != nil {
 		t.Fatalf("RotateOAuthRefreshToken: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestRotateOAuthRefreshToken_ValidTokenRotatesOnce(t *testing.T) {
 	}
 	// Old refresh token can no longer rotate again on its own (it's now
 	// the reuse-of-superseded-token case).
-	if _, _, _, err := RotateOAuthRefreshToken(ctx, pool, oldRefreshToken); !errors.Is(err, ErrRefreshTokenReused) {
+	if _, _, _, err := RotateOAuthRefreshToken(ctx, pool, oldRefreshToken, client.ID); !errors.Is(err, ErrRefreshTokenReused) {
 		t.Fatalf("expected ErrRefreshTokenReused for the old refresh token, got %v", err)
 	}
 }
@@ -104,7 +104,7 @@ func TestRotateOAuthRefreshToken_UnknownTokenReturnsNotFound(t *testing.T) {
 	pool := oauthClientTestPool(t)
 	ctx := context.Background()
 
-	if _, _, _, err := RotateOAuthRefreshToken(ctx, pool, "not-a-real-refresh-token"); !errors.Is(err, ErrRefreshTokenNotFound) {
+	if _, _, _, err := RotateOAuthRefreshToken(ctx, pool, "not-a-real-refresh-token", "some-client-id"); !errors.Is(err, ErrRefreshTokenNotFound) {
 		t.Fatalf("expected ErrRefreshTokenNotFound, got %v", err)
 	}
 }
@@ -133,7 +133,7 @@ func TestRotateOAuthRefreshToken_ReuseRevokesEntireFamily(t *testing.T) {
 	}
 
 	// Legitimate rotation once — firstRefreshToken becomes superseded.
-	secondAccessToken, secondRefreshToken, _, err := RotateOAuthRefreshToken(ctx, pool, firstRefreshToken)
+	secondAccessToken, secondRefreshToken, _, err := RotateOAuthRefreshToken(ctx, pool, firstRefreshToken, client.ID)
 	if err != nil {
 		t.Fatalf("RotateOAuthRefreshToken (legitimate): %v", err)
 	}
@@ -141,7 +141,7 @@ func TestRotateOAuthRefreshToken_ReuseRevokesEntireFamily(t *testing.T) {
 
 	// Reuse of the superseded firstRefreshToken must be rejected AND revoke
 	// the whole family, including the currently-active secondAccessToken.
-	if _, _, _, err := RotateOAuthRefreshToken(ctx, pool, firstRefreshToken); !errors.Is(err, ErrRefreshTokenReused) {
+	if _, _, _, err := RotateOAuthRefreshToken(ctx, pool, firstRefreshToken, client.ID); !errors.Is(err, ErrRefreshTokenReused) {
 		t.Fatalf("expected ErrRefreshTokenReused, got %v", err)
 	}
 	if _, err := ResolvePAT(ctx, pool, secondAccessToken); !errors.Is(err, ErrPATRevoked) {

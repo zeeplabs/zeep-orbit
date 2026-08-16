@@ -211,7 +211,7 @@ func TestTokenHandler_RefreshToken_ValidExchangeRotates(t *testing.T) {
 		t.Fatalf("SetRefreshToken: %v", err)
 	}
 
-	form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {refreshToken}}
+	form := url.Values{"grant_type": {"refresh_token"}, "client_id": {client.ID}, "refresh_token": {refreshToken}}
 	req := httptest.NewRequest(http.MethodPost, "/dashboard/oauth/token", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rr := httptest.NewRecorder()
@@ -254,7 +254,7 @@ func TestTokenHandler_RefreshToken_ReuseRejectedAndBlocksFurtherCalls(t *testing
 	}
 
 	doRefresh := func(token string) (int, tokenResponse) {
-		form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {token}}
+		form := url.Values{"grant_type": {"refresh_token"}, "client_id": {client.ID}, "refresh_token": {token}}
 		req := httptest.NewRequest(http.MethodPost, "/dashboard/oauth/token", strings.NewReader(form.Encode()))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		rr := httptest.NewRecorder()
@@ -277,5 +277,58 @@ func TestTokenHandler_RefreshToken_ReuseRejectedAndBlocksFurtherCalls(t *testing
 
 	if _, err := ResolvePAT(ctx, pool, currentAccessToken); !errors.Is(err, ErrPATRevoked) {
 		t.Fatalf("expected the current access token to be revoked by family-wide reuse revocation, got %v", err)
+	}
+}
+
+// TestTokenHandler_RefreshToken_MissingOrMismatchedClientIDRejected covers
+// RFC 6749 §6 / OAuth 2.1 §4.3: a public client must identify itself with
+// client_id at refresh too, not just at the initial authorization_code
+// exchange — and a mismatch must not rotate or revoke the presented token
+// (the legitimate client must still be able to use it afterward).
+func TestTokenHandler_RefreshToken_MissingOrMismatchedClientIDRejected(t *testing.T) {
+	pool := oauthClientTestPool(t)
+	ctx := context.Background()
+	h := NewOAuthHandler(pool)
+	userID := testUser(t, pool, "token-refresh-client-id-check@example.com", "admin")
+	client, err := RegisterClient(ctx, pool, RegisterClientInput{Name: "cli", RedirectURIs: []string{"https://example.com/cb"}})
+	if err != nil {
+		t.Fatalf("RegisterClient: %v", err)
+	}
+	otherClient, err := RegisterClient(ctx, pool, RegisterClientInput{Name: "other", RedirectURIs: []string{"https://other.example.com/cb"}})
+	if err != nil {
+		t.Fatalf("RegisterClient (other): %v", err)
+	}
+	_, row, err := CreateOAuthAccessToken(ctx, pool, userID, client.ID, "", oauthTestTTL())
+	if err != nil {
+		t.Fatalf("CreateOAuthAccessToken: %v", err)
+	}
+	refreshToken, err := SetRefreshToken(ctx, pool, row.ID)
+	if err != nil {
+		t.Fatalf("SetRefreshToken: %v", err)
+	}
+
+	doRefresh := func(clientID string) int {
+		form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {refreshToken}}
+		if clientID != "" {
+			form.Set("client_id", clientID)
+		}
+		req := httptest.NewRequest(http.MethodPost, "/dashboard/oauth/token", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rr := httptest.NewRecorder()
+		h.Token(rr, req)
+		return rr.Code
+	}
+
+	if got := doRefresh(""); got != http.StatusBadRequest {
+		t.Fatalf("expected 400 for missing client_id, got %d", got)
+	}
+	if got := doRefresh(otherClient.ID); got != http.StatusBadRequest {
+		t.Fatalf("expected 400 for a client_id that doesn't own the refresh token, got %d", got)
+	}
+
+	// The token must still be fully usable by its real owner after both
+	// rejected attempts above — neither should have rotated or revoked it.
+	if got := doRefresh(client.ID); got != http.StatusOK {
+		t.Fatalf("expected the legitimate client_id to still succeed, got %d", got)
 	}
 }

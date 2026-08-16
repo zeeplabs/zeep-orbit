@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Navigate, Routes, Route, useParams, useLocation } from 'react-router-dom'
@@ -28,6 +28,23 @@ import { useBootstrapStatus } from './lib/api'
 const ComponentsSandbox = import.meta.env.DEV
   ? lazy(() => import('./pages/dev/ComponentsSandbox'))
   : null
+
+// ResumeReturnTo replaces a client-side <Navigate> for resuming `return_to`
+// when the target might not be an SPA route at all — e.g. the OAuth
+// authorization endpoint (/dashboard/oauth/authorize) is handled entirely
+// by the Go backend and re-evaluates the request once a session cookie is
+// present, redirecting on to /oauth/consent itself. <Navigate> only ever
+// updates client-side router state, so it can never reach a backend-only
+// path; a full document load (window.location.assign) always works for
+// both an SPA route (the app just reloads, unaffected) and a backend one.
+function ResumeReturnTo({ fallback }: { fallback: string }) {
+  const location = useLocation()
+  useEffect(() => {
+    const returnTo = safeReturnTo(location.search)
+    window.location.assign(returnTo ? `/dashboard${returnTo}` : fallback)
+  }, [location.search, fallback])
+  return null
+}
 
 function LoadingScreen() {
   const { t } = useTranslation()
@@ -102,7 +119,7 @@ function App() {
           />
         )}
         <Route path="/login" element={
-          user ? <Navigate to={safeReturnTo(location.search) ?? '/apps'} replace /> : <LoginPage />
+          user ? <ResumeReturnTo fallback="/dashboard/apps" /> : <LoginPage />
         } />
         <Route path="/google-setup" element={
           !user ? <Navigate to="/login" replace /> :

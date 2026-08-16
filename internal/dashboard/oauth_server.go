@@ -418,12 +418,13 @@ func (h *OAuthHandler) tokenAuthorizationCode(w http.ResponseWriter, r *http.Req
 // Error Handling Strategy).
 func (h *OAuthHandler) tokenRefresh(w http.ResponseWriter, r *http.Request) {
 	presented := r.FormValue("refresh_token")
-	if presented == "" {
+	clientID := r.FormValue("client_id")
+	if presented == "" || clientID == "" {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_request")
 		return
 	}
 
-	accessToken, refreshToken, _, err := RotateOAuthRefreshToken(r.Context(), h.pool, presented)
+	accessToken, refreshToken, _, err := RotateOAuthRefreshToken(r.Context(), h.pool, presented, clientID)
 	if err != nil {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_grant")
 		return

@@ -251,7 +251,7 @@ func TestOAuthEndToEnd_DiscoveryThroughToolCallRefreshAndReuseRevocation(t *test
 	}
 
 	// 7. Refresh rotation.
-	refreshForm := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {firstTokens.RefreshToken}}
+	refreshForm := url.Values{"grant_type": {"refresh_token"}, "client_id": {reg.ClientID}, "refresh_token": {firstTokens.RefreshToken}}
 	refreshReq := httptest.NewRequest(http.MethodPost, "/dashboard/oauth/token", strings.NewReader(refreshForm.Encode()))
 	refreshReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	refreshRR := httptest.NewRecorder()
@@ -276,7 +276,7 @@ func TestOAuthEndToEnd_DiscoveryThroughToolCallRefreshAndReuseRevocation(t *test
 	// 8. Reuse of the superseded (original) refresh token: rejected, and
 	// the whole token family — including the current access token from
 	// step 7 — is revoked.
-	reuseForm := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {firstTokens.RefreshToken}}
+	reuseForm := url.Values{"grant_type": {"refresh_token"}, "client_id": {reg.ClientID}, "refresh_token": {firstTokens.RefreshToken}}
 	reuseReq := httptest.NewRequest(http.MethodPost, "/dashboard/oauth/token", strings.NewReader(reuseForm.Encode()))
 	reuseReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	reuseRR := httptest.NewRecorder()

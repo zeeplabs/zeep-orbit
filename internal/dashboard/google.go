@@ -76,7 +76,11 @@ func (h *GoogleOAuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	state, err := signGoogleState([]byte(cfg.ClientSecret))
+	returnTo := r.URL.Query().Get("return_to")
+	if returnTo != "" && !isSafeDashboardReturnPath(returnTo) {
+		returnTo = ""
+	}
+	state, err := signGoogleState([]byte(cfg.ClientSecret), returnTo)
 	if err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
@@ -116,7 +120,8 @@ func (h *GoogleOAuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !verifyGoogleState([]byte(cfg.ClientSecret), state) {
+	returnTo, ok := verifyGoogleState([]byte(cfg.ClientSecret), state)
+	if !ok {
 		h.callbackErrorPage(w, "Sessão expirada ou inválida. Tente novamente.")
 		return
 	}
@@ -174,11 +179,19 @@ func (h *GoogleOAuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 
 	needsSetup := user.Name == "" && user.PasswordHash == ""
 	if needsSetup {
-		http.Redirect(w, r, "/dashboard/google-setup", http.StatusFound)
+		setupURL := "/dashboard/google-setup"
+		if returnTo != "" {
+			setupURL += "?return_to=" + url.QueryEscape(returnTo)
+		}
+		http.Redirect(w, r, setupURL, http.StatusFound)
 		return
 	}
 
-	http.Redirect(w, r, "/dashboard", http.StatusFound)
+	dest := "/dashboard"
+	if returnTo != "" {
+		dest += returnTo
+	}
+	http.Redirect(w, r, dest, http.StatusFound)
 }
 
 // googleStateClaims is the payload embedded in the OAuth "state" param,
@@ -187,12 +200,29 @@ func (h *GoogleOAuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 // handled the earlier /login request — required behind a non-sticky load
 // balancer running multiple replicas.
 type googleStateClaims struct {
-	ExpiresAt int64 `json:"exp"`
+	ExpiresAt int64  `json:"exp"`
+	ReturnTo  string `json:"return_to,omitempty"`
 }
 
-func signGoogleState(secret []byte) (string, error) {
+// isSafeDashboardReturnPath guards ReturnTo the same way the frontend's
+// safeReturnTo (src/lib/returnTo.ts) does: only a same-origin path relative
+// to the SPA's /dashboard basename is ever honored, never an absolute URL
+// or a scheme-relative "//host/..." / "/\host/..." (browsers normalize the
+// latter to the former). This is the server-side half of that guard —
+// Login (below) receives return_to as an untrusted query param on a link
+// the frontend built, so it's re-validated here rather than trusted just
+// because the frontend already validated it once.
+func isSafeDashboardReturnPath(path string) bool {
+	if path == "" {
+		return false
+	}
+	return strings.HasPrefix(path, "/") && !strings.HasPrefix(path, "//") && !strings.HasPrefix(path, `/\`)
+}
+
+func signGoogleState(secret []byte, returnTo string) (string, error) {
 	payload, err := json.Marshal(googleStateClaims{
 		ExpiresAt: time.Now().Add(10 * time.Minute).Unix(),
+		ReturnTo:  returnTo,
 	})
 	if err != nil {
 		return "", fmt.Errorf("google: marshal state: %w", err)
@@ -206,28 +236,38 @@ func signGoogleState(secret []byte) (string, error) {
 	return encoded + "." + sig, nil
 }
 
-func verifyGoogleState(secret []byte, token string) bool {
+// verifyGoogleState validates token and, on success, returns the ReturnTo
+// path it carried (already re-validated by isSafeDashboardReturnPath at
+// Login time, but checked again here in case the signing key or claims
+// shape ever changes — cheap, and this is the boundary Callback trusts).
+func verifyGoogleState(secret []byte, token string) (returnTo string, ok bool) {
 	encoded, sig, found := strings.Cut(token, ".")
 	if !found || encoded == "" || sig == "" {
-		return false
+		return "", false
 	}
 
 	mac := hmac.New(sha256.New, secret)
 	mac.Write([]byte(encoded))
 	expectedSig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 	if !hmac.Equal([]byte(sig), []byte(expectedSig)) {
-		return false
+		return "", false
 	}
 
 	payload, err := base64.RawURLEncoding.DecodeString(encoded)
 	if err != nil {
-		return false
+		return "", false
 	}
 	var claims googleStateClaims
 	if err := json.Unmarshal(payload, &claims); err != nil {
-		return false
+		return "", false
 	}
-	return time.Now().Unix() <= claims.ExpiresAt
+	if time.Now().Unix() > claims.ExpiresAt {
+		return "", false
+	}
+	if claims.ReturnTo != "" && !isSafeDashboardReturnPath(claims.ReturnTo) {
+		return "", true
+	}
+	return claims.ReturnTo, true
 }
 
 type googleTokenResponse struct {
