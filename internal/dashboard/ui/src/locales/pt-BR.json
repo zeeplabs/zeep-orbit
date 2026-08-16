@@ -992,5 +992,12 @@
   "pats.neverUsed": "Nunca usado",
   "pats.revoke": "Revogar",
   "pats.revokeTitle": "Revogar este token?",
-  "pats.revokeConfirm": "\"{{name}}\" deixará de funcionar imediatamente para qualquer cliente que o utilize. Essa ação não pode ser desfeita."
+  "pats.revokeConfirm": "\"{{name}}\" deixará de funcionar imediatamente para qualquer cliente que o utilize. Essa ação não pode ser desfeita.",
+  "oauthClients.title": "Clientes OAuth registrados",
+  "oauthClients.explainer": "Qualquer cliente MCP pode se autorregistrar nesta instância antes de um admin sequer ver. Revise aqui o que foi registrado e apague o que não reconhecer.",
+  "oauthClients.empty": "Nenhum cliente OAuth registrado",
+  "oauthClients.emptyDesc": "Um cliente se registra sozinho na primeira conexão via OAuth.",
+  "oauthClients.delete": "Excluir",
+  "oauthClients.deleteTitle": "Excluir este cliente OAuth?",
+  "oauthClients.deleteConfirm": "\"{{name}}\" e todo token de acesso/atualização já emitido a ele deixarão de funcionar imediatamente. Essa ação não pode ser desfeita."
 }

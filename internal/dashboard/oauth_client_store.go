@@ -123,3 +123,53 @@ func GetClient(ctx context.Context, pool *db.Pool, clientID string) (OAuthClient
 	}
 	return row, nil
 }
+
+// ListOAuthClients returns every dynamically self-registered OAuth client,
+// newest first — registration (RegisterClient) is unauthenticated by design
+// (RFC 7591), so this is the only place an admin can see what has
+// self-registered against this instance and, from the consent screen's
+// self-declared client_name, judge whether it looks legitimate.
+func ListOAuthClients(ctx context.Context, pool *db.Pool) ([]OAuthClient, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT id, name, redirect_uris, created_at FROM zeep_system.oauth_clients ORDER BY created_at DESC`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("dashboard: list oauth clients: %w", err)
+	}
+	defer rows.Close()
+
+	var clients []OAuthClient
+	for rows.Next() {
+		var row OAuthClient
+		var storedRedirects []byte
+		if err := rows.Scan(&row.ID, &row.Name, &storedRedirects, &row.CreatedAt); err != nil {
+			return nil, fmt.Errorf("dashboard: scan oauth client: %w", err)
+		}
+		if err := json.Unmarshal(storedRedirects, &row.RedirectURIs); err != nil {
+			return nil, fmt.Errorf("dashboard: unmarshal redirect_uris: %w", err)
+		}
+		clients = append(clients, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("dashboard: list oauth clients: %w", err)
+	}
+	return clients, nil
+}
+
+// DeleteOAuthClient removes a registered client. This is the only lifecycle
+// control an admin has today (no expiry, no separate "revoke" state) — but
+// it's a complete one: oauth_auth_codes.client_id and
+// dashboard_pats.oauth_client_id both carry ON DELETE CASCADE (provisioner.go),
+// so deleting a client also deletes every outstanding authorization code and
+// revokes every access/refresh token pair ever issued to it, in one
+// statement.
+func DeleteOAuthClient(ctx context.Context, pool *db.Pool, clientID string) error {
+	tag, err := pool.Exec(ctx, `DELETE FROM zeep_system.oauth_clients WHERE id = $1`, clientID)
+	if err != nil {
+		return fmt.Errorf("dashboard: delete oauth client %s: %w", clientID, err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrOAuthClientNotFound
+	}
+	return nil
+}

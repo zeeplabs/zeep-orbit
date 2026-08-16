@@ -1,9 +1,13 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   PersonalAccessToken,
+  RegisteredOAuthClient,
   useCreatePAT,
+  useDeleteOAuthClient,
+  useOAuthClients,
   usePATs,
   useRevokePAT,
 } from "../lib/api";
@@ -347,6 +351,92 @@ function PersonalAccessTokensSection() {
   );
 }
 
+// RegisteredOAuthClientsSection lists every dynamically self-registered
+// OAuth client (RFC 7591 registration is unauthenticated by design) and
+// lets a superadmin delete one — the only lifecycle control that exists
+// today, but a complete one: deleting a client cascades to every
+// authorization code and access/refresh token pair it ever issued
+// (oauth_client_store.go's DeleteOAuthClient). Superadmin-only, mirroring
+// deploy-provider/GitHub config's instance-wide scope; not shown to a
+// regular admin at all rather than shown disabled, matching
+// GitHubIntegrationPage's pattern.
+function RegisteredOAuthClientsSection() {
+  const { t } = useTranslation();
+  const { data: me, isLoading: meLoading } = useQuery({
+    queryKey: ["me"],
+    queryFn: async () => {
+      const res = await fetch("/dashboard/api/me", { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json() as Promise<{ role: string }>;
+    },
+    retry: false,
+  });
+  const { data: clients, isLoading } = useOAuthClients();
+  const deleteClient = useDeleteOAuthClient();
+  const [deleteTarget, setDeleteTarget] = useState<RegisteredOAuthClient | null>(null);
+
+  if (meLoading || me?.role !== "superadmin") return null;
+
+  const confirmDelete = () => {
+    if (!deleteTarget) return;
+    deleteClient.mutate(deleteTarget.id);
+    setDeleteTarget(null);
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div>
+        <h3 className="text-[13px] font-semibold text-[var(--text-primary)]">{t("oauthClients.title")}</h3>
+        <p className="mt-1 text-[12.5px] text-[var(--text-secondary)]">{t("oauthClients.explainer")}</p>
+      </div>
+
+      {isLoading ? (
+        <LoadingState rows={2} />
+      ) : !clients?.length ? (
+        <EmptyState icon="link" title={t("oauthClients.empty")} description={t("oauthClients.emptyDesc")} />
+      ) : (
+        <div className="flex flex-col gap-2">
+          {clients.map((client) => (
+            <div
+              key={client.id}
+              className="flex items-center justify-between rounded-[10px] border border-[var(--border)] bg-[var(--sunken)] px-4 py-3"
+            >
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{client.name}</p>
+                <p className="truncate text-[11px] text-[var(--text-tertiary)]">
+                  {client.redirect_uris.join(", ")}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="icon"
+                className="size-8 shrink-0 text-[var(--text-secondary)] hover:text-[var(--danger)]"
+                title={t("oauthClients.delete")}
+                onClick={() => setDeleteTarget(client)}
+              >
+                <Icon name="close" size={15} />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title={t("oauthClients.deleteTitle")}
+        message={t("oauthClients.deleteConfirm", { name: deleteTarget?.name ?? "" })}
+        confirmLabel={t("oauthClients.delete")}
+        cancelLabel={t("pats.cancel")}
+        destructive
+        icon="close"
+        loading={deleteClient.isPending}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
+    </div>
+  );
+}
+
 // MCPPage: dedicated screen replacing the old key-icon-triggered
 // PersonalAccessTokens modal (.specs/features/mcp-settings-page). Explains
 // the MCP endpoint, both supported auth methods, gives copy-pasteable
@@ -362,6 +452,7 @@ export default function MCPPage() {
       <AuthExplainer t={t} />
       <ClientTutorials t={t} />
       <PersonalAccessTokensSection />
+      <RegisteredOAuthClientsSection />
     </div>
   );
 }

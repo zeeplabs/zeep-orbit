@@ -930,6 +930,38 @@ export function useRevokePAT(): UseMutationResult<{ message: string }, Error, st
   })
 }
 
+// RegisteredOAuthClient mirrors internal/dashboard/oauth_client_store.go's
+// OAuthClient — a dynamically self-registered MCP client (RFC 7591).
+export interface RegisteredOAuthClient {
+  id: string
+  name: string
+  redirect_uris: string[]
+  created_at: string
+}
+
+export function useOAuthClients(): UseQueryResult<RegisteredOAuthClient[]> {
+  return useQuery({
+    queryKey: ['oauth-clients'],
+    queryFn: () => apiFetch<RegisteredOAuthClient[]>('/dashboard/api/oauth-clients'),
+  })
+}
+
+export function useDeleteOAuthClient(): UseMutationResult<{ message: string }, Error, string> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (clientId: string) =>
+      apiFetch<{ message: string }>(`/dashboard/api/oauth-clients/${clientId}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['oauth-clients'] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
 export interface AuditEntry {
   id: string
   user_id: string

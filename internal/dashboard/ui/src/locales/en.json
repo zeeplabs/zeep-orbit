@@ -992,5 +992,12 @@
   "pats.neverUsed": "Never used",
   "pats.revoke": "Revoke",
   "pats.revokeTitle": "Revoke this token?",
-  "pats.revokeConfirm": "\"{{name}}\" will stop working immediately for any client using it. This can't be undone."
+  "pats.revokeConfirm": "\"{{name}}\" will stop working immediately for any client using it. This can't be undone.",
+  "oauthClients.title": "Registered OAuth clients",
+  "oauthClients.explainer": "Any MCP client can self-register against this instance's OAuth endpoint before an admin ever sees it. Review what has registered here, and delete anything you don't recognize.",
+  "oauthClients.empty": "No OAuth clients registered",
+  "oauthClients.emptyDesc": "A client registers itself the first time it connects via OAuth.",
+  "oauthClients.delete": "Delete",
+  "oauthClients.deleteTitle": "Delete this OAuth client?",
+  "oauthClients.deleteConfirm": "\"{{name}}\" and every access/refresh token it was ever issued will stop working immediately. This can't be undone."
 }

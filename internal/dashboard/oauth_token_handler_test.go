@@ -49,6 +49,7 @@ func TestTokenHandler_AuthorizationCode_ValidExchangeResolvesLikeManualPAT(t *te
 
 	form := url.Values{
 		"grant_type":    {"authorization_code"},
+		"client_id":     {client.ID},
 		"code":          {code},
 		"code_verifier": {verifier},
 		"redirect_uri":  {"https://example.com/cb"},
@@ -132,6 +133,60 @@ func TestTokenHandler_AuthorizationCode_ReusedExpiredOrMismatchedPKCERejected(t 
 	}
 	if code := exchange(expiredCode, verifier); code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for an expired code, got %d", code)
+	}
+}
+
+// TestTokenHandler_AuthorizationCode_MissingOrMismatchedClientIDRejected
+// covers RFC 6749 §4.1.3: a public client must assert client_id at token
+// exchange, and it must match the client the code was actually issued to —
+// otherwise one registered client could redeem a code obtained via another
+// client's authorization request.
+func TestTokenHandler_AuthorizationCode_MissingOrMismatchedClientIDRejected(t *testing.T) {
+	pool := oauthClientTestPool(t)
+	ctx := context.Background()
+	h := NewOAuthHandler(pool)
+	userID := testUser(t, pool, "token-client-id-check@example.com", "admin")
+	client, err := RegisterClient(ctx, pool, RegisterClientInput{Name: "cli", RedirectURIs: []string{"https://example.com/cb"}})
+	if err != nil {
+		t.Fatalf("RegisterClient: %v", err)
+	}
+	otherClient, err := RegisterClient(ctx, pool, RegisterClientInput{Name: "other", RedirectURIs: []string{"https://other.example.com/cb"}})
+	if err != nil {
+		t.Fatalf("RegisterClient (other): %v", err)
+	}
+
+	exchange := func(code, verifier, clientID string) int {
+		form := url.Values{
+			"grant_type":    {"authorization_code"},
+			"code":          {code},
+			"code_verifier": {verifier},
+		}
+		if clientID != "" {
+			form.Set("client_id", clientID)
+		}
+		req := httptest.NewRequest(http.MethodPost, "/dashboard/oauth/token", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rr := httptest.NewRecorder()
+		h.Token(rr, req)
+		return rr.Code
+	}
+
+	verifier := "test-verifier-1234567890123456789012345"
+
+	code, _, err := CreateAuthCode(ctx, pool, client.ID, userID, pkceChallengeFor(verifier), "https://example.com/cb")
+	if err != nil {
+		t.Fatalf("CreateAuthCode: %v", err)
+	}
+	if got := exchange(code, verifier, ""); got != http.StatusBadRequest {
+		t.Fatalf("expected 400 for missing client_id, got %d", got)
+	}
+
+	code2, _, err := CreateAuthCode(ctx, pool, client.ID, userID, pkceChallengeFor(verifier), "https://example.com/cb")
+	if err != nil {
+		t.Fatalf("CreateAuthCode: %v", err)
+	}
+	if got := exchange(code2, verifier, otherClient.ID); got != http.StatusBadRequest {
+		t.Fatalf("expected 400 for a client_id that doesn't match the code's issuing client, got %d", got)
 	}
 }
 

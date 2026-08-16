@@ -223,6 +223,7 @@ func TestOAuthEndToEnd_DiscoveryThroughToolCallRefreshAndReuseRevocation(t *test
 	// 5. Token exchange (authorization_code).
 	tokenForm := url.Values{
 		"grant_type":    {"authorization_code"},
+		"client_id":     {reg.ClientID},
 		"code":          {code},
 		"code_verifier": {verifier},
 		"redirect_uri":  {"https://client.example.com/callback"},

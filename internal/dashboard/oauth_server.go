@@ -360,6 +360,15 @@ func (h *OAuthHandler) tokenAuthorizationCode(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	// RFC 6749 §4.1.3: a public client (no client_secret, our only kind —
+	// see RegisterClient) authenticates itself at token exchange by
+	// asserting client_id, which must match the client the code was issued
+	// to. Checked after ConsumeAuthCode so a mismatch still burns the
+	// code's single use, same as every other invalid_grant path here.
+	if clientID := r.FormValue("client_id"); clientID == "" || clientID != authCode.ClientID {
+		writeOAuthError(w, http.StatusBadRequest, "invalid_grant")
+		return
+	}
 	if redirectURI := r.FormValue("redirect_uri"); redirectURI != "" && redirectURI != authCode.RedirectURI {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_grant")
 		return

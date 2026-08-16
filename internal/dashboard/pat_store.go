@@ -224,7 +224,7 @@ const oauthAccessTokenTTL = time.Hour
 // fresh family_id is generated); pass the existing family's id when minting
 // a rotated replacement. Returns the plaintext access token exactly once,
 // same one-way-hash contract as CreatePAT.
-func CreateOAuthAccessToken(ctx context.Context, pool *db.Pool, userID, oauthClientID, familyID string, expiresAt time.Time) (string, PATRow, error) {
+func CreateOAuthAccessToken(ctx context.Context, q db.Querier, userID, oauthClientID, familyID string, expiresAt time.Time) (string, PATRow, error) {
 	token, err := generateToken()
 	if err != nil {
 		return "", PATRow{}, fmt.Errorf("dashboard: generate oauth access token: %w", err)
@@ -237,7 +237,7 @@ func CreateOAuthAccessToken(ctx context.Context, pool *db.Pool, userID, oauthCli
 	}
 
 	var row PATRow
-	err = pool.QueryRow(ctx,
+	err = q.QueryRow(ctx,
 		`INSERT INTO zeep_system.dashboard_pats (user_id, name, token_hash, kind, oauth_client_id, family_id, expires_at)
 		 VALUES ($1, 'oauth', $2, 'oauth', $3, COALESCE($4, gen_random_uuid()), $5)
 		 RETURNING id, user_id, name, kind, oauth_client_id, expires_at, revoked_at, last_used_at, created_at`,
@@ -255,14 +255,14 @@ func CreateOAuthAccessToken(ctx context.Context, pool *db.Pool, userID, oauthCli
 // component describes attaching a refresh token onto the access-token PAT
 // row CreateOAuthAccessToken just created. Returns the plaintext exactly
 // once.
-func SetRefreshToken(ctx context.Context, pool *db.Pool, patID string) (string, error) {
+func SetRefreshToken(ctx context.Context, q db.Querier, patID string) (string, error) {
 	token, err := generateToken()
 	if err != nil {
 		return "", fmt.Errorf("dashboard: generate refresh token: %w", err)
 	}
 	tokenHash := hashPATToken(token)
 
-	if _, err := pool.Exec(ctx,
+	if _, err := q.Exec(ctx,
 		`UPDATE zeep_system.dashboard_pats SET refresh_token_hash = $1 WHERE id = $2`,
 		tokenHash, patID,
 	); err != nil {
@@ -286,11 +286,22 @@ func SetRefreshToken(ctx context.Context, pool *db.Pool, patID string) (string, 
 func RotateOAuthRefreshToken(ctx context.Context, pool *db.Pool, presentedRefreshToken string) (accessToken, refreshToken string, row PATRow, err error) {
 	tokenHash := hashPATToken(presentedRefreshToken)
 
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return "", "", PATRow{}, fmt.Errorf("dashboard: rotate refresh token begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
 	var patID, userID string
 	var oauthClientID, familyID *string
 	var revokedAt *time.Time
-	err = pool.QueryRow(ctx,
-		`SELECT id, user_id, oauth_client_id, family_id, revoked_at FROM zeep_system.dashboard_pats WHERE refresh_token_hash = $1`,
+	// FOR UPDATE: two concurrent rotations presenting the same refresh
+	// token must not both observe revoked_at IS NULL — without this lock,
+	// both could pass the check below and each mint a fresh, live token
+	// family, defeating reuse detection exactly when it matters (a leaked
+	// token replayed at the same moment as the legitimate client's refresh).
+	err = tx.QueryRow(ctx,
+		`SELECT id, user_id, oauth_client_id, family_id, revoked_at FROM zeep_system.dashboard_pats WHERE refresh_token_hash = $1 FOR UPDATE`,
 		tokenHash,
 	).Scan(&patID, &userID, &oauthClientID, &familyID, &revokedAt)
 	if err != nil {
@@ -304,16 +315,19 @@ func RotateOAuthRefreshToken(ctx context.Context, pool *db.Pool, presentedRefres
 	}
 
 	if revokedAt != nil {
-		if _, revokeErr := pool.Exec(ctx,
+		if _, revokeErr := tx.Exec(ctx,
 			`UPDATE zeep_system.dashboard_pats SET revoked_at = now() WHERE family_id = $1 AND revoked_at IS NULL`,
 			*familyID,
 		); revokeErr != nil {
 			return "", "", PATRow{}, fmt.Errorf("dashboard: revoke oauth family %s: %w", *familyID, revokeErr)
 		}
+		if err := tx.Commit(ctx); err != nil {
+			return "", "", PATRow{}, fmt.Errorf("dashboard: revoke oauth family %s commit: %w", *familyID, err)
+		}
 		return "", "", PATRow{}, ErrRefreshTokenReused
 	}
 
-	if _, err := pool.Exec(ctx, `UPDATE zeep_system.dashboard_pats SET revoked_at = now() WHERE id = $1`, patID); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE zeep_system.dashboard_pats SET revoked_at = now() WHERE id = $1`, patID); err != nil {
 		return "", "", PATRow{}, fmt.Errorf("dashboard: supersede oauth PAT %s: %w", patID, err)
 	}
 
@@ -321,13 +335,16 @@ func RotateOAuthRefreshToken(ctx context.Context, pool *db.Pool, presentedRefres
 	if oauthClientID != nil {
 		clientID = *oauthClientID
 	}
-	newAccessToken, newRow, err := CreateOAuthAccessToken(ctx, pool, userID, clientID, *familyID, time.Now().Add(oauthAccessTokenTTL))
+	newAccessToken, newRow, err := CreateOAuthAccessToken(ctx, tx, userID, clientID, *familyID, time.Now().Add(oauthAccessTokenTTL))
 	if err != nil {
 		return "", "", PATRow{}, err
 	}
-	newRefreshToken, err := SetRefreshToken(ctx, pool, newRow.ID)
+	newRefreshToken, err := SetRefreshToken(ctx, tx, newRow.ID)
 	if err != nil {
 		return "", "", PATRow{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return "", "", PATRow{}, fmt.Errorf("dashboard: rotate refresh token commit: %w", err)
 	}
 	return newAccessToken, newRefreshToken, newRow, nil
 }

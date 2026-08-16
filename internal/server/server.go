@@ -209,6 +209,8 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Post("/api/me/pats", dashH.CreatePAT)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/me/pats", dashH.ListPATs)
 		r.With(dashboard.RequireAuth(pool)).Delete("/api/me/pats/{patId}", dashH.RevokePAT)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/oauth-clients", dashH.ListOAuthClients)
+		r.With(dashboard.RequireAuth(pool)).Delete("/api/oauth-clients/{clientId}", dashH.DeleteOAuthClient)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/apps", dashH.ListApps)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/apps", dashH.CreateApp)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/apps/{id}", dashH.GetApp)
