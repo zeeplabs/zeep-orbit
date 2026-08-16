@@ -146,6 +146,18 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: MCPUI-06,MCPUI-09 (dashboard-ui/e2e)
 - last seen: 2026-08-15T23:56:05Z
 
+### L-023 - When a test loops the same assertion shape over multiple structurally-different formats (JSON vs TOML, etc.), verify the assertion against each format's real serialization instead of assuming the first format's shape generalizes.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `e2e-testing` · harmful: 0
+- features: mcp-settings-page
+- evidence: internal/dashboard/ui/e2e/personal-access-tokens.spec.ts:165 (e2e-testing)
+- last seen: 2026-08-16T00:12:33Z
+
+### L-024 - An assertion placed after an earlier assertion in the same test function is unverified until the test is actually run end-to-end once — a prior failure in the same test silently prevents later assertions from ever executing, and static code review cannot detect this.
+- signal: `gate_fail` · recurrence: 1 feature(s) · scope: `e2e-testing` · harmful: 0
+- features: mcp-settings-page
+- evidence: internal/dashboard/ui/e2e/personal-access-tokens.spec.ts:165-177 (e2e-testing)
+- last seen: 2026-08-16T00:12:33Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.
