@@ -156,13 +156,18 @@ test('renders MCP discovery and per-client connection tutorials', async ({ page 
 
   // MCPUI-07: all 4 clients are present, and each one's snippet embeds the
   // live endpoint (not the README's <host> placeholder) plus the
-  // ${ZEEP_ORBIT_PAT} env var reference, matching README.md's blocks.
+  // ZEEP_ORBIT_PAT env var reference, matching README.md's blocks. Codex's
+  // TOML config references the env var by bare name
+  // (`bearer_token_env_var = "ZEEP_ORBIT_PAT"`), unlike the 3 JSON
+  // clients' `"Bearer ${ZEEP_ORBIT_PAT}"` header interpolation -- asserting
+  // the `${...}` form for all 4 made this loop fail deterministically on
+  // Codex before it ever reached the copy-toast assertions below.
   for (const client of ['Claude Code', 'Codex', 'Cursor', 'OpenCode']) {
     const snippetEl = page.getByTestId(`mcp-client-snippet-${client}`)
     await expect(snippetEl).toBeVisible()
     const snippet = await snippetEl.getAttribute('data-snippet')
     expect(snippet).toContain(endpoint)
-    expect(snippet).toContain('${ZEEP_ORBIT_PAT}')
+    expect(snippet).toContain('ZEEP_ORBIT_PAT')
     expect(snippet).not.toContain('<host>')
   }
 
