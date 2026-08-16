@@ -1,0 +1,433 @@
+// Tool registrations for the MCP server (mcp-server spec design.md: MCP
+// Tool Registry). Every tool is a thin wrapper around a shared *ForUser
+// operation function already used by the equivalent REST handler — the
+// mechanism that satisfies the spec's "every MCP tool call executes through
+// the exact same authorization and validation path" goal. Internal errors
+// are mapped to a fixed generic message before being returned (AGENTS.md
+// §4: never leak err.Error() into a caller-facing surface for 500s); each
+// ToolHandlerFor's returned error becomes a structured tool-error result
+// (CallToolResult.IsError, per the SDK's own contract), never a raw Go
+// error string.
+package mcpserver
+
+import (
+	"context"
+	"errors"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/zeeplabs/zeep-orbit/internal/config"
+	"github.com/zeeplabs/zeep-orbit/internal/dashboard"
+	"github.com/zeeplabs/zeep-orbit/internal/db"
+	"github.com/zeeplabs/zeep-orbit/internal/policytemplates"
+	"github.com/zeeplabs/zeep-orbit/internal/provisioner"
+)
+
+// ToolDeps bundles what every registered tool needs: the shared Postgres
+// pool the read-only *ForUser functions take directly (T10), plus the
+// *dashboard.Handler the write *ForUser methods (T4-T7) are bound to —
+// same Handler instance internal/server/server.go's REST routes already
+// use, so a write tool call runs through the identical provisioner/audit
+// wiring a REST call would.
+type ToolDeps struct {
+	Pool  *db.Pool
+	DashH *dashboard.Handler
+}
+
+// errInternal is the fixed, safe-to-expose message every tool returns for
+// an internal (500-class) failure — the real error is never surfaced to the
+// MCP caller (AGENTS.md §4).
+var errInternal = errors.New("internal error")
+
+// errUnauthorized signals the (should-be-unreachable) case where a tool
+// handler runs without a DashboardUser in context — RequirePAT guarantees
+// one for every request that reaches the MCP layer.
+var errUnauthorized = errors.New("unauthorized")
+
+// RegisterTools registers every mcp-server spec tool against server. Called
+// once per NewHandler construction.
+func RegisterTools(server *mcp.Server, deps ToolDeps) {
+	registerReadTools(server, deps)
+	registerWriteTools(server, deps)
+	registerTemplateTools(server, deps)
+}
+
+// orbitListAppsInput takes no arguments — the tool always lists the calling
+// PAT's own apps, mirroring GET /dashboard/api/apps (no filter params).
+type orbitListAppsInput struct{}
+
+// orbitListAppsOutput mirrors ListApps' REST response shape (a JSON array
+// of apps) wrapped in an object, since MCP tool outputs are objects.
+type orbitListAppsOutput struct {
+	Apps []*dashboard.AppRow `json:"apps"`
+}
+
+// orbitGetAppSchemaInput is the input for orbit_get_app_schema.
+type orbitGetAppSchemaInput struct {
+	AppID string `json:"app_id" jsonschema:"id of the app to fetch the schema for"`
+}
+
+// registerReadTools registers orbit_list_apps and orbit_get_app_schema —
+// the two lowest-risk, read-only tools (mcp-server spec T10), proving the
+// registration pattern before any write tool is added.
+func registerReadTools(server *mcp.Server, deps ToolDeps) {
+	// Out is `any` for both tools below rather than the concrete response
+	// struct: AddTool's automatic output-schema inference can't express
+	// AppRow.AuthProviders (json.RawMessage, a raw JSON object at runtime)
+	// as a JSON Schema type, and the SDK docs call out `any` as the escape
+	// hatch ("if the output type is 'any', no output schema is generated").
+	// StructuredContent is still populated correctly from the returned
+	// value — only the automatic schema *validation* is skipped.
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_list_apps",
+		Description: "List every app the caller's dashboard account has access to.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ orbitListAppsInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		apps, err := dashboard.ListAppsForUser(ctx, deps.Pool, user)
+		if err != nil {
+			return nil, nil, errInternal
+		}
+		return nil, orbitListAppsOutput{Apps: apps}, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_get_app_schema",
+		Description: "Get an app's current tables, columns, RLS modes, and row policies.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitGetAppSchemaInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		schema, err := dashboard.GetAppSchemaForUser(ctx, deps.Pool, user, in.AppID)
+		if err != nil {
+			if errors.Is(err, dashboard.ErrNotFound) {
+				return nil, nil, errors.New("not found")
+			}
+			return nil, nil, errInternal
+		}
+		return nil, schema, nil
+	})
+}
+
+// orbitCreateAppInput mirrors the minimal slice of dashboard's
+// appRequestBody a "describe an app, get an app" tool call needs (mcp-server
+// spec P2 AC1: "valid name and configuration") — name plus whether the
+// app's own end users authenticate with email/password. The richer
+// sub-objects (auth_providers, storage_config, rate_limit) stay REST/UI-only
+// for now; nothing in the spec's P2 story requires an LLM to set them.
+type orbitCreateAppInput struct {
+	Name             string `json:"name" jsonschema:"the app's name (lowercase letters, numbers, and hyphens)"`
+	AuthEmailEnabled bool   `json:"auth_email_enabled,omitempty" jsonschema:"whether this app's end users authenticate with email/password"`
+}
+
+// orbitCreateTableInput mirrors dashboard's tableRequestBody plus the
+// target app id (tableRequestBody's id normally comes from the URL path).
+type orbitCreateTableInput struct {
+	AppID   string                `json:"app_id" jsonschema:"id of the app to add the table to"`
+	Name    string                `json:"name" jsonschema:"the table's name"`
+	RLS     string                `json:"rls,omitempty" jsonschema:"row-level security mode: one of \"\", \"owner\", \"enabled\", \"policy\""`
+	Columns []config.ColumnConfig `json:"columns" jsonschema:"the table's columns"`
+	Indexes []config.IndexConfig  `json:"indexes,omitempty" jsonschema:"indexes to create on the table"`
+}
+
+// orbitSetTableRLSModeInput is the input for orbit_set_table_rls_mode.
+type orbitSetTableRLSModeInput struct {
+	AppID     string `json:"app_id" jsonschema:"id of the app that owns the table"`
+	TableName string `json:"table_name" jsonschema:"name of the table to update"`
+	RLSMode   string `json:"rls_mode" jsonschema:"one of \"\", \"owner\", \"enabled\", \"policy\""`
+}
+
+// mapWriteError maps an error returned by one of the write *ForUser
+// functions to a caller-safe tool error: *dashboard.ValidationError and
+// *provisioner.TypeChangeError messages are safe to expose verbatim (same
+// "safe to expose" exception AGENTS.md §4 carves out for
+// provisioner.ValidationError — the caller-input-naming message is the
+// point of MCP-08), ErrNotFound/ErrForbidden map to their REST-equivalent
+// wording, and everything else collapses to the fixed generic message.
+func mapWriteError(err error) error {
+	var valErr *dashboard.ValidationError
+	var typeErr *provisioner.TypeChangeError
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, dashboard.ErrNotFound):
+		return errors.New("not found")
+	case errors.Is(err, dashboard.ErrForbidden):
+		return errors.New("forbidden")
+	case errors.Is(err, dashboard.ErrTableNotFound):
+		return errors.New("table not found")
+	case errors.Is(err, dashboard.ErrPolicyAlreadyExists):
+		return dashboard.ErrPolicyAlreadyExists
+	case errors.As(err, &valErr):
+		return valErr
+	case errors.As(err, &typeErr):
+		return typeErr
+	default:
+		return errInternal
+	}
+}
+
+// registerWriteTools registers the three core write tools (mcp-server spec
+// T11) — each a thin wrapper over a Phase 2 *ForUser method, so a tool call
+// runs through the exact same validation/provisioner/audit path the
+// equivalent REST endpoint uses.
+func registerWriteTools(server *mcp.Server, deps ToolDeps) {
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_create_app",
+		Description: "Create a new app.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitCreateAppInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		app, err := deps.DashH.CreateAppForUser(ctx, user, dashboard.AppRequestBody{
+			Name:             in.Name,
+			AuthEmailEnabled: in.AuthEmailEnabled,
+		}, "mcp")
+		if err != nil {
+			return nil, nil, mapWriteError(err)
+		}
+		return nil, app, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_create_table",
+		Description: "Create a table (with columns) on an existing app.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitCreateTableInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		row, err := deps.DashH.CreateAppTableForUser(ctx, user, in.AppID, dashboard.TableRequestBody{
+			Name:    in.Name,
+			RLS:     in.RLS,
+			Columns: in.Columns,
+			Indexes: in.Indexes,
+		}, "mcp")
+		if err != nil {
+			return nil, nil, mapWriteError(err)
+		}
+		return nil, row, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_set_table_rls_mode",
+		Description: "Set a table's row-level security mode.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitSetTableRLSModeInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		row, err := deps.DashH.UpdateTableRLSModeForUser(ctx, user, in.AppID, in.TableName, in.RLSMode, "mcp")
+		if err != nil {
+			return nil, nil, mapWriteError(err)
+		}
+		return nil, row, nil
+	})
+}
+
+// orbitListPolicyTemplatesInput takes no arguments — the template catalog
+// is fixed and global, not per-app.
+type orbitListPolicyTemplatesInput struct{}
+
+// orbitPolicyTemplateInfo describes one template for orbit_list_policy_templates
+// — policytemplates.TemplateDefinition alone (id/requires-owner-column/kind/
+// fixed-actions) isn't enough for an LLM to pick a template without guessing
+// free-form clause syntax (mcp-server spec T12/MCP-12), so this adds a
+// human-readable description and the exact input names
+// orbit_create_policy_from_template requires for that template.
+type orbitPolicyTemplateInfo struct {
+	ID                  string   `json:"id"`
+	Description         string   `json:"description"`
+	RequiresOwnerColumn bool     `json:"requires_owner_column"`
+	Kind                string   `json:"kind"`
+	ActionsFixed        []string `json:"actions_fixed,omitempty"`
+	RequiredInputs      []string `json:"required_inputs"`
+}
+
+// policyTemplateDescriptions/policyTemplateRequiredInputs are MCP-tool-level
+// metadata only — policytemplates itself stays pure per its own package doc
+// ("Dependencies: none"); this mapping is not persisted or reused elsewhere.
+var policyTemplateDescriptions = map[string]string{
+	policytemplates.TemplateIDOwnerOnly:          "Only the row's own owner can access it, for the chosen actions.",
+	policytemplates.TemplateIDOpenRead:           "Any of the given roles can read every row; no write access granted.",
+	policytemplates.TemplateIDReadOnly:           "Alias of open_read — nobody can write, matching roles can read every row.",
+	policytemplates.TemplateIDValueMatch:         "Read access restricted to rows where a chosen column equals a fixed value.",
+	policytemplates.TemplateIDOpenReadOwnerWrite: "Any of the given roles can read every row; only the row's owner can update or delete it.",
+	policytemplates.TemplateIDBlockedByDefault:   "Informational only — creates no policy. Set the table's rls mode to deny access by default instead.",
+}
+
+var policyTemplateRequiredInputs = map[string][]string{
+	policytemplates.TemplateIDOwnerOnly:          {"actions", "roles"},
+	policytemplates.TemplateIDOpenRead:           {"roles"},
+	policytemplates.TemplateIDReadOnly:           {"roles"},
+	policytemplates.TemplateIDValueMatch:         {"roles", "column", "value"},
+	policytemplates.TemplateIDOpenReadOwnerWrite: {"roles"},
+	policytemplates.TemplateIDBlockedByDefault:   {},
+}
+
+// orbitCreatePolicyFromTemplateInput is the input for
+// orbit_create_policy_from_template. Actions/Column/Value are only required
+// for specific templates (owner_only, value_match respectively) — see
+// policyTemplateRequiredInputs.
+type orbitCreatePolicyFromTemplateInput struct {
+	AppID      string   `json:"app_id" jsonschema:"id of the app that owns the table"`
+	TableName  string   `json:"table_name" jsonschema:"name of the table to create the policy/policies on"`
+	TemplateID string   `json:"template_id" jsonschema:"one of the ids returned by orbit_list_policy_templates"`
+	Actions    []string `json:"actions,omitempty" jsonschema:"required for owner_only: the actions to restrict to the row's owner (e.g. select, update)"`
+	Roles      []string `json:"roles,omitempty" jsonschema:"the end-user roles this policy applies to"`
+	Column     string   `json:"column,omitempty" jsonschema:"required for value_match: the column to filter on"`
+	Value      string   `json:"value,omitempty" jsonschema:"required for value_match: the literal value the column must equal"`
+}
+
+// orbitCreatePolicyFromTemplateResult reports which policies were created
+// and, on a partial failure, which policy failed and which were never
+// attempted — the same partial-failure contract the frontend template
+// picker already has (mcp-server spec MCP-13, design.md Error Handling
+// Strategy: "stop at first error, report which policies succeeded and
+// which step failed").
+type orbitCreatePolicyFromTemplateResult struct {
+	Created       []*dashboard.TablePolicyRow `json:"created"`
+	FailedPolicy  string                      `json:"failed_policy,omitempty"`
+	FailureReason string                      `json:"failure_reason,omitempty"`
+	Pending       []string                    `json:"pending_policies,omitempty"`
+}
+
+// missingInputError builds the structured error orbit_create_policy_from_template
+// returns for a missing/invalid required input (mcp-server spec MCP-14):
+// names the specific input, so the LLM knows exactly what to re-ask for.
+func missingInputError(name string) error {
+	return errors.New("missing or invalid input: " + name)
+}
+
+// toDashboardPolicyDef converts a policytemplates.PolicyDef (the pure,
+// dependency-free package's own type) into dashboard.PolicyDef — the two
+// are a deliberate field-for-field mirror (see policytemplates' package
+// doc), so this is a plain field copy, not a transformation.
+func toDashboardPolicyDef(p policytemplates.PolicyDef) dashboard.PolicyDef {
+	clauses := make([]dashboard.PolicyClause, 0, len(p.Clauses))
+	for _, c := range p.Clauses {
+		clauses = append(clauses, dashboard.PolicyClause{
+			Column:      c.Column,
+			Operator:    c.Operator,
+			ValueSource: c.ValueSource,
+			Value:       c.Value,
+			Logic:       c.Logic,
+		})
+	}
+	return dashboard.PolicyDef{
+		Name:    p.Name,
+		Action:  p.Action,
+		Roles:   p.Roles,
+		Clauses: clauses,
+	}
+}
+
+// buildTemplatePolicies resolves in.TemplateID + its inputs into the
+// PolicyDef(s) that template produces, or a missingInputError if a
+// template-specific required input is missing/empty (mcp-server spec
+// MCP-14) — evaluated entirely before any policy is created.
+func buildTemplatePolicies(in orbitCreatePolicyFromTemplateInput) ([]policytemplates.PolicyDef, error) {
+	switch in.TemplateID {
+	case policytemplates.TemplateIDOwnerOnly:
+		if len(in.Roles) == 0 {
+			return nil, missingInputError("roles")
+		}
+		if len(in.Actions) == 0 {
+			return nil, missingInputError("actions")
+		}
+		return policytemplates.BuildOwnerOnlyPolicies(in.Actions, in.Roles), nil
+	case policytemplates.TemplateIDOpenRead:
+		if len(in.Roles) == 0 {
+			return nil, missingInputError("roles")
+		}
+		return []policytemplates.PolicyDef{policytemplates.BuildOpenReadPolicy(in.Roles)}, nil
+	case policytemplates.TemplateIDReadOnly:
+		if len(in.Roles) == 0 {
+			return nil, missingInputError("roles")
+		}
+		return []policytemplates.PolicyDef{policytemplates.BuildReadOnlyPolicy(in.Roles)}, nil
+	case policytemplates.TemplateIDValueMatch:
+		if len(in.Roles) == 0 {
+			return nil, missingInputError("roles")
+		}
+		if in.Column == "" {
+			return nil, missingInputError("column")
+		}
+		if in.Value == "" {
+			return nil, missingInputError("value")
+		}
+		return []policytemplates.PolicyDef{policytemplates.BuildValueMatchPolicy(in.Column, in.Value, in.Roles)}, nil
+	case policytemplates.TemplateIDOpenReadOwnerWrite:
+		if len(in.Roles) == 0 {
+			return nil, missingInputError("roles")
+		}
+		return policytemplates.BuildOpenReadOwnerWritePolicies(in.Roles), nil
+	case policytemplates.TemplateIDBlockedByDefault:
+		return nil, errors.New("template blocked_by_default creates no policy — set the table's rls mode instead")
+	default:
+		return nil, missingInputError("template_id")
+	}
+}
+
+// registerTemplateTools registers orbit_list_policy_templates and
+// orbit_create_policy_from_template (mcp-server spec T12).
+func registerTemplateTools(server *mcp.Server, deps ToolDeps) {
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_list_policy_templates",
+		Description: "List the named row-policy templates available for orbit_create_policy_from_template.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ orbitListPolicyTemplatesInput) (*mcp.CallToolResult, any, error) {
+		defs := policytemplates.List()
+		out := make([]orbitPolicyTemplateInfo, 0, len(defs))
+		for _, d := range defs {
+			out = append(out, orbitPolicyTemplateInfo{
+				ID:                  d.ID,
+				Description:         policyTemplateDescriptions[d.ID],
+				RequiresOwnerColumn: d.RequiresOwnerColumn,
+				Kind:                d.Kind,
+				ActionsFixed:        d.ActionsFixed,
+				RequiredInputs:      policyTemplateRequiredInputs[d.ID],
+			})
+		}
+		return nil, struct {
+			Templates []orbitPolicyTemplateInfo `json:"templates"`
+		}{Templates: out}, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_create_policy_from_template",
+		Description: "Create a row policy (or set of policies) on a table from a named template.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitCreatePolicyFromTemplateInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+
+		defs, err := buildTemplatePolicies(in)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		created := make([]*dashboard.TablePolicyRow, 0, len(defs))
+		for i, def := range defs {
+			row, err := deps.DashH.CreateTablePolicyForUser(ctx, user, in.AppID, in.TableName, toDashboardPolicyDef(def), "mcp")
+			if err != nil {
+				pending := make([]string, 0, len(defs)-i-1)
+				for _, remaining := range defs[i+1:] {
+					pending = append(pending, remaining.Name)
+				}
+				return nil, orbitCreatePolicyFromTemplateResult{
+					Created:       created,
+					FailedPolicy:  def.Name,
+					FailureReason: mapWriteError(err).Error(),
+					Pending:       pending,
+				}, nil
+			}
+			created = append(created, row)
+		}
+		return nil, orbitCreatePolicyFromTemplateResult{Created: created}, nil
+	})
+}

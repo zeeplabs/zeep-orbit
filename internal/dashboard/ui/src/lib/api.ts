@@ -869,6 +869,99 @@ export function useChangeUserPassword(): UseMutationResult<
   })
 }
 
+// PersonalAccessToken mirrors internal/dashboard/pat_store.go's PATRow —
+// token_hash is intentionally never a field here (mcp-server spec P1 AC1).
+export interface PersonalAccessToken {
+  id: string
+  user_id: string
+  name: string
+  kind: 'manual' | 'ephemeral' | 'oauth'
+  oauth_client_id?: string
+  expires_at?: string
+  revoked_at?: string
+  last_used_at?: string
+  created_at: string
+}
+
+// CreatePATResult is PersonalAccessToken plus the plaintext token, present
+// only on the create response (shown once, never retrievable again).
+export interface CreatePATResult extends PersonalAccessToken {
+  token: string
+}
+
+export function usePATs(): UseQueryResult<PersonalAccessToken[]> {
+  return useQuery({
+    queryKey: ['pats'],
+    queryFn: () => apiFetch<PersonalAccessToken[]>('/dashboard/api/me/pats'),
+  })
+}
+
+export function useCreatePAT(): UseMutationResult<CreatePATResult, Error, string> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (name: string) =>
+      apiFetch<CreatePATResult>('/dashboard/api/me/pats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pats'] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+export function useRevokePAT(): UseMutationResult<{ message: string }, Error, string> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (patId: string) =>
+      apiFetch<{ message: string }>(`/dashboard/api/me/pats/${patId}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pats'] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+// RegisteredOAuthClient mirrors internal/dashboard/oauth_client_store.go's
+// OAuthClient — a dynamically self-registered MCP client (RFC 7591).
+export interface RegisteredOAuthClient {
+  id: string
+  name: string
+  redirect_uris: string[]
+  created_at: string
+}
+
+export function useOAuthClients(): UseQueryResult<RegisteredOAuthClient[]> {
+  return useQuery({
+    queryKey: ['oauth-clients'],
+    queryFn: () => apiFetch<RegisteredOAuthClient[]>('/dashboard/api/oauth-clients'),
+  })
+}
+
+export function useDeleteOAuthClient(): UseMutationResult<{ message: string }, Error, string> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (clientId: string) =>
+      apiFetch<{ message: string }>(`/dashboard/api/oauth-clients/${clientId}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['oauth-clients'] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
 export interface AuditEntry {
   id: string
   user_id: string

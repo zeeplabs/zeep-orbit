@@ -9,8 +9,10 @@ import 'prismjs/components/prism-java'
 import 'prismjs/components/prism-markup'
 import 'prismjs/components/prism-markup-templating'
 import 'prismjs/components/prism-php'
+import 'prismjs/components/prism-json'
+import 'prismjs/components/prism-toml'
 
-export type SdkLang = 'typescript' | 'go' | 'python' | 'rust' | 'java' | 'php'
+export type SdkLang = 'typescript' | 'go' | 'python' | 'rust' | 'java' | 'php' | 'json' | 'toml'
 
 export function highlight(code: string, lang: SdkLang): string {
   const grammar = Prism.languages[lang]

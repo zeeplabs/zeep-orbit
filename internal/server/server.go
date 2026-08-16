@@ -21,6 +21,7 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/dashboard"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 	"github.com/zeeplabs/zeep-orbit/internal/docs"
+	"github.com/zeeplabs/zeep-orbit/internal/mcpserver"
 	"github.com/zeeplabs/zeep-orbit/internal/registry"
 )
 
@@ -167,6 +168,27 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 	})
 	r.With(webhookLimiterMW).HandleFunc("/hooks/{webhookId}/{token}", webhookH.HandleWebhookDelivery)
 
+	// MCP transport (mcp-server spec): sibling to the /dashboard route
+	// group, not nested inside it — it authenticates with a bearer PAT via
+	// mcpserver.RequirePAT, not the zeep_session cookie the /dashboard
+	// group's handlers use. Rate limited per-PAT-id (mcpserver.NewHandler),
+	// same rationale as the webhook route above.
+	mcpLimiter := dashboard.NewRateLimiter(120, time.Minute)
+	r.Handle("/dashboard/mcp", mcpserver.NewHandler(pool, dashH, mcpLimiter))
+
+	// OAuth 2.1 authorization-code-with-PKCE front door (mcp-server spec):
+	// unauthenticated by nature (metadata discovery and registration
+	// precede any credential). Registration is rate limited per-IP —
+	// registration alone grants no data access, so there's no logical
+	// caller identity to key by yet (design.md Risks & Concerns).
+	oauthH := dashboard.NewOAuthHandler(pool)
+	oauthRegisterLimiter := dashboard.NewRateLimiter(20, time.Minute)
+	r.Get("/.well-known/oauth-authorization-server", oauthH.GetMetadata)
+	r.With(oauthRegisterLimiter.Middleware).Post("/dashboard/oauth/register", oauthH.RegisterClient)
+	r.Get("/dashboard/oauth/authorize", oauthH.Authorize)
+	r.With(dashboard.RequireAuth(pool)).Post("/dashboard/oauth/authorize", oauthH.Decide)
+	r.Post("/dashboard/oauth/token", oauthH.Token)
+
 	dh := docs.NewHandler(reg)
 	r.Get("/docs/", dh.HandleIndex)
 	r.Get("/docs/{app}", dh.HandleUI)
@@ -184,6 +206,11 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Put("/api/me/password", dashH.ChangeMyPassword)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/me/language", dashH.SetLanguage)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/me/google-setup", dashH.CompleteGoogleSetup)
+		r.With(dashboard.RequireAuth(pool)).Post("/api/me/pats", dashH.CreatePAT)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/me/pats", dashH.ListPATs)
+		r.With(dashboard.RequireAuth(pool)).Delete("/api/me/pats/{patId}", dashH.RevokePAT)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/oauth-clients", dashH.ListOAuthClients)
+		r.With(dashboard.RequireAuth(pool)).Delete("/api/oauth-clients/{clientId}", dashH.DeleteOAuthClient)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/apps", dashH.ListApps)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/apps", dashH.CreateApp)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/apps/{id}", dashH.GetApp)

@@ -90,7 +90,7 @@ export function MobileNav({
             style={{ paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))' }}
           >
             <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-[var(--border-strong)]" />
-            <nav className="flex flex-col gap-4">
+            <nav data-testid="mobile-nav-sheet" className="flex flex-col gap-4">
               {NAV_SECTIONS.map((section) => {
                 const visible = section.items.filter(
                   (it) => !it.platformAction || hasPlatformPermission(role, it.platformAction),

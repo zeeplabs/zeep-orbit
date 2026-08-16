@@ -43,6 +43,7 @@ export const NAV_SECTIONS: NavSectionDef[] = [
     items: [
       { icon: 'analytics', labelKey: 'nav.logs', path: '/logs' },
       { icon: 'code', labelKey: 'SDKs', path: '/sdks' },
+      { icon: 'key', labelKey: 'nav.mcp', path: '/mcp-settings' },
     ],
   },
   {

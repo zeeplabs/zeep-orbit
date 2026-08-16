@@ -49,6 +49,7 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/meu-app/tarefas
 - [Apps Frontend](#%EF%B8%8F-apps-frontend)
 - [SDK Clients](#-sdk-clients)
 - [CLI](#-cli)
+- [Servidor MCP](#-servidor-mcp)
 - [Observabilidade](#-observabilidade)
 - [Deploy](#-deploy)
   - [Docker](#docker)
@@ -115,6 +116,7 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/meu-app/tarefas
 | **i18n**                 | Dashboard em pt-BR / English, seletor de idioma          |
 | **Changelog**            | Histórico de releases no app, embarcado no binário       |
 | **Aviso de Atualização** | Alerta no sidebar quando há novo release no GitHub       |
+| **Servidor MCP**        | Servidor Model Context Protocol — gerencia apps, tabelas e políticas de linha a partir do Claude Code, Codex, Cursor, OpenCode (PAT) ou Claude Desktop (OAuth 2.1) |
 
 ---
 
@@ -370,6 +372,76 @@ Apps e tabelas são criados e gerenciados inteiramente pelo Dashboard (e, futura
 
 ---
 
+## 🔌 Servidor MCP
+
+O Zeep Orbit vem com um servidor [Model Context Protocol](https://modelcontextprotocol.io) para que assistentes de código com IA gerenciem apps, tabelas e políticas de linha diretamente — sem precisar clicar no dashboard.
+
+- **Endpoint:** `https://<host>/dashboard/mcp` — Streamable HTTP, stateless (seguro atrás de load balancer não-sticky / múltiplas réplicas)
+- **Autenticação:** dois métodos, ambos resolvidos contra o mesmo store de Personal Access Token:
+  - **Personal Access Token (PAT)** — gere um em **Dashboard → MCP**, depois envie como bearer token. É o que Claude Code, Codex, Cursor e OpenCode usam.
+  - **OAuth 2.1 + PKCE** — registro dinâmico de client, fluxo authorization code, rotação de refresh token, discovery em `/.well-known/oauth-authorization-server`. É o que o Claude Desktop usa no fluxo interativo de conexão.
+- **Tools expostas:** `orbit_list_apps`, `orbit_get_app_schema`, `orbit_create_app`, `orbit_create_table`, `orbit_set_table_rls_mode`, `orbit_list_policy_templates`, `orbit_create_policy_from_template` — mesmo caminho de validação, provisionamento e auditoria da REST API e do dashboard, sem atalhos.
+
+### Configuração do cliente
+
+Gere um PAT primeiro (**Dashboard → MCP**), exporte como variável de ambiente e configure seu cliente:
+
+**Claude Code** — `.mcp.json`:
+```json
+{
+  "mcpServers": {
+    "zeep-orbit": {
+      "type": "http",
+      "url": "https://<host>/dashboard/mcp",
+      "headers": {
+        "Authorization": "Bearer ${ZEEP_ORBIT_PAT}"
+      }
+    }
+  }
+}
+```
+
+**Codex** — `~/.codex/config.toml`:
+```toml
+[mcp_servers.zeep-orbit]
+url = "https://<host>/dashboard/mcp"
+bearer_token_env_var = "ZEEP_ORBIT_PAT"
+```
+
+**Cursor** — `.cursor/mcp.json`:
+```json
+{
+  "mcpServers": {
+    "zeep-orbit": {
+      "url": "https://<host>/dashboard/mcp",
+      "headers": {
+        "Authorization": "Bearer ${ZEEP_ORBIT_PAT}"
+      }
+    }
+  }
+}
+```
+
+**OpenCode** — `opencode.json`:
+```json
+{
+  "mcp": {
+    "zeep-orbit": {
+      "type": "remote",
+      "url": "https://<host>/dashboard/mcp",
+      "headers": {
+        "Authorization": "Bearer ${ZEEP_ORBIT_PAT}"
+      },
+      "enabled": true
+    }
+  }
+}
+```
+
+> Trate o PAT como uma senha — nunca commite. Se seu cliente não suportar interpolação de variável `${VAR}` no arquivo de config, mantenha esse arquivo fora do controle de versão.
+
+---
+
 ## 📊 Observabilidade
 
 - **Métricas Prometheus** em `/metrics`: contagem de requisições, latência, apps ativos
@@ -469,6 +541,7 @@ A flag `--atomic` faz rollback automático se a atualização falhar.
 | `BRAND_COMPANY_NAME`         | Não         | Nome da empresa para white-label                    |
 | `LOG_LEVEL`                  | Não         | `debug` para logs de desenvolvimento                |
 | `DASHBOARD_LOG_BUFFER_SIZE`  | Não         | Tamanho do buffer circular de logs (padrão: 2000)   |
+| `ORBIT_PUBLIC_URL`           | Não         | URL base visível externamente (ex: `https://orbit.example.com`) para o documento de metadados OAuth 2.1 (`/.well-known/oauth-authorization-server`). Sem ela, a URL é derivada dos cabeçalhos `Host`/`X-Forwarded-Proto` da requisição — configure quando o Orbit não estiver atrás de um proxy que valide esses cabeçalhos, para que um cliente MCP não possa ser apontado para um endpoint de token falsificado. |
 
 ---
 
@@ -517,7 +590,6 @@ Alguns destes itens já aparecem no dashboard como controles desabilitados ou ba
 - Sign in with Apple (por app)
 - Gerador de código TypeScript SDK (`@zeeptech/orbit-generate`)
 - Snippets oficiais de prompt para Claude Code / Cursor / Lovable
-- Servidor MCP para operações do zeep-orbit
 - Geração automática de GraphQL
 - Assinaturas em tempo real (WebSockets)
 - Edge functions

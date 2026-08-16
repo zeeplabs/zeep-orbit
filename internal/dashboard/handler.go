@@ -854,9 +854,9 @@ func (h *Handler) ListApps(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, apps)
 }
 
-// appRequestBody is the JSON body for create/update app requests. Tables are
+// AppRequestBody is the JSON body for create/update app requests. Tables are
 // managed one at a time via the /apps/{id}/tables endpoints, not here.
-type appRequestBody struct {
+type AppRequestBody struct {
 	Name             string                  `json:"name"`
 	AuthEmailEnabled bool                    `json:"auth_email_enabled"`
 	AuthProviders    json.RawMessage         `json:"auth_providers,omitempty"`
@@ -864,12 +864,82 @@ type appRequestBody struct {
 	RateLimit        *config.RateLimitConfig `json:"rate_limit,omitempty"`
 }
 
-// tableRequestBody is the JSON body for create/update table requests.
-type tableRequestBody struct {
+// TableRequestBody is the JSON body for create/update table requests.
+type TableRequestBody struct {
 	Name    string                `json:"name"`
 	RLS     string                `json:"rls"`
 	Columns []config.ColumnConfig `json:"columns"`
 	Indexes []config.IndexConfig  `json:"indexes"`
+}
+
+// ValidationError signals a client-input validation failure — safe to
+// expose verbatim to the caller (same "safe to expose" exception AGENTS.md
+// §4 carves out for provisioner.ValidationError). Extracted *ForUser
+// functions return this for input the shared struct's own validation
+// rejects, so both the REST handler and an MCP tool caller (mcp-server
+// spec, MCP-08) can distinguish "bad input" from an internal failure.
+type ValidationError struct {
+	msg string
+}
+
+func (e *ValidationError) Error() string { return e.msg }
+
+// Sentinels distinguishing CreateAppForUser's internal (500-class) failure
+// points from one another, so the HTTP handler can keep returning the same
+// distinct public message each point returned before the extraction
+// (AGENTS.md §4: fixed public message, real error logged server-side only).
+var (
+	errAppCreateFailed         = errors.New("dashboard: create app failed")
+	errSaveAuthProvidersFailed = errors.New("dashboard: save auth providers failed")
+	errResolveStorageFailed    = errors.New("dashboard: resolve storage config failed")
+	errSaveStorageFailed       = errors.New("dashboard: save storage config failed")
+)
+
+// CreateAppForUser is the shared operation behind CreateApp — the exact
+// validation/store/provisioner/audit path a MCP tool call (orbit_create_app)
+// will call into identically (mcp-server spec, MCP-06/MCP-10). Extracted
+// verbatim from the former CreateApp handler body; behavior is unchanged.
+func (h *Handler) CreateAppForUser(ctx context.Context, user *DashboardUser, body AppRequestBody, ip string) (*AppRow, error) {
+	if err := validateAppInput(body.Name); err != nil {
+		return nil, &ValidationError{msg: err.Error()}
+	}
+
+	app, err := CreateApp(ctx, h.pool, body.Name, user.ID, body.AuthEmailEnabled)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errAppCreateFailed, err)
+	}
+
+	if len(body.AuthProviders) > 0 {
+		if err := UpdateAppAuthProvidersRaw(ctx, h.pool, app.ID, body.AuthProviders); err != nil {
+			return nil, fmt.Errorf("%w: %v", errSaveAuthProvidersFailed, err)
+		}
+		app.AuthProviders = body.AuthProviders
+	}
+
+	if body.StorageConfig != nil && body.StorageConfig.Bucket != "" {
+		sc, err := resolveAppStorage(ctx, h.pool, body.StorageConfig)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", errResolveStorageFailed, err)
+		}
+		if err := UpdateAppStorageConfig(ctx, h.pool, app.ID, sc); err != nil {
+			return nil, fmt.Errorf("%w: %v", errSaveStorageFailed, err)
+		}
+		app.StorageConfig = sc
+	}
+
+	cfg := buildAppConfig(app)
+	if _, err := h.prov.Apply(ctx, &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
+		// Returned raw (not wrapped in a local sentinel): may be
+		// *provisioner.TypeChangeError, which the caller unwraps via
+		// errors.As the same way the pre-extraction handler did.
+		return nil, err
+	}
+
+	h.reg.Register(appRowToRegistryApp(app))
+
+	app.JWTSecret = ""
+	h.audit(ctx, user.ID, user.Email, "app.create", "app", app.ID, app.Name, nil, ip)
+	return app, nil
 }
 
 // CreateApp handles POST /dashboard/api/apps
@@ -881,58 +951,35 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
-	var body appRequestBody
+	var body AppRequestBody
 	if !h.decodeJSONBody(w, r, &body) {
 		return
 	}
-	if err := validateAppInput(body.Name); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
-	}
 
-	app, err := CreateApp(r.Context(), h.pool, body.Name, user.ID, body.AuthEmailEnabled)
+	app, err := h.CreateAppForUser(r.Context(), user, body, r.RemoteAddr)
 	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
-		return
-	}
-
-	if len(body.AuthProviders) > 0 {
-		if err := UpdateAppAuthProvidersRaw(r.Context(), h.pool, app.ID, body.AuthProviders); err != nil {
-			h.writeError(w, r, http.StatusInternalServerError, "failed to save auth providers", err)
-			return
-		}
-		app.AuthProviders = body.AuthProviders
-	}
-
-	if body.StorageConfig != nil && body.StorageConfig.Bucket != "" {
-		sc, err := resolveAppStorage(r.Context(), h.pool, body.StorageConfig)
-		if err != nil {
-			h.writeError(w, r, http.StatusInternalServerError, "failed to resolve storage config", err)
-			return
-		}
-		if err := UpdateAppStorageConfig(r.Context(), h.pool, app.ID, sc); err != nil {
-			h.writeError(w, r, http.StatusInternalServerError, "failed to save storage config", err)
-			return
-		}
-		app.StorageConfig = sc
-	}
-
-	cfg := buildAppConfig(app)
-	if _, err := h.prov.Apply(r.Context(), &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
+		var valErr *ValidationError
 		var typeErr *provisioner.TypeChangeError
-		if errors.As(err, &typeErr) {
+		switch {
+		case errors.As(err, &valErr):
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": valErr.Error()})
+		case errors.As(err, &typeErr):
 			h.writeError(w, r, http.StatusBadRequest, typeErr.Error(), err)
-		} else {
+		case errors.Is(err, errAppCreateFailed):
+			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		case errors.Is(err, errSaveAuthProvidersFailed):
+			h.writeError(w, r, http.StatusInternalServerError, "failed to save auth providers", err)
+		case errors.Is(err, errResolveStorageFailed):
+			h.writeError(w, r, http.StatusInternalServerError, "failed to resolve storage config", err)
+		case errors.Is(err, errSaveStorageFailed):
+			h.writeError(w, r, http.StatusInternalServerError, "failed to save storage config", err)
+		default:
 			h.writeError(w, r, http.StatusInternalServerError, "provisioning failed — check server logs for details", err)
 		}
 		return
 	}
 
-	h.reg.Register(appRowToRegistryApp(app))
-
-	app.JWTSecret = ""
 	writeJSON(w, http.StatusCreated, app)
-	h.audit(r.Context(), user.ID, user.Email, "app.create", "app", app.ID, app.Name, nil, r.RemoteAddr)
 }
 
 // GetApp handles GET /dashboard/api/apps/{id}
@@ -970,7 +1017,7 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 	appID := chi.URLParam(r, "id")
 
 	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
-	var body appRequestBody
+	var body AppRequestBody
 	if !h.decodeJSONBody(w, r, &body) {
 		return
 	}
@@ -1100,6 +1147,67 @@ func (h *Handler) DeleteApp(w http.ResponseWriter, r *http.Request) {
 	h.audit(r.Context(), user.ID, user.Email, "app.delete", "app", appID, existing.Name, nil, r.RemoteAddr)
 }
 
+// errLoadSystemConfigFailed / errAppTableInternalFailed distinguish
+// CreateAppTableForUser's internal (500-class) failure points, so the HTTP
+// handler keeps returning the same distinct public message each point
+// returned before the extraction.
+var (
+	errLoadSystemConfigFailed = errors.New("dashboard: load system config failed")
+	errAppTableInternalFailed = errors.New("dashboard: app table internal failure")
+)
+
+// CreateAppTableForUser is the shared operation behind CreateAppTable — the
+// exact validation/store/provisioner/audit path a MCP tool call
+// (orbit_create_table) will call into identically (mcp-server spec,
+// MCP-07/MCP-08/MCP-10). Extracted verbatim from the former CreateAppTable
+// handler body; behavior is unchanged.
+func (h *Handler) CreateAppTableForUser(ctx context.Context, user *DashboardUser, appID string, body TableRequestBody, ip string) (*AppTableRow, error) {
+	app, role, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, err
+	}
+	if !role.CanWrite() {
+		return nil, ErrForbidden
+	}
+
+	sysCfg, err := GetSystemConfig(ctx, h.pool)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errLoadSystemConfigFailed, err)
+	}
+	body.RLS = resolveTableRLS(body.RLS, sysCfg.RequireRLSDefault, app.AuthEmailEnabled)
+
+	table := AppTableRow{Name: body.Name, RLS: body.RLS, Columns: body.Columns, Indexes: body.Indexes}
+	if err := validateTableInput(table, app.AuthEmailEnabled, app.Tables); err != nil {
+		return nil, &ValidationError{msg: err.Error()}
+	}
+
+	// Provision the physical table before persisting its metadata row — if
+	// Apply fails, nothing should be left behind for the dashboard to think
+	// exists (a metadata row with no matching physical table blocks retrying
+	// with the same name and shows a table that errors on every operation).
+	cfg := buildAppConfig(app)
+	cfg.Tables = []config.TableConfig{{Name: table.Name, RLS: table.RLS, Columns: table.Columns, Indexes: table.Indexes}}
+	if _, err := h.prov.Apply(ctx, &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
+		// Returned raw: may be *provisioner.TypeChangeError, unwrapped by the
+		// caller via errors.As the same way the pre-extraction handler did.
+		return nil, err
+	}
+
+	row, err := InsertAppTable(ctx, h.pool, appID, table)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+	}
+
+	updated, _, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+	}
+	h.reg.Register(appRowToRegistryApp(updated))
+
+	h.audit(ctx, user.ID, user.Email, "app.table.create", "app_table", row.ID, app.Name+"/"+row.Name, nil, ip)
+	return &row, nil
+}
+
 // CreateAppTable handles POST /dashboard/api/apps/{id}/tables. Tables are
 // created one at a time — the request only ever describes a single table,
 // applied to the provisioner without touching the app's other tables.
@@ -1111,70 +1219,37 @@ func (h *Handler) CreateAppTable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appID := chi.URLParam(r, "id")
-	app, role, err := GetApp(r.Context(), h.pool, appID, user)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
-			return
-		}
-		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
-		return
-	}
-	if !role.CanWrite() {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
-		return
-	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
-	var body tableRequestBody
+	var body TableRequestBody
 	if !h.decodeJSONBody(w, r, &body) {
 		return
 	}
 
-	sysCfg, err := GetSystemConfig(r.Context(), h.pool)
+	row, err := h.CreateAppTableForUser(r.Context(), user, appID, body, r.RemoteAddr)
 	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "failed to load system config", err)
-		return
-	}
-	body.RLS = resolveTableRLS(body.RLS, sysCfg.RequireRLSDefault, app.AuthEmailEnabled)
-
-	table := AppTableRow{Name: body.Name, RLS: body.RLS, Columns: body.Columns, Indexes: body.Indexes}
-	if err := validateTableInput(table, app.AuthEmailEnabled, app.Tables); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
-	}
-
-	// Provision the physical table before persisting its metadata row — if
-	// Apply fails, nothing should be left behind for the dashboard to think
-	// exists (a metadata row with no matching physical table blocks retrying
-	// with the same name and shows a table that errors on every operation).
-	cfg := buildAppConfig(app)
-	cfg.Tables = []config.TableConfig{{Name: table.Name, RLS: table.RLS, Columns: table.Columns, Indexes: table.Indexes}}
-	if _, err := h.prov.Apply(r.Context(), &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
+		var valErr *ValidationError
 		var typeErr *provisioner.TypeChangeError
-		if errors.As(err, &typeErr) {
+		switch {
+		case errors.Is(err, ErrNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		case errors.Is(err, ErrForbidden):
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		case errors.Is(err, errLoadSystemConfigFailed):
+			h.writeError(w, r, http.StatusInternalServerError, "failed to load system config", err)
+		case errors.As(err, &valErr):
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": valErr.Error()})
+		case errors.As(err, &typeErr):
 			h.writeError(w, r, http.StatusBadRequest, typeErr.Error(), err)
-		} else {
+		case errors.Is(err, errAppTableInternalFailed):
+			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		default:
 			h.writeError(w, r, http.StatusInternalServerError, "provisioning failed — check server logs for details", err)
 		}
 		return
 	}
 
-	row, err := InsertAppTable(r.Context(), h.pool, appID, table)
-	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
-		return
-	}
-
-	updated, _, err := GetApp(r.Context(), h.pool, appID, user)
-	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
-		return
-	}
-	h.reg.Register(appRowToRegistryApp(updated))
-
 	writeJSON(w, http.StatusCreated, row)
-	h.audit(r.Context(), user.ID, user.Email, "app.table.create", "app_table", row.ID, app.Name+"/"+row.Name, nil, r.RemoteAddr)
 }
 
 // UpdateAppTable handles PUT /dashboard/api/apps/{id}/tables/{tableId}. Table
@@ -1218,7 +1293,7 @@ func (h *Handler) UpdateAppTable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
-	var body tableRequestBody
+	var body TableRequestBody
 	if !h.decodeJSONBody(w, r, &body) {
 		return
 	}
@@ -1263,6 +1338,70 @@ func (h *Handler) UpdateAppTable(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, row)
 	h.audit(r.Context(), user.ID, user.Email, "app.table.update", "app_table", row.ID, app.Name+"/"+row.Name, nil, r.RemoteAddr)
+}
+
+// UpdateTableRLSModeForUser is the shared operation behind
+// orbit_set_table_rls_mode (mcp-server spec, MCP-11) — narrower than
+// UpdateAppTable's HTTP handler above, which this leaves untouched: that
+// endpoint's request body always carries a full columns/indexes replace
+// alongside rls, so there is no existing "RLS-only" REST code path to
+// extract from. This is new, additive code addressing the table by name
+// (matching how table-policy routes already do, via findAppTableByName)
+// rather than by id, changing only rls while leaving the table's existing
+// columns/indexes untouched, then applying/persisting/auditing through the
+// same provisioner+store+audit calls UpdateAppTable's handler uses.
+func (h *Handler) UpdateTableRLSModeForUser(ctx context.Context, user *DashboardUser, appID, tableName, rlsMode, ip string) (*AppTableRow, error) {
+	app, role, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, err
+	}
+	if !role.CanWrite() {
+		return nil, ErrForbidden
+	}
+
+	existingTable := findAppTableByName(app, tableName)
+	if existingTable == nil {
+		return nil, ErrNotFound
+	}
+
+	if !config.ValidRLS(rlsMode) {
+		return nil, &ValidationError{msg: fmt.Sprintf(
+			"table %s has an invalid rls value: %s (must be one of \"\", \"owner\", \"enabled\", \"policy\")",
+			tableName, rlsMode,
+		)}
+	}
+	if config.HasOwnerColumn(rlsMode) && !app.AuthEmailEnabled {
+		return nil, &ValidationError{msg: fmt.Sprintf(
+			"table %s uses restricted access (RLS), which requires 'Email Authentication' to be enabled for this app",
+			tableName,
+		)}
+	}
+
+	// Provision the physical change before persisting metadata — same
+	// ordering rationale as UpdateAppTable's handler: if Apply fails, the
+	// stored rls must still match what's actually in Postgres.
+	cfg := buildAppConfig(app)
+	cfg.Tables = []config.TableConfig{{Name: existingTable.Name, RLS: rlsMode, Columns: existingTable.Columns, Indexes: existingTable.Indexes}}
+	if _, err := h.prov.Apply(ctx, &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
+		return nil, err
+	}
+
+	row, err := UpdateAppTable(ctx, h.pool, appID, existingTable.ID, schemaNameForDB(app.Name), rlsMode, existingTable.Columns, existingTable.Indexes)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+	}
+
+	updated, _, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+	}
+	h.reg.Register(appRowToRegistryApp(updated))
+
+	h.audit(ctx, user.ID, user.Email, "app.table.update", "app_table", row.ID, app.Name+"/"+row.Name, nil, ip)
+	return &row, nil
 }
 
 // DeleteAppTable handles DELETE /dashboard/api/apps/{id}/tables/{tableId}.
@@ -1369,6 +1508,44 @@ func (h *Handler) ListTablePolicies(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, policies)
 }
 
+// ErrTableNotFound is returned by CreateTablePolicyForUser when tableName
+// does not resolve to a table on the app — distinct from ErrNotFound (which
+// covers "app not found/no access") so the caller can tell the two 404s
+// apart, matching the two distinct messages CreateTablePolicy's handler
+// returned before extraction ("not found" vs. "table not found").
+var ErrTableNotFound = errors.New("dashboard: table not found")
+
+// CreateTablePolicyForUser is the shared operation behind CreateTablePolicy
+// — the exact authorization/store/audit path a MCP tool call
+// (orbit_create_policy_from_template, mcp-server spec MCP-13/MCP-14/MCP-10)
+// will call into identically. Extracted verbatim from the former
+// CreateTablePolicy handler body; behavior is unchanged.
+func (h *Handler) CreateTablePolicyForUser(ctx context.Context, user *DashboardUser, appID, tableName string, def PolicyDef, ip string) (*TablePolicyRow, error) {
+	app, role, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, err
+	}
+	if !role.CanManage() {
+		return nil, ErrForbidden
+	}
+	table := findAppTableByName(app, tableName)
+	if table == nil {
+		return nil, ErrTableNotFound
+	}
+
+	schemaName := schemaNameForDB(app.Name)
+	row, err := CreateTablePolicy(ctx, h.pool, appID, schemaName, tableName, table.Columns, def, user.ID)
+	if err != nil {
+		// Returned raw: may be *provisioner.ValidationError or
+		// ErrPolicyAlreadyExists, unwrapped/matched by the caller the same
+		// way the pre-extraction handler did.
+		return nil, err
+	}
+
+	h.audit(ctx, user.ID, user.Email, "app.table_policy.create", "table_policy", row.ID, app.Name+"/"+tableName+"/"+row.PgPolicyName, nil, ip)
+	return &row, nil
+}
+
 // CreateTablePolicy handles POST /dashboard/api/apps/{id}/tables/{table}/policies.
 func (h *Handler) CreateTablePolicy(w http.ResponseWriter, r *http.Request) {
 	user, ok := UserFromContext(r.Context())
@@ -1379,24 +1556,6 @@ func (h *Handler) CreateTablePolicy(w http.ResponseWriter, r *http.Request) {
 
 	appID := chi.URLParam(r, "id")
 	tableName := chi.URLParam(r, "table")
-	app, role, err := GetApp(r.Context(), h.pool, appID, user)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
-			return
-		}
-		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
-		return
-	}
-	if !role.CanManage() {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
-		return
-	}
-	table := findAppTableByName(app, tableName)
-	if table == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
-		return
-	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
 	var body PolicyDef
@@ -1404,11 +1563,16 @@ func (h *Handler) CreateTablePolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	schemaName := schemaNameForDB(app.Name)
-	row, err := CreateTablePolicy(r.Context(), h.pool, appID, schemaName, tableName, table.Columns, body, user.ID)
+	row, err := h.CreateTablePolicyForUser(r.Context(), user, appID, tableName, body, r.RemoteAddr)
 	if err != nil {
 		var valErr *provisioner.ValidationError
 		switch {
+		case errors.Is(err, ErrNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		case errors.Is(err, ErrForbidden):
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		case errors.Is(err, ErrTableNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
 		case errors.As(err, &valErr):
 			// Safe to expose: describes which clause/field failed, never
 			// internal detail (AGENTS.md §4 — provisioner.ValidationError is
@@ -1424,7 +1588,6 @@ func (h *Handler) CreateTablePolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, row)
-	h.audit(r.Context(), user.ID, user.Email, "app.table_policy.create", "table_policy", row.ID, app.Name+"/"+tableName+"/"+row.PgPolicyName, nil, r.RemoteAddr)
 }
 
 // UpdateTablePolicy handles PUT /dashboard/api/apps/{id}/tables/{table}/policies/{policyId}.

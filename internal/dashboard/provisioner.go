@@ -477,6 +477,95 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 		 ON zeep_system.webhook_deliveries(webhook_id, event_id) WHERE event_id IS NOT NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_received_at
 		 ON zeep_system.webhook_deliveries(received_at)`,
+		// Personal access tokens for MCP-server / script access (mcp-server
+		// spec, T1). oauth_client_id/refresh_token_hash have no FK yet — the
+		// oauth_clients table they'll eventually reference is added later
+		// (T17); a plain UUID column now avoids a second migration then, per
+		// design.md's Data Models note for dashboard_pats.
+		`CREATE TABLE IF NOT EXISTS zeep_system.dashboard_pats (
+			id                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+			user_id            UUID        NOT NULL REFERENCES zeep_system.dashboard_users(id) ON DELETE CASCADE,
+			name               TEXT        NOT NULL,
+			token_hash         TEXT        NOT NULL UNIQUE,
+			kind               TEXT        NOT NULL CHECK (kind IN ('manual','ephemeral','oauth')),
+			oauth_client_id    UUID,
+			refresh_token_hash TEXT,
+			expires_at         TIMESTAMPTZ,
+			revoked_at         TIMESTAMPTZ,
+			last_used_at       TIMESTAMPTZ,
+			created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_dashboard_pats_user_id ON zeep_system.dashboard_pats(user_id)`,
+		// Dynamically-registered OAuth clients (mcp-server spec, T17) — id is
+		// the client_id handed back at registration, generated via
+		// generateToken (a hex string, not a UUID) per design.md's
+		// OAuthClientStore component, so it's TEXT rather than this
+		// codebase's usual UUID PRIMARY KEY.
+		`CREATE TABLE IF NOT EXISTS zeep_system.oauth_clients (
+			id            TEXT        PRIMARY KEY,
+			name          TEXT        NOT NULL,
+			redirect_uris JSONB       NOT NULL,
+			created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		// dashboard_pats.oauth_client_id was added in T1 as a plain UUID
+		// column (oauth_clients didn't exist yet, per that migration's own
+		// comment) — retyped to TEXT now that oauth_clients.id is TEXT
+		// (generateToken's hex output, not a UUID). Guarded so this is a
+		// no-op once applied.
+		`DO $do$
+		 BEGIN
+		   IF EXISTS (
+		     SELECT 1 FROM information_schema.columns
+		     WHERE table_schema = 'zeep_system' AND table_name = 'dashboard_pats'
+		       AND column_name = 'oauth_client_id' AND data_type = 'uuid'
+		   ) THEN
+		     ALTER TABLE zeep_system.dashboard_pats ALTER COLUMN oauth_client_id TYPE TEXT;
+		   END IF;
+		 END
+		 $do$`,
+		// FK deferred until now since oauth_clients didn't exist at T1.
+		// Guarded so this is a no-op once applied.
+		`DO $do$
+		 BEGIN
+		   IF NOT EXISTS (
+		     SELECT 1 FROM pg_constraint c
+		     JOIN pg_class t ON t.oid = c.conrelid
+		     JOIN pg_namespace n ON n.oid = t.relnamespace
+		     WHERE n.nspname = 'zeep_system' AND t.relname = 'dashboard_pats'
+		       AND c.conname = 'dashboard_pats_oauth_client_id_fkey'
+		   ) THEN
+		     ALTER TABLE zeep_system.dashboard_pats
+		       ADD CONSTRAINT dashboard_pats_oauth_client_id_fkey
+		       FOREIGN KEY (oauth_client_id) REFERENCES zeep_system.oauth_clients(id) ON DELETE CASCADE;
+		   END IF;
+		 END
+		 $do$`,
+		// Single-use, short-lived PKCE authorization codes (mcp-server spec,
+		// T18) — hashed like every other token in this design (design.md
+		// Tech Decisions), never an in-memory map, so a code issued by one
+		// replica is exchangeable against a different replica handling the
+		// token-exchange request (AGENTS.md's no-in-memory-cross-request-
+		// state rule).
+		`CREATE TABLE IF NOT EXISTS zeep_system.oauth_auth_codes (
+			id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+			code_hash      TEXT        NOT NULL UNIQUE,
+			client_id      TEXT        NOT NULL REFERENCES zeep_system.oauth_clients(id) ON DELETE CASCADE,
+			user_id        UUID        NOT NULL REFERENCES zeep_system.dashboard_users(id) ON DELETE CASCADE,
+			code_challenge TEXT        NOT NULL,
+			redirect_uri   TEXT        NOT NULL,
+			used_at        TIMESTAMPTZ,
+			expires_at     TIMESTAMPTZ NOT NULL,
+			created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_oauth_auth_codes_expires_at ON zeep_system.oauth_auth_codes(expires_at)`,
+		// family_id groups every dashboard_pats row descended from one OAuth
+		// grant (the original authorization_code exchange, plus every
+		// refresh rotation since) — mcp-server spec T20, so refresh-token-
+		// reuse detection can revoke the whole lineage in one UPDATE
+		// (design.md Tech Decisions: refresh token rotation + reuse
+		// detection), not just the single reused row.
+		`ALTER TABLE zeep_system.dashboard_pats ADD COLUMN IF NOT EXISTS family_id UUID`,
+		`CREATE INDEX IF NOT EXISTS idx_dashboard_pats_family_id ON zeep_system.dashboard_pats(family_id) WHERE family_id IS NOT NULL`,
 	}
 
 	for _, stmt := range stmts {

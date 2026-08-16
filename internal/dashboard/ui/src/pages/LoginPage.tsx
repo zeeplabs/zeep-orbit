@@ -1,17 +1,20 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { useLocation } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Icon } from '@/components/ui/icon'
 import { usePublicConfig } from '@/lib/api'
+import { safeReturnTo } from '@/lib/returnTo'
 import logo from '@/assets/images/logo/orbit-transparent.png'
 import pkg from '../../package.json'
 
 export default function LoginPage() {
   const { t } = useTranslation()
   const qc = useQueryClient()
+  const location = useLocation()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -19,6 +22,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
 
   const { data: config } = usePublicConfig()
+  const googleReturnTo = safeReturnTo(location.search)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -39,7 +43,8 @@ export default function LoginPage() {
       }
 
       qc.clear()
-      window.location.href = '/dashboard/apps'
+      const returnTo = safeReturnTo(location.search)
+      window.location.href = returnTo ? `/dashboard${returnTo}` : '/dashboard/apps'
     } catch {
       setError(t('common.connectionError'))
     } finally {
@@ -206,7 +211,11 @@ export default function LoginPage() {
                 </div>
 
                 <a
-                  href="/dashboard/api/auth/google/login"
+                  href={
+                    googleReturnTo
+                      ? `/dashboard/api/auth/google/login?return_to=${encodeURIComponent(googleReturnTo)}`
+                      : '/dashboard/api/auth/google/login'
+                  }
                   className="flex h-auto items-center justify-center gap-2.5 rounded-[10px] border py-2.5 text-[14px] font-semibold no-underline transition-colors"
                   style={{
                     borderColor: 'var(--border-strong)',

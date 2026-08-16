@@ -122,6 +122,42 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: spec.md AC P1-6 / tasks.md T2 Done-when; no generated-SQL comparison test exists (provisioner)
 - last seen: 2026-08-12T15:32:07Z
 
+### L-019 - When migrating a modal's functionality into a new dedicated page, add e2e assertions for the new page's own surface (nav label, route, static content, copy actions) — don't assume the migrated flow's existing test covers it.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `dashboard-ui-e2e` · harmful: 0
+- features: mcp-settings-page
+- evidence: MCPUI-01..09 (spec.md P1/P2); validation.md AC table (dashboard-ui-e2e)
+- last seen: 2026-08-15T23:38:47Z
+
+### L-020 - A single happy-path e2e test that always has data in the list will never exercise empty-state or error-toast branches — add an explicit test case that drives the list to empty and one that forces a mutation failure.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `dashboard-ui-e2e` · harmful: 0
+- features: mcp-settings-page
+- evidence: MCPUI-13, MCPUI-14 (spec.md P3 edge cases); validation.md AC table (dashboard-ui-e2e)
+- last seen: 2026-08-15T23:38:47Z
+
+### L-021 - For any nav-item feature, add an e2e test that clicks the nav link and asserts the resulting URL, not just that the link is visible -- direct page.goto() in beforeEach hides route-path regressions in the nav config from ever being exercised.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `dashboard-ui/e2e` · harmful: 0
+- features: mcp-settings-page
+- evidence: internal/dashboard/ui/src/components/layout/nav.ts:46 (dashboard-ui/e2e)
+- last seen: 2026-08-15T23:56:05Z
+
+### L-022 - When an AC requires a copy-to-clipboard action plus a specific success-toast string, add a test that actually clicks the copy control and asserts the toast text -- reading the copied value from a data attribute without clicking the button leaves the exact bug class (wrong toast message) uncaught by any test.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `dashboard-ui/e2e` · harmful: 0
+- features: mcp-settings-page
+- evidence: MCPUI-06,MCPUI-09 (dashboard-ui/e2e)
+- last seen: 2026-08-15T23:56:05Z
+
+### L-023 - When a test loops the same assertion shape over multiple structurally-different formats (JSON vs TOML, etc.), verify the assertion against each format's real serialization instead of assuming the first format's shape generalizes.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `e2e-testing` · harmful: 0
+- features: mcp-settings-page
+- evidence: internal/dashboard/ui/e2e/personal-access-tokens.spec.ts:165 (e2e-testing)
+- last seen: 2026-08-16T00:12:33Z
+
+### L-024 - An assertion placed after an earlier assertion in the same test function is unverified until the test is actually run end-to-end once — a prior failure in the same test silently prevents later assertions from ever executing, and static code review cannot detect this.
+- signal: `gate_fail` · recurrence: 1 feature(s) · scope: `e2e-testing` · harmful: 0
+- features: mcp-settings-page
+- evidence: internal/dashboard/ui/e2e/personal-access-tokens.spec.ts:165-177 (e2e-testing)
+- last seen: 2026-08-16T00:12:33Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

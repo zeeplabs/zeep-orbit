@@ -1,16 +1,19 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { useLocation } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Icon } from '@/components/ui/icon'
 import { cn } from '@/lib/utils'
+import { safeReturnTo } from '@/lib/returnTo'
 import logo from '@/assets/images/logo/logo.svg'
 
 export default function GoogleSetupPage() {
   const { t } = useTranslation()
   const qc = useQueryClient()
+  const location = useLocation()
   const [name, setName] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -46,8 +49,9 @@ export default function GoogleSetupPage() {
       setDone(true)
       qc.invalidateQueries({ queryKey: ['me'] })
       qc.clear()
+      const returnTo = safeReturnTo(location.search)
       setTimeout(() => {
-        window.location.href = '/dashboard/apps'
+        window.location.href = returnTo ? `/dashboard${returnTo}` : '/dashboard/apps'
       }, 1500)
     } catch {
       setError(t('common.connectionError'))

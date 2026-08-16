@@ -1,7 +1,8 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Navigate, Routes, Route, useParams } from 'react-router-dom'
+import { Navigate, Routes, Route, useParams, useLocation } from 'react-router-dom'
+import { safeReturnTo } from '@/lib/returnTo'
 import LoginPage from './pages/LoginPage'
 import GoogleSetupPage from './pages/GoogleSetupPage'
 import DashboardShell from './pages/DashboardShell'
@@ -15,9 +16,11 @@ import LogsPage from './pages/LogsPage'
 import AuditLogPage from './pages/AuditLogPage'
 import GitHubIntegrationPage from './pages/GitHubIntegrationPage'
 import SdkPage from './pages/SdkPage'
+import MCPPage from './pages/MCPPage'
 import ChangelogPage from './pages/ChangelogPage'
 import DataBrowserPage from './pages/DataBrowserPage'
 import AccessDenied from './pages/AccessDenied'
+import OAuthConsent from './components/OAuthConsent'
 import { RequireRole } from './components/patterns/RequireRole'
 import { Toaster } from 'sonner'
 import { useBootstrapStatus } from './lib/api'
@@ -25,6 +28,23 @@ import { useBootstrapStatus } from './lib/api'
 const ComponentsSandbox = import.meta.env.DEV
   ? lazy(() => import('./pages/dev/ComponentsSandbox'))
   : null
+
+// ResumeReturnTo replaces a client-side <Navigate> for resuming `return_to`
+// when the target might not be an SPA route at all — e.g. the OAuth
+// authorization endpoint (/dashboard/oauth/authorize) is handled entirely
+// by the Go backend and re-evaluates the request once a session cookie is
+// present, redirecting on to /oauth/consent itself. <Navigate> only ever
+// updates client-side router state, so it can never reach a backend-only
+// path; a full document load (window.location.assign) always works for
+// both an SPA route (the app just reloads, unaffected) and a backend one.
+function ResumeReturnTo({ fallback }: { fallback: string }) {
+  const location = useLocation()
+  useEffect(() => {
+    const returnTo = safeReturnTo(location.search)
+    window.location.assign(returnTo ? `/dashboard${returnTo}` : fallback)
+  }, [location.search, fallback])
+  return <LoadingScreen />
+}
 
 function LoadingScreen() {
   const { t } = useTranslation()
@@ -57,6 +77,8 @@ function RedirectToAppDetails({ tab }: { tab?: string }) {
 
 function App() {
   const qc = useQueryClient()
+  const location = useLocation()
+  const returnTo = encodeURIComponent(location.pathname + location.search)
 
   const { data: status, isLoading: statusLoading } = useBootstrapStatus()
 
@@ -96,11 +118,16 @@ function App() {
             }
           />
         )}
-        <Route path="/login" element={user ? <Navigate to="/apps" replace /> : <LoginPage />} />
+        <Route path="/login" element={
+          user ? <ResumeReturnTo fallback="/dashboard/apps" /> : <LoginPage />
+        } />
         <Route path="/google-setup" element={
           !user ? <Navigate to="/login" replace /> :
           user.needs_setup ? <GoogleSetupPage /> :
           <Navigate to="/apps" replace />
+        } />
+        <Route path="/oauth/consent" element={
+          !user ? <Navigate to={`/login?return_to=${returnTo}`} replace /> : <OAuthConsent />
         } />
         <Route
           element={<DashboardShell user={user} />}
@@ -130,6 +157,7 @@ function App() {
             element={<RequireRole allow={['superadmin']}><GitHubIntegrationPage /></RequireRole>}
           />
           <Route path="/sdks" element={<SdkPage />} />
+          <Route path="/mcp-settings" element={<MCPPage />} />
           <Route path="/changelog" element={<ChangelogPage />} />
           <Route path="/403" element={<AccessDenied />} />
         </Route>

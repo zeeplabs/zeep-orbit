@@ -9,6 +9,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-08-16
+
+### Added
+
+- **MCP server** — Zeep Orbit now exposes a Model Context Protocol endpoint (`/dashboard/mcp`) so an AI coding agent (Claude Code, Claude Desktop, Cursor, Codex, OpenCode) can create and manage apps, tables, RLS modes, and row policies through the same operations the dashboard's REST API already performs — one tool per existing endpoint, not a parallel code path. Two auth methods: **Personal Access Tokens** (bearer, created/listed/revoked from the dashboard) for CLI-style clients, and **OAuth 2.1 with PKCE + dynamic client registration** (RFC 7591) for clients like Claude Desktop that have no way to paste a static token. The OAuth flow restricts registered `redirect_uris` to `https://` (or `http://` on loopback, for native/CLI clients per RFC 8252), single-uses and PKCE-binds authorization codes, rotates refresh tokens with reuse detection (a replayed token revokes its whole token family), and verifies `client_id` at every token exchange (authorization_code and refresh_token grants alike).
+- **A dedicated "MCP" page in the dashboard** (Deployment section of the sidebar) explains how to connect an AI coding agent to this Orbit instance's MCP server: the live endpoint URL with a copy action, a plain-language explanation of the two auth methods, and copy-pasteable, syntax-highlighted config snippets for each of the four PAT-based clients. Personal access token management (create, list, revoke) moved here from its previous home behind an unlabeled key icon in the sidebar footer.
+- **A superadmin-only "Registered OAuth clients" section on the MCP page** lists every client that has dynamically self-registered against this instance's OAuth endpoint (registration is unauthenticated by RFC 7591 design, so this would otherwise be invisible) and lets a superadmin delete one — which cascades to revoke every authorization code and access/refresh token pair that client was ever issued.
+- **`ORBIT_PUBLIC_URL`** (optional env var) pins the base URL the OAuth 2.1 metadata document (`/.well-known/oauth-authorization-server`) advertises its endpoints under. Without it, the URL is derived from the request's `Host`/`X-Forwarded-Proto` headers — set this if Orbit runs without a reverse proxy that validates those headers, so an MCP client can't be pointed at a spoofed token endpoint via a forged `Host` header.
+- **The OAuth consent flow resumes correctly after a login (including via Google SSO) instead of dropping an admin back on the dashboard home.** An unauthenticated admin hitting the consent screen is bounced to login with the original request preserved in `return_to`; after login (password or Google, including a first-time Google setup step), the admin lands back where they started rather than at `/apps`.
+
 ## [1.3.0] — 2026-08-13
 
 ### Added
