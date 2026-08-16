@@ -107,28 +107,28 @@ The MCP server (`.specs/features/mcp-server/`) is implemented and reachable at `
 
 | Requirement ID | Story | Phase | Status |
 |---|---|---|---|
-| MCPUI-01 | P1: Discover and open MCP setup | Execute | Implementing |
-| MCPUI-02 | P1: Discover and open MCP setup | Execute | Implementing |
-| MCPUI-03 | P1: Discover and open MCP setup | Execute | Implementing |
-| MCPUI-04 | P1: Discover and open MCP setup | Execute | Implementing |
-| MCPUI-05 | P2: Understand how to connect | Execute | Implementing |
-| MCPUI-06 | P2: Understand how to connect | Execute | Implementing |
-| MCPUI-07 | P2: Understand how to connect | Execute | Implementing |
-| MCPUI-08 | P2: Understand how to connect | Execute | Implementing |
-| MCPUI-09 | P2: Understand how to connect | Execute | Implementing |
-| MCPUI-10 | P3: Manage PATs | Execute | Implementing |
-| MCPUI-11 | P3: Manage PATs | Execute | Implementing |
-| MCPUI-12 | P3: Manage PATs | Execute | Implementing |
-| MCPUI-13 | P3: Manage PATs | Execute | Implementing |
-| MCPUI-14 | P3: Manage PATs | Execute | Implementing |
-| MCPUI-15 | P3: Manage PATs | Execute | Implementing |
+| MCPUI-01 | P1: Discover and open MCP setup | Execute | Verified |
+| MCPUI-02 | P1: Discover and open MCP setup | Execute | Verified |
+| MCPUI-03 | P1: Discover and open MCP setup | Execute | Verified |
+| MCPUI-04 | P1: Discover and open MCP setup | Execute | Verified |
+| MCPUI-05 | P2: Understand how to connect | Execute | Verified |
+| MCPUI-06 | P2: Understand how to connect | Execute | Verified |
+| MCPUI-07 | P2: Understand how to connect | Execute | Verified |
+| MCPUI-08 | P2: Understand how to connect | Execute | Verified |
+| MCPUI-09 | P2: Understand how to connect | Execute | Verified |
+| MCPUI-10 | P3: Manage PATs | Execute | Verified |
+| MCPUI-11 | P3: Manage PATs | Execute | Verified |
+| MCPUI-12 | P3: Manage PATs | Execute | Verified |
+| MCPUI-13 | P3: Manage PATs | Execute | Verified |
+| MCPUI-14 | P3: Manage PATs | Execute | Verified |
+| MCPUI-15 | P3: Manage PATs | Execute | Verified |
 
-**Coverage:** 15 total, 0 mapped to tasks (Tasks phase skipped — Medium scope, ≤8 implicit steps in Execute), 15 unmapped until Execute's inline task list ⚠️
+**Coverage:** 15 total, 15 verified live against `internal/dashboard/ui/e2e/personal-access-tokens.spec.ts` (5 tests, 5/5 passing — see `.specs/features/mcp-settings-page/validation.md` round 3 + the `d314852` fix commit for the final confirmation run) ✅
 
 ---
 
 ## Success Criteria
 
-- [ ] Sidebar shows a labeled "MCP" entry; the old unlabeled key icon is gone
-- [ ] `/mcp-settings` renders endpoint URL, auth explanation, 4 client tutorials, and full PAT CRUD with zero raw i18n keys visible
-- [x] `npx tsc -b` and `npm run build` (internal/dashboard/ui) pass; existing PAT e2e test (T16, from commit `6349d64`) updated to target `/mcp-settings` instead of the modal trigger. Full automated green run blocked in this session by sandbox Docker/network instability (a testcontainers `ryuk` reaper and intermittent request hangs against ad-hoc Postgres containers, unrelated to this feature's code) — but one partial live run against a real Postgres-backed server did render the page end-to-end (endpoint URL, auth explainer, all 4 client snippets with correct syntax highlighting, PAT create-and-reveal) before failing only on the since-fixed `data-testid` lookup. Flagged for the Verifier to attempt independently.
+- [x] Sidebar shows a labeled "MCP" entry; the old unlabeled key icon is gone
+- [x] `/mcp-settings` renders endpoint URL, auth explanation, 4 client tutorials, and full PAT CRUD with zero raw i18n keys visible
+- [x] `npx tsc -b` and `npm run build` (internal/dashboard/ui) pass; `personal-access-tokens.spec.ts` (5 tests, migrated + extended from T16's modal test across 3 verify rounds) passes 5/5 live against a real Postgres-backed server (confirmed twice independently: once by the round-3 Verifier, once by the author after fixing the last test bug it found — a wrong env-var assertion for Codex's TOML snippet, commit `d314852`)
