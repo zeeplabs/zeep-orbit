@@ -543,6 +543,7 @@ The `--atomic` flag rolls back automatically if the upgrade fails.
 | `BRAND_COMPANY_NAME`         | No       | Company name for white-label                        |
 | `LOG_LEVEL`                  | No       | Set `debug` for development output                  |
 | `DASHBOARD_LOG_BUFFER_SIZE`  | No       | Ring buffer size for log viewer (default: 2000)     |
+| `ORBIT_PUBLIC_URL`           | No       | Externally-visible base URL (e.g. `https://orbit.example.com`) for the OAuth 2.1 metadata document (`/.well-known/oauth-authorization-server`). Without it, the URL is derived from the request's `Host`/`X-Forwarded-Proto` headers — set this when Orbit isn't behind a proxy that validates those headers, so an MCP client can't be pointed at a spoofed token endpoint. |
 
 ---
 

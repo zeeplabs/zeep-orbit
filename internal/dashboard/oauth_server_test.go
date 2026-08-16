@@ -12,6 +12,23 @@ import (
 	"time"
 )
 
+// TestRequestBaseURL_ORBIT_PUBLIC_URLOverridesRequestHeaders covers the
+// ORBIT_PUBLIC_URL escape hatch: when set, it's used verbatim instead of
+// deriving the base URL from Host/X-Forwarded-Proto, which are otherwise
+// attacker-controllable when Orbit isn't behind a proxy that validates
+// them.
+func TestRequestBaseURL_ORBIT_PUBLIC_URLOverridesRequestHeaders(t *testing.T) {
+	t.Setenv("ORBIT_PUBLIC_URL", "https://configured.example.com/")
+
+	req := httptest.NewRequest(http.MethodGet, "http://attacker-controlled.invalid/x", nil)
+	req.Host = "attacker-controlled.invalid"
+	req.Header.Set("X-Forwarded-Proto", "http")
+
+	if got := requestBaseURL(req); got != "https://configured.example.com" {
+		t.Fatalf("expected ORBIT_PUBLIC_URL (trailing slash trimmed) to win, got %q", got)
+	}
+}
+
 // TestGetMetadata_ReturnsDiscoveryDocumentWithAllThreeEndpoints covers T17's
 // Done-when: GET /.well-known/oauth-authorization-server returns a valid
 // discovery document with all 3 endpoint URLs (spec MCP-19).

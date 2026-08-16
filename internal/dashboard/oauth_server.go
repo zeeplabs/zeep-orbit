@@ -14,6 +14,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -31,10 +32,21 @@ func NewOAuthHandler(pool *db.Pool) *OAuthHandler {
 }
 
 // requestBaseURL derives the externally-visible scheme+host for building
-// absolute endpoint URLs in the metadata document — reverse-proxy-aware
-// (X-Forwarded-Proto), since this service runs behind a load balancer
-// (AGENTS.md) and never terminates TLS itself.
+// absolute endpoint URLs in the metadata document. When ORBIT_PUBLIC_URL is
+// set, it's used verbatim — this is the safe path, since it comes from
+// trusted deployment config rather than the request itself. Without it,
+// this falls back to trusting r.Host/X-Forwarded-Proto (reverse-proxy-aware,
+// since this service runs behind a load balancer and never terminates TLS
+// itself — AGENTS.md), which only an operator without a validating proxy in
+// front of Orbit needs to worry about: those headers are otherwise
+// attacker-controllable, and this document only affects where an MCP client
+// discovers the token/authorize endpoints to be — it never bypasses the
+// redirect_uri/PKCE/client_id checks a token exchange itself performs.
 func requestBaseURL(r *http.Request) string {
+	if configured := strings.TrimSuffix(os.Getenv("ORBIT_PUBLIC_URL"), "/"); configured != "" {
+		return configured
+	}
+
 	scheme := "http"
 	if r.TLS != nil {
 		scheme = "https"

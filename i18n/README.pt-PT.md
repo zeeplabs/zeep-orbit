@@ -541,6 +541,7 @@ A flag `--atomic` reverte automaticamente caso a atualização falhe.
 | `BRAND_COMPANY_NAME`           | Não         | Nome da empresa para white-label                        |
 | `LOG_LEVEL`                    | Não         | Defina `debug` para output de desenvolvimento           |
 | `DASHBOARD_LOG_BUFFER_SIZE`    | Não         | Tamanho do ring buffer do visualizador de logs (padrão: 2000) |
+| `ORBIT_PUBLIC_URL`             | Não         | URL base visível externamente (ex: `https://orbit.example.com`) para o documento de metadados OAuth 2.1 (`/.well-known/oauth-authorization-server`). Sem ela, a URL é derivada dos cabeçalhos `Host`/`X-Forwarded-Proto` do pedido — defina quando o Orbit não estiver atrás de um proxy que valide esses cabeçalhos, para que um cliente MCP não possa ser apontado para um endpoint de token falsificado. |
 
 ---
 
