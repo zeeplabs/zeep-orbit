@@ -7,7 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
+	"github.com/zeeplabs/zeep-orbit/internal/registry"
 )
 
 func webhooksTestPool(t *testing.T) *db.Pool {
@@ -135,6 +137,109 @@ func TestListWebhooksForUser_OutsiderReturnsErrNotFound(t *testing.T) {
 	_, err := ListWebhooksForUser(ctx, pool, actors["outsider"], appID)
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("expected ErrNotFound for an outsider with no app visibility, got %v", err)
+	}
+}
+
+// TestGetWebhookForUser_HappyPathReturnsWebhookAndMappings covers T11's
+// Done-when: GetWebhookForUser returns the webhook config plus its event
+// mappings for a webhookID belonging to the given appID (spec AC2).
+func TestGetWebhookForUser_HappyPathReturnsWebhookAndMappings(t *testing.T) {
+	pool := webhooksTestPool(t)
+	ctx := context.Background()
+	appID, actors := webhooksTestAppWithMembers(t, pool)
+
+	created, _, err := CreateWebhook(ctx, pool, CreateWebhookInput{
+		AppID: appID, Name: "for-user get", Method: "POST", EventTypePath: "eventType", CreatedBy: actors["admin"].ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateWebhook: %v", err)
+	}
+	reg := registry.New()
+	reg.Register(&registry.App{
+		Config:     config.AppConfig{Name: "webhook-foruser-app"},
+		SchemaName: "webhook-foruser-app",
+		Tables: map[string]*registry.Table{
+			"requests": {
+				Name:    "requests",
+				Columns: []registry.Column{{Name: "external_id", Type: "text"}},
+			},
+		},
+	})
+	if _, err := SaveEventMapping(ctx, pool, reg, "webhook-foruser-app", created.ID, EventMappingDef{
+		EventTypeValue: "created",
+		Action:         "insert",
+		TargetTable:    "requests",
+		FieldMappings:  []FieldMappingDef{{SourcePath: "id", Column: "external_id"}},
+	}); err != nil {
+		t.Fatalf("SaveEventMapping: %v", err)
+	}
+
+	wh, mappings, err := GetWebhookForUser(ctx, pool, actors["admin"], appID, created.ID)
+	if err != nil {
+		t.Fatalf("GetWebhookForUser: %v", err)
+	}
+	if wh.ID != created.ID {
+		t.Fatalf("expected webhook %s, got %s", created.ID, wh.ID)
+	}
+	if len(mappings) != 1 || mappings[0].EventTypeValue != "created" {
+		t.Fatalf("expected 1 mapping for 'created', got %+v", mappings)
+	}
+}
+
+// TestGetWebhookForUser_CrossAppWebhookReturnsErrWebhookNotFound covers T11's
+// Done-when: a webhookID that belongs to a DIFFERENT app than the given
+// appID returns not-found — the explicit cross-app scoping edge case the
+// spec calls out (Edge Cases: "never returning another app's webhook data
+// through a mismatched app_id").
+func TestGetWebhookForUser_CrossAppWebhookReturnsErrWebhookNotFound(t *testing.T) {
+	pool := webhooksTestPool(t)
+	ctx := context.Background()
+	appID, actors := webhooksTestAppWithMembers(t, pool)
+
+	created, _, err := CreateWebhook(ctx, pool, CreateWebhookInput{
+		AppID: appID, Name: "owned-by-app-a", Method: "POST", EventTypePath: "eventType", CreatedBy: actors["admin"].ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateWebhook: %v", err)
+	}
+
+	var otherAppID string
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO zeep_system.apps (name, owner_id) VALUES ($1, $2) RETURNING id`,
+		"webhook-foruser-other-app", actors["admin"].ID,
+	).Scan(&otherAppID); err != nil {
+		t.Fatalf("create other app: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO zeep_system.app_members (backend_app_id, user_id, role) VALUES ($1, $2, 'admin')`,
+		otherAppID, actors["admin"].ID,
+	); err != nil {
+		t.Fatalf("seed admin membership on other app: %v", err)
+	}
+
+	_, _, err = GetWebhookForUser(ctx, pool, actors["admin"], otherAppID, created.ID)
+	if !errors.Is(err, ErrWebhookNotFound) {
+		t.Fatalf("expected ErrWebhookNotFound for a webhook belonging to a different app, got %v", err)
+	}
+}
+
+// TestGetWebhookForUser_NonManagerForbidden covers T11's Done-when: an
+// editor (fails CanManage()) is rejected with ErrForbidden.
+func TestGetWebhookForUser_NonManagerForbidden(t *testing.T) {
+	pool := webhooksTestPool(t)
+	ctx := context.Background()
+	appID, actors := webhooksTestAppWithMembers(t, pool)
+
+	created, _, err := CreateWebhook(ctx, pool, CreateWebhookInput{
+		AppID: appID, Name: "editor-attempt", Method: "POST", EventTypePath: "eventType", CreatedBy: actors["admin"].ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateWebhook: %v", err)
+	}
+
+	_, _, err = GetWebhookForUser(ctx, pool, actors["editor"], appID, created.ID)
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("expected ErrForbidden for an editor (CanManage()==false), got %v", err)
 	}
 }
 

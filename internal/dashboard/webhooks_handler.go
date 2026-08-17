@@ -237,16 +237,31 @@ func (h *Handler) ListWebhooks(w http.ResponseWriter, r *http.Request) {
 
 // GetWebhook handles GET /dashboard/api/apps/{id}/webhooks/{webhookId}.
 func (h *Handler) GetWebhook(w http.ResponseWriter, r *http.Request) {
-	appID := chi.URLParam(r, "id")
-	if _, ok := h.webhookRBACGate(w, r, appID); !ok {
-		return
-	}
-	webhookID := chi.URLParam(r, "webhookId")
-	wh, ok := h.getScopedWebhook(w, r, appID, webhookID)
+	user, ok := UserFromContext(r.Context())
 	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
-	writeJSON(w, http.StatusOK, toWebhookResponse(wh))
+	appID := chi.URLParam(r, "id")
+	webhookID := chi.URLParam(r, "webhookId")
+	// Event mappings aren't part of this REST response shape (webhookResponse
+	// has no mappings field) — only orbit_get_webhook's combined response
+	// needs them, per design.md's Tech Decisions. Discarded here.
+	wh, _, err := GetWebhookForUser(r.Context(), h.pool, user, appID, webhookID)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		case errors.Is(err, ErrForbidden):
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		case errors.Is(err, ErrWebhookNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "webhook not found"})
+		default:
+			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		}
+		return
+	}
+	writeJSON(w, http.StatusOK, toWebhookResponse(*wh))
 }
 
 // RotateWebhookToken handles POST /dashboard/api/apps/{id}/webhooks/{webhookId}/rotate-token.

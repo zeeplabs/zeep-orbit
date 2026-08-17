@@ -348,11 +348,11 @@ T14 → T15
 - Skill: NONE
 
 **Done when**:
-- [ ] `GetWebhookForUser` returns the webhook config plus its event mappings for a `webhook_id` that belongs to the given `app_id`
-- [ ] Returns not-found for a `webhook_id` that belongs to a **different** app than the given `app_id` (explicit cross-app scoping test — this is the edge case the spec calls out)
-- [ ] Returns forbidden for a caller whose role fails `CanManage()`
-- [ ] Existing `GetWebhook` REST handler test(s) still pass unmodified
-- [ ] Gate passes: `go test ./internal/dashboard/... -race`
+- [x] `GetWebhookForUser` returns the webhook config plus its event mappings for a `webhook_id` that belongs to the given `app_id`
+- [x] Returns not-found for a `webhook_id` that belongs to a **different** app than the given `app_id` (explicit cross-app scoping test — this is the edge case the spec calls out)
+- [x] Returns forbidden for a caller whose role fails `CanManage()`
+- [x] Existing `GetWebhook` REST handler test(s) still pass unmodified
+- [x] Gate passes: `go test ./internal/dashboard/... -race`
 
 **Tests**: integration (real Postgres)
 **Gate**: quick

@@ -216,6 +216,34 @@ func ListWebhooksForUser(ctx context.Context, pool *db.Pool, user *DashboardUser
 	return ListWebhooks(ctx, pool, appID)
 }
 
+// GetWebhookForUser is the shared operation behind the GetWebhook REST
+// handler and orbit_get_webhook (mcp-read-only-tools T11/T13): resolve+
+// authorize the app (same CanManage() tier as ListWebhooksForUser), then
+// return one webhook plus its event mappings in a single combined result
+// (design.md's Tech Decisions: matches spec AC2 exactly, avoids forcing a
+// second round-trip). GetWebhookByID is already scoped to appID, so a
+// webhookID belonging to a different app returns ErrWebhookNotFound — the
+// same cross-app-scoping behavior getScopedWebhook already enforces for the
+// REST handler.
+func GetWebhookForUser(ctx context.Context, pool *db.Pool, user *DashboardUser, appID, webhookID string) (*WebhookRow, []EventMappingRow, error) {
+	_, role, err := GetApp(ctx, pool, appID, user)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !role.CanManage() {
+		return nil, nil, ErrForbidden
+	}
+	wh, err := GetWebhookByID(ctx, pool, appID, webhookID)
+	if err != nil {
+		return nil, nil, err
+	}
+	mappings, err := ListEventMappings(ctx, pool, wh.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &wh, mappings, nil
+}
+
 // ListWebhooks returns every non-soft-deleted webhook for an app, newest first.
 func ListWebhooks(ctx context.Context, pool *db.Pool, appID string) ([]WebhookRow, error) {
 	rows, err := pool.Query(ctx,
