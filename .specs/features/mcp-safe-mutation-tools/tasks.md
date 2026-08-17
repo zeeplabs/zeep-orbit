@@ -194,12 +194,12 @@ T7 → T8
 - Skill: NONE
 
 **Done when**:
-- [ ] `CreateWebhookForUser` creates a webhook using the same validation `CreateWebhook`'s REST handler already applies, without affecting any other webhook on the app
-- [ ] Returns forbidden for a caller whose role fails `CanManage()` — dedicated test with an editor-role member (not admin), confirming the stricter tier this endpoint actually enforces vs. the table endpoints' `CanWrite()`
-- [ ] Returns not-found for an invisible/nonexistent app
-- [ ] Existing `CreateWebhook` REST handler test(s) still pass unmodified
-- [ ] Records `webhook.create` in the audit log on success (same action string the REST handler already uses)
-- [ ] Gate passes: `go test ./internal/dashboard/... -race`
+- [x] `CreateWebhookForUser` creates a webhook using the same validation `CreateWebhook`'s REST handler already applies, without affecting any other webhook on the app
+- [x] Returns forbidden for a caller whose role fails `CanManage()` — dedicated test with an editor-role member (not admin), confirming the stricter tier this endpoint actually enforces vs. the table endpoints' `CanWrite()`
+- [x] Returns not-found for an invisible/nonexistent app
+- [x] Existing `CreateWebhook` REST handler test(s) still pass unmodified
+- [x] Records `webhook.create` in the audit log on success (same action string the REST handler already uses)
+- [x] Gate passes: `go test ./internal/dashboard/... -race`
 
 **Tests**: integration (real Postgres)
 **Gate**: quick

@@ -275,6 +275,45 @@ func ListWebhookDeliveriesForUser(ctx context.Context, pool *db.Pool, user *Dash
 	return ListDeliveries(ctx, pool, wh.ID, limit, offset)
 }
 
+// CreateWebhookForUser is the shared operation behind the CreateWebhook REST
+// handler and orbit_create_webhook (mcp-safe-mutation-tools spec T5/T6):
+// resolve+authorize the app with the same GetApp+role.CanManage() gate
+// webhookRBACGate enforces (context-based instead of http.ResponseWriter-
+// based — webhookRBACGate itself can't be called from a non-HTTP caller),
+// validate Method/Name/EventTypePath the same way the REST handler does,
+// then call the existing CreateWebhook store function as-is (already
+// genuinely additive — no overwrite path). Audits under "webhook.create",
+// reusing the REST handler's existing action string rather than a new one,
+// since the underlying mutation is identical.
+func (h *Handler) CreateWebhookForUser(ctx context.Context, user *DashboardUser, appID string, input CreateWebhookInput, ip string) (*WebhookRow, error) {
+	app, role, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, err
+	}
+	if !role.CanManage() {
+		return nil, ErrForbidden
+	}
+
+	switch input.Method {
+	case "GET", "POST", "PUT", "PATCH":
+	default:
+		return nil, &ValidationError{msg: "method must be one of GET, POST, PUT, PATCH"}
+	}
+	if input.Name == "" || input.EventTypePath == "" {
+		return nil, &ValidationError{msg: "name and event_type_path are required"}
+	}
+
+	input.AppID = appID
+	input.CreatedBy = user.ID
+	row, _, err := CreateWebhook(ctx, h.pool, input)
+	if err != nil {
+		return nil, err
+	}
+
+	h.audit(ctx, user.ID, user.Email, "webhook.create", "webhook", row.ID, app.Name+"/"+row.Name, nil, ip)
+	return &row, nil
+}
+
 // ListWebhooks returns every non-soft-deleted webhook for an app, newest first.
 func ListWebhooks(ctx context.Context, pool *db.Pool, appID string) ([]WebhookRow, error) {
 	rows, err := pool.Query(ctx,

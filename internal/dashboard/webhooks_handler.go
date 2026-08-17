@@ -110,46 +110,41 @@ func (h *Handler) getScopedWebhook(w http.ResponseWriter, r *http.Request, appID
 
 // CreateWebhook handles POST /dashboard/api/apps/{id}/webhooks.
 func (h *Handler) CreateWebhook(w http.ResponseWriter, r *http.Request) {
-	appID := chi.URLParam(r, "id")
-	app, ok := h.webhookRBACGate(w, r, appID)
+	user, ok := UserFromContext(r.Context())
 	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
 
-	user, _ := UserFromContext(r.Context())
-
+	appID := chi.URLParam(r, "id")
 	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
 	var body createWebhookRequest
 	if !h.decodeJSONBody(w, r, &body) {
 		return
 	}
 
-	switch body.Method {
-	case "GET", "POST", "PUT", "PATCH":
-	default:
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "method must be one of GET, POST, PUT, PATCH"})
-		return
-	}
-	if body.Name == "" || body.EventTypePath == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name and event_type_path are required"})
-		return
-	}
-
-	row, _, err := CreateWebhook(r.Context(), h.pool, CreateWebhookInput{
-		AppID:         appID,
+	row, err := h.CreateWebhookForUser(r.Context(), user, appID, CreateWebhookInput{
 		Name:          body.Name,
 		Method:        body.Method,
 		EventTypePath: body.EventTypePath,
 		EventIDPath:   body.EventIDPath,
-		CreatedBy:     user.ID,
-	})
+	}, r.RemoteAddr)
 	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		var valErr *ValidationError
+		switch {
+		case errors.Is(err, ErrNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		case errors.Is(err, ErrForbidden):
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		case errors.As(err, &valErr):
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": valErr.Error()})
+		default:
+			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		}
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, toWebhookResponse(row))
-	h.audit(r.Context(), user.ID, user.Email, "webhook.create", "webhook", row.ID, app.Name+"/"+row.Name, nil, r.RemoteAddr)
+	writeJSON(w, http.StatusCreated, toWebhookResponse(*row))
 }
 
 type updateWebhookRequest struct {
