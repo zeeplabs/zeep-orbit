@@ -177,6 +177,56 @@ func TestAddTableColumnForUser_BadReferenceRejected(t *testing.T) {
 	}
 }
 
+// TestAddTableColumnForUser_RenameFromIsForceCleared covers the anti-smuggling
+// guard (handler.go's col.RenameFrom = "" before merge): a caller can't turn
+// this additive-only endpoint into a rename of an existing column by setting
+// RenameFrom to another column's name. Flagged by independent review as a
+// control with no direct test — the new column is added as a genuinely new
+// column (no rename applied), and the "renamed-from" column survives
+// untouched under its original name.
+func TestAddTableColumnForUser_RenameFromIsForceCleared(t *testing.T) {
+	pool, h, actors, _, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{Name: "col-rename-app"}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppForUser: %v", err)
+	}
+	table, err := h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
+		Name:    "items",
+		Columns: []config.ColumnConfig{{Name: "title", Type: "text"}},
+	}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppTableForUser: %v", err)
+	}
+
+	updated, err := h.AddTableColumnForUser(ctx, actors["loner"], app.ID, table.Name, config.ColumnConfig{
+		Name: "subtitle", Type: "text", RenameFrom: "title",
+	}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("AddTableColumnForUser with RenameFrom set: %v", err)
+	}
+	if len(updated.Columns) != 2 {
+		t.Fatalf("expected 2 columns (title survives, subtitle added new — no rename), got %d: %+v", len(updated.Columns), updated.Columns)
+	}
+	var titleStillExists, subtitleIsNew bool
+	for _, c := range updated.Columns {
+		if c.Name == "title" {
+			titleStillExists = true
+		}
+		if c.Name == "subtitle" {
+			subtitleIsNew = c.RenameFrom == ""
+		}
+	}
+	if !titleStillExists {
+		t.Fatalf("expected original column %q to survive untouched (RenameFrom must not smuggle a rename), got %+v", "title", updated.Columns)
+	}
+	if !subtitleIsNew {
+		t.Fatalf("expected new column %q to have RenameFrom force-cleared, got %+v", "subtitle", updated.Columns)
+	}
+}
+
 // TestAddTableColumnForUser_ReferenceCompletingCycleRejected covers the
 // whole-app-graph FK-cycle detector (config.ValidateTables'
 // detectReferenceCycle) via this new incremental path — a Verifier gap
