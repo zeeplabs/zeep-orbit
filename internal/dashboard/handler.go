@@ -1428,6 +1428,87 @@ func (h *Handler) UpdateTableRLSModeForUser(ctx context.Context, user *Dashboard
 	return &row, nil
 }
 
+// ErrColumnAlreadyExists is returned by AddTableColumnForUser when the
+// requested column name already exists on the table — an "add" operation
+// must never silently turn into a "replace", so this is rejected rather
+// than merged/overwritten.
+var ErrColumnAlreadyExists = errors.New("dashboard: column already exists")
+
+// AddTableColumnForUser adds exactly one new column to an existing table by
+// merging it server-side into the table's current stored Columns before
+// validating/applying/persisting the whole merged set — mirroring
+// UpdateTableRLSModeForUser's fetch-then-mutate-one-field-then-persist
+// pattern. This exists because UpdateAppTable's full-replace endpoint is
+// unsafe for an agent to resend a partial columns array against (silently
+// orphans any column it omits, since validateTableInput/config.ValidateTables
+// has no incremental single-column entry point and apps_store.UpdateAppTable
+// always overwrites the whole columns array) — see
+// .specs/features/mcp-safe-mutation-tools/design.md.
+func (h *Handler) AddTableColumnForUser(ctx context.Context, user *DashboardUser, appID, tableName string, col config.ColumnConfig, ip string) (*AppTableRow, error) {
+	app, role, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, err
+	}
+	if !role.CanWrite() {
+		return nil, ErrForbidden
+	}
+
+	existingTable := findAppTableByName(app, tableName)
+	if existingTable == nil {
+		return nil, ErrNotFound
+	}
+
+	for _, c := range existingTable.Columns {
+		if c.Name == col.Name {
+			return nil, ErrColumnAlreadyExists
+		}
+	}
+
+	// A brand-new column has nothing to rename from — force-clear it so a
+	// caller can't smuggle a rename of an existing column through this
+	// additive-only endpoint.
+	col.RenameFrom = ""
+
+	mergedColumns := make([]config.ColumnConfig, 0, len(existingTable.Columns)+1)
+	mergedColumns = append(mergedColumns, existingTable.Columns...)
+	mergedColumns = append(mergedColumns, col)
+
+	otherTables := make([]AppTableRow, 0, len(app.Tables))
+	for _, t := range app.Tables {
+		if t.ID != existingTable.ID {
+			otherTables = append(otherTables, t)
+		}
+	}
+
+	table := AppTableRow{Name: existingTable.Name, RLS: existingTable.RLS, Columns: mergedColumns, Indexes: existingTable.Indexes}
+	if err := validateTableInput(table, app.AuthEmailEnabled, otherTables); err != nil {
+		return nil, &ValidationError{msg: err.Error()}
+	}
+
+	cfg := buildAppConfig(app)
+	cfg.Tables = []config.TableConfig{{Name: table.Name, RLS: table.RLS, Columns: table.Columns, Indexes: table.Indexes}}
+	if _, err := h.prov.Apply(ctx, &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
+		return nil, err
+	}
+
+	row, err := UpdateAppTable(ctx, h.pool, appID, existingTable.ID, schemaNameForDB(app.Name), existingTable.RLS, mergedColumns, existingTable.Indexes)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+	}
+
+	updated, _, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+	}
+	h.reg.Register(appRowToRegistryApp(updated))
+
+	h.audit(ctx, user.ID, user.Email, "app.table_column.create", "app_table", row.ID, app.Name+"/"+row.Name+"/"+col.Name, nil, ip)
+	return &row, nil
+}
+
 // DeleteAppTable handles DELETE /dashboard/api/apps/{id}/tables/{tableId}.
 // Removes the metadata row and drops the physical table — unlike the old
 // bulk UpdateApp flow, a removed table is never left behind in the database.
