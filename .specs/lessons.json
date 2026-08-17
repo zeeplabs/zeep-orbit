@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 25,
+  "next_id": 26,
   "lessons": [
     {
       "id": "L-001",
@@ -436,6 +436,24 @@
       ],
       "created": "2026-08-16T00:12:33Z",
       "last_seen": "2026-08-16T00:12:33Z"
+    },
+    {
+      "id": "L-025",
+      "key": "spec_deviation::when tasks md needs more requirement ids than spec md s traceability table allocated e g splitting one p3 story into per tool ids extend spec md s table in the same change instead of letting tasks md invent ids the spec never declared",
+      "text": "When tasks.md needs more requirement IDs than spec.md's traceability table allocated (e.g. splitting one P3 story into per-tool IDs), extend spec.md's table in the same change instead of letting tasks.md invent IDs the spec never declared.",
+      "signal": "spec_deviation",
+      "scope": ".specs/features/*/spec.md",
+      "status": "candidate",
+      "features": [
+        "mcp-read-only-tools"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "spec.md:119-137 vs tasks.md T11-T15 (.specs/features/*/spec.md)"
+      ],
+      "created": "2026-08-17T18:19:39Z",
+      "last_seen": "2026-08-17T18:19:39Z"
     }
   ]
 }

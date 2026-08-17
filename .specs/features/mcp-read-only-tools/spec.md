@@ -8,11 +8,11 @@ A full survey of the REST API surface (2026-08-17) confirmed this gap is broad a
 
 ## Goals
 
-- [ ] An MCP client can read an app's raw configuration record (auth providers configured, storage bucket configured, rate limit, membership-relevant fields), one table's row policies, and the identity's own PATs — through tools that never existed before this spec.
-- [ ] An MCP client can inspect an app's operational surface — team membership, issued app API tokens, webhooks (config, event mappings, delivery history), log volume/metrics — read-only, one call each.
-- [ ] Every new tool authorizes through the exact same `GetApp(ctx, pool, appID, user)` + role-check path (or equivalent ownership scoping) the corresponding REST handler already uses — no new permission model, no tool that can see more than its caller's Dashboard session could see.
-- [ ] Every new tool is a thin wrapper around an existing (or trivially extracted) `*ForUser`-style function, mirroring `mcp-server`'s Shared Operation Functions pattern — never new business logic duplicated between REST and MCP.
-- [ ] No new tool in this spec returns a secret, credential, or raw token value that its REST equivalent doesn't already return in redacted form.
+- [x] An MCP client can read an app's raw configuration record (auth providers configured, storage bucket configured, rate limit, membership-relevant fields), one table's row policies, and the identity's own PATs — through tools that never existed before this spec.
+- [x] An MCP client can inspect an app's operational surface — team membership, issued app API tokens, webhooks (config, event mappings, delivery history), log volume/metrics — read-only, one call each.
+- [x] Every new tool authorizes through the exact same `GetApp(ctx, pool, appID, user)` + role-check path (or equivalent ownership scoping) the corresponding REST handler already uses — no new permission model, no tool that can see more than its caller's Dashboard session could see.
+- [x] Every new tool is a thin wrapper around an existing (or trivially extracted) `*ForUser`-style function, mirroring `mcp-server`'s Shared Operation Functions pattern — never new business logic duplicated between REST and MCP.
+- [x] No new tool in this spec returns a secret, credential, or raw token value that its REST equivalent doesn't already return in redacted form.
 
 ## Out of Scope
 
@@ -120,26 +120,28 @@ Every ambiguity is resolved or recorded here - nothing is left silently unclear.
 
 | Requirement ID | Story | Phase | Status |
 | -------------- | ----- | ------ | ------ |
-| MROT-01 | P1: Agent inspects app config + table policies | - | Pending |
-| MROT-02 | P1: Agent inspects app config + table policies | - | Pending |
-| MROT-03 | P1: Agent inspects app config + table policies | - | Pending |
-| MROT-04 | P2: Agent inspects access surface | - | Pending |
-| MROT-05 | P2: Agent inspects access surface | - | Pending |
-| MROT-06 | P2: Agent inspects access surface | - | Pending |
-| MROT-07 | P2: Agent inspects access surface | - | Pending |
-| MROT-08 | P3: Agent inspects operational history | - | Pending |
-| MROT-09 | P3: Agent inspects operational history | - | Pending |
+| MROT-01 | P1: Agent inspects app config + table policies | T1 | Verified |
+| MROT-02 | P1: Agent inspects app config + table policies | T4, T5 | Verified |
+| MROT-03 | P1: Agent inspects app config + table policies | T1 | Verified |
+| MROT-04 | P2: Agent inspects access surface | T6, T7, T8, T9 | Verified |
+| MROT-05 | P2: Agent inspects access surface | T1 | Verified |
+| MROT-06 | P2: Agent inspects access surface | T2 | Verified |
+| MROT-07 | P2: Agent inspects access surface | T3 | Verified |
+| MROT-08 | P3: Agent inspects operational history | T10, T13 | Verified |
+| MROT-09 | P3: Agent inspects operational history | T11, T13 | Verified |
+| MROT-10 | P3: Agent inspects operational history | T12, T13 | Verified |
+| MROT-11 | P3: Agent inspects operational history | T14, T15 | Verified |
 
 **ID format:** `MROT-[NUMBER]` (MCP Read-Only Tools)
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 9 total, 0 mapped to tasks, 9 unmapped ⚠️ (tasks.md not yet written — spec-only phase per current scope)
+**Coverage:** 11 total, 11 mapped to tasks, 0 unmapped — verified PASS, see `validation.md` (diff range `6df417d..230450b`)
 
 ---
 
 ## Success Criteria
 
-- [ ] All 10 new tools listed across P1-P3 (`orbit_get_app`, `orbit_list_table_policies`, `orbit_list_app_members`, `orbit_list_app_tokens`, `orbit_list_app_auth_providers`, `orbit_list_my_pats`, `orbit_list_webhooks`, `orbit_get_webhook`, `orbit_list_webhook_deliveries`, `orbit_get_logs_metrics`) are callable via a real MCP client against a running server and return data matching the equivalent Dashboard UI page.
-- [ ] Zero secret/credential values appear in any new tool's response, verified the same boundary-level way `TestOrbitListAppsTool_ResponseNeverContainsSecrets` verifies the existing tools (2026-08-17 credential-leak fix precedent).
-- [ ] Every new tool's authorization is proven to reject a caller without access to the given `app_id`, using the same test shape as the existing write tools' forbidden-path tests.
+- [x] All 10 new tools listed across P1-P3 (`orbit_get_app`, `orbit_list_table_policies`, `orbit_list_app_members`, `orbit_list_app_tokens`, `orbit_list_app_auth_providers`, `orbit_list_my_pats`, `orbit_list_webhooks`, `orbit_get_webhook`, `orbit_list_webhook_deliveries`, `orbit_get_logs_metrics`) are callable via a real MCP client against a running server and return data matching the equivalent Dashboard UI page.
+- [x] Zero secret/credential values appear in any new tool's response, verified the same boundary-level way `TestOrbitListAppsTool_ResponseNeverContainsSecrets` verifies the existing tools (2026-08-17 credential-leak fix precedent).
+- [x] Every new tool's authorization is proven to reject a caller without access to the given `app_id`, using the same test shape as the existing write tools' forbidden-path tests.
