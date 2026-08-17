@@ -1,6 +1,28 @@
 {
   "entries": [
     {
+      "version": "v1.4.0",
+      "release_date": "2026-08-16",
+      "title": {"en": "MCP Server (PAT + OAuth 2.1)", "pt-BR": "Servidor MCP (PAT + OAuth 2.1)"},
+      "summary": {"en": "An AI coding agent can now connect directly to your Orbit instance over MCP and manage apps, tables, and policies the same way the dashboard does — authenticated with a Personal Access Token or, for clients like Claude Desktop, OAuth 2.1 with PKCE.", "pt-BR": "Um agente de IA agora pode se conectar direto na sua instância Orbit via MCP e gerenciar apps, tabelas e policies do mesmo jeito que o dashboard faz — autenticado com um Personal Access Token ou, para clients como o Claude Desktop, OAuth 2.1 com PKCE."},
+      "sections": [
+        {
+          "type": "features",
+          "items": [
+            {"description": {"en": "MCP server at `/dashboard/mcp` — one tool per existing dashboard operation (create app, create table, set RLS mode, create policy from template, and more), so an AI coding agent drives the same code path a human clicking through the dashboard would.", "pt-BR": "Servidor MCP em `/dashboard/mcp` — uma tool por operação já existente do dashboard (criar app, criar tabela, definir modo RLS, criar policy a partir de template, entre outras), então um agente de IA aciona o mesmo caminho de código que um humano clicando no dashboard usaria."}},
+            {"description": {"en": "Two auth methods: Personal Access Tokens (create/list/revoke from the new MCP settings page) for CLI-style clients, and OAuth 2.1 with PKCE + dynamic client registration for clients like Claude Desktop that can't hold a static token.", "pt-BR": "Dois métodos de autenticação: Personal Access Tokens (criar/listar/revogar na nova página de configurações MCP) para clients estilo CLI, e OAuth 2.1 com PKCE + registro dinâmico de client para clients como o Claude Desktop, que não conseguem guardar um token estático."}},
+            {"description": {"en": "A new \"MCP\" page in the dashboard walks through connecting Claude Code, Claude Desktop, Cursor, Codex, or OpenCode, with copy-pasteable config for each.", "pt-BR": "Uma nova página \"MCP\" no dashboard explica como conectar o Claude Code, Claude Desktop, Cursor, Codex ou OpenCode, com configuração pronta pra copiar e colar para cada um."}}
+          ]
+        },
+        {
+          "type": "security",
+          "items": [
+            {"description": {"en": "OAuth client registration only accepts https:// redirect URIs (or http:// on loopback, for native clients); authorization codes and refresh tokens are single-use and rotated with reuse detection; client_id is verified at every token exchange; and a superadmin can review and revoke any self-registered OAuth client from the MCP page.", "pt-BR": "O registro de client OAuth só aceita redirect URIs https:// (ou http:// em loopback, para clients nativos); códigos de autorização e refresh tokens são de uso único e rotacionados com detecção de reuso; o client_id é verificado em toda troca de token; e um superadmin pode revisar e revogar qualquer client OAuth auto-registrado direto na página MCP."}}
+          ]
+        }
+      ]
+    },
+    {
       "version": "v1.3.0",
       "release_date": "2026-08-13",
       "title": {"en": "Inbound Webhooks, RLS \"Policy\" Mode & Policy Templates", "pt-BR": "Webhooks de Entrada, Modo \"Policy\" de RLS e Templates de Policy"},
