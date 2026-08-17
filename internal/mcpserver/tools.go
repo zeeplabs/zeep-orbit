@@ -456,12 +456,18 @@ type orbitGetAppInput struct {
 	AppID string `json:"app_id" jsonschema:"id of the app to fetch"`
 }
 
+// orbitListAppAuthProvidersInput is the input for orbit_list_app_auth_providers.
+type orbitListAppAuthProvidersInput struct {
+	AppID string `json:"app_id" jsonschema:"id of the app to fetch auth providers for"`
+}
+
 // registerAppConfigReadTools registers the read-only tools that expose an
 // app's own configuration record and per-table policy data (mcp-read-only-tools
-// spec P1: orbit_get_app; T5 adds orbit_list_table_policies here too).
-// Each tool authorizes through the exact tier its wrapped function/REST
-// handler already enforces — the tiers are not uniform across this group,
-// see design.md's Authorization Matrix.
+// spec P1: orbit_get_app; T2 adds orbit_list_app_auth_providers; T5 adds
+// orbit_list_table_policies here too). Each tool authorizes through the
+// exact tier its wrapped function/REST handler already enforces — the
+// tiers are not uniform across this group, see design.md's Authorization
+// Matrix.
 func registerAppConfigReadTools(server *mcp.Server, deps ToolDeps) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "orbit_get_app",
@@ -477,5 +483,20 @@ func registerAppConfigReadTools(server *mcp.Server, deps ToolDeps) {
 		}
 		app.RedactSecrets()
 		return nil, app, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_list_app_auth_providers",
+		Description: "List an app's configured login providers (client secrets redacted to a client_secret_set boolean). Requires the caller to have any effective role on the app, no extra management role required.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitListAppAuthProvidersInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		providers, err := dashboard.GetAppAuthProviders(ctx, deps.Pool, in.AppID, user)
+		if err != nil {
+			return nil, nil, mapReadError(err)
+		}
+		return nil, providers, nil
 	})
 }

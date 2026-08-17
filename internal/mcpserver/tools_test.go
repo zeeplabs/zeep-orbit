@@ -304,3 +304,109 @@ func TestOrbitGetApp_NoAccessReturnsStructuredToolError(t *testing.T) {
 		t.Fatalf("expected the same not-found wording GetApp already returns, got %q", text.Text)
 	}
 }
+
+// TestOrbitListAppAuthProviders_ReturnsRedactedShapeForAuthorizedCaller
+// covers mcp-read-only-tools T2's Done-when: the same redacted shape
+// GetAppAuthProviders' REST handler already returns (spec P2 AC3),
+// client_secret replaced with client_secret_set, and the real secret
+// value never present anywhere in the response.
+func TestOrbitListAppAuthProviders_ReturnsRedactedShapeForAuthorizedCaller(t *testing.T) {
+	pool := authTestPool(t)
+	owner := authTestUser(t, pool, "tools-list-providers-owner@example.com")
+	token, _, err := dashboard.CreatePAT(context.Background(), pool, owner.ID, "cli", dashboard.PATKindManual, nil)
+	if err != nil {
+		t.Fatalf("CreatePAT: %v", err)
+	}
+	app, err := dashboard.CreateApp(context.Background(), pool, "tools-list-providers-app", owner.ID, true)
+	if err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+	const fakeClientSecret = "fake-google-oauth-client-secret-t2"
+	authProviders := json.RawMessage(fmt.Sprintf(
+		`{"google":{"enabled":true,"client_id":"fake-client-id.apps.googleusercontent.com","client_secret":%q,"redirect_url":"https://example.com/cb"}}`,
+		fakeClientSecret,
+	))
+	if err := dashboard.UpdateAppAuthProvidersRaw(context.Background(), pool, app.ID, authProviders); err != nil {
+		t.Fatalf("UpdateAppAuthProvidersRaw: %v", err)
+	}
+
+	sess := startMCPSession(t, pool, token)
+
+	res, err := sess.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "orbit_list_app_auth_providers",
+		Arguments: map[string]any{"app_id": app.ID},
+	})
+	if err != nil {
+		t.Fatalf("CallTool orbit_list_app_auth_providers: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("expected a successful tool result, got an error result: %+v", res.Content)
+	}
+	data, err := json.Marshal(res.StructuredContent)
+	if err != nil {
+		t.Fatalf("marshal StructuredContent: %v", err)
+	}
+	body := string(data)
+	if strings.Contains(body, fakeClientSecret) {
+		t.Fatalf("orbit_list_app_auth_providers leaked the OAuth client_secret: %s", body)
+	}
+
+	var out map[string]map[string]any
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("unmarshal StructuredContent: %v", err)
+	}
+	google, ok := out["google"]
+	if !ok {
+		t.Fatalf("expected a google provider entry, got %+v", out)
+	}
+	if _, hasSecret := google["client_secret"]; hasSecret {
+		t.Fatalf("expected client_secret field to be absent, got %+v", google)
+	}
+	if set, _ := google["client_secret_set"].(bool); !set {
+		t.Fatalf("expected client_secret_set=true, got %+v", google)
+	}
+	if google["client_id"] != "fake-client-id.apps.googleusercontent.com" {
+		t.Fatalf("expected client_id to be preserved (non-secret field), got %+v", google)
+	}
+}
+
+// TestOrbitListAppAuthProviders_NoAccessReturnsStructuredToolError covers
+// mcp-read-only-tools T2's Done-when: an invisible/nonexistent app returns
+// the same not-found tool error GetAppAuthProviders (via GetApp) already
+// returns.
+func TestOrbitListAppAuthProviders_NoAccessReturnsStructuredToolError(t *testing.T) {
+	pool := authTestPool(t)
+	owner := authTestUser(t, pool, "tools-list-providers-owner2@example.com")
+	outsider, err := dashboard.CreateUser(context.Background(), pool, "tools-list-providers-outsider@example.com", "outsider", "hash", "member")
+	if err != nil {
+		t.Fatalf("create outsider user: %v", err)
+	}
+	token, _, err := dashboard.CreatePAT(context.Background(), pool, outsider.ID, "cli", dashboard.PATKindManual, nil)
+	if err != nil {
+		t.Fatalf("CreatePAT: %v", err)
+	}
+	app, err := dashboard.CreateApp(context.Background(), pool, "tools-list-providers-app2", owner.ID, true)
+	if err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+
+	sess := startMCPSession(t, pool, token)
+
+	res, err := sess.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "orbit_list_app_auth_providers",
+		Arguments: map[string]any{"app_id": app.ID},
+	})
+	if err != nil {
+		t.Fatalf("CallTool orbit_list_app_auth_providers (protocol-level): %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected a structured tool error for an app the caller has no access to")
+	}
+	text, ok := res.Content[0].(*mcp.TextContent)
+	if !ok {
+		t.Fatalf("expected TextContent error, got %T", res.Content[0])
+	}
+	if text.Text != "not found" {
+		t.Fatalf("expected the same not-found wording GetApp already returns, got %q", text.Text)
+	}
+}

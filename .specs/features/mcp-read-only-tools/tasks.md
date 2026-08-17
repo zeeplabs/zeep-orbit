@@ -122,10 +122,10 @@ T14 → T15
 - Skill: NONE
 
 **Done when**:
-- [ ] Returns the same redacted shape the REST endpoint (`GET /apps/{id}/auth/providers`) returns for a known app
-- [ ] Response never contains `client_secret` under any provider key (boundary test)
-- [ ] Returns not-found for an invisible/nonexistent app
-- [ ] Gate passes: `go test ./internal/mcpserver/... -race`
+- [x] Returns the same redacted shape the REST endpoint (`GET /apps/{id}/auth/providers`) returns for a known app
+- [x] Response never contains `client_secret` under any provider key (boundary test)
+- [x] Returns not-found for an invisible/nonexistent app
+- [x] Gate passes: `go test ./internal/mcpserver/... -race`
 
 **Tests**: integration (real MCP client roundtrip)
 **Gate**: full
