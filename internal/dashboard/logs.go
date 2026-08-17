@@ -1,9 +1,12 @@
 package dashboard
 
 import (
+	"context"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
 
 const maxBodyCapture = 2048
@@ -134,6 +137,22 @@ func (rb *RingBuffer) Metrics(allowedApps map[string]bool) LogMetrics {
 	}
 
 	return m
+}
+
+// LogsMetricsForUser is the shared operation behind the LogsMetrics REST
+// handler and orbit_get_logs_metrics (mcp-read-only-tools T14/T15):
+// resolve the caller's allowed app-name set (nil/unrestricted for
+// superadmin/CanReadAnyApp, the caller's own membership set otherwise —
+// ListOwnedAppNames' own two branches), then return the RingBuffer's
+// one-minute caller-wide aggregate restricted to that set. Ownership-only:
+// no app_id parameter, no CanManage() tier — matches the pre-extraction
+// handler body exactly (handler.go:2017-2030).
+func LogsMetricsForUser(ctx context.Context, pool *db.Pool, logs *RingBuffer, user *DashboardUser) (LogMetrics, error) {
+	allowedApps, err := ListOwnedAppNames(ctx, pool, user)
+	if err != nil {
+		return LogMetrics{}, err
+	}
+	return logs.Metrics(allowedApps), nil
 }
 
 func ExtractApp(path string) string {

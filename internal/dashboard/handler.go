@@ -2021,13 +2021,13 @@ func (h *Handler) LogsMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user)
+	metrics, err := LogsMetricsForUser(r.Context(), h.pool, h.Logs, user)
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, h.Logs.Metrics(allowedApps))
+	writeJSON(w, http.StatusOK, metrics)
 }
 
 // DataBrowserTableColumn represents a column in the data browser tree.

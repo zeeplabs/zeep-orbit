@@ -425,9 +425,9 @@ T14 → T15
 - Skill: NONE
 
 **Done when**:
-- [ ] `LogsMetricsForUser` returns the same `LogMetrics` shape `LogsMetrics`'s existing REST test expects, for both a superadmin (unrestricted `allowedApps`) and a regular member (restricted set) — both branches of `ListOwnedAppNames` tested explicitly
-- [ ] Existing `LogsMetrics` REST handler test(s) still pass unmodified
-- [ ] Gate passes: `go test ./internal/dashboard/... -race`
+- [x] `LogsMetricsForUser` returns the same `LogMetrics` shape `LogsMetrics`'s existing REST test expects, for both a superadmin (unrestricted `allowedApps`) and a regular member (restricted set) — both branches of `ListOwnedAppNames` tested explicitly
+- [x] Existing `LogsMetrics` REST handler test(s) still pass unmodified
+- [x] Gate passes: `go test ./internal/dashboard/... -race`
 
 **Tests**: integration (real Postgres, seeded `RingBuffer` entries)
 **Gate**: quick
