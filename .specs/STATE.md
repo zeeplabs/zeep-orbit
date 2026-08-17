@@ -2,15 +2,17 @@
 
 ## Decisions
 
-(none yet)
+- **AD-001**: `mcp-read-only-tools` implemented via 2 sub-agent batches (T1-T7, T8-T15) + fresh Verifier, all on `develop`, no push. 15 atomic commits (`6df417d`..`230450b`) + 1 doc-closure commit (`bfa33d8`). PASS — spec-anchored check clean, 5/5 injected mutations killed. `.specs/features/mcp-read-only-tools/validation.md` has full evidence.
 
 ## Handoff
 
-- **Feature**: `mcp-read-only-tools` (`.specs/features/mcp-read-only-tools/`)
-- **Phase / Task**: Tasks approved (gate clean, 0 errors / 7 acceptable warnings), about to start Execute — no task started yet
-- **Completed**: none
-- **In-progress** (file:line): none — paused before Execute began
-- **Next step**: Ask the user whether to dispatch sub-agents per batch (Batch 1 = T1-T7, Batch 2 = T8-T15) or execute inline, then start T1 (`orbit_get_app` MCP tool, `internal/mcpserver/tools.go`)
+- **Feature**: `mcp-read-only-tools` — **DONE** (verified PASS, `validate_state.py` clean)
+- **Phase / Task**: Complete. 15/15 tasks committed, validation.md written, spec.md traceability closed (MROT-01..11 all Verified)
+- **Completed**: T1-T15 (all), plus post-Verifier doc fix (spec.md traceability table extended to MROT-11)
+- **In-progress**: none
+- **Next step**: Two independent items remain, neither started:
+  1. Write `design.md` + `tasks.md` for `mcp-safe-mutation-tools` (only `spec.md` exists — covers `orbit_add_table_column`, `orbit_add_table_index`, `orbit_create_webhook`, `orbit_save_webhook_event_mapping`)
+  2. Commit the Swagger cache-control fix (`CHANGELOG.md` + `internal/docs/handler.go`) — still uncommitted, deferred pending explicit user request
 - **Blockers**: none
-- **Uncommitted files**: `CHANGELOG.md` (Fixed entry for the `/docs/{app}/openapi.json` cache bug), `internal/docs/handler.go` (added `Cache-Control: no-store` to `HandleSpec`) — both from an earlier, separate bugfix this session, not yet committed per "never commit unless asked"; `.specs/features/mcp-read-only-tools/` and `.specs/features/mcp-safe-mutation-tools/` (untracked, new spec directories — `mcp-safe-mutation-tools` has spec.md only, no design/tasks yet)
+- **Uncommitted files**: `CHANGELOG.md` (Fixed entry for the docs cache bug), `internal/docs/handler.go` (`Cache-Control: no-store` in `HandleSpec`) — unrelated bugfix from earlier this session, not committed per "never commit unless asked"; `.specs/features/mcp-safe-mutation-tools/` has only `spec.md` (untracked design/tasks)
 - **Branch**: `develop`
