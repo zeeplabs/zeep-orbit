@@ -147,10 +147,10 @@ T14 → T15
 - Skill: NONE
 
 **Done when**:
-- [ ] Returns only PATs owned by the calling identity (test with two distinct users' PATs seeded, confirm no cross-user leakage)
-- [ ] Response never contains a raw token/JTI value, only metadata (id, name, kind, expiry, revoked/last-used timestamps)
-- [ ] Empty PAT list returns `[]`, not `null`
-- [ ] Gate passes: `go test ./internal/mcpserver/... -race`
+- [x] Returns only PATs owned by the calling identity (test with two distinct users' PATs seeded, confirm no cross-user leakage)
+- [x] Response never contains a raw token/JTI value, only metadata (id, name, kind, expiry, revoked/last-used timestamps)
+- [x] Empty PAT list returns `[]`, not `null`
+- [x] Gate passes: `go test ./internal/mcpserver/... -race`
 
 **Tests**: integration (real MCP client roundtrip)
 **Gate**: full

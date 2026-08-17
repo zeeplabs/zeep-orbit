@@ -410,3 +410,92 @@ func TestOrbitListAppAuthProviders_NoAccessReturnsStructuredToolError(t *testing
 		t.Fatalf("expected the same not-found wording GetApp already returns, got %q", text.Text)
 	}
 }
+
+// TestOrbitListMyPats_ReturnsOnlyCallersOwnPATs covers mcp-read-only-tools
+// T3's Done-when: only PATs owned by the calling identity are returned —
+// seeded with two distinct users' PATs, confirming no cross-user leakage
+// (spec P2 AC4) — and that no raw token/JTI value is present, only
+// metadata (id, name, kind, expiry, revoked/last-used timestamps).
+func TestOrbitListMyPats_ReturnsOnlyCallersOwnPATs(t *testing.T) {
+	pool := authTestPool(t)
+	caller := authTestUser(t, pool, "tools-list-pats-caller@example.com")
+	other := authTestUser(t, pool, "tools-list-pats-other@example.com")
+
+	callerToken, _, err := dashboard.CreatePAT(context.Background(), pool, caller.ID, "caller-cli", dashboard.PATKindManual, nil)
+	if err != nil {
+		t.Fatalf("CreatePAT (caller): %v", err)
+	}
+	otherToken, _, err := dashboard.CreatePAT(context.Background(), pool, other.ID, "other-cli", dashboard.PATKindManual, nil)
+	if err != nil {
+		t.Fatalf("CreatePAT (other): %v", err)
+	}
+
+	sess := startMCPSession(t, pool, callerToken)
+
+	res, err := sess.CallTool(context.Background(), &mcp.CallToolParams{Name: "orbit_list_my_pats"})
+	if err != nil {
+		t.Fatalf("CallTool orbit_list_my_pats: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("expected a successful tool result, got an error result: %+v", res.Content)
+	}
+	data, err := json.Marshal(res.StructuredContent)
+	if err != nil {
+		t.Fatalf("marshal StructuredContent: %v", err)
+	}
+	body := string(data)
+	if strings.Contains(body, callerToken) || strings.Contains(body, otherToken) {
+		t.Fatalf("orbit_list_my_pats leaked a raw PAT token value: %s", body)
+	}
+
+	var out struct {
+		PATs []struct {
+			ID     string `json:"id"`
+			UserID string `json:"user_id"`
+			Name   string `json:"name"`
+		} `json:"pats"`
+	}
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("unmarshal StructuredContent: %v", err)
+	}
+	if len(out.PATs) != 1 {
+		t.Fatalf("expected exactly 1 PAT (caller's own), got %d: %+v", len(out.PATs), out.PATs)
+	}
+	if out.PATs[0].UserID != caller.ID || out.PATs[0].Name != "caller-cli" {
+		t.Fatalf("expected caller's own PAT (user_id=%s, name=caller-cli), got %+v", caller.ID, out.PATs[0])
+	}
+}
+
+// TestOrbitListMyPats_EmptyForUserWithNoPATsReturnsEmptyArray covers
+// mcp-read-only-tools T3's Done-when: a zero-PAT owner sees `[]`, never
+// `null` (spec's "Empty-result shape" assumption). Calling orbit_list_my_pats
+// itself always requires a PAT to authenticate (RequirePAT), so the calling
+// identity can never have literally zero PATs at the moment of the call —
+// this exercises the same dashboard.ListPATs call the tool makes directly,
+// for a user who owns no PATs, confirming the tool's underlying data source
+// returns []PATRow{}, not nil, for that case; the tool serializes whatever
+// ListPATs returns unchanged (registerAccessReadTools does no filtering).
+func TestOrbitListMyPats_EmptyForUserWithNoPATsReturnsEmptyArray(t *testing.T) {
+	pool := authTestPool(t)
+	noPatsUser := authTestUser(t, pool, "tools-list-pats-none@example.com")
+
+	pats, err := dashboard.ListPATs(context.Background(), pool, noPatsUser.ID)
+	if err != nil {
+		t.Fatalf("ListPATs: %v", err)
+	}
+	if pats == nil {
+		t.Fatal("expected ListPATs to return an empty slice, got nil")
+	}
+	if len(pats) != 0 {
+		t.Fatalf("expected zero PATs for a fresh user, got %+v", pats)
+	}
+
+	out := orbitListMyPatsOutput{PATs: pats}
+	data, err := json.Marshal(out)
+	if err != nil {
+		t.Fatalf("marshal orbitListMyPatsOutput: %v", err)
+	}
+	if !strings.Contains(string(data), `"pats":[]`) {
+		t.Fatalf("expected serialized output to contain \"pats\":[], got %s", data)
+	}
+}

@@ -51,6 +51,7 @@ func RegisterTools(server *mcp.Server, deps ToolDeps) {
 	registerWriteTools(server, deps)
 	registerTemplateTools(server, deps)
 	registerAppConfigReadTools(server, deps)
+	registerAccessReadTools(server, deps)
 }
 
 // orbitListAppsInput takes no arguments — the tool always lists the calling
@@ -498,5 +499,38 @@ func registerAppConfigReadTools(server *mcp.Server, deps ToolDeps) {
 			return nil, nil, mapReadError(err)
 		}
 		return nil, providers, nil
+	})
+}
+
+// orbitListMyPatsInput takes no arguments — the tool always lists the
+// calling identity's own PATs, mirroring GET /dashboard/api/me/pats
+// (mcp-read-only-tools spec: "ListPATs scope" assumption — not app-scoped,
+// PATs aren't tied to one app).
+type orbitListMyPatsInput struct{}
+
+// orbitListMyPatsOutput mirrors ListPATs' REST response shape wrapped in an
+// object, since MCP tool outputs are objects.
+type orbitListMyPatsOutput struct {
+	PATs []dashboard.PATRow `json:"pats"`
+}
+
+// registerAccessReadTools registers the read-only tools that expose who
+// and what has access to an app, plus the caller's own identity-scoped
+// resources (mcp-read-only-tools spec P2: T3 adds orbit_list_my_pats; T7
+// adds orbit_list_app_members here too).
+func registerAccessReadTools(server *mcp.Server, deps ToolDeps) {
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_list_my_pats",
+		Description: "List the calling identity's own personal access tokens (metadata only — no raw token value). Not app-scoped: returns the caller's PATs regardless of any app.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ orbitListMyPatsInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		pats, err := dashboard.ListPATs(ctx, deps.Pool, user.ID)
+		if err != nil {
+			return nil, nil, errInternal
+		}
+		return nil, orbitListMyPatsOutput{PATs: pats}, nil
 	})
 }
