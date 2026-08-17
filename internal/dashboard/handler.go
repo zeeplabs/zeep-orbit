@@ -1509,6 +1509,77 @@ func (h *Handler) AddTableColumnForUser(ctx context.Context, user *DashboardUser
 	return &row, nil
 }
 
+// ErrIndexAlreadyExists is returned by AddTableIndexForUser when the
+// requested index name already exists on the table.
+var ErrIndexAlreadyExists = errors.New("dashboard: index already exists")
+
+// AddTableIndexForUser adds exactly one new index to an existing table,
+// mirroring AddTableColumnForUser's merge-then-validate-then-apply-then-
+// persist shape for Indexes instead of Columns. Uses the current blocking
+// CREATE INDEX IF NOT EXISTS (not CONCURRENTLY) — see
+// .specs/features/mcp-safe-mutation-tools/design.md's Tech Decisions for why
+// CONCURRENTLY was deferred (missing INVALID-index cleanup logic, not a
+// transactional blocker).
+func (h *Handler) AddTableIndexForUser(ctx context.Context, user *DashboardUser, appID, tableName string, idx config.IndexConfig, ip string) (*AppTableRow, error) {
+	app, role, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, err
+	}
+	if !role.CanWrite() {
+		return nil, ErrForbidden
+	}
+
+	existingTable := findAppTableByName(app, tableName)
+	if existingTable == nil {
+		return nil, ErrNotFound
+	}
+
+	for _, existing := range existingTable.Indexes {
+		if existing.Name == idx.Name {
+			return nil, ErrIndexAlreadyExists
+		}
+	}
+
+	mergedIndexes := make([]config.IndexConfig, 0, len(existingTable.Indexes)+1)
+	mergedIndexes = append(mergedIndexes, existingTable.Indexes...)
+	mergedIndexes = append(mergedIndexes, idx)
+
+	otherTables := make([]AppTableRow, 0, len(app.Tables))
+	for _, t := range app.Tables {
+		if t.ID != existingTable.ID {
+			otherTables = append(otherTables, t)
+		}
+	}
+
+	table := AppTableRow{Name: existingTable.Name, RLS: existingTable.RLS, Columns: existingTable.Columns, Indexes: mergedIndexes}
+	if err := validateTableInput(table, app.AuthEmailEnabled, otherTables); err != nil {
+		return nil, &ValidationError{msg: err.Error()}
+	}
+
+	cfg := buildAppConfig(app)
+	cfg.Tables = []config.TableConfig{{Name: table.Name, RLS: table.RLS, Columns: table.Columns, Indexes: table.Indexes}}
+	if _, err := h.prov.Apply(ctx, &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
+		return nil, err
+	}
+
+	row, err := UpdateAppTable(ctx, h.pool, appID, existingTable.ID, schemaNameForDB(app.Name), existingTable.RLS, existingTable.Columns, mergedIndexes)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+	}
+
+	updated, _, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+	}
+	h.reg.Register(appRowToRegistryApp(updated))
+
+	h.audit(ctx, user.ID, user.Email, "app.table_index.create", "app_table", row.ID, app.Name+"/"+row.Name+"/"+idx.Name, nil, ip)
+	return &row, nil
+}
+
 // DeleteAppTable handles DELETE /dashboard/api/apps/{id}/tables/{tableId}.
 // Removes the metadata row and drops the physical table — unlike the old
 // bulk UpdateApp flow, a removed table is never left behind in the database.

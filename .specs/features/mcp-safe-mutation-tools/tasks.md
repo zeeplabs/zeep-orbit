@@ -139,13 +139,13 @@ T7 → T8
 - Skill: NONE
 
 **Done when**:
-- [ ] `AddTableIndexForUser` adds the new index while leaving every other index and all columns unchanged
-- [ ] Returns `ErrIndexAlreadyExists` for a duplicate index name, table left untouched
-- [ ] Returns a validation error for an index referencing a column that doesn't exist on the table, table left untouched
-- [ ] Returns `ErrForbidden` for a caller whose role fails `CanWrite()`
-- [ ] Returns not-found for an invisible/nonexistent app or table
-- [ ] Records `app.table_index.create` in the audit log on success
-- [ ] Gate passes: `go test ./internal/dashboard/... -race`
+- [x] `AddTableIndexForUser` adds the new index while leaving every other index and all columns unchanged
+- [x] Returns `ErrIndexAlreadyExists` for a duplicate index name, table left untouched
+- [x] Returns a validation error for an index referencing a column that doesn't exist on the table, table left untouched
+- [x] Returns `ErrForbidden` for a caller whose role fails `CanWrite()`
+- [x] Returns not-found for an invisible/nonexistent app or table
+- [x] Records `app.table_index.create` in the audit log on success
+- [x] Gate passes: `go test ./internal/dashboard/... -race`
 
 **Tests**: integration (real Postgres)
 **Gate**: quick
