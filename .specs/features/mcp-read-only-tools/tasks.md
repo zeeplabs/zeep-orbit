@@ -172,11 +172,11 @@ T14 → T15
 - Skill: NONE
 
 **Done when**:
-- [ ] `ListTablePoliciesForUser` returns the same policies `ListTablePolicies`'s existing REST test expects for the same fixture
-- [ ] Returns `ErrForbidden` when caller's role fails `CanManage()` (viewer/editor role tested explicitly, not just "some non-admin")
-- [ ] Returns `ErrTableNotFound` for a valid app + nonexistent table name (never `[]`)
-- [ ] Existing `ListTablePolicies` REST handler test(s) still pass unmodified
-- [ ] Gate passes: `go test ./internal/dashboard/... -race`
+- [x] `ListTablePoliciesForUser` returns the same policies `ListTablePolicies`'s existing REST test expects for the same fixture
+- [x] Returns `ErrForbidden` when caller's role fails `CanManage()` (viewer/editor role tested explicitly, not just "some non-admin")
+- [x] Returns `ErrTableNotFound` for a valid app + nonexistent table name (never `[]`)
+- [x] Existing `ListTablePolicies` REST handler test(s) still pass unmodified
+- [x] Gate passes: `go test ./internal/dashboard/... -race`
 
 **Tests**: integration (real Postgres)
 **Gate**: quick

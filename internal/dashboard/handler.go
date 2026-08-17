@@ -1506,27 +1506,18 @@ func (h *Handler) ListTablePolicies(w http.ResponseWriter, r *http.Request) {
 
 	appID := chi.URLParam(r, "id")
 	tableName := chi.URLParam(r, "table")
-	app, role, err := GetApp(r.Context(), h.pool, appID, user)
+	policies, err := ListTablePoliciesForUser(r.Context(), h.pool, user, appID, tableName)
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
+		switch {
+		case errors.Is(err, ErrNotFound):
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
-			return
+		case errors.Is(err, ErrForbidden):
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		case errors.Is(err, ErrTableNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
+		default:
+			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		}
-		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
-		return
-	}
-	if !role.CanManage() {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
-		return
-	}
-	if findAppTableByName(app, tableName) == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
-		return
-	}
-
-	policies, err := ListTablePolicies(r.Context(), h.pool, appID, tableName)
-	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, policies)

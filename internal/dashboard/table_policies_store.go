@@ -211,6 +211,28 @@ func ListTablePolicies(ctx context.Context, pool *db.Pool, appID, tableName stri
 	return result, rows.Err()
 }
 
+// ListTablePoliciesForUser is the shared operation behind ListTablePolicies'
+// REST handler and the mcp-read-only-tools spec's orbit_list_table_policies
+// tool — resolves+authorizes appID (requiring role.CanManage(), matching
+// the pre-extraction handler's exact check), resolves tableName to a real
+// table on the app (findAppTableByName), then returns that table's
+// policies. Returns ErrNotFound if the app doesn't exist/isn't visible,
+// ErrForbidden if the caller's role fails CanManage(), ErrTableNotFound if
+// tableName doesn't match any table on the app.
+func ListTablePoliciesForUser(ctx context.Context, pool *db.Pool, user *DashboardUser, appID, tableName string) ([]TablePolicyRow, error) {
+	app, role, err := GetApp(ctx, pool, appID, user)
+	if err != nil {
+		return nil, err
+	}
+	if !role.CanManage() {
+		return nil, ErrForbidden
+	}
+	if findAppTableByName(app, tableName) == nil {
+		return nil, ErrTableNotFound
+	}
+	return ListTablePolicies(ctx, pool, appID, tableName)
+}
+
 // DeleteTablePolicy removes a policy's metadata row and executes the
 // corresponding DROP POLICY. It never disables ROW LEVEL SECURITY on the
 // table, even when it deletes the last policy for that table/action — the
