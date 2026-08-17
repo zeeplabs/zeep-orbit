@@ -10,12 +10,12 @@ This spec also covers a second, independent bucket: additive webhook operations 
 
 ## Goals
 
-- [ ] An MCP client can add a single new column to an existing table (with an optional foreign-key reference to another table/column) without resending or risking any other column already on that table.
-- [ ] An MCP client can add a single new index to an existing table without resending or risking the table's existing indexes.
-- [ ] An MCP client can create a new webhook and register a new event mapping on an app, using the existing endpoints as-is.
-- [ ] Every new backend endpoint in this spec merges server-side against the table's current stored definition — the request body never needs to (and structurally cannot) omit or corrupt an existing column/index.
-- [ ] Every new tool authorizes through the same `GetApp` + `role.CanWrite()`/`CanManage()` path every existing write tool already uses — no new permission model.
-- [ ] Every new tool's mutation is auditable through the existing `h.audit(...)` call, same as every other write operation in this codebase.
+- [x] An MCP client can add a single new column to an existing table (with an optional foreign-key reference to another table/column) without resending or risking any other column already on that table.
+- [x] An MCP client can add a single new index to an existing table without resending or risking the table's existing indexes.
+- [x] An MCP client can create a new webhook and register a new event mapping on an app, using the existing endpoints as-is.
+- [x] Every new backend endpoint in this spec merges server-side against the table's current stored definition — the request body never needs to (and structurally cannot) omit or corrupt an existing column/index.
+- [x] Every new tool authorizes through the same `GetApp` + `role.CanWrite()`/`CanManage()` path every existing write tool already uses — no new permission model.
+- [x] Every new tool's mutation is auditable through the existing `h.audit(...)` call, same as every other write operation in this codebase.
 
 ## Out of Scope
 
@@ -39,8 +39,8 @@ Every ambiguity is resolved or recorded here - nothing is left silently unclear.
 
 | Assumption / decision | Chosen default | Rationale | Confirmed? |
 | --------------------- | --------------- | --------- | ---------- |
-| New endpoint shape for "add column" | `POST /dashboard/api/apps/{id}/tables/{tableId}/columns`, body = a single `ColumnConfig`-shaped object (name, type, required, default, optional `references`) | Mirrors the resource-per-verb convention already used for policies (`POST .../tables/{table}/policies`) and webhooks (`POST .../webhooks`) rather than reusing the table full-replace body shape | n |
-| New endpoint shape for "add index" | `POST /dashboard/api/apps/{id}/tables/{tableId}/indexes`, body = a single `IndexConfig`-shaped object (name, columns, unique) | Same resource-per-verb convention | n |
+| New endpoint shape for "add column" | **Corrected during Execute**: implemented as a new `*Handler` method (`AddTableColumnForUser`) reachable only through the `orbit_add_table_column` MCP tool — no new `POST /dashboard/api/apps/{id}/tables/{tableId}/columns` HTTP route was wired, since neither design.md nor tasks.md called for one. The spec's Goals only require MCP-client capability, which this satisfies; the REST-endpoint shape below was the original assumption, not what was built | Design/tasks scoped this as an MCP-only capability (thin tool wrapper over a new Handler method), matching the existing internal reuse pattern, rather than also exposing a new REST route the Dashboard UI doesn't yet have a use for. A REST route can be added later without changing `AddTableColumnForUser`'s signature, if a UI need for it appears | y — confirmed by reading the actual implementation; no `internal/server` route references this method |
+| New endpoint shape for "add index" | Same correction as above, for `AddTableIndexForUser`/`orbit_add_table_index` — MCP-tool-only, no new `POST /dashboard/api/apps/{id}/tables/{tableId}/indexes` HTTP route | Same rationale | y — confirmed by reading the actual implementation |
 | Server-side merge mechanism | The new handler/`*ForUser` function loads the table's current `Columns`/`Indexes` from the already-fetched `app.Tables` (from `GetApp`), appends the one new column/index, then calls `validateTableInput`/`config.ValidateTables` and `h.prov.Apply` with the merged full list — the caller-supplied request body never contains anything but the one new item | Exactly mirrors `UpdateTableRLSModeForUser`'s existing pattern (`handler.go:1377`): fetch current state server-side, mutate only the targeted field, persist the merged whole. This is the concrete mechanism that eliminates the "agent forgets an existing column" orphaning risk identified in the 2026-08-17 survey | y — this is the point of the spec |
 | Duplicate name handling | IF the new column name already exists on the table, or the new index name already exists on the table, THEN the endpoint SHALL reject with a 400 validation error (reusing `validateTableInput`'s existing duplicate-name-shaped checks where applicable, extended to columns/indexes) — never silently overwrite | An "add" operation that can silently turn into a "replace" reintroduces exactly the ambiguity this spec exists to remove | y |
 | `CREATE INDEX` locking behavior | Out of scope to change in this spec — the new `orbit_add_table_index` tool's docstring/description SHALL warn the calling agent (and, by extension, its operator) that index creation is a blocking operation on the target table, matching `ensureIndexes`'s current non-concurrent behavior. **Corrected during design (`design.md` Risks & Concerns / Tech Decisions)**: `h.prov.Apply` never opens an explicit transaction — every DDL statement runs as its own autocommit `pool.Exec` — so `CREATE INDEX CONCURRENTLY` is structurally usable today; the real blocker is that this codebase has no cleanup/retry logic for the `INVALID` index `CONCURRENTLY` can leave behind on a failed build. Design decided to keep the current blocking behavior for this spec and disclose it to the caller, not adopt `CONCURRENTLY` | y — resolved during design, see `design.md` |
@@ -124,29 +124,29 @@ Every ambiguity is resolved or recorded here - nothing is left silently unclear.
 
 | Requirement ID | Story | Phase | Status |
 | -------------- | ----- | ------ | ------ |
-| MSMT-01 | P1: Agent adds a column | - | Pending |
-| MSMT-02 | P1: Agent adds a column | - | Pending |
-| MSMT-03 | P1: Agent adds a column | - | Pending |
-| MSMT-04 | P1: Agent adds a column | - | Pending |
-| MSMT-05 | P1: Agent adds a column | - | Pending |
-| MSMT-06 | P1: Agent adds a column | - | Pending |
-| MSMT-07 | P2: Agent adds an index | - | Pending |
-| MSMT-08 | P2: Agent adds an index | - | Pending |
-| MSMT-09 | P2: Agent adds an index | - | Pending |
-| MSMT-10 | P3: Agent creates webhook + mapping | - | Pending |
-| MSMT-11 | P3: Agent creates webhook + mapping | - | Pending |
+| MSMT-01 | P1: Agent adds a column | T1, T2 | Verified |
+| MSMT-02 | P1: Agent adds a column | T1, T2 | Verified |
+| MSMT-03 | P1: Agent adds a column | T1, T2 | Verified |
+| MSMT-04 | P1: Agent adds a column | T1, T2 | Verified |
+| MSMT-05 | P1: Agent adds a column | T1, T2 | Verified |
+| MSMT-06 | P1: Agent adds a column | T1, T2 | Verified |
+| MSMT-07 | P2: Agent adds an index | T3, T4 | Verified |
+| MSMT-08 | P2: Agent adds an index | T3, T4 | Verified |
+| MSMT-09 | P2: Agent adds an index | T3, T4 | Verified |
+| MSMT-10 | P3: Agent creates webhook + mapping | T5, T6 | Verified |
+| MSMT-11 | P3: Agent creates webhook + mapping | T7, T8 | Verified |
 
 **ID format:** `MSMT-[NUMBER]` (MCP Safe Mutation Tools)
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 11 total, 0 mapped to tasks, 11 unmapped ⚠️ (tasks.md not yet written — spec-only phase per current scope)
+**Coverage:** 11 total, 11 mapped to tasks, 0 unmapped — verified PASS, see `validation.md` (diff range `4b54100..8e52c1c`)
 
 ---
 
 ## Success Criteria
 
-- [ ] `orbit_add_table_column`, `orbit_add_table_index`, `orbit_create_webhook`, `orbit_save_webhook_event_mapping` are all callable via a real MCP client against a running server.
-- [ ] A test proves that calling `orbit_add_table_column` twice in a row (adding two different columns) results in a table with all original columns plus both new ones — the concrete regression test for the orphaned-column risk that motivated this spec.
-- [ ] Zero existing column, index, or webhook is ever modified or removed as a side effect of any tool in this spec.
-- [ ] Every new tool's authorization is proven to reject a caller without `CanWrite()` (or the webhook tools' equivalent) on the given `app_id`.
+- [x] `orbit_add_table_column`, `orbit_add_table_index`, `orbit_create_webhook`, `orbit_save_webhook_event_mapping` are all callable via a real MCP client against a running server.
+- [x] A test proves that calling `orbit_add_table_column` twice in a row (adding two different columns) results in a table with all original columns plus both new ones — the concrete regression test for the orphaned-column risk that motivated this spec.
+- [x] Zero existing column, index, or webhook is ever modified or removed as a side effect of any tool in this spec.
+- [x] Every new tool's authorization is proven to reject a caller without `CanWrite()` (or the webhook tools' equivalent) on the given `app_id`.
