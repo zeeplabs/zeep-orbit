@@ -62,9 +62,20 @@ func (a *AppRow) RedactSecrets() {
 // replaces each provider's client_secret with a client_secret_set boolean,
 // the same reveal-nothing-but-whether-it's-configured pattern
 // auth_providers_store.go's GoogleProviderConfig already uses for the
-// separate (dashboard-login, not per-app) auth providers table. Fails
-// closed to an empty object on anything that doesn't parse as expected,
-// rather than risk passing an unrecognized shape through unredacted.
+// separate (dashboard-login, not per-app) auth providers table.
+//
+// Deliberately an ALLOW-list (appProviderDisplayFields), not a deny-list of
+// known secret field names: a deny-list only protects against a secret it
+// already knows to look for by exact key name, so a provider config
+// carrying a credential under a different key (a future provider's
+// api_key/private_key, or client_secret nested one level deeper) would
+// pass straight through unredacted. Projecting onto a fixed set of known-
+// safe display fields fails closed by construction — a new provider field
+// is invisible here until someone deliberately adds it to the allow-list.
+//
+// Fails closed to an empty object on anything that doesn't parse as
+// map[string]map[string]any, rather than risk passing an unrecognized
+// shape through unredacted.
 func redactAuthProviderSecrets(raw json.RawMessage) json.RawMessage {
 	if len(raw) == 0 {
 		return raw
@@ -73,21 +84,80 @@ func redactAuthProviderSecrets(raw json.RawMessage) json.RawMessage {
 	if err := json.Unmarshal(raw, &providers); err != nil {
 		return json.RawMessage(`{}`)
 	}
-	for _, cfg := range providers {
-		secret, hasSecret := cfg["client_secret"]
-		if !hasSecret {
-			continue
+	redacted := make(map[string]map[string]any, len(providers))
+	for name, cfg := range providers {
+		safe := make(map[string]any, len(appProviderDisplayFields)+1)
+		for field := range appProviderDisplayFields {
+			if v, ok := cfg[field]; ok {
+				safe[field] = v
+			}
 		}
-		delete(cfg, "client_secret")
-		if s, ok := secret.(string); ok && s != "" {
-			cfg["client_secret_set"] = true
+		if s, ok := cfg["client_secret"].(string); ok && s != "" {
+			safe["client_secret_set"] = true
 		}
+		redacted[name] = safe
 	}
-	out, err := json.Marshal(providers)
+	out, err := json.Marshal(redacted)
 	if err != nil {
 		return json.RawMessage(`{}`)
 	}
 	return out
+}
+
+// appProviderDisplayFields is every field an app auth provider's config
+// carries that's safe to hand back to a caller as-is. See
+// redactAuthProviderSecrets' doc comment for why this is an allow-list.
+// Mirrors the fields internal/auth/google.go's getGoogleConfig and
+// AppProviderConfig (app_providers.go) already treat as the provider's
+// non-secret shape.
+var appProviderDisplayFields = map[string]bool{
+	"enabled":         true,
+	"client_id":       true,
+	"redirect_url":    true,
+	"allowed_domains": true,
+}
+
+// mergeAppAuthProviders merges an incoming auth_providers payload onto the
+// app's currently-stored config, per provider and per field — a field
+// key that's absent, nil, or an empty string in incoming leaves the
+// existing stored value untouched, exactly the convention
+// auth_providers_store.go's mergeProviderConfig already established for
+// the separate system-wide auth providers table (AGENTS.md §5's merge-on-
+// absent-key rule). This matters specifically for client_secret: the
+// dashboard UI never re-populates that field from a GET (GetAppAuthProviders
+// only ever returns client_secret_set, never the plaintext), so its save
+// button had no way to send back a value that wasn't either freshly
+// retyped or blank — a raw column overwrite (the pre-fix behavior) meant
+// saving any other field on the Login tab silently wiped out a
+// previously-configured OAuth client_secret, breaking that app's Google
+// login. A provider present in current but entirely absent from incoming
+// is dropped — incoming represents the full desired set of providers.
+func mergeAppAuthProviders(current, incoming json.RawMessage) (json.RawMessage, error) {
+	var currentMap map[string]map[string]any
+	if len(current) > 0 {
+		_ = json.Unmarshal(current, &currentMap) // tolerate empty/malformed existing data
+	}
+
+	var incomingMap map[string]map[string]any
+	if err := json.Unmarshal(incoming, &incomingMap); err != nil {
+		return nil, fmt.Errorf("dashboard: invalid auth_providers payload: %w", err)
+	}
+
+	merged := make(map[string]map[string]any, len(incomingMap))
+	for provider, incomingCfg := range incomingMap {
+		base := make(map[string]any, len(incomingCfg))
+		for k, v := range currentMap[provider] {
+			base[k] = v
+		}
+		for k, v := range incomingCfg {
+			if v == nil || v == "" {
+				continue // absent/nil/empty in incoming: keep whatever's already stored
+			}
+			base[k] = v
+		}
+		merged[provider] = base
+	}
+	return json.Marshal(merged)
 }
 
 // decodeEnduserRolesConfig unmarshals the enduser_roles_config JSONB column.

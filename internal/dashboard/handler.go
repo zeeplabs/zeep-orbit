@@ -1059,11 +1059,22 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(body.AuthProviders) > 0 {
-		if err := UpdateAppAuthProvidersRaw(r.Context(), h.pool, app.ID, body.AuthProviders); err != nil {
+		// app.AuthProviders still holds the pre-update stored value here
+		// (the UPDATE above only touched auth_email_enabled) — merge onto
+		// it rather than overwriting the column outright, so a client_secret
+		// this specific request doesn't mention (the dashboard UI never
+		// gets the plaintext back to resend) survives instead of being
+		// silently wiped.
+		merged, err := mergeAppAuthProviders(app.AuthProviders, body.AuthProviders)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		if err := UpdateAppAuthProvidersRaw(r.Context(), h.pool, app.ID, merged); err != nil {
 			h.writeError(w, r, http.StatusInternalServerError, "failed to save auth providers", err)
 			return
 		}
-		app.AuthProviders = body.AuthProviders
+		app.AuthProviders = merged
 	}
 
 	if body.StorageConfig != nil && body.StorageConfig.Bucket != "" {

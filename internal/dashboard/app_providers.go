@@ -37,15 +37,24 @@ func GetAppAuthProviders(ctx context.Context, pool *db.Pool, appID string, user 
 
 // UpdateAppAuthProviders updates the auth_providers JSONB for an app.
 // Requires CanManage() (admin only) — auth providers are app-level config.
+// Merges onto the existing stored config (mergeAppAuthProviders) rather
+// than overwriting the column outright, so a field this request doesn't
+// mention — client_secret above all, since GetAppAuthProviders never
+// returns its plaintext for a caller to resend — survives instead of
+// being silently wiped.
 func UpdateAppAuthProviders(ctx context.Context, pool *db.Pool, appID string, user *DashboardUser, providers json.RawMessage) error {
-	_, role, err := GetApp(ctx, pool, appID, user)
+	app, role, err := GetApp(ctx, pool, appID, user)
 	if err != nil {
 		return err
 	}
 	if !role.CanManage() {
 		return ErrForbidden
 	}
-	return updateAppProvidersRaw(ctx, pool, appID, providers)
+	merged, err := mergeAppAuthProviders(app.AuthProviders, providers)
+	if err != nil {
+		return &ValidationError{msg: err.Error()}
+	}
+	return updateAppProvidersRaw(ctx, pool, appID, merged)
 }
 
 // UpdateAppAuthProvidersRaw updates auth_providers without access check (for use during app creation).
@@ -100,18 +109,28 @@ func (h *Handler) UpdateAppProviders(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := UpdateAppAuthProviders(r.Context(), h.pool, appID, user, providers); err != nil {
-		if errors.Is(err, ErrForbidden) {
+		var valErr *ValidationError
+		switch {
+		case errors.Is(err, ErrForbidden):
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
-			return
+		case errors.As(err, &valErr):
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": valErr.Error()})
+		default:
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update providers"})
 		}
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update providers"})
 		return
 	}
 
 	app, _, err := GetApp(r.Context(), h.pool, appID, user)
-	if err == nil {
-		h.reg.Register(appRowToRegistryApp(app))
+	if err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
 	}
+	h.reg.Register(appRowToRegistryApp(app))
 
-	writeJSON(w, http.StatusOK, providers)
+	// Echo back the merged, redacted config — never the caller's raw
+	// payload (which may still carry a plaintext client_secret the admin
+	// just typed; a response body is a worse place for that to sit than
+	// the request that legitimately needed it, e.g. proxy/HAR logs).
+	writeJSON(w, http.StatusOK, redactAuthProviderSecrets(app.AuthProviders))
 }

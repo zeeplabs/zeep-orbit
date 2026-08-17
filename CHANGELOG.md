@@ -9,6 +9,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+
+- **The dashboard API and the MCP tool `orbit_list_apps` no longer return an app's real credentials in plaintext.** `GET /dashboard/api/apps`, `GET /dashboard/api/apps/{id}`, and `orbit_list_apps` were all serializing the app's storage config (AWS `access_key_id`/`secret_access_key`) and every configured auth provider's OAuth `client_secret` — plus, on `GET .../apps/{id}` before an existing partial fix, the app's own `jwt_secret` — to any caller who could see the app at all (any app member, not just an admin). Confirmed as a live incident on a production app before this fix. Responses now carry only what a dashboard UI legitimately needs to display (bucket/region/client_id/etc.) plus a `client_secret_set` boolean; `orbit_get_app_schema` was never affected (its response shape never carried these fields). **If you have apps with a configured storage bucket or OAuth login provider, treat those credentials as exposed and rotate them** — this fix stops further disclosure, it doesn't invalidate what may already have been read.
+- **Saving an app's Login settings without retyping its Google OAuth `client_secret` no longer silently deletes that secret and breaks the app's Google login.** `PUT /dashboard/api/apps/{id}` did a raw overwrite of the stored `auth_providers` config; the dashboard's Login tab never re-populates the `client_secret` field from a GET (it can't — see above), so every save that didn't involve retyping the secret sent an empty value, wiping it. Auth provider updates now merge onto the existing stored config field-by-field, matching the merge-on-absent-key convention already used for the separate system-wide auth providers config: an absent, `null`, or empty-string field in the request keeps whatever's already stored; a non-empty value still overwrites (secret rotation keeps working).
+
 ## [1.4.0] — 2026-08-16
 
 ### Added

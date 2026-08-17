@@ -239,8 +239,13 @@ func mergeProviderConfig(provider string, input json.RawMessage, existing *AuthP
 	return result
 }
 
+// stripSecretFromConfig removes client_secret regardless of provider name
+// — previously gated on provider == "google", the only provider that
+// exists today, but that meant a second provider added later would leak
+// its secret on the non-reveal path by default (the gate would silently
+// skip it) instead of failing closed.
 func stripSecretFromConfig(provider string, config json.RawMessage) json.RawMessage {
-	if provider != "google" || config == nil {
+	if config == nil {
 		return config
 	}
 	var cfg map[string]any
