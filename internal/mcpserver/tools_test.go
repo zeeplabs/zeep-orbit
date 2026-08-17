@@ -3,7 +3,9 @@ package mcpserver
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/dashboard"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
+	"github.com/zeeplabs/zeep-orbit/internal/storage"
 )
 
 // startMCPSession spins up a NewHandler-backed httptest.Server and returns a
@@ -184,5 +187,120 @@ func TestOrbitGetAppSchema_NoAccessReturnsStructuredToolError(t *testing.T) {
 	}
 	if text.Text == "" {
 		t.Fatal("expected a non-empty structured error message")
+	}
+}
+
+// TestOrbitGetApp_ReturnsRedactedAppForAuthorizedCaller covers
+// mcp-read-only-tools T1's Done-when: a caller with access to the app gets
+// back the AppRow with RedactSecrets() already applied — no client_secret,
+// secret_access_key, or jwt_secret value anywhere in the response (spec
+// AC1/AC5).
+func TestOrbitGetApp_ReturnsRedactedAppForAuthorizedCaller(t *testing.T) {
+	pool := authTestPool(t)
+	owner := authTestUser(t, pool, "tools-get-app-owner@example.com")
+	token, _, err := dashboard.CreatePAT(context.Background(), pool, owner.ID, "cli", dashboard.PATKindManual, nil)
+	if err != nil {
+		t.Fatalf("CreatePAT: %v", err)
+	}
+	app, err := dashboard.CreateApp(context.Background(), pool, "tools-get-app-app", owner.ID, true)
+	if err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+	const fakeSecretKey = "AKIAFAKESECRETACCESSKEYVALUE"
+	const fakeClientSecret = "fake-google-oauth-client-secret"
+	if err := dashboard.UpdateAppStorageConfig(context.Background(), pool, app.ID, &storage.StorageConfig{
+		Bucket:          "starbem-apps",
+		Region:          "us-east-1",
+		Endpoint:        "https://s3.amazonaws.com",
+		AccessKeyID:     "AKIAFAKEACCESSKEYID",
+		SecretAccessKey: fakeSecretKey,
+	}); err != nil {
+		t.Fatalf("UpdateAppStorageConfig: %v", err)
+	}
+	authProviders := json.RawMessage(fmt.Sprintf(
+		`{"google":{"enabled":true,"client_id":"fake-client-id.apps.googleusercontent.com","client_secret":%q,"redirect_url":"https://example.com/cb"}}`,
+		fakeClientSecret,
+	))
+	if err := dashboard.UpdateAppAuthProvidersRaw(context.Background(), pool, app.ID, authProviders); err != nil {
+		t.Fatalf("UpdateAppAuthProvidersRaw: %v", err)
+	}
+
+	sess := startMCPSession(t, pool, token)
+
+	res, err := sess.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "orbit_get_app",
+		Arguments: map[string]any{"app_id": app.ID},
+	})
+	if err != nil {
+		t.Fatalf("CallTool orbit_get_app: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("expected a successful tool result, got an error result: %+v", res.Content)
+	}
+	data, err := json.Marshal(res.StructuredContent)
+	if err != nil {
+		t.Fatalf("marshal StructuredContent: %v", err)
+	}
+	body := string(data)
+	if strings.Contains(body, fakeSecretKey) {
+		t.Fatalf("orbit_get_app leaked the S3 secret key: %s", body)
+	}
+	if strings.Contains(body, fakeClientSecret) {
+		t.Fatalf("orbit_get_app leaked the OAuth client_secret: %s", body)
+	}
+	if strings.Contains(body, `"jwt_secret"`) {
+		t.Fatalf("orbit_get_app leaked jwt_secret field: %s", body)
+	}
+
+	var out struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("unmarshal StructuredContent: %v", err)
+	}
+	if out.ID != app.ID || out.Name != app.Name {
+		t.Fatalf("expected app %s/%s, got %+v", app.ID, app.Name, out)
+	}
+}
+
+// TestOrbitGetApp_NoAccessReturnsStructuredToolError covers mcp-read-only-tools
+// T1's Done-when: an app the caller has no membership/role on (and isn't
+// superadmin/CanReadAnyApp) returns the same not-found tool error GetApp
+// already returns (spec AC3), not the app data.
+func TestOrbitGetApp_NoAccessReturnsStructuredToolError(t *testing.T) {
+	pool := authTestPool(t)
+	owner := authTestUser(t, pool, "tools-get-app-owner2@example.com")
+	outsider, err := dashboard.CreateUser(context.Background(), pool, "tools-get-app-outsider@example.com", "outsider", "hash", "member")
+	if err != nil {
+		t.Fatalf("create outsider user: %v", err)
+	}
+	token, _, err := dashboard.CreatePAT(context.Background(), pool, outsider.ID, "cli", dashboard.PATKindManual, nil)
+	if err != nil {
+		t.Fatalf("CreatePAT: %v", err)
+	}
+	app, err := dashboard.CreateApp(context.Background(), pool, "tools-get-app-app2", owner.ID, true)
+	if err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+
+	sess := startMCPSession(t, pool, token)
+
+	res, err := sess.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "orbit_get_app",
+		Arguments: map[string]any{"app_id": app.ID},
+	})
+	if err != nil {
+		t.Fatalf("CallTool orbit_get_app (protocol-level): %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected a structured tool error for an app the caller has no access to")
+	}
+	text, ok := res.Content[0].(*mcp.TextContent)
+	if !ok {
+		t.Fatalf("expected TextContent error, got %T", res.Content[0])
+	}
+	if text.Text != "not found" {
+		t.Fatalf("expected the same not-found wording GetApp already returns, got %q", text.Text)
 	}
 }

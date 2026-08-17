@@ -50,6 +50,7 @@ func RegisterTools(server *mcp.Server, deps ToolDeps) {
 	registerReadTools(server, deps)
 	registerWriteTools(server, deps)
 	registerTemplateTools(server, deps)
+	registerAppConfigReadTools(server, deps)
 }
 
 // orbitListAppsInput takes no arguments — the tool always lists the calling
@@ -429,5 +430,52 @@ func registerTemplateTools(server *mcp.Server, deps ToolDeps) {
 			created = append(created, row)
 		}
 		return nil, orbitCreatePolicyFromTemplateResult{Created: created}, nil
+	})
+}
+
+// mapReadError maps an error returned by one of the new read-only *ForUser
+// functions (mcp-read-only-tools spec) to a caller-safe tool error, the
+// same fixed-message convention mapWriteError already established:
+// ErrNotFound/ErrForbidden map to their REST-equivalent wording, everything
+// else collapses to errInternal (AGENTS.md §4 — never a raw err.Error()).
+func mapReadError(err error) error {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, dashboard.ErrNotFound):
+		return errors.New("not found")
+	case errors.Is(err, dashboard.ErrForbidden):
+		return errors.New("forbidden")
+	default:
+		return errInternal
+	}
+}
+
+// orbitGetAppInput is the input for orbit_get_app.
+type orbitGetAppInput struct {
+	AppID string `json:"app_id" jsonschema:"id of the app to fetch"`
+}
+
+// registerAppConfigReadTools registers the read-only tools that expose an
+// app's own configuration record and per-table policy data (mcp-read-only-tools
+// spec P1: orbit_get_app; T5 adds orbit_list_table_policies here too).
+// Each tool authorizes through the exact tier its wrapped function/REST
+// handler already enforces — the tiers are not uniform across this group,
+// see design.md's Authorization Matrix.
+func registerAppConfigReadTools(server *mcp.Server, deps ToolDeps) {
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_get_app",
+		Description: "Get an app's own configuration record (auth providers, storage, rate limit — secrets redacted). Requires the caller to have any effective role on the app (same visibility GetApp already grants), no extra management role required.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitGetAppInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		app, _, err := dashboard.GetApp(ctx, deps.Pool, in.AppID, user)
+		if err != nil {
+			return nil, nil, mapReadError(err)
+		}
+		app.RedactSecrets()
+		return nil, app, nil
 	})
 }

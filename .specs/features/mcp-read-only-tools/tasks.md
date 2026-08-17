@@ -97,10 +97,10 @@ T14 → T15
 - Skill: NONE
 
 **Done when**:
-- [ ] `orbit_get_app` returns a redacted `AppRow` for a caller with access
-- [ ] Returns `"not found"` tool error for an invisible/nonexistent app (matching `GetApp`'s `ErrNotFound`)
-- [ ] Response contains no `client_secret`/`secret_access_key`/`jwt_secret` under any field name (boundary test, same style as `TestOrbitListAppsTool_ResponseNeverContainsSecrets`)
-- [ ] Gate passes: `go test ./internal/mcpserver/... -race`
+- [x] `orbit_get_app` returns a redacted `AppRow` for a caller with access
+- [x] Returns `"not found"` tool error for an invisible/nonexistent app (matching `GetApp`'s `ErrNotFound`)
+- [x] Response contains no `client_secret`/`secret_access_key`/`jwt_secret` under any field name (boundary test, same style as `TestOrbitListAppsTool_ResponseNeverContainsSecrets`)
+- [x] Gate passes: `go test ./internal/mcpserver/... -race`
 
 **Tests**: integration (real MCP client roundtrip)
 **Gate**: full
