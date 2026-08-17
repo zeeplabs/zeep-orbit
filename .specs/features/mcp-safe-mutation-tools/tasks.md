@@ -113,11 +113,11 @@ T7 → T8
 - Skill: NONE
 
 **Done when**:
-- [ ] Calling `orbit_add_table_column` twice in a row (two different columns) results in a table with all original columns plus both new ones (the concrete regression test for the orphaned-column risk, per spec.md's Success Criteria)
-- [ ] Returns a distinct `"column already exists"` tool error (not a generic internal error) for a duplicate name
-- [ ] Returns forbidden for a caller whose role fails `CanWrite()` on that app (explicit tier test)
-- [ ] Returns not-found for a nonexistent/invisible app or table
-- [ ] Gate passes: `go test ./internal/mcpserver/... -race`
+- [x] Calling `orbit_add_table_column` twice in a row (two different columns) results in a table with all original columns plus both new ones (the concrete regression test for the orphaned-column risk, per spec.md's Success Criteria)
+- [x] Returns a distinct `"column already exists"` tool error (not a generic internal error) for a duplicate name
+- [x] Returns forbidden for a caller whose role fails `CanWrite()` on that app (explicit tier test)
+- [x] Returns not-found for a nonexistent/invisible app or table
+- [x] Gate passes: `go test ./internal/mcpserver/... -race`
 
 **Tests**: integration (real MCP client roundtrip)
 **Gate**: full

@@ -54,6 +54,7 @@ func RegisterTools(server *mcp.Server, deps ToolDeps) {
 	registerAppConfigReadTools(server, deps)
 	registerAccessReadTools(server, deps)
 	registerOperationalReadTools(server, deps)
+	registerAppConfigWriteTools(server, deps)
 }
 
 // orbitListAppsInput takes no arguments — the tool always lists the calling
@@ -165,6 +166,8 @@ func mapWriteError(err error) error {
 		return errors.New("table not found")
 	case errors.Is(err, dashboard.ErrPolicyAlreadyExists):
 		return dashboard.ErrPolicyAlreadyExists
+	case errors.Is(err, dashboard.ErrColumnAlreadyExists):
+		return dashboard.ErrColumnAlreadyExists
 	case errors.As(err, &valErr):
 		return valErr
 	case errors.As(err, &typeErr):
@@ -226,6 +229,41 @@ func registerWriteTools(server *mcp.Server, deps ToolDeps) {
 			return nil, nil, errUnauthorized
 		}
 		row, err := deps.DashH.UpdateTableRLSModeForUser(ctx, user, in.AppID, in.TableName, in.RLSMode, "mcp")
+		if err != nil {
+			return nil, nil, mapWriteError(err)
+		}
+		return nil, row, nil
+	})
+}
+
+// orbitAddTableColumnInput is the input for orbit_add_table_column.
+// config.ColumnConfig is used directly (same precedent as
+// orbitCreateTableInput.Columns) rather than a bespoke translation struct —
+// it already carries the json tags an MCP tool input needs.
+type orbitAddTableColumnInput struct {
+	AppID     string              `json:"app_id" jsonschema:"id of the app that owns the table"`
+	TableName string              `json:"table_name" jsonschema:"name of the table to add the column to"`
+	Column    config.ColumnConfig `json:"column" jsonschema:"the single new column to add"`
+}
+
+// registerAppConfigWriteTools registers the additive table-schema mutation
+// tools (mcp-safe-mutation-tools spec): add one column, add one index (added
+// alongside it in a follow-up task), each server-side-merged against the
+// table's current stored definition so the request body can never omit or
+// corrupt an existing column/index (see design.md's Architecture Overview —
+// this is exactly why UpdateAppTable's full-replace endpoint isn't safe to
+// expose directly). Gates on role.CanWrite(), matching
+// CreateAppTableForUser/UpdateTableRLSModeForUser.
+func registerAppConfigWriteTools(server *mcp.Server, deps ToolDeps) {
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_add_table_column",
+		Description: "Add a single new column to an existing table, without resending or risking any other column already on that table.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitAddTableColumnInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		row, err := deps.DashH.AddTableColumnForUser(ctx, user, in.AppID, in.TableName, in.Column, "mcp")
 		if err != nil {
 			return nil, nil, mapWriteError(err)
 		}
