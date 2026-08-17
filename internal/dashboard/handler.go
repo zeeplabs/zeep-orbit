@@ -2899,19 +2899,16 @@ func (h *Handler) ListAppTokens(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appID := chi.URLParam(r, "id")
-	app, _, err := GetApp(r.Context(), h.pool, appID, user)
+	tokens, err := ListAppTokensForUser(r.Context(), h.pool, user, appID)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
-		return
-	}
-	if app.AuthEmailEnabled {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "app tokens only available for apps without email auth"})
-		return
-	}
-
-	tokens, err := ListAppTokens(r.Context(), h.pool, appID)
-	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "failed to list tokens", err)
+		switch {
+		case errors.Is(err, ErrNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		case errors.Is(err, ErrAppTokensNotSupported):
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": ErrAppTokensNotSupported.Error()})
+		default:
+			h.writeError(w, r, http.StatusInternalServerError, "failed to list tokens", err)
+		}
 		return
 	}
 	writeJSON(w, http.StatusOK, tokens)

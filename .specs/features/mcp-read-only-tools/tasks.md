@@ -273,11 +273,11 @@ T14 → T15
 - Skill: NONE
 
 **Done when**:
-- [ ] `ListAppTokensForUser` returns the same token metadata rows `ListAppTokens`'s existing REST test expects, with no raw token/JTI value
-- [ ] Returns `ErrAppTokensNotSupported` (not `[]`, not a generic error) for an app with `AuthEmailEnabled == true` — dedicated test, this is the risk flagged in design.md's Risks & Concerns
-- [ ] Returns not-found for an invisible/nonexistent app
-- [ ] Existing `ListAppTokens` REST handler test(s) still pass unmodified
-- [ ] Gate passes: `go test ./internal/dashboard/... -race`
+- [x] `ListAppTokensForUser` returns the same token metadata rows `ListAppTokens`'s existing REST test expects, with no raw token/JTI value
+- [x] Returns `ErrAppTokensNotSupported` (not `[]`, not a generic error) for an app with `AuthEmailEnabled == true` — dedicated test, this is the risk flagged in design.md's Risks & Concerns
+- [x] Returns not-found for an invisible/nonexistent app
+- [x] Existing `ListAppTokens` REST handler test(s) still pass unmodified
+- [x] Gate passes: `go test ./internal/dashboard/... -race`
 
 **Tests**: integration (real Postgres)
 **Gate**: quick

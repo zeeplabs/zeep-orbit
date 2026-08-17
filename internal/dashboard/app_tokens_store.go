@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
@@ -11,6 +12,15 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 	"github.com/zeeplabs/zeep-orbit/internal/tokencache"
 )
+
+// ErrAppTokensNotSupported is returned by ListAppTokensForUser when the app
+// has AuthEmailEnabled == true — app tokens are only issued for apps whose
+// end users don't authenticate with email/password (handler.go:2916-2919's
+// existing business rule, preserved verbatim during extraction). This is a
+// feature-availability check, not a permission check — the caller sees a
+// distinct error, never an empty list (which would otherwise read as "zero
+// tokens issued" instead of "not applicable to this app").
+var ErrAppTokensNotSupported = errors.New("app tokens only available for apps without email auth")
 
 func randomJTI() (string, error) {
 	b := make([]byte, 16)
@@ -57,6 +67,25 @@ func ListAppTokens(ctx context.Context, pool *db.Pool, appID string) ([]AppToken
 		tokens = append(tokens, t)
 	}
 	return tokens, rows.Err()
+}
+
+// ListAppTokensForUser is the shared operation behind the ListAppTokens REST
+// handler and orbit_list_app_tokens (mcp-read-only-tools T8/T9): resolve+
+// authorize the app, enforce the existing email-auth business rule, then
+// return token metadata. Authorization here is visibility-only — GetApp's
+// not-found check, no CanManage() tier on top (matching handler.go's
+// pre-extraction body exactly, which never checked role at all for this
+// endpoint). This is intentionally different from the CanManage() tier used
+// by table policies/members/webhooks — see design.md's Authorization Matrix.
+func ListAppTokensForUser(ctx context.Context, pool *db.Pool, user *DashboardUser, appID string) ([]AppTokenRow, error) {
+	app, _, err := GetApp(ctx, pool, appID, user)
+	if err != nil {
+		return nil, err
+	}
+	if app.AuthEmailEnabled {
+		return nil, ErrAppTokensNotSupported
+	}
+	return ListAppTokens(ctx, pool, appID)
 }
 
 func CreateAppToken(ctx context.Context, pool *db.Pool, input CreateAppTokenInput) (*AppTokenRow, error) {
