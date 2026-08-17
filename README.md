@@ -376,7 +376,7 @@ Apps and tables are created and managed entirely through the Dashboard (or, goin
 
 ## 🔌 MCP Server
 
-Zeep Orbit ships a [Model Context Protocol](https://modelcontextprotocol.io) server so AI coding assistants can manage apps, tables, and row policies directly — no dashboard clicks needed.
+Zeep Orbit ships a [Model Context Protocol](https://modelcontextprotocol.io) server so AI coding assistants can create and inspect apps, tables, row policies, members, tokens, and webhooks directly — no dashboard clicks needed.
 
 - **Endpoint:** `https://<host>/dashboard/mcp` — Streamable HTTP, stateless (safe behind a non-sticky load balancer / multiple replicas)
 - **Auth:** two methods, both resolved against the same Personal Access Token store:
