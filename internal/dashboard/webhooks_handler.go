@@ -557,32 +557,45 @@ func toDeliveryResponse(d DeliveryRow) deliveryResponse {
 // (spec P2 dashboard-delivery-log AC1/AC2) — reuses WebhookDeliveryStore.ListDeliveries
 // for the data, translated through deliveryResponse for the wire shape.
 func (h *Handler) ListWebhookDeliveries(w http.ResponseWriter, r *http.Request) {
-	appID := chi.URLParam(r, "id")
-	if _, ok := h.webhookRBACGate(w, r, appID); !ok {
-		return
-	}
-	webhookID := chi.URLParam(r, "webhookId")
-	wh, ok := h.getScopedWebhook(w, r, appID, webhookID)
+	user, ok := UserFromContext(r.Context())
 	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
+	appID := chi.URLParam(r, "id")
+	webhookID := chi.URLParam(r, "webhookId")
 
-	limit := defaultDeliveryPageSize
+	// limit/offset are parsed here as sentinel-style raw ints (0/-1 meaning
+	// "unset or unparsable") — ListWebhookDeliveriesForUser owns the actual
+	// default/max clamping (moved there as part of the T12 extraction), so
+	// this parsing step is unchanged in effect from the pre-extraction
+	// behavior: an invalid or out-of-range value silently falls back to the
+	// default, never a 400.
+	limit := 0
 	if v := r.URL.Query().Get("limit"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= maxDeliveryPageSize {
+		if n, err := strconv.Atoi(v); err == nil {
 			limit = n
 		}
 	}
-	offset := 0
+	offset := -1
 	if v := r.URL.Query().Get("offset"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+		if n, err := strconv.Atoi(v); err == nil {
 			offset = n
 		}
 	}
 
-	rows, err := ListDeliveries(r.Context(), h.pool, wh.ID, limit, offset)
+	rows, err := ListWebhookDeliveriesForUser(r.Context(), h.pool, user, appID, webhookID, limit, offset)
 	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		switch {
+		case errors.Is(err, ErrNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		case errors.Is(err, ErrForbidden):
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		case errors.Is(err, ErrWebhookNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "webhook not found"})
+		default:
+			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		}
 		return
 	}
 	resp := make([]deliveryResponse, len(rows))

@@ -374,10 +374,10 @@ T14 → T15
 - Skill: NONE
 
 **Done when**:
-- [ ] `ListWebhookDeliveriesForUser` returns delivery history respecting the same `limit`/`offset` bounds `ListDeliveries` already enforces (test with an out-of-bounds request confirming it's clamped/rejected the same way the REST handler already does)
-- [ ] Returns not-found for a `webhook_id` belonging to a different app
-- [ ] Existing `ListWebhookDeliveries` REST handler test(s) still pass unmodified
-- [ ] Gate passes: `go test ./internal/dashboard/... -race`
+- [x] `ListWebhookDeliveriesForUser` returns delivery history respecting the same `limit`/`offset` bounds `ListDeliveries` already enforces (test with an out-of-bounds request confirming it's clamped/rejected the same way the REST handler already does)
+- [x] Returns not-found for a `webhook_id` belonging to a different app
+- [x] Existing `ListWebhookDeliveries` REST handler test(s) still pass unmodified
+- [x] Gate passes: `go test ./internal/dashboard/... -race`
 
 **Tests**: integration (real Postgres)
 **Gate**: quick

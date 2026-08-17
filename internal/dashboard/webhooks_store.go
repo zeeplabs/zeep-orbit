@@ -244,6 +244,37 @@ func GetWebhookForUser(ctx context.Context, pool *db.Pool, user *DashboardUser, 
 	return &wh, mappings, nil
 }
 
+// ListWebhookDeliveriesForUser is the shared operation behind the
+// ListWebhookDeliveries REST handler and orbit_list_webhook_deliveries
+// (mcp-read-only-tools T12/T13): resolve+authorize the app (same
+// CanManage() tier as ListWebhooksForUser/GetWebhookForUser), scope the
+// webhook to the given app (GetWebhookByID, cross-app-safe), then return its
+// delivery history. limit/offset are clamped to the same bounds the REST
+// handler already enforced (limit defaults to 50 when <=0 or >200, offset
+// defaults to 0 when negative) — the caller passes through whatever it
+// parsed (0/-1 sentinel-style included), this function decides the final
+// bounded value, so behavior is unchanged from the pre-extraction handler.
+func ListWebhookDeliveriesForUser(ctx context.Context, pool *db.Pool, user *DashboardUser, appID, webhookID string, limit, offset int) ([]DeliveryRow, error) {
+	_, role, err := GetApp(ctx, pool, appID, user)
+	if err != nil {
+		return nil, err
+	}
+	if !role.CanManage() {
+		return nil, ErrForbidden
+	}
+	wh, err := GetWebhookByID(ctx, pool, appID, webhookID)
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 || limit > maxDeliveryPageSize {
+		limit = defaultDeliveryPageSize
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	return ListDeliveries(ctx, pool, wh.ID, limit, offset)
+}
+
 // ListWebhooks returns every non-soft-deleted webhook for an app, newest first.
 func ListWebhooks(ctx context.Context, pool *db.Pool, appID string) ([]WebhookRow, error) {
 	rows, err := pool.Query(ctx,
