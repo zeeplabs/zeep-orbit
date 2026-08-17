@@ -9,6 +9,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`GET /docs/{app}/openapi.json` could serve a stale spec missing recently added tables.** The response carried no `Cache-Control` header, so a browser or intermediate proxy could cache the spec from before a table was added and keep serving it after — the endpoint's data was always correct on an uncached request. Responses are now marked `Cache-Control: no-store`.
+
 ### Security
 
 - **The dashboard API and the MCP tool `orbit_list_apps` no longer return an app's real credentials in plaintext.** `GET /dashboard/api/apps`, `GET /dashboard/api/apps/{id}`, and `orbit_list_apps` were all serializing the app's storage config (AWS `access_key_id`/`secret_access_key`) and every configured auth provider's OAuth `client_secret` — plus, on `GET .../apps/{id}` before an existing partial fix, the app's own `jwt_secret` — to any caller who could see the app at all (any app member, not just an admin). Confirmed as a live incident on a production app before this fix. Responses now carry only what a dashboard UI legitimately needs to display (bucket/region/client_id/etc.) plus a `client_secret_set` boolean; `orbit_get_app_schema` was never affected (its response shape never carried these fields). **If you have apps with a configured storage bucket or OAuth login provider, treat those credentials as exposed and rotate them** — this fix stops further disclosure, it doesn't invalidate what may already have been read.
