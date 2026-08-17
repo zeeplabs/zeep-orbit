@@ -118,7 +118,7 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/myapp/tasks
 | **i18n**                | Dashboard in pt-BR / English, language switcher          |
 | **Changelog**           | In-app release history, shipped with the binary          |
 | **Update Notifications**| Sidebar alert when a new release is available on GitHub  |
-| **MCP Server**          | Model Context Protocol server — manage apps, tables, and row policies from Claude Code, Codex, Cursor, OpenCode (PAT) or Claude Desktop (OAuth 2.1) |
+| **MCP Server**          | Model Context Protocol server — create and inspect apps, tables, row policies, members, tokens, and webhooks from Claude Code, Codex, Cursor, OpenCode (PAT) or Claude Desktop (OAuth 2.1) |
 
 ---
 

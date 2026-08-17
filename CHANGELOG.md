@@ -9,6 +9,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **10 new read-only MCP tools** let an AI agent inspect an app's own configuration and operational surface without asking a human to check the Dashboard UI: `orbit_get_app`, `orbit_list_table_policies`, `orbit_list_app_members`, `orbit_list_app_tokens`, `orbit_list_app_auth_providers`, `orbit_list_my_pats`, `orbit_list_webhooks`, `orbit_get_webhook`, `orbit_list_webhook_deliveries`, `orbit_get_logs_metrics`. Every tool authorizes through the exact same `GetApp`/role-check path (or ownership scoping) its REST equivalent already uses — no new permission model — and never returns a secret/credential value its REST equivalent doesn't already redact.
+- **4 new safe mutation MCP tools** let an AI agent evolve an existing table's schema and manage webhooks without the risk of the full-replace `PUT .../tables/{tableId}` endpoint: `orbit_add_table_column` and `orbit_add_table_index` add exactly one new column/index, merged server-side against the table's current stored definition — the request can never omit or corrupt an existing column/index, unlike a naive full-replace resend. `orbit_create_webhook` and `orbit_save_webhook_event_mapping` wrap the existing, already-additive webhook endpoints. Table-schema tools require `role.CanWrite()`; webhook tools require the stricter `role.CanManage()`, matching each operation's existing REST authorization tier exactly.
+
 ### Fixed
 
 - **`GET /docs/{app}/openapi.json` could serve a stale spec missing recently added tables.** The response carried no `Cache-Control` header, so a browser or intermediate proxy could cache the spec from before a table was added and keep serving it after — the endpoint's data was always correct on an uncached request. Responses are now marked `Cache-Control: no-store`.
