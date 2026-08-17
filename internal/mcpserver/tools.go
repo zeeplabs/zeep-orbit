@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"go.uber.org/zap"
 
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/dashboard"
@@ -45,9 +46,27 @@ var errInternal = errors.New("internal error")
 // one for every request that reaches the MCP layer.
 var errUnauthorized = errors.New("unauthorized")
 
+// toolLogger receives the real error behind every errInternal a tool
+// returns, set once by RegisterTools — mirrors what dashboard.Handler's own
+// writeError does for REST 500s (AGENTS.md §4 requires both halves: log the
+// real error server-side, return a fixed generic message to the caller).
+// Defaults to a no-op so a call before RegisterTools runs (shouldn't happen
+// in practice) never panics.
+var toolLogger = zap.NewNop()
+
+// internalErr logs err server-side and returns the fixed, safe-to-expose
+// errInternal every tool's internal-failure branch returns to the caller.
+func internalErr(err error) error {
+	toolLogger.Error("mcp tool internal error", zap.Error(err))
+	return errInternal
+}
+
 // RegisterTools registers every mcp-server spec tool against server. Called
 // once per NewHandler construction.
 func RegisterTools(server *mcp.Server, deps ToolDeps) {
+	if l := deps.DashH.Logger(); l != nil {
+		toolLogger = l
+	}
 	registerReadTools(server, deps)
 	registerWriteTools(server, deps)
 	registerTemplateTools(server, deps)
@@ -94,7 +113,7 @@ func registerReadTools(server *mcp.Server, deps ToolDeps) {
 		}
 		apps, err := dashboard.ListAppsForUser(ctx, deps.Pool, user)
 		if err != nil {
-			return nil, nil, errInternal
+			return nil, nil, internalErr(err)
 		}
 		return nil, orbitListAppsOutput{Apps: apps}, nil
 	})
@@ -112,7 +131,7 @@ func registerReadTools(server *mcp.Server, deps ToolDeps) {
 			if errors.Is(err, dashboard.ErrNotFound) {
 				return nil, nil, errors.New("not found")
 			}
-			return nil, nil, errInternal
+			return nil, nil, internalErr(err)
 		}
 		return nil, schema, nil
 	})
@@ -179,12 +198,20 @@ func mapWriteError(err error) error {
 		return dashboard.ErrUnknownTargetColumn
 	case errors.Is(err, dashboard.ErrMappingConflict):
 		return dashboard.ErrMappingConflict
+	case errors.Is(err, dashboard.ErrInvalidAction):
+		return dashboard.ErrInvalidAction
+	case errors.Is(err, dashboard.ErrMatchKeyRequired):
+		return dashboard.ErrMatchKeyRequired
+	case errors.Is(err, dashboard.ErrEventTypeValueRequired):
+		return dashboard.ErrEventTypeValueRequired
+	case errors.Is(err, dashboard.ErrFieldMappingsRequired):
+		return dashboard.ErrFieldMappingsRequired
 	case errors.As(err, &valErr):
 		return valErr
 	case errors.As(err, &typeErr):
 		return typeErr
 	default:
-		return errInternal
+		return internalErr(err)
 	}
 }
 
@@ -257,6 +284,15 @@ type orbitAddTableColumnInput struct {
 	Column    config.ColumnConfig `json:"column" jsonschema:"the single new column to add"`
 }
 
+// addTableIndexBlockingWriteDisclosure is the spec P2 AC6-required warning
+// that index creation briefly blocks writes to the target table (design.md's
+// Tech Decisions: CREATE INDEX, not CONCURRENTLY). Extracted to a constant,
+// referenced by both the tool description above and its test
+// (TestOrbitAddTableIndex_DescriptionDisclosesBlockingBehavior), so a future
+// copy edit can't silently drop the disclosure without also touching the
+// test that guards it.
+const addTableIndexBlockingWriteDisclosure = "Index creation briefly blocks writes to the target table (CREATE INDEX, not CONCURRENTLY) — avoid running against a table already receiving production traffic without a maintenance window."
+
 // orbitAddTableIndexInput is the input for orbit_add_table_index.
 type orbitAddTableIndexInput struct {
 	AppID     string             `json:"app_id" jsonschema:"id of the app that owns the table"`
@@ -290,7 +326,7 @@ func registerAppConfigWriteTools(server *mcp.Server, deps ToolDeps) {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "orbit_add_table_index",
-		Description: "Add a single new index to an existing table, without resending or risking the table's existing indexes. Index creation briefly blocks writes to the target table (CREATE INDEX, not CONCURRENTLY) — avoid running against a table already receiving production traffic without a maintenance window.",
+		Description: "Add a single new index to an existing table, without resending or risking the table's existing indexes. " + addTableIndexBlockingWriteDisclosure,
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitAddTableIndexInput) (*mcp.CallToolResult, any, error) {
 		user, ok := dashboard.UserFromContext(ctx)
 		if !ok {
@@ -527,7 +563,7 @@ func mapReadError(err error) error {
 	case errors.Is(err, dashboard.ErrWebhookNotFound):
 		return errors.New("webhook not found")
 	default:
-		return errInternal
+		return internalErr(err)
 	}
 }
 
@@ -660,7 +696,7 @@ func registerAccessReadTools(server *mcp.Server, deps ToolDeps) {
 		}
 		pats, err := dashboard.ListPATs(ctx, deps.Pool, user.ID)
 		if err != nil {
-			return nil, nil, errInternal
+			return nil, nil, internalErr(err)
 		}
 		return nil, orbitListMyPatsOutput{PATs: pats}, nil
 	})
@@ -682,7 +718,7 @@ func registerAccessReadTools(server *mcp.Server, deps ToolDeps) {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "orbit_list_app_tokens",
-		Description: "List an app's issued API tokens (metadata only — no raw token/JTI value). Requires the caller to have any effective role on the app (same visibility GetApp already grants), no extra management role required. Not available for apps with email/password auth enabled.",
+		Description: "List an app's issued API tokens (metadata only — no raw/usable token value; the jti field is an opaque identifier used only for revocation lookup, not a credential). Requires the caller to have any effective role on the app (same visibility GetApp already grants), no extra management role required. Not available for apps with email/password auth enabled.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitListAppTokensInput) (*mcp.CallToolResult, any, error) {
 		user, ok := dashboard.UserFromContext(ctx)
 		if !ok {
@@ -922,7 +958,7 @@ func registerOperationalReadTools(server *mcp.Server, deps ToolDeps) {
 		}
 		metrics, err := dashboard.LogsMetricsForUser(ctx, deps.Pool, deps.DashH.Logs, user)
 		if err != nil {
-			return nil, nil, errInternal
+			return nil, nil, internalErr(err)
 		}
 		return nil, metrics, nil
 	})
@@ -963,7 +999,7 @@ type orbitSaveWebhookEventMappingInput struct {
 func registerOperationalWriteTools(server *mcp.Server, deps ToolDeps) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "orbit_create_webhook",
-		Description: "Create a new webhook on an app, without affecting any other webhook on that app. Requires the caller to be able to manage the app (role.CanManage()).",
+		Description: "Create a new webhook on an app, without affecting any other webhook on that app. Requires the caller to be able to manage the app (role.CanManage()). This tool's response never includes the webhook's callback token/URL — fetch it from the Dashboard (or the REST API) after creation to finish wiring up the external provider.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitCreateWebhookInput) (*mcp.CallToolResult, any, error) {
 		user, ok := dashboard.UserFromContext(ctx)
 		if !ok {

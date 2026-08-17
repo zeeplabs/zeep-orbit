@@ -202,7 +202,7 @@ func TestOrbitAddTableIndex_DescriptionDisclosesBlockingBehavior(t *testing.T) {
 	if found == nil {
 		t.Fatal("orbit_add_table_index not found in tool list")
 	}
-	if !strings.Contains(found.Description, "block") && !strings.Contains(found.Description, "CONCURRENTLY") {
-		t.Fatalf("expected orbit_add_table_index's description to disclose blocking write behavior, got %q", found.Description)
+	if !strings.Contains(found.Description, addTableIndexBlockingWriteDisclosure) {
+		t.Fatalf("expected orbit_add_table_index's description to contain the blocking-write disclosure %q, got %q", addTableIndexBlockingWriteDisclosure, found.Description)
 	}
 }

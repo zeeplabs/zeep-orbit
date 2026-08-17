@@ -89,6 +89,55 @@ func TestOrbitSaveWebhookEventMapping_RegistersMapping(t *testing.T) {
 	}
 }
 
+// TestOrbitSaveWebhookEventMapping_InvalidActionReturnsDistinctError covers
+// a Verifier-flagged gap: mapWriteError originally had no case for
+// dashboard.ErrInvalidAction (nor ErrMatchKeyRequired/ErrEventTypeValueRequired/
+// ErrFieldMappingsRequired), so all 4 of SaveEventMapping's own input-validation
+// sentinels fell through to the generic "internal error" — an agent calling
+// this tool with a typo'd action couldn't tell a bad-input mistake from a
+// platform failure, unlike the REST handler which already mapped these to a
+// proper 400. This asserts the tool surfaces the real, specific message.
+func TestOrbitSaveWebhookEventMapping_InvalidActionReturnsDistinctError(t *testing.T) {
+	pool := authTestPool(t)
+	reg := registry.New()
+	h := dashboard.NewHandler(pool, reg, zap.NewNop())
+	owner := authTestUser(t, pool, "tools-savemap-badaction-owner@example.com")
+	token, _, err := dashboard.CreatePAT(context.Background(), pool, owner.ID, "cli", dashboard.PATKindManual, nil)
+	if err != nil {
+		t.Fatalf("CreatePAT: %v", err)
+	}
+	appID, webhookID := seedAppWebhookForMappingTests(t, h, reg, owner.ID)
+
+	sess := startMCPSessionWithHandler(t, pool, h, token)
+
+	res, err := sess.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "orbit_save_webhook_event_mapping",
+		Arguments: map[string]any{
+			"app_id":           appID,
+			"webhook_id":       webhookID,
+			"event_type_value": "employee.created",
+			"action":           "upsert",
+			"target_table":     "employees",
+			"field_mappings": []map[string]any{
+				{"source_path": "id", "column": "external_id"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool orbit_save_webhook_event_mapping: %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected an error result for an invalid action")
+	}
+	text, ok := res.Content[0].(*mcp.TextContent)
+	if !ok {
+		t.Fatalf("expected TextContent error, got %T", res.Content[0])
+	}
+	if text.Text != dashboard.ErrInvalidAction.Error() {
+		t.Fatalf("expected %q, got %q (must not collapse to the generic internal error)", dashboard.ErrInvalidAction.Error(), text.Text)
+	}
+}
+
 // TestOrbitSaveWebhookEventMapping_UnknownTargetTableReturnsDistinctError
 // covers the unknown-target-table tool error.
 func TestOrbitSaveWebhookEventMapping_UnknownTargetTableReturnsDistinctError(t *testing.T) {

@@ -39,6 +39,13 @@ type Handler struct {
 	logger *zap.Logger
 }
 
+// Logger returns the Handler's configured logger — used by internal/mcpserver
+// so an MCP tool's internal (500-class) failures are logged server-side with
+// the same detail a REST 500 gets via writeError, instead of only returning
+// the fixed generic message to the caller (AGENTS.md §4 requires both halves:
+// log the real error, return a safe one).
+func (h *Handler) Logger() *zap.Logger { return h.logger }
+
 // NewHandler creates a new Handler. logger receives detailed error context for
 // every failed request so infra can diagnose issues from container logs alone;
 // pass zap.NewNop() if no logger is available.
