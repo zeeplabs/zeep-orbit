@@ -76,27 +76,44 @@ func (h *Handler) ListAppMembers(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing app id"})
 		return
 	}
-	app, err := appRefFromRequest(r, id)
-	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
-		return
-	}
-	role, err := ResolveAppRole(r.Context(), h.pool, actor, app)
-	if err != nil {
-		if errors.Is(err, ErrInvalidAppRef) {
+	if strings.HasPrefix(r.URL.Path, "/dashboard/api/frontend-apps/") {
+		app, err := appRefFromRequest(r, id)
+		if err != nil {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 			return
 		}
-		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		role, err := ResolveAppRole(r.Context(), h.pool, actor, app)
+		if err != nil {
+			if errors.Is(err, ErrInvalidAppRef) {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+				return
+			}
+			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+			return
+		}
+		if !role.CanManage() {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+			return
+		}
+		members, err := ListAppMembers(r.Context(), h.pool, app)
+		if err != nil {
+			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"members": members})
 		return
 	}
-	if !role.CanManage() {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
-		return
-	}
-	members, err := ListAppMembers(r.Context(), h.pool, app)
+
+	members, err := ListAppMembersForUser(r.Context(), h.pool, actor, id)
 	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		switch {
+		case errors.Is(err, ErrNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		case errors.Is(err, ErrForbidden):
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		default:
+			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		}
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"members": members})

@@ -361,3 +361,82 @@ func TestConcurrentAdminDemotionsDoNotDeadlock(t *testing.T) {
 		}
 	}
 }
+
+// TestListAppMembersForUser_HappyPathMatchesRESTShape covers
+// mcp-read-only-tools T6's Done-when: ListAppMembersForUser returns the
+// same member list ListAppMembers' existing REST test
+// (TestAppMembersRBACMatrix's be_appadmin_list case) expects for the same
+// fixture.
+func TestListAppMembersForUser_HappyPathMatchesRESTShape(t *testing.T) {
+	pool, _, actors, backendAppID, _ := appMembersHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	members, err := ListAppMembersForUser(ctx, pool, actors["appadmin"], backendAppID)
+	if err != nil {
+		t.Fatalf("ListAppMembersForUser: %v", err)
+	}
+	if len(members) == 0 {
+		t.Fatal("expected at least the seeded appadmin/appeditor members")
+	}
+	var sawAdmin, sawEditor bool
+	for _, m := range members {
+		switch m.UserID {
+		case actors["appadmin"].ID:
+			sawAdmin = m.Role == AppRoleAdmin
+		case actors["appeditor"].ID:
+			sawEditor = m.Role == AppRoleEditor
+		}
+	}
+	if !sawAdmin || !sawEditor {
+		t.Fatalf("expected appadmin (admin) and appeditor (editor) in the member list, got %+v", members)
+	}
+}
+
+// TestListAppMembersForUser_NonManagerForbidden covers mcp-read-only-tools
+// T6's Done-when: an editor (a real app member whose role fails
+// CanManage(), not just "no membership") is rejected with ErrForbidden —
+// the explicit CanManage() tier test the design's Authorization Matrix
+// requires.
+func TestListAppMembersForUser_NonManagerForbidden(t *testing.T) {
+	pool, _, actors, backendAppID, _ := appMembersHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	_, err := ListAppMembersForUser(ctx, pool, actors["appeditor"], backendAppID)
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("expected ErrForbidden for an editor (CanManage()==false), got %v", err)
+	}
+}
+
+// TestListAppMembersForUser_OutsiderForbidden covers the same forbidden
+// tier for a caller with no app_members row at all — matching
+// TestAppMembersRBACMatrix's be_outsider_list case (403, not 404): this
+// endpoint deliberately doesn't distinguish "no access" from "doesn't
+// exist" (app_members.go:64-67's stated reasoning), unlike GetApp-based
+// tools.
+func TestListAppMembersForUser_OutsiderForbidden(t *testing.T) {
+	pool, _, actors, backendAppID, _ := appMembersHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	_, err := ListAppMembersForUser(ctx, pool, actors["outsider"], backendAppID)
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("expected ErrForbidden for an outsider with no app_members row, got %v", err)
+	}
+}
+
+// TestListAppMembersForUser_MalformedRefReturnsErrNotFound covers the one
+// not-found path this function actually has: an empty appID produces a
+// malformed AppRef (ErrInvalidAppRef), which the REST handler itself maps
+// to 404 — ListAppMembersForUser preserves that same mapping.
+func TestListAppMembersForUser_MalformedRefReturnsErrNotFound(t *testing.T) {
+	pool, _, actors, _, _ := appMembersHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	_, err := ListAppMembersForUser(ctx, pool, actors["appadmin"], "")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound for an empty appID (malformed AppRef), got %v", err)
+	}
+}

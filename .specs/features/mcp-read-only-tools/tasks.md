@@ -223,11 +223,11 @@ T14 → T15
 - Skill: NONE
 
 **Done when**:
-- [ ] `ListAppMembersForUser` returns the same member list `ListAppMembers`'s existing REST test expects
-- [ ] Returns forbidden for a caller whose role fails `CanManage()` (tested with an editor/viewer member, not just "no membership")
-- [ ] Returns not-found for an invisible/nonexistent app
-- [ ] Existing `ListAppMembers` REST handler test(s) still pass unmodified
-- [ ] Gate passes: `go test ./internal/dashboard/... -race`
+- [x] `ListAppMembersForUser` returns the same member list `ListAppMembers`'s existing REST test expects
+- [x] Returns forbidden for a caller whose role fails `CanManage()` (tested with an editor/viewer member, not just "no membership")
+- [x] Returns not-found for an invisible/nonexistent app — **SPEC_DEVIATION**: see commit body; this endpoint's REST handler deliberately returns 403 (not 404) for a nonexistent/invisible app (`app_members.go:64-67`'s own stated reasoning — "403 doesn't leak existence"), unlike GetApp-based tools. `ListAppMembersForUser` mirrors that exactly; `ErrNotFound` is reachable only via a malformed `AppRef` (empty `appID`), tested directly.
+- [x] Existing `ListAppMembers` REST handler test(s) still pass unmodified
+- [x] Gate passes: `go test ./internal/dashboard/... -race`
 
 **Tests**: integration (real Postgres)
 **Gate**: quick
