@@ -228,6 +228,13 @@ func mergeProviderConfig(provider string, input json.RawMessage, existing *AuthP
 	var existingMap map[string]any
 	json.Unmarshal(input, &inputMap)
 	json.Unmarshal(existing.Config, &existingMap)
+	// A valid-but-non-object input (e.g. `{"config": 123}`, or literal
+	// `null`) unmarshals cleanly into a nil map — without this, the
+	// `inputMap[k] = v` write below would panic on a nil map (assigning
+	// into a nil map is only safe for reads, not writes).
+	if inputMap == nil {
+		inputMap = map[string]any{}
+	}
 
 	for k, v := range existingMap {
 		if _, exists := inputMap[k]; !exists || inputMap[k] == nil || inputMap[k] == "" {
@@ -239,21 +246,35 @@ func mergeProviderConfig(provider string, input json.RawMessage, existing *AuthP
 	return result
 }
 
-// stripSecretFromConfig removes client_secret regardless of provider name
-// — previously gated on provider == "google", the only provider that
-// exists today, but that meant a second provider added later would leak
-// its secret on the non-reveal path by default (the gate would silently
-// skip it) instead of failing closed.
+// stripSecretFromConfig projects config onto the same known-safe display
+// fields the per-app twin (apps_store.go's redactAuthProviderSecrets)
+// allow-lists — an allow-list rather than a deny-list on the field name
+// "client_secret", for the same reason: a credential stored under a
+// different or nested key would pass straight through a deny-list
+// unredacted. Fails closed to {} on anything that doesn't parse as a flat
+// object, rather than returning the input unmodified (which could still
+// carry the real secret).
 func stripSecretFromConfig(provider string, config json.RawMessage) json.RawMessage {
 	if config == nil {
 		return config
 	}
 	var cfg map[string]any
 	if err := json.Unmarshal(config, &cfg); err != nil {
-		return config
+		return json.RawMessage(`{}`)
 	}
-	delete(cfg, "client_secret")
-	result, _ := json.Marshal(cfg)
+	safe := make(map[string]any, len(appProviderDisplayFields)+1)
+	for field := range appProviderDisplayFields {
+		if v, ok := cfg[field]; ok {
+			safe[field] = v
+		}
+	}
+	if s, ok := cfg["client_secret"].(string); ok && s != "" {
+		safe["client_secret_set"] = true
+	}
+	result, err := json.Marshal(safe)
+	if err != nil {
+		return json.RawMessage(`{}`)
+	}
 	return result
 }
 

@@ -380,6 +380,15 @@ func (h *Handler) UpsertAuthProvider(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Never echo the plaintext client_secret back on a write response —
+	// same class of bug as app_providers.go's UpdateAppProviders (this
+	// endpoint's per-app twin) fixed for: mergeProviderConfig above may
+	// have just pulled the *stored* secret back in when the caller sent
+	// an empty client_secret, so this response could hand back a secret
+	// the caller never actually typed. GetAuthProvider has an explicit
+	// ?reveal=true escape hatch for viewing it; this write endpoint has
+	// no equivalent need to.
+	result.Config = stripSecretFromConfig(provider, result.Config)
 	writeJSON(w, http.StatusOK, result)
 	h.audit(r.Context(), user.ID, user.Email, "auth.provider.update", "auth_provider", provider, provider, nil, r.RemoteAddr)
 }

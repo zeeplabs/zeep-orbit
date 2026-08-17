@@ -111,10 +111,11 @@ func redactAuthProviderSecrets(raw json.RawMessage) json.RawMessage {
 // AppProviderConfig (app_providers.go) already treat as the provider's
 // non-secret shape.
 var appProviderDisplayFields = map[string]bool{
-	"enabled":         true,
-	"client_id":       true,
-	"redirect_url":    true,
-	"allowed_domains": true,
+	"enabled":           true,
+	"client_id":         true,
+	"redirect_url":      true,
+	"allowed_domains":   true,
+	"client_secret_set": true, // so re-redacting an already-redacted config (double redaction is idempotent elsewhere) doesn't silently drop this derived flag
 }
 
 // mergeAppAuthProviders merges an incoming auth_providers payload onto the
@@ -141,6 +142,14 @@ func mergeAppAuthProviders(current, incoming json.RawMessage) (json.RawMessage, 
 	var incomingMap map[string]map[string]any
 	if err := json.Unmarshal(incoming, &incomingMap); err != nil {
 		return nil, fmt.Errorf("dashboard: invalid auth_providers payload: %w", err)
+	}
+	if incomingMap == nil {
+		// A literal JSON `null` body unmarshals cleanly to a nil map —
+		// without this, it would fall through to the loop below (which
+		// ranges zero times over a nil map), produce an empty `merged`,
+		// and wipe every provider the app had configured. Treat it as a
+		// no-op instead: nothing to merge, current config stands.
+		return current, nil
 	}
 
 	merged := make(map[string]map[string]any, len(incomingMap))

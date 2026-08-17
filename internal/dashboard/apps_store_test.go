@@ -372,6 +372,35 @@ func TestMergeAppAuthProviders_EmptyOrAbsentFieldKeepsExisting(t *testing.T) {
 	if _, exists := droppedDecoded["google"]; exists {
 		t.Errorf("expected google to be dropped when omitted from incoming entirely, got %+v", droppedDecoded)
 	}
+
+	// A literal JSON null body must not wipe every configured provider —
+	// it unmarshals to a nil map, which without an explicit guard would
+	// fall through to "merged = {}" and delete everything.
+	nullResult, err := mergeAppAuthProviders(current, json.RawMessage(`null`))
+	if err != nil {
+		t.Fatalf("mergeAppAuthProviders (null): %v", err)
+	}
+	if string(nullResult) != string(current) {
+		t.Errorf("expected a literal null incoming payload to be a no-op, got %s (current was %s)", nullResult, current)
+	}
+
+	// An explicit enabled:false must still take effect (a bare boolean
+	// false is neither nil nor "", so it's a real overwrite, not a
+	// keep-existing skip) — this is what lets the dashboard's Google
+	// toggle actually disable the provider, not just look disabled in
+	// the UI.
+	disableIncoming := json.RawMessage(`{"google":{"enabled":false,"client_id":"old-client-id","client_secret":"","redirect_url":"https://old.example.com/cb","allowed_domains":[]}}`)
+	disabled, err := mergeAppAuthProviders(current, disableIncoming)
+	if err != nil {
+		t.Fatalf("mergeAppAuthProviders (disable): %v", err)
+	}
+	var disabledDecoded map[string]map[string]any
+	if err := json.Unmarshal(disabled, &disabledDecoded); err != nil {
+		t.Fatalf("unmarshal disabled: %v", err)
+	}
+	if enabled, _ := disabledDecoded["google"]["enabled"].(bool); enabled {
+		t.Errorf("expected enabled:false to actually take effect, got %+v", disabledDecoded["google"])
+	}
 }
 
 // TestUpdateAppHandler_SavingOtherFieldsDoesNotWipeGoogleClientSecret is
