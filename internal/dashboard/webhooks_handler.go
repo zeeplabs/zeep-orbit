@@ -110,46 +110,41 @@ func (h *Handler) getScopedWebhook(w http.ResponseWriter, r *http.Request, appID
 
 // CreateWebhook handles POST /dashboard/api/apps/{id}/webhooks.
 func (h *Handler) CreateWebhook(w http.ResponseWriter, r *http.Request) {
-	appID := chi.URLParam(r, "id")
-	app, ok := h.webhookRBACGate(w, r, appID)
+	user, ok := UserFromContext(r.Context())
 	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
 
-	user, _ := UserFromContext(r.Context())
-
+	appID := chi.URLParam(r, "id")
 	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
 	var body createWebhookRequest
 	if !h.decodeJSONBody(w, r, &body) {
 		return
 	}
 
-	switch body.Method {
-	case "GET", "POST", "PUT", "PATCH":
-	default:
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "method must be one of GET, POST, PUT, PATCH"})
-		return
-	}
-	if body.Name == "" || body.EventTypePath == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name and event_type_path are required"})
-		return
-	}
-
-	row, _, err := CreateWebhook(r.Context(), h.pool, CreateWebhookInput{
-		AppID:         appID,
+	row, err := h.CreateWebhookForUser(r.Context(), user, appID, CreateWebhookInput{
 		Name:          body.Name,
 		Method:        body.Method,
 		EventTypePath: body.EventTypePath,
 		EventIDPath:   body.EventIDPath,
-		CreatedBy:     user.ID,
-	})
+	}, r.RemoteAddr)
 	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		var valErr *ValidationError
+		switch {
+		case errors.Is(err, ErrNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		case errors.Is(err, ErrForbidden):
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		case errors.As(err, &valErr):
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": valErr.Error()})
+		default:
+			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		}
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, toWebhookResponse(row))
-	h.audit(r.Context(), user.ID, user.Email, "webhook.create", "webhook", row.ID, app.Name+"/"+row.Name, nil, r.RemoteAddr)
+	writeJSON(w, http.StatusCreated, toWebhookResponse(*row))
 }
 
 type updateWebhookRequest struct {
@@ -210,14 +205,22 @@ func (h *Handler) UpdateWebhook(w http.ResponseWriter, r *http.Request) {
 
 // ListWebhooks handles GET /dashboard/api/apps/{id}/webhooks.
 func (h *Handler) ListWebhooks(w http.ResponseWriter, r *http.Request) {
-	appID := chi.URLParam(r, "id")
-	if _, ok := h.webhookRBACGate(w, r, appID); !ok {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
-
-	rows, err := ListWebhooks(r.Context(), h.pool, appID)
+	appID := chi.URLParam(r, "id")
+	rows, err := ListWebhooksForUser(r.Context(), h.pool, user, appID)
 	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		switch {
+		case errors.Is(err, ErrNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		case errors.Is(err, ErrForbidden):
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		default:
+			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		}
 		return
 	}
 	resp := make([]webhookResponse, 0, len(rows))
@@ -229,16 +232,32 @@ func (h *Handler) ListWebhooks(w http.ResponseWriter, r *http.Request) {
 
 // GetWebhook handles GET /dashboard/api/apps/{id}/webhooks/{webhookId}.
 func (h *Handler) GetWebhook(w http.ResponseWriter, r *http.Request) {
-	appID := chi.URLParam(r, "id")
-	if _, ok := h.webhookRBACGate(w, r, appID); !ok {
-		return
-	}
-	webhookID := chi.URLParam(r, "webhookId")
-	wh, ok := h.getScopedWebhook(w, r, appID, webhookID)
+	user, ok := UserFromContext(r.Context())
 	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
-	writeJSON(w, http.StatusOK, toWebhookResponse(wh))
+	appID := chi.URLParam(r, "id")
+	webhookID := chi.URLParam(r, "webhookId")
+	// Event mappings aren't part of this REST response shape (webhookResponse
+	// has no mappings field) — only orbit_get_webhook's combined response
+	// needs them, per design.md's Tech Decisions. GetWebhookConfigForUser
+	// skips that query entirely rather than fetching and discarding it.
+	wh, err := GetWebhookConfigForUser(r.Context(), h.pool, user, appID, webhookID)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		case errors.Is(err, ErrForbidden):
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		case errors.Is(err, ErrWebhookNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "webhook not found"})
+		default:
+			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		}
+		return
+	}
+	writeJSON(w, http.StatusOK, toWebhookResponse(*wh))
 }
 
 // RotateWebhookToken handles POST /dashboard/api/apps/{id}/webhooks/{webhookId}/rotate-token.
@@ -351,17 +370,14 @@ type saveEventMappingRequest struct {
 
 // SaveEventMapping handles POST /dashboard/api/apps/{id}/webhooks/{webhookId}/mappings.
 func (h *Handler) SaveEventMapping(w http.ResponseWriter, r *http.Request) {
-	appID := chi.URLParam(r, "id")
-	app, ok := h.webhookRBACGate(w, r, appID)
+	user, ok := UserFromContext(r.Context())
 	if !ok {
-		return
-	}
-	webhookID := chi.URLParam(r, "webhookId")
-	wh, ok := h.getScopedWebhook(w, r, appID, webhookID)
-	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
 
+	appID := chi.URLParam(r, "id")
+	webhookID := chi.URLParam(r, "webhookId")
 	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
 	var body saveEventMappingRequest
 	if !h.decodeJSONBody(w, r, &body) {
@@ -375,9 +391,15 @@ func (h *Handler) SaveEventMapping(w http.ResponseWriter, r *http.Request) {
 		MatchKeyColumn: body.MatchKeyColumn,
 		FieldMappings:  body.FieldMappings,
 	}
-	row, err := SaveEventMapping(r.Context(), h.pool, h.reg, app.Name, wh.ID, def)
+	row, err := h.SaveEventMappingForUser(r.Context(), user, appID, webhookID, def, r.RemoteAddr)
 	if err != nil {
 		switch {
+		case errors.Is(err, ErrNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		case errors.Is(err, ErrForbidden):
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		case errors.Is(err, ErrWebhookNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "webhook not found"})
 		case errors.Is(err, ErrInvalidAction),
 			errors.Is(err, ErrMatchKeyRequired),
 			errors.Is(err, ErrUnknownTargetTable),
@@ -395,9 +417,7 @@ func (h *Handler) SaveEventMapping(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, toMappingResponse(row))
-	user, _ := UserFromContext(r.Context())
-	h.audit(r.Context(), user.ID, user.Email, "webhook.mapping.save", "webhook_event_mapping", row.ID, app.Name+"/"+wh.Name+"/"+row.EventTypeValue, nil, r.RemoteAddr)
+	writeJSON(w, http.StatusCreated, toMappingResponse(*row))
 }
 
 // ListEventMappings handles GET /dashboard/api/apps/{id}/webhooks/{webhookId}/mappings.
@@ -534,32 +554,45 @@ func toDeliveryResponse(d DeliveryRow) deliveryResponse {
 // (spec P2 dashboard-delivery-log AC1/AC2) — reuses WebhookDeliveryStore.ListDeliveries
 // for the data, translated through deliveryResponse for the wire shape.
 func (h *Handler) ListWebhookDeliveries(w http.ResponseWriter, r *http.Request) {
-	appID := chi.URLParam(r, "id")
-	if _, ok := h.webhookRBACGate(w, r, appID); !ok {
-		return
-	}
-	webhookID := chi.URLParam(r, "webhookId")
-	wh, ok := h.getScopedWebhook(w, r, appID, webhookID)
+	user, ok := UserFromContext(r.Context())
 	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
+	appID := chi.URLParam(r, "id")
+	webhookID := chi.URLParam(r, "webhookId")
 
-	limit := defaultDeliveryPageSize
+	// limit/offset are parsed here as sentinel-style raw ints (0/-1 meaning
+	// "unset or unparsable") — ListWebhookDeliveriesForUser owns the actual
+	// default/max clamping (moved there as part of the T12 extraction), so
+	// this parsing step is unchanged in effect from the pre-extraction
+	// behavior: an invalid or out-of-range value silently falls back to the
+	// default, never a 400.
+	limit := 0
 	if v := r.URL.Query().Get("limit"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= maxDeliveryPageSize {
+		if n, err := strconv.Atoi(v); err == nil {
 			limit = n
 		}
 	}
-	offset := 0
+	offset := -1
 	if v := r.URL.Query().Get("offset"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+		if n, err := strconv.Atoi(v); err == nil {
 			offset = n
 		}
 	}
 
-	rows, err := ListDeliveries(r.Context(), h.pool, wh.ID, limit, offset)
+	rows, err := ListWebhookDeliveriesForUser(r.Context(), h.pool, user, appID, webhookID, limit, offset)
 	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		switch {
+		case errors.Is(err, ErrNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		case errors.Is(err, ErrForbidden):
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		case errors.Is(err, ErrWebhookNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "webhook not found"})
+		default:
+			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		}
 		return
 	}
 	resp := make([]deliveryResponse, len(rows))

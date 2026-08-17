@@ -199,6 +199,174 @@ func GetWebhookByID(ctx context.Context, pool *db.Pool, appID, webhookID string)
 	return w, nil
 }
 
+// ListWebhooksForUser is the shared operation behind the ListWebhooks REST
+// handler and orbit_list_webhooks (mcp-read-only-tools T10/T13):
+// resolve+authorize the app via the same check webhookRBACGate performs
+// (GetApp + role.CanManage() — webhooks are part of the app's
+// access-control surface, same tier as table policies/members), then
+// return its webhooks.
+func ListWebhooksForUser(ctx context.Context, pool *db.Pool, user *DashboardUser, appID string) ([]WebhookRow, error) {
+	_, role, err := GetApp(ctx, pool, appID, user)
+	if err != nil {
+		return nil, err
+	}
+	if !role.CanManage() {
+		return nil, ErrForbidden
+	}
+	return ListWebhooks(ctx, pool, appID)
+}
+
+// GetWebhookForUser is the shared operation behind the GetWebhook REST
+// handler and orbit_get_webhook (mcp-read-only-tools T11/T13): resolve+
+// authorize the app (same CanManage() tier as ListWebhooksForUser), then
+// return one webhook plus its event mappings in a single combined result
+// (design.md's Tech Decisions: matches spec AC2 exactly, avoids forcing a
+// second round-trip). GetWebhookByID is already scoped to appID, so a
+// webhookID belonging to a different app returns ErrWebhookNotFound — the
+// same cross-app-scoping behavior getScopedWebhook already enforces for the
+// REST handler.
+func GetWebhookForUser(ctx context.Context, pool *db.Pool, user *DashboardUser, appID, webhookID string) (*WebhookRow, []EventMappingRow, error) {
+	wh, err := resolveManagedWebhook(ctx, pool, user, appID, webhookID)
+	if err != nil {
+		return nil, nil, err
+	}
+	mappings, err := ListEventMappings(ctx, pool, wh.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &wh, mappings, nil
+}
+
+// GetWebhookConfigForUser is the shared operation behind the GetWebhook REST
+// handler: same auth+cross-app-scoping as GetWebhookForUser, but skips the
+// ListEventMappings query — webhookResponse (the REST shape) has no mappings
+// field, so fetching them there was a wasted round-trip only orbit_get_webhook's
+// combined response actually needs.
+func GetWebhookConfigForUser(ctx context.Context, pool *db.Pool, user *DashboardUser, appID, webhookID string) (*WebhookRow, error) {
+	wh, err := resolveManagedWebhook(ctx, pool, user, appID, webhookID)
+	if err != nil {
+		return nil, err
+	}
+	return &wh, nil
+}
+
+// resolveManagedWebhook is the shared GetApp+role.CanManage()+cross-app-scoped
+// webhook lookup every webhook read/write *ForUser function composes.
+func resolveManagedWebhook(ctx context.Context, pool *db.Pool, user *DashboardUser, appID, webhookID string) (WebhookRow, error) {
+	_, role, err := GetApp(ctx, pool, appID, user)
+	if err != nil {
+		return WebhookRow{}, err
+	}
+	if !role.CanManage() {
+		return WebhookRow{}, ErrForbidden
+	}
+	return GetWebhookByID(ctx, pool, appID, webhookID)
+}
+
+// ListWebhookDeliveriesForUser is the shared operation behind the
+// ListWebhookDeliveries REST handler and orbit_list_webhook_deliveries
+// (mcp-read-only-tools T12/T13): resolve+authorize the app (same
+// CanManage() tier as ListWebhooksForUser/GetWebhookForUser), scope the
+// webhook to the given app (GetWebhookByID, cross-app-safe), then return its
+// delivery history. limit/offset are clamped to the same bounds the REST
+// handler already enforced (limit defaults to 50 when <=0 or >200, offset
+// defaults to 0 when negative) — the caller passes through whatever it
+// parsed (0/-1 sentinel-style included), this function decides the final
+// bounded value, so behavior is unchanged from the pre-extraction handler.
+func ListWebhookDeliveriesForUser(ctx context.Context, pool *db.Pool, user *DashboardUser, appID, webhookID string, limit, offset int) ([]DeliveryRow, error) {
+	_, role, err := GetApp(ctx, pool, appID, user)
+	if err != nil {
+		return nil, err
+	}
+	if !role.CanManage() {
+		return nil, ErrForbidden
+	}
+	wh, err := GetWebhookByID(ctx, pool, appID, webhookID)
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 || limit > maxDeliveryPageSize {
+		limit = defaultDeliveryPageSize
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	return ListDeliveries(ctx, pool, wh.ID, limit, offset)
+}
+
+// CreateWebhookForUser is the shared operation behind the CreateWebhook REST
+// handler and orbit_create_webhook (mcp-safe-mutation-tools spec T5/T6):
+// resolve+authorize the app with the same GetApp+role.CanManage() gate
+// webhookRBACGate enforces (context-based instead of http.ResponseWriter-
+// based — webhookRBACGate itself can't be called from a non-HTTP caller),
+// validate Method/Name/EventTypePath the same way the REST handler does,
+// then call the existing CreateWebhook store function as-is (already
+// genuinely additive — no overwrite path). Audits under "webhook.create",
+// reusing the REST handler's existing action string rather than a new one,
+// since the underlying mutation is identical.
+func (h *Handler) CreateWebhookForUser(ctx context.Context, user *DashboardUser, appID string, input CreateWebhookInput, ip string) (*WebhookRow, error) {
+	app, role, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, err
+	}
+	if !role.CanManage() {
+		return nil, ErrForbidden
+	}
+
+	switch input.Method {
+	case "GET", "POST", "PUT", "PATCH":
+	default:
+		return nil, &ValidationError{msg: "method must be one of GET, POST, PUT, PATCH"}
+	}
+	if input.Name == "" || input.EventTypePath == "" {
+		return nil, &ValidationError{msg: "name and event_type_path are required"}
+	}
+
+	input.AppID = appID
+	input.CreatedBy = user.ID
+	row, _, err := CreateWebhook(ctx, h.pool, input)
+	if err != nil {
+		return nil, err
+	}
+
+	h.audit(ctx, user.ID, user.Email, "webhook.create", "webhook", row.ID, app.Name+"/"+row.Name, nil, ip)
+	return &row, nil
+}
+
+// SaveEventMappingForUser is the shared operation behind the
+// SaveEventMapping REST handler and orbit_save_webhook_event_mapping
+// (mcp-safe-mutation-tools spec T7/T8): resolve+authorize the app
+// (GetApp+role.CanManage(), same as CreateWebhookForUser), scope the
+// webhook to the given app the same way GetWebhookForUser does
+// (GetWebhookByID already scopes by appID, so a webhookID belonging to a
+// different app returns ErrWebhookNotFound), then call the existing
+// SaveEventMapping store function as-is — it already rejects conflicting
+// mappings with ErrMappingConflict instead of overwriting, and unknown
+// targets with ErrUnknownTargetTable/ErrUnknownTargetColumn, all propagated
+// unchanged. Audits under "webhook.mapping.save", reusing the REST
+// handler's existing action string.
+func (h *Handler) SaveEventMappingForUser(ctx context.Context, user *DashboardUser, appID, webhookID string, def EventMappingDef, ip string) (*EventMappingRow, error) {
+	app, role, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, err
+	}
+	if !role.CanManage() {
+		return nil, ErrForbidden
+	}
+	wh, err := GetWebhookByID(ctx, h.pool, appID, webhookID)
+	if err != nil {
+		return nil, err
+	}
+
+	row, err := SaveEventMapping(ctx, h.pool, h.reg, app.Name, wh.ID, def)
+	if err != nil {
+		return nil, err
+	}
+
+	h.audit(ctx, user.ID, user.Email, "webhook.mapping.save", "webhook_event_mapping", row.ID, app.Name+"/"+wh.Name+"/"+row.EventTypeValue, nil, ip)
+	return &row, nil
+}
+
 // ListWebhooks returns every non-soft-deleted webhook for an app, newest first.
 func ListWebhooks(ctx context.Context, pool *db.Pool, appID string) ([]WebhookRow, error) {
 	rows, err := pool.Query(ctx,

@@ -158,6 +158,12 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: internal/dashboard/ui/e2e/personal-access-tokens.spec.ts:165-177 (e2e-testing)
 - last seen: 2026-08-16T00:12:33Z
 
+### L-025 - When tasks.md needs more requirement IDs than spec.md's traceability table allocated (e.g. splitting one P3 story into per-tool IDs), extend spec.md's table in the same change instead of letting tasks.md invent IDs the spec never declared.
+- signal: `spec_deviation` · recurrence: 1 feature(s) · scope: `.specs/features/*/spec.md` · harmful: 0
+- features: mcp-read-only-tools
+- evidence: spec.md:119-137 vs tasks.md T11-T15 (.specs/features/*/spec.md)
+- last seen: 2026-08-17T18:19:39Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

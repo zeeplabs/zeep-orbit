@@ -290,18 +290,24 @@ function LoginTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]>
     setError(null);
     setSaved(false);
     const payload: Record<string, unknown> = { id: app.id, name: app.name, auth_email_enabled: authEmail };
-    if (googleEnabled) {
-      const domains = googleAllowedDomains.split(",").map((d) => d.trim()).filter(Boolean);
-      payload.auth_providers = {
-        google: {
-          enabled: true,
-          client_id: googleClientId,
-          client_secret: googleClientSecret,
-          redirect_url: googleRedirectUrl || `/${app.name}/auth/google/callback`,
-          ...(domains.length > 0 ? { allowed_domains: domains } : {}),
-        },
-      };
-    }
+    // Always send the google block, even when disabled — the backend
+    // merges onto the stored config field-by-field (empty/absent means
+    // "keep existing"), so omitting this entirely whenever googleEnabled
+    // is false meant toggling Google off never actually persisted (the
+    // switch looked saved in the UI but the provider stayed enabled in
+    // the database). enabled/allowed_domains are always sent explicitly
+    // (never conditionally omitted) so both can be changed to their
+    // "off"/"empty" state, not just their "on"/"populated" one.
+    const domains = googleAllowedDomains.split(",").map((d) => d.trim()).filter(Boolean);
+    payload.auth_providers = {
+      google: {
+        enabled: googleEnabled,
+        client_id: googleClientId,
+        client_secret: googleClientSecret,
+        redirect_url: googleRedirectUrl || `/${app.name}/auth/google/callback`,
+        allowed_domains: domains,
+      },
+    };
     try {
       await updateApp.mutateAsync(payload as any);
       setSaved(true);

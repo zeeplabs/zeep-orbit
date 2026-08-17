@@ -13,8 +13,10 @@ package mcpserver
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"go.uber.org/zap"
 
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/dashboard"
@@ -44,12 +46,35 @@ var errInternal = errors.New("internal error")
 // one for every request that reaches the MCP layer.
 var errUnauthorized = errors.New("unauthorized")
 
+// toolLogger receives the real error behind every errInternal a tool
+// returns, set once by RegisterTools — mirrors what dashboard.Handler's own
+// writeError does for REST 500s (AGENTS.md §4 requires both halves: log the
+// real error server-side, return a fixed generic message to the caller).
+// Defaults to a no-op so a call before RegisterTools runs (shouldn't happen
+// in practice) never panics.
+var toolLogger = zap.NewNop()
+
+// internalErr logs err server-side and returns the fixed, safe-to-expose
+// errInternal every tool's internal-failure branch returns to the caller.
+func internalErr(err error) error {
+	toolLogger.Error("mcp tool internal error", zap.Error(err))
+	return errInternal
+}
+
 // RegisterTools registers every mcp-server spec tool against server. Called
 // once per NewHandler construction.
 func RegisterTools(server *mcp.Server, deps ToolDeps) {
+	if l := deps.DashH.Logger(); l != nil {
+		toolLogger = l
+	}
 	registerReadTools(server, deps)
 	registerWriteTools(server, deps)
 	registerTemplateTools(server, deps)
+	registerAppConfigReadTools(server, deps)
+	registerAccessReadTools(server, deps)
+	registerOperationalReadTools(server, deps)
+	registerAppConfigWriteTools(server, deps)
+	registerOperationalWriteTools(server, deps)
 }
 
 // orbitListAppsInput takes no arguments — the tool always lists the calling
@@ -88,7 +113,7 @@ func registerReadTools(server *mcp.Server, deps ToolDeps) {
 		}
 		apps, err := dashboard.ListAppsForUser(ctx, deps.Pool, user)
 		if err != nil {
-			return nil, nil, errInternal
+			return nil, nil, internalErr(err)
 		}
 		return nil, orbitListAppsOutput{Apps: apps}, nil
 	})
@@ -106,7 +131,7 @@ func registerReadTools(server *mcp.Server, deps ToolDeps) {
 			if errors.Is(err, dashboard.ErrNotFound) {
 				return nil, nil, errors.New("not found")
 			}
-			return nil, nil, errInternal
+			return nil, nil, internalErr(err)
 		}
 		return nil, schema, nil
 	})
@@ -161,12 +186,32 @@ func mapWriteError(err error) error {
 		return errors.New("table not found")
 	case errors.Is(err, dashboard.ErrPolicyAlreadyExists):
 		return dashboard.ErrPolicyAlreadyExists
+	case errors.Is(err, dashboard.ErrColumnAlreadyExists):
+		return dashboard.ErrColumnAlreadyExists
+	case errors.Is(err, dashboard.ErrIndexAlreadyExists):
+		return dashboard.ErrIndexAlreadyExists
+	case errors.Is(err, dashboard.ErrWebhookNotFound):
+		return errors.New("webhook not found")
+	case errors.Is(err, dashboard.ErrUnknownTargetTable):
+		return dashboard.ErrUnknownTargetTable
+	case errors.Is(err, dashboard.ErrUnknownTargetColumn):
+		return dashboard.ErrUnknownTargetColumn
+	case errors.Is(err, dashboard.ErrMappingConflict):
+		return dashboard.ErrMappingConflict
+	case errors.Is(err, dashboard.ErrInvalidAction):
+		return dashboard.ErrInvalidAction
+	case errors.Is(err, dashboard.ErrMatchKeyRequired):
+		return dashboard.ErrMatchKeyRequired
+	case errors.Is(err, dashboard.ErrEventTypeValueRequired):
+		return dashboard.ErrEventTypeValueRequired
+	case errors.Is(err, dashboard.ErrFieldMappingsRequired):
+		return dashboard.ErrFieldMappingsRequired
 	case errors.As(err, &valErr):
 		return valErr
 	case errors.As(err, &typeErr):
 		return typeErr
 	default:
-		return errInternal
+		return internalErr(err)
 	}
 }
 
@@ -222,6 +267,72 @@ func registerWriteTools(server *mcp.Server, deps ToolDeps) {
 			return nil, nil, errUnauthorized
 		}
 		row, err := deps.DashH.UpdateTableRLSModeForUser(ctx, user, in.AppID, in.TableName, in.RLSMode, "mcp")
+		if err != nil {
+			return nil, nil, mapWriteError(err)
+		}
+		return nil, row, nil
+	})
+}
+
+// orbitAddTableColumnInput is the input for orbit_add_table_column.
+// config.ColumnConfig is used directly (same precedent as
+// orbitCreateTableInput.Columns) rather than a bespoke translation struct —
+// it already carries the json tags an MCP tool input needs.
+type orbitAddTableColumnInput struct {
+	AppID     string              `json:"app_id" jsonschema:"id of the app that owns the table"`
+	TableName string              `json:"table_name" jsonschema:"name of the table to add the column to"`
+	Column    config.ColumnConfig `json:"column" jsonschema:"the single new column to add"`
+}
+
+// addTableIndexBlockingWriteDisclosure is the spec P2 AC6-required warning
+// that index creation briefly blocks writes to the target table (design.md's
+// Tech Decisions: CREATE INDEX, not CONCURRENTLY). Extracted to a constant,
+// referenced by both the tool description above and its test
+// (TestOrbitAddTableIndex_DescriptionDisclosesBlockingBehavior), so a future
+// copy edit can't silently drop the disclosure without also touching the
+// test that guards it.
+const addTableIndexBlockingWriteDisclosure = "Index creation briefly blocks writes to the target table (CREATE INDEX, not CONCURRENTLY) — avoid running against a table already receiving production traffic without a maintenance window."
+
+// orbitAddTableIndexInput is the input for orbit_add_table_index.
+type orbitAddTableIndexInput struct {
+	AppID     string             `json:"app_id" jsonschema:"id of the app that owns the table"`
+	TableName string             `json:"table_name" jsonschema:"name of the table to add the index to"`
+	Index     config.IndexConfig `json:"index" jsonschema:"the single new index to add"`
+}
+
+// registerAppConfigWriteTools registers the two additive table-schema
+// mutation tools (mcp-safe-mutation-tools spec): add one column, add one
+// index, each server-side-merged against the table's current stored
+// definition so the request body can never omit or corrupt an existing
+// column/index (see design.md's Architecture Overview — this is exactly why
+// UpdateAppTable's full-replace endpoint isn't safe to expose directly).
+// Both gate on role.CanWrite(), matching CreateAppTableForUser/
+// UpdateTableRLSModeForUser.
+func registerAppConfigWriteTools(server *mcp.Server, deps ToolDeps) {
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_add_table_column",
+		Description: "Add a single new column to an existing table, without resending or risking any other column already on that table.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitAddTableColumnInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		row, err := deps.DashH.AddTableColumnForUser(ctx, user, in.AppID, in.TableName, in.Column, "mcp")
+		if err != nil {
+			return nil, nil, mapWriteError(err)
+		}
+		return nil, row, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_add_table_index",
+		Description: "Add a single new index to an existing table, without resending or risking the table's existing indexes. " + addTableIndexBlockingWriteDisclosure,
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitAddTableIndexInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		row, err := deps.DashH.AddTableIndexForUser(ctx, user, in.AppID, in.TableName, in.Index, "mcp")
 		if err != nil {
 			return nil, nil, mapWriteError(err)
 		}
@@ -429,5 +540,501 @@ func registerTemplateTools(server *mcp.Server, deps ToolDeps) {
 			created = append(created, row)
 		}
 		return nil, orbitCreatePolicyFromTemplateResult{Created: created}, nil
+	})
+}
+
+// mapReadError maps an error returned by one of the new read-only *ForUser
+// functions (mcp-read-only-tools spec) to a caller-safe tool error, the
+// same fixed-message convention mapWriteError already established:
+// ErrNotFound/ErrForbidden map to their REST-equivalent wording, everything
+// else collapses to errInternal (AGENTS.md §4 — never a raw err.Error()).
+func mapReadError(err error) error {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, dashboard.ErrNotFound):
+		return errors.New("not found")
+	case errors.Is(err, dashboard.ErrForbidden):
+		return errors.New("forbidden")
+	case errors.Is(err, dashboard.ErrTableNotFound):
+		return errors.New("table not found")
+	case errors.Is(err, dashboard.ErrAppTokensNotSupported):
+		return dashboard.ErrAppTokensNotSupported
+	case errors.Is(err, dashboard.ErrWebhookNotFound):
+		return errors.New("webhook not found")
+	default:
+		return internalErr(err)
+	}
+}
+
+// orbitGetAppInput is the input for orbit_get_app.
+type orbitGetAppInput struct {
+	AppID string `json:"app_id" jsonschema:"id of the app to fetch"`
+}
+
+// orbitListAppAuthProvidersInput is the input for orbit_list_app_auth_providers.
+type orbitListAppAuthProvidersInput struct {
+	AppID string `json:"app_id" jsonschema:"id of the app to fetch auth providers for"`
+}
+
+// orbitListTablePoliciesInput is the input for orbit_list_table_policies.
+type orbitListTablePoliciesInput struct {
+	AppID     string `json:"app_id" jsonschema:"id of the app that owns the table"`
+	TableName string `json:"table_name" jsonschema:"name of the table to list row policies for"`
+}
+
+// orbitListTablePoliciesOutput mirrors ListTablePolicies' REST response
+// shape (a JSON array of policies) wrapped in an object, since MCP tool
+// outputs are objects.
+type orbitListTablePoliciesOutput struct {
+	Policies []dashboard.TablePolicyRow `json:"policies"`
+}
+
+// registerAppConfigReadTools registers the read-only tools that expose an
+// app's own configuration record and per-table policy data (mcp-read-only-tools
+// spec P1: orbit_get_app; T2 adds orbit_list_app_auth_providers; T5 adds
+// orbit_list_table_policies here too). Each tool authorizes through the
+// exact tier its wrapped function/REST handler already enforces — the
+// tiers are not uniform across this group, see design.md's Authorization
+// Matrix.
+func registerAppConfigReadTools(server *mcp.Server, deps ToolDeps) {
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_get_app",
+		Description: "Get an app's own configuration record (auth providers, storage, rate limit — secrets redacted). Requires the caller to have any effective role on the app (same visibility GetApp already grants), no extra management role required.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitGetAppInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		app, _, err := dashboard.GetApp(ctx, deps.Pool, in.AppID, user)
+		if err != nil {
+			return nil, nil, mapReadError(err)
+		}
+		app.RedactSecrets()
+		return nil, app, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_list_app_auth_providers",
+		Description: "List an app's configured login providers (client secrets redacted to a client_secret_set boolean). Requires the caller to have any effective role on the app, no extra management role required.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitListAppAuthProvidersInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		providers, err := dashboard.GetAppAuthProviders(ctx, deps.Pool, in.AppID, user)
+		if err != nil {
+			return nil, nil, mapReadError(err)
+		}
+		return nil, providers, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_list_table_policies",
+		Description: "List every row policy on a table. Requires the caller to be able to manage the app (role.CanManage()) — table policies are part of the app's access-control surface, same tier as CreateTablePolicy.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitListTablePoliciesInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		policies, err := dashboard.ListTablePoliciesForUser(ctx, deps.Pool, user, in.AppID, in.TableName)
+		if err != nil {
+			return nil, nil, mapReadError(err)
+		}
+		return nil, orbitListTablePoliciesOutput{Policies: policies}, nil
+	})
+}
+
+// orbitListMyPatsInput takes no arguments — the tool always lists the
+// calling identity's own PATs, mirroring GET /dashboard/api/me/pats
+// (mcp-read-only-tools spec: "ListPATs scope" assumption — not app-scoped,
+// PATs aren't tied to one app).
+type orbitListMyPatsInput struct{}
+
+// orbitListMyPatsOutput mirrors ListPATs' REST response shape wrapped in an
+// object, since MCP tool outputs are objects.
+type orbitListMyPatsOutput struct {
+	PATs []dashboard.PATRow `json:"pats"`
+}
+
+// orbitListAppMembersInput is the input for orbit_list_app_members.
+type orbitListAppMembersInput struct {
+	AppID string `json:"app_id" jsonschema:"id of the app to list members for"`
+}
+
+// orbitListAppMembersOutput mirrors ListAppMembers' REST response shape
+// (a JSON array of members) wrapped in an object, since MCP tool outputs
+// are objects.
+type orbitListAppMembersOutput struct {
+	Members []*dashboard.AppMember `json:"members"`
+}
+
+// orbitListAppTokensInput is the input for orbit_list_app_tokens.
+type orbitListAppTokensInput struct {
+	AppID string `json:"app_id" jsonschema:"id of the app to list issued API tokens for"`
+}
+
+// orbitListAppTokensOutput mirrors ListAppTokens' REST response shape (a
+// JSON array of token metadata rows) wrapped in an object, since MCP tool
+// outputs are objects.
+type orbitListAppTokensOutput struct {
+	Tokens []dashboard.AppTokenRow `json:"tokens"`
+}
+
+// registerAccessReadTools registers the read-only tools that expose who
+// and what has access to an app, plus the caller's own identity-scoped
+// resources (mcp-read-only-tools spec P2: T3 adds orbit_list_my_pats; T7
+// adds orbit_list_app_members; T9 adds orbit_list_app_tokens here too).
+func registerAccessReadTools(server *mcp.Server, deps ToolDeps) {
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_list_my_pats",
+		Description: "List the calling identity's own personal access tokens (metadata only — no raw token value). Not app-scoped: returns the caller's PATs regardless of any app.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ orbitListMyPatsInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		pats, err := dashboard.ListPATs(ctx, deps.Pool, user.ID)
+		if err != nil {
+			return nil, nil, internalErr(err)
+		}
+		return nil, orbitListMyPatsOutput{PATs: pats}, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_list_app_members",
+		Description: "List an app's team members (user_id, role, created_at). Requires the caller to be able to manage the app (role.CanManage()) — membership is part of the app's access-control surface, same tier as table policies.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitListAppMembersInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		members, err := dashboard.ListAppMembersForUser(ctx, deps.Pool, user, in.AppID)
+		if err != nil {
+			return nil, nil, mapReadError(err)
+		}
+		return nil, orbitListAppMembersOutput{Members: members}, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_list_app_tokens",
+		Description: "List an app's issued API tokens (metadata only — no raw/usable token value; the jti field is an opaque identifier used only for revocation lookup, not a credential). Requires the caller to have any effective role on the app (same visibility GetApp already grants), no extra management role required. Not available for apps with email/password auth enabled.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitListAppTokensInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		tokens, err := dashboard.ListAppTokensForUser(ctx, deps.Pool, user, in.AppID)
+		if err != nil {
+			return nil, nil, mapReadError(err)
+		}
+		return nil, orbitListAppTokensOutput{Tokens: tokens}, nil
+	})
+}
+
+// orbitWebhookSummary is the MCP-facing shape of a dashboard.WebhookRow —
+// the same fields webhooks_handler.go's webhookResponse exposes over REST,
+// minus Token: webhookResponse decrypts and returns the plaintext callback
+// token for the dashboard session's own use, but design.md's Tech Decisions
+// require "no signing-secret value" for the read-only MCP tools, so the
+// token is never included here (WebhookRow's own TokenSecret ciphertext
+// field is dropped too — same reasoning, different form of the same
+// secret). WebhookRow itself carries no json tags, so this translation also
+// avoids emitting Go's default PascalCase field names.
+type orbitWebhookSummary struct {
+	ID             string         `json:"id"`
+	AppID          string         `json:"app_id"`
+	Name           string         `json:"name"`
+	Method         string         `json:"method"`
+	EventTypePath  string         `json:"event_type_path"`
+	EventIDPath    *string        `json:"event_id_path"`
+	Status         string         `json:"status"`
+	CapturedSample map[string]any `json:"captured_sample"`
+	DeletedAt      *time.Time     `json:"deleted_at"`
+	CreatedBy      string         `json:"created_by"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+}
+
+func toOrbitWebhookSummary(w dashboard.WebhookRow) orbitWebhookSummary {
+	return orbitWebhookSummary{
+		ID:             w.ID,
+		AppID:          w.AppID,
+		Name:           w.Name,
+		Method:         w.Method,
+		EventTypePath:  w.EventTypePath,
+		EventIDPath:    w.EventIDPath,
+		Status:         w.Status,
+		CapturedSample: w.CapturedSample,
+		DeletedAt:      w.DeletedAt,
+		CreatedBy:      w.CreatedBy,
+		CreatedAt:      w.CreatedAt,
+		UpdatedAt:      w.UpdatedAt,
+	}
+}
+
+// orbitEventMapping is the MCP-facing shape of a dashboard.EventMappingRow
+// (also carries no json tags in its store form) — snake_case, matching
+// webhooks_handler.go's own mappingResponse translation.
+type orbitEventMapping struct {
+	ID             string                      `json:"id"`
+	WebhookID      string                      `json:"webhook_id"`
+	EventTypeValue string                      `json:"event_type_value"`
+	Action         string                      `json:"action"`
+	TargetTable    string                      `json:"target_table"`
+	MatchKeyColumn *string                     `json:"match_key_column"`
+	FieldMappings  []dashboard.FieldMappingDef `json:"field_mappings"`
+	CreatedAt      time.Time                   `json:"created_at"`
+	UpdatedAt      time.Time                   `json:"updated_at"`
+}
+
+func toOrbitEventMapping(m dashboard.EventMappingRow) orbitEventMapping {
+	return orbitEventMapping{
+		ID:             m.ID,
+		WebhookID:      m.WebhookID,
+		EventTypeValue: m.EventTypeValue,
+		Action:         m.Action,
+		TargetTable:    m.TargetTable,
+		MatchKeyColumn: m.MatchKeyColumn,
+		FieldMappings:  m.FieldMappings,
+		CreatedAt:      m.CreatedAt,
+		UpdatedAt:      m.UpdatedAt,
+	}
+}
+
+// orbitListWebhooksInput is the input for orbit_list_webhooks.
+type orbitListWebhooksInput struct {
+	AppID string `json:"app_id" jsonschema:"id of the app to list webhooks for"`
+}
+
+// orbitListWebhooksOutput wraps a JSON array of webhook summaries, since MCP
+// tool outputs are objects.
+type orbitListWebhooksOutput struct {
+	Webhooks []orbitWebhookSummary `json:"webhooks"`
+}
+
+// orbitGetWebhookInput is the input for orbit_get_webhook.
+type orbitGetWebhookInput struct {
+	AppID     string `json:"app_id" jsonschema:"id of the app that owns the webhook"`
+	WebhookID string `json:"webhook_id" jsonschema:"id of the webhook to fetch"`
+}
+
+// orbitGetWebhookOutput combines a webhook's config with its event mappings
+// in one response (design.md Tech Decisions: matches spec AC2 exactly,
+// avoids a second round-trip for what's conceptually one "show me this
+// webhook" question).
+type orbitGetWebhookOutput struct {
+	Webhook       orbitWebhookSummary `json:"webhook"`
+	EventMappings []orbitEventMapping `json:"event_mappings"`
+}
+
+// orbitListWebhookDeliveriesInput is the input for
+// orbit_list_webhook_deliveries. Limit/offset mirror the same bounds the
+// REST endpoint already enforces (ListWebhookDeliveriesForUser clamps
+// silently, it never rejects) — no new query capability is invented here,
+// per design.md's Tech Decisions.
+type orbitListWebhookDeliveriesInput struct {
+	AppID     string `json:"app_id" jsonschema:"id of the app that owns the webhook"`
+	WebhookID string `json:"webhook_id" jsonschema:"id of the webhook to list deliveries for"`
+	Limit     int    `json:"limit,omitempty" jsonschema:"max rows to return (default 50, max 200)"`
+	Offset    int    `json:"offset,omitempty" jsonschema:"rows to skip (default 0)"`
+}
+
+// orbitDelivery is the MCP-facing shape of a dashboard.DeliveryRow (also
+// carries no json tags in its store form) — snake_case, matching
+// webhooks_handler.go's own deliveryResponse translation.
+type orbitDelivery struct {
+	ID             string         `json:"id"`
+	WebhookID      string         `json:"webhook_id"`
+	ReceivedAt     time.Time      `json:"received_at"`
+	HTTPStatus     int            `json:"http_status"`
+	Outcome        string         `json:"outcome"`
+	EventTypeValue *string        `json:"event_type_value"`
+	EventID        *string        `json:"event_id"`
+	RawPayload     map[string]any `json:"raw_payload"`
+	TargetRowID    *string        `json:"target_row_id"`
+	ErrorDetail    *string        `json:"error_detail"`
+}
+
+func toOrbitDelivery(d dashboard.DeliveryRow) orbitDelivery {
+	return orbitDelivery{
+		ID:             d.ID,
+		WebhookID:      d.WebhookID,
+		ReceivedAt:     d.ReceivedAt,
+		HTTPStatus:     d.HTTPStatus,
+		Outcome:        d.Outcome,
+		EventTypeValue: d.EventTypeValue,
+		EventID:        d.EventID,
+		RawPayload:     d.RawPayload,
+		TargetRowID:    d.TargetRowID,
+		ErrorDetail:    d.ErrorDetail,
+	}
+}
+
+// orbitListWebhookDeliveriesOutput mirrors ListWebhookDeliveries' REST
+// response shape (a JSON array of deliveries) wrapped in an object.
+type orbitListWebhookDeliveriesOutput struct {
+	Deliveries []orbitDelivery `json:"deliveries"`
+}
+
+// orbitGetLogsMetricsInput takes no arguments — the wrapped REST endpoint
+// (LogsMetrics) itself takes no app_id or filter parameters (design.md's
+// "orbit_get_logs_metrics takes no input" Tech Decision): it always
+// returns one caller-wide aggregate across whichever apps ListOwnedAppNames
+// grants the caller.
+type orbitGetLogsMetricsInput struct{}
+
+// registerOperationalReadTools registers the read-only tools that expose an
+// app's operational history — webhooks, their event mappings, delivery
+// history, and (T15) caller-wide log metrics (mcp-read-only-tools spec P3:
+// T13 adds the three webhook tools here). All three webhook tools share the
+// same CanManage() tier as table policies/members (design.md's
+// Authorization Matrix).
+func registerOperationalReadTools(server *mcp.Server, deps ToolDeps) {
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_list_webhooks",
+		Description: "List every webhook configured for an app (no signing-secret value). Requires the caller to be able to manage the app (role.CanManage()).",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitListWebhooksInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		rows, err := dashboard.ListWebhooksForUser(ctx, deps.Pool, user, in.AppID)
+		if err != nil {
+			return nil, nil, mapReadError(err)
+		}
+		out := make([]orbitWebhookSummary, 0, len(rows))
+		for _, row := range rows {
+			out = append(out, toOrbitWebhookSummary(row))
+		}
+		return nil, orbitListWebhooksOutput{Webhooks: out}, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_get_webhook",
+		Description: "Get one webhook's full config (no signing-secret value) plus its event mappings. Requires the caller to be able to manage the app (role.CanManage()). webhook_id must belong to app_id — a webhook from a different app returns not-found.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitGetWebhookInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		wh, mappings, err := dashboard.GetWebhookForUser(ctx, deps.Pool, user, in.AppID, in.WebhookID)
+		if err != nil {
+			return nil, nil, mapReadError(err)
+		}
+		outMappings := make([]orbitEventMapping, 0, len(mappings))
+		for _, m := range mappings {
+			outMappings = append(outMappings, toOrbitEventMapping(m))
+		}
+		return nil, orbitGetWebhookOutput{Webhook: toOrbitWebhookSummary(*wh), EventMappings: outMappings}, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_list_webhook_deliveries",
+		Description: "List a webhook's delivery history, newest first (limit defaults to 50, max 200; offset defaults to 0 — same bounds the REST endpoint enforces). Requires the caller to be able to manage the app (role.CanManage()). webhook_id must belong to app_id.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitListWebhookDeliveriesInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		rows, err := dashboard.ListWebhookDeliveriesForUser(ctx, deps.Pool, user, in.AppID, in.WebhookID, in.Limit, in.Offset)
+		if err != nil {
+			return nil, nil, mapReadError(err)
+		}
+		out := make([]orbitDelivery, 0, len(rows))
+		for _, row := range rows {
+			out = append(out, toOrbitDelivery(row))
+		}
+		return nil, orbitListWebhookDeliveriesOutput{Deliveries: out}, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_get_logs_metrics",
+		Description: "Get a one-minute request-volume/latency/error-rate aggregate across every app the caller can see (RequestsPerApp breaks it down per app). Not app-scoped — takes no input. Ownership-only: unrestricted for superadmin/CanReadAnyApp, restricted to the caller's own apps otherwise. Reflects the last minute on whichever server instance handled this request — a load-balanced deployment may show different results per call.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ orbitGetLogsMetricsInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		metrics, err := dashboard.LogsMetricsForUser(ctx, deps.Pool, deps.DashH.Logs, user)
+		if err != nil {
+			return nil, nil, internalErr(err)
+		}
+		return nil, metrics, nil
+	})
+}
+
+// orbitCreateWebhookInput is the input for orbit_create_webhook.
+// dashboard.CreateWebhookInput carries no json tags (it's an internal store
+// parameter struct, never serialized directly), so a bespoke translation
+// struct is needed here — same reasoning as orbitWebhookSummary's existence
+// for the read-side tools.
+type orbitCreateWebhookInput struct {
+	AppID         string `json:"app_id" jsonschema:"id of the app to create the webhook on"`
+	Name          string `json:"name" jsonschema:"a human-readable name for the webhook"`
+	Method        string `json:"method" jsonschema:"HTTP method the webhook's target endpoint expects: one of GET, POST, PUT, PATCH"`
+	EventTypePath string `json:"event_type_path" jsonschema:"JSON path into the target table's row used to determine the event type"`
+	EventIDPath   string `json:"event_id_path,omitempty" jsonschema:"optional JSON path used to deduplicate events"`
+}
+
+// orbitSaveWebhookEventMappingInput is the input for
+// orbit_save_webhook_event_mapping. dashboard.EventMappingDef carries no
+// json tags (internal store parameter struct), so a bespoke translation
+// struct is needed here too.
+type orbitSaveWebhookEventMappingInput struct {
+	AppID          string                      `json:"app_id" jsonschema:"id of the app that owns the webhook"`
+	WebhookID      string                      `json:"webhook_id" jsonschema:"id of the webhook to add the mapping to"`
+	EventTypeValue string                      `json:"event_type_value" jsonschema:"the event type value this mapping applies to"`
+	Action         string                      `json:"action" jsonschema:"one of insert, update, delete"`
+	TargetTable    string                      `json:"target_table" jsonschema:"name of the app table this event writes to"`
+	MatchKeyColumn string                      `json:"match_key_column,omitempty" jsonschema:"required when action is update or delete: the column used to find the target row"`
+	FieldMappings  []dashboard.FieldMappingDef `json:"field_mappings" jsonschema:"how fields in the incoming event map to columns on the target table"`
+}
+
+// registerOperationalWriteTools registers the additive webhook mutation
+// tools (mcp-safe-mutation-tools spec): create a webhook, save an event
+// mapping. Both gate on role.CanManage() — a stricter tier than the table
+// tools' CanWrite(), matching webhookRBACGate exactly (design.md's Tech
+// Decisions: this is a real, confirmed tier difference, not an oversight).
+func registerOperationalWriteTools(server *mcp.Server, deps ToolDeps) {
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_create_webhook",
+		Description: "Create a new webhook on an app, without affecting any other webhook on that app. Requires the caller to be able to manage the app (role.CanManage()). This tool's response never includes the webhook's callback token/URL — fetch it from the Dashboard (or the REST API) after creation to finish wiring up the external provider.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitCreateWebhookInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		row, err := deps.DashH.CreateWebhookForUser(ctx, user, in.AppID, dashboard.CreateWebhookInput{
+			Name:          in.Name,
+			Method:        in.Method,
+			EventTypePath: in.EventTypePath,
+			EventIDPath:   in.EventIDPath,
+		}, "mcp")
+		if err != nil {
+			return nil, nil, mapWriteError(err)
+		}
+		return nil, toOrbitWebhookSummary(*row), nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_save_webhook_event_mapping",
+		Description: "Register (or replace, if the same event_type_value already exists and no conflicting mapping is present) an event-type-to-target-table mapping on a webhook, without affecting any other mapping. Requires the caller to be able to manage the app (role.CanManage()).",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitSaveWebhookEventMappingInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		row, err := deps.DashH.SaveEventMappingForUser(ctx, user, in.AppID, in.WebhookID, dashboard.EventMappingDef{
+			EventTypeValue: in.EventTypeValue,
+			Action:         in.Action,
+			TargetTable:    in.TargetTable,
+			MatchKeyColumn: in.MatchKeyColumn,
+			FieldMappings:  in.FieldMappings,
+		}, "mcp")
+		if err != nil {
+			return nil, nil, mapWriteError(err)
+		}
+		return nil, toOrbitEventMapping(*row), nil
 	})
 }

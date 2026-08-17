@@ -1,15 +1,24 @@
 package dashboard
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
+	"github.com/zeeplabs/zeep-orbit/internal/registry"
+	"github.com/zeeplabs/zeep-orbit/internal/storage"
 )
 
 func appsStoreTestPool(t *testing.T) *db.Pool {
@@ -52,6 +61,404 @@ func appsStoreTestApp(t *testing.T, pool *db.Pool) (appID string) {
 		t.Fatalf("create test app: %v", err)
 	}
 	return appID
+}
+
+// TestRedactAuthProviderSecrets covers redactAuthProviderSecrets in
+// isolation (no DB needed) — the exact shape internal/auth/google.go's
+// getGoogleConfig reads (enabled/client_id/client_secret/redirect_url).
+func TestRedactAuthProviderSecrets(t *testing.T) {
+	in := json.RawMessage(`{"google":{"enabled":true,"client_id":"abc123","client_secret":"super-secret-value","redirect_url":"https://example.com/cb"}}`)
+	out := redactAuthProviderSecrets(in)
+
+	if strings.Contains(string(out), "super-secret-value") {
+		t.Fatalf("expected client_secret to be stripped, got %s", out)
+	}
+	var decoded map[string]map[string]any
+	if err := json.Unmarshal(out, &decoded); err != nil {
+		t.Fatalf("unmarshal redacted output: %v", err)
+	}
+	google := decoded["google"]
+	if google["client_id"] != "abc123" {
+		t.Errorf("expected client_id to survive redaction, got %+v", google)
+	}
+	if google["redirect_url"] != "https://example.com/cb" {
+		t.Errorf("expected redirect_url to survive redaction, got %+v", google)
+	}
+	if _, hasSecret := google["client_secret"]; hasSecret {
+		t.Errorf("expected client_secret key to be removed entirely, got %+v", google)
+	}
+	if set, _ := google["client_secret_set"].(bool); !set {
+		t.Errorf("expected client_secret_set=true, got %+v", google)
+	}
+
+	// Malformed input fails closed to {} rather than passing anything
+	// unrecognized through unredacted.
+	if got := string(redactAuthProviderSecrets(json.RawMessage(`not json`))); got != "{}" {
+		t.Errorf("expected malformed input to fail closed to {}, got %s", got)
+	}
+}
+
+// TestAppRowRedactSecrets_StripsCredentialsButKeepsDisplayFields is the
+// regression test for the incident that motivated RedactSecrets: a real
+// production app's schema (asset-manager) returned a plaintext Google
+// OAuth client_secret and AWS S3 secret_access_key through
+// GetApp/ListApps/orbit_list_apps, none of which masked anything before
+// this fix. Seeds real-looking secrets via the same store functions the
+// dashboard UI uses to save them, fetches through both GetApp and
+// ListApps, and proves the secret values are gone after RedactSecrets()
+// while the fields a UI legitimately needs to display (bucket, region,
+// client_id, jwt_secret presence) survive.
+func TestAppRowRedactSecrets_StripsCredentialsButKeepsDisplayFields(t *testing.T) {
+	pool := appsStoreTestPool(t)
+	ctx := context.Background()
+	appID := appsStoreTestApp(t, pool)
+
+	const fakeSecretKey = "AKIAFAKESECRETACCESSKEYVALUE"
+	const fakeClientSecret = "fake-google-oauth-client-secret"
+
+	if err := UpdateAppStorageConfig(ctx, pool, appID, &storage.StorageConfig{
+		Bucket:          "starbem-apps",
+		Region:          "us-east-1",
+		Endpoint:        "https://s3.amazonaws.com",
+		AccessKeyID:     "AKIAFAKEACCESSKEYID",
+		SecretAccessKey: fakeSecretKey,
+	}); err != nil {
+		t.Fatalf("UpdateAppStorageConfig: %v", err)
+	}
+	authProviders := json.RawMessage(fmt.Sprintf(
+		`{"google":{"enabled":true,"client_id":"fake-client-id.apps.googleusercontent.com","client_secret":%q,"redirect_url":"https://example.com/cb"}}`,
+		fakeClientSecret,
+	))
+	if err := UpdateAppAuthProvidersRaw(ctx, pool, appID, authProviders); err != nil {
+		t.Fatalf("UpdateAppAuthProvidersRaw: %v", err)
+	}
+
+	user := &DashboardUser{ID: testUser(t, pool, "reader@example.com", "superadmin"), Role: "superadmin"}
+
+	assertRedacted := func(t *testing.T, app *AppRow, label string) {
+		t.Helper()
+		app.RedactSecrets()
+		if app.JWTSecret != "" {
+			t.Errorf("%s: expected JWTSecret stripped, got non-empty", label)
+		}
+		if app.StorageConfig == nil {
+			t.Fatalf("%s: expected StorageConfig to survive redaction (non-secret fields still needed)", label)
+		}
+		if app.StorageConfig.SecretAccessKey != "" {
+			t.Errorf("%s: expected SecretAccessKey stripped, got non-empty", label)
+		}
+		if app.StorageConfig.Bucket != "starbem-apps" {
+			t.Errorf("%s: expected Bucket to survive redaction, got %q", label, app.StorageConfig.Bucket)
+		}
+		if strings.Contains(string(app.AuthProviders), fakeClientSecret) {
+			t.Errorf("%s: expected client_secret value gone from AuthProviders, found in %s", label, app.AuthProviders)
+		}
+		if !strings.Contains(string(app.AuthProviders), "fake-client-id.apps.googleusercontent.com") {
+			t.Errorf("%s: expected client_id to survive redaction, got %s", label, app.AuthProviders)
+		}
+	}
+
+	getApp, _, err := GetApp(ctx, pool, appID, user)
+	if err != nil {
+		t.Fatalf("GetApp: %v", err)
+	}
+	if getApp.StorageConfig.SecretAccessKey != fakeSecretKey {
+		t.Fatal("sanity check failed: GetApp should return the real secret before redaction")
+	}
+	assertRedacted(t, getApp, "GetApp")
+
+	listed, err := ListApps(ctx, pool, user)
+	if err != nil {
+		t.Fatalf("ListApps: %v", err)
+	}
+	var found *AppRow
+	for _, a := range listed {
+		if a.ID == appID {
+			found = a
+		}
+	}
+	if found == nil {
+		t.Fatal("expected the test app in ListApps results")
+	}
+	if found.StorageConfig.SecretAccessKey != fakeSecretKey {
+		t.Fatal("sanity check failed: ListApps should return the real secret before redaction")
+	}
+	assertRedacted(t, found, "ListApps")
+}
+
+// TestListAppsHandler_ResponseBodyNeverContainsSecrets and
+// TestGetAppHandler_ResponseBodyNeverContainsSecrets are the boundary-level
+// regression tests for the incident: they call the real HTTP handlers
+// (not RedactSecrets directly) and assert the actual serialized response
+// body — the thing an MCP client or a browser's network tab would
+// actually see — never contains the fake secret values, catching a
+// regression where a handler stops calling RedactSecrets() even though
+// the store-level tests above would keep passing.
+func TestListAppsHandler_ResponseBodyNeverContainsSecrets(t *testing.T) {
+	pool := appsStoreTestPool(t)
+	appID := appsStoreTestApp(t, pool)
+
+	const fakeSecretKey = "AKIAFAKESECRETACCESSKEYVALUE"
+	const fakeClientSecret = "fake-google-oauth-client-secret"
+	seedAppSecrets(t, pool, appID, fakeSecretKey, fakeClientSecret)
+
+	h := NewHandler(pool, registry.New(), zap.NewNop())
+	user := &DashboardUser{ID: testUser(t, pool, "reader-list@example.com", "superadmin"), Role: "superadmin"}
+
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/apps", nil)
+	req = withUser(req, user)
+	rr := httptest.NewRecorder()
+	h.ListApps(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body=%s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if strings.Contains(body, fakeSecretKey) {
+		t.Errorf("ListApps response body leaked the S3 secret key: %s", body)
+	}
+	if strings.Contains(body, fakeClientSecret) {
+		t.Errorf("ListApps response body leaked the OAuth client_secret: %s", body)
+	}
+	if !strings.Contains(body, "starbem-apps") {
+		t.Errorf("expected non-secret bucket name to survive redaction, got %s", body)
+	}
+}
+
+func TestGetAppHandler_ResponseBodyNeverContainsSecrets(t *testing.T) {
+	pool := appsStoreTestPool(t)
+	appID := appsStoreTestApp(t, pool)
+
+	const fakeSecretKey = "AKIAFAKESECRETACCESSKEYVALUE"
+	const fakeClientSecret = "fake-google-oauth-client-secret"
+	seedAppSecrets(t, pool, appID, fakeSecretKey, fakeClientSecret)
+
+	h := NewHandler(pool, registry.New(), zap.NewNop())
+	user := &DashboardUser{ID: testUser(t, pool, "reader-get@example.com", "superadmin"), Role: "superadmin"}
+
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/apps/"+appID, nil)
+	req = withUser(req, user)
+	req = withChiParams(req, map[string]string{"id": appID})
+	rr := httptest.NewRecorder()
+	h.GetApp(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body=%s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if strings.Contains(body, fakeSecretKey) {
+		t.Errorf("GetApp response body leaked the S3 secret key: %s", body)
+	}
+	if strings.Contains(body, fakeClientSecret) {
+		t.Errorf("GetApp response body leaked the OAuth client_secret: %s", body)
+	}
+	if strings.Contains(body, "jwt_secret") {
+		// jwt_secret has omitempty; a blanked string must not even appear
+		// as a key, not just an empty value, to rule out a partial fix.
+		t.Errorf("GetApp response body should omit jwt_secret entirely once blanked, got %s", body)
+	}
+}
+
+// seedAppSecrets writes a fake AWS storage config and a fake Google OAuth
+// provider config onto appID via the same store functions the dashboard UI
+// uses to save them — not a direct SQL UPDATE — so these tests exercise
+// the identical write path a real save would.
+func seedAppSecrets(t *testing.T, pool *db.Pool, appID, fakeSecretKey, fakeClientSecret string) {
+	t.Helper()
+	ctx := context.Background()
+	if err := UpdateAppStorageConfig(ctx, pool, appID, &storage.StorageConfig{
+		Bucket:          "starbem-apps",
+		Region:          "us-east-1",
+		Endpoint:        "https://s3.amazonaws.com",
+		AccessKeyID:     "AKIAFAKEACCESSKEYID",
+		SecretAccessKey: fakeSecretKey,
+	}); err != nil {
+		t.Fatalf("UpdateAppStorageConfig: %v", err)
+	}
+	authProviders := json.RawMessage(fmt.Sprintf(
+		`{"google":{"enabled":true,"client_id":"fake-client-id.apps.googleusercontent.com","client_secret":%q,"redirect_url":"https://example.com/cb"}}`,
+		fakeClientSecret,
+	))
+	if err := UpdateAppAuthProvidersRaw(ctx, pool, appID, authProviders); err != nil {
+		t.Fatalf("UpdateAppAuthProvidersRaw: %v", err)
+	}
+}
+
+// TestOrbitListAppsTool_ResponseNeverContainsSecrets is the MCP-side
+// boundary test — orbit_list_apps' actual tool response (StructuredContent,
+// the thing an MCP client receives) must never carry the same secrets,
+// even though it goes through a different call path (ListAppsForUser, not
+// the REST ListApps handler) than the two tests above.
+func TestOrbitListAppsTool_ResponseNeverContainsSecrets(t *testing.T) {
+	pool := appsStoreTestPool(t)
+	appID := appsStoreTestApp(t, pool)
+
+	const fakeSecretKey = "AKIAFAKESECRETACCESSKEYVALUE"
+	const fakeClientSecret = "fake-google-oauth-client-secret"
+	seedAppSecrets(t, pool, appID, fakeSecretKey, fakeClientSecret)
+
+	apps, err := ListAppsForUser(context.Background(), pool, &DashboardUser{
+		ID: testUser(t, pool, "reader-mcp@example.com", "superadmin"), Role: "superadmin",
+	})
+	if err != nil {
+		t.Fatalf("ListAppsForUser: %v", err)
+	}
+	out, err := json.Marshal(apps)
+	if err != nil {
+		t.Fatalf("marshal ListAppsForUser result: %v", err)
+	}
+	body := string(out)
+	if strings.Contains(body, fakeSecretKey) {
+		t.Errorf("orbit_list_apps (ListAppsForUser) leaked the S3 secret key: %s", body)
+	}
+	if strings.Contains(body, fakeClientSecret) {
+		t.Errorf("orbit_list_apps (ListAppsForUser) leaked the OAuth client_secret: %s", body)
+	}
+}
+
+// TestMergeAppAuthProviders_EmptyOrAbsentFieldKeepsExisting is the pure
+// unit test for the merge semantics: absent, nil, or empty-string fields
+// in the incoming payload must not clobber the corresponding stored value.
+func TestMergeAppAuthProviders_EmptyOrAbsentFieldKeepsExisting(t *testing.T) {
+	current := json.RawMessage(`{"google":{"enabled":true,"client_id":"old-client-id","client_secret":"old-secret","redirect_url":"https://old.example.com/cb"}}`)
+
+	// Incoming sends an empty client_secret (the exact shape LoginTab's
+	// save() sends whenever the admin doesn't retype the secret) plus a
+	// changed redirect_url.
+	incoming := json.RawMessage(`{"google":{"enabled":true,"client_id":"old-client-id","client_secret":"","redirect_url":"https://new.example.com/cb"}}`)
+
+	merged, err := mergeAppAuthProviders(current, incoming)
+	if err != nil {
+		t.Fatalf("mergeAppAuthProviders: %v", err)
+	}
+
+	var decoded map[string]map[string]any
+	if err := json.Unmarshal(merged, &decoded); err != nil {
+		t.Fatalf("unmarshal merged: %v", err)
+	}
+	google := decoded["google"]
+	if google["client_secret"] != "old-secret" {
+		t.Errorf("expected client_secret preserved from current, got %+v", google)
+	}
+	if google["redirect_url"] != "https://new.example.com/cb" {
+		t.Errorf("expected redirect_url updated to the new value, got %+v", google)
+	}
+
+	// A non-empty client_secret in incoming DOES overwrite (secret
+	// rotation must still work).
+	rotateIncoming := json.RawMessage(`{"google":{"enabled":true,"client_id":"old-client-id","client_secret":"rotated-secret","redirect_url":"https://old.example.com/cb"}}`)
+	rotated, err := mergeAppAuthProviders(current, rotateIncoming)
+	if err != nil {
+		t.Fatalf("mergeAppAuthProviders (rotate): %v", err)
+	}
+	var rotatedDecoded map[string]map[string]any
+	if err := json.Unmarshal(rotated, &rotatedDecoded); err != nil {
+		t.Fatalf("unmarshal rotated: %v", err)
+	}
+	if rotatedDecoded["google"]["client_secret"] != "rotated-secret" {
+		t.Errorf("expected client_secret to rotate when incoming provides a new one, got %+v", rotatedDecoded["google"])
+	}
+
+	// A provider entirely absent from incoming is dropped, not merged —
+	// incoming is the full desired set.
+	dropped, err := mergeAppAuthProviders(current, json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatalf("mergeAppAuthProviders (drop): %v", err)
+	}
+	var droppedDecoded map[string]map[string]any
+	if err := json.Unmarshal(dropped, &droppedDecoded); err != nil {
+		t.Fatalf("unmarshal dropped: %v", err)
+	}
+	if _, exists := droppedDecoded["google"]; exists {
+		t.Errorf("expected google to be dropped when omitted from incoming entirely, got %+v", droppedDecoded)
+	}
+
+	// A literal JSON null body must not wipe every configured provider —
+	// it unmarshals to a nil map, which without an explicit guard would
+	// fall through to "merged = {}" and delete everything.
+	nullResult, err := mergeAppAuthProviders(current, json.RawMessage(`null`))
+	if err != nil {
+		t.Fatalf("mergeAppAuthProviders (null): %v", err)
+	}
+	if string(nullResult) != string(current) {
+		t.Errorf("expected a literal null incoming payload to be a no-op, got %s (current was %s)", nullResult, current)
+	}
+
+	// An explicit enabled:false must still take effect (a bare boolean
+	// false is neither nil nor "", so it's a real overwrite, not a
+	// keep-existing skip) — this is what lets the dashboard's Google
+	// toggle actually disable the provider, not just look disabled in
+	// the UI.
+	disableIncoming := json.RawMessage(`{"google":{"enabled":false,"client_id":"old-client-id","client_secret":"","redirect_url":"https://old.example.com/cb","allowed_domains":[]}}`)
+	disabled, err := mergeAppAuthProviders(current, disableIncoming)
+	if err != nil {
+		t.Fatalf("mergeAppAuthProviders (disable): %v", err)
+	}
+	var disabledDecoded map[string]map[string]any
+	if err := json.Unmarshal(disabled, &disabledDecoded); err != nil {
+		t.Fatalf("unmarshal disabled: %v", err)
+	}
+	if enabled, _ := disabledDecoded["google"]["enabled"].(bool); enabled {
+		t.Errorf("expected enabled:false to actually take effect, got %+v", disabledDecoded["google"])
+	}
+}
+
+// TestUpdateAppHandler_SavingOtherFieldsDoesNotWipeGoogleClientSecret is
+// the end-to-end regression test for M3: reproduces exactly what
+// LoginTab.save() (AppDetailsPage.tsx) sends when an admin changes
+// redirect_url/allowed_domains without retyping the Google client_secret
+// (the field is never re-populated from a GET response, so its state
+// starts blank) — before the fix, PUT /dashboard/api/apps/{id} did a raw
+// column overwrite and this silently deleted the app's working OAuth
+// client_secret.
+func TestUpdateAppHandler_SavingOtherFieldsDoesNotWipeGoogleClientSecret(t *testing.T) {
+	pool := appsStoreTestPool(t)
+	ctx := context.Background()
+	appID := appsStoreTestApp(t, pool)
+
+	const realClientSecret = "the-real-google-client-secret"
+	if err := UpdateAppAuthProvidersRaw(ctx, pool, appID, json.RawMessage(fmt.Sprintf(
+		`{"google":{"enabled":true,"client_id":"real-client-id","client_secret":%q,"redirect_url":"https://example.com/cb"}}`,
+		realClientSecret,
+	))); err != nil {
+		t.Fatalf("seed UpdateAppAuthProvidersRaw: %v", err)
+	}
+
+	h := NewHandler(pool, registry.New(), zap.NewNop())
+	user := &DashboardUser{ID: testUser(t, pool, "editor@example.com", "superadmin"), Role: "superadmin"}
+
+	body, _ := json.Marshal(AppRequestBody{
+		Name:             "test-app",
+		AuthEmailEnabled: true,
+		AuthProviders: json.RawMessage(
+			`{"google":{"enabled":true,"client_id":"real-client-id","client_secret":"","redirect_url":"https://updated.example.com/cb"}}`,
+		),
+	})
+	req := httptest.NewRequest(http.MethodPut, "/dashboard/api/apps/"+appID, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = withUser(req, user)
+	req = withChiParams(req, map[string]string{"id": appID})
+	rr := httptest.NewRecorder()
+	h.UpdateApp(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body=%s", rr.Code, rr.Body.String())
+	}
+
+	var storedRaw []byte
+	if err := pool.QueryRow(ctx, `SELECT auth_providers FROM zeep_system.apps WHERE id = $1`, appID).Scan(&storedRaw); err != nil {
+		t.Fatalf("read stored auth_providers: %v", err)
+	}
+	var stored map[string]map[string]any
+	if err := json.Unmarshal(storedRaw, &stored); err != nil {
+		t.Fatalf("unmarshal stored auth_providers: %v", err)
+	}
+	if stored["google"]["client_secret"] != realClientSecret {
+		t.Fatalf("expected client_secret to survive the update (not wiped by the empty string LoginTab sends), got %+v", stored["google"])
+	}
+	if stored["google"]["redirect_url"] != "https://updated.example.com/cb" {
+		t.Errorf("expected redirect_url to actually update, got %+v", stored["google"])
+	}
 }
 
 func TestInsertAppTable_RoundTripsIndexes(t *testing.T) {

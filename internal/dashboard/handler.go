@@ -39,6 +39,13 @@ type Handler struct {
 	logger *zap.Logger
 }
 
+// Logger returns the Handler's configured logger — used by internal/mcpserver
+// so an MCP tool's internal (500-class) failures are logged server-side with
+// the same detail a REST 500 gets via writeError, instead of only returning
+// the fixed generic message to the caller (AGENTS.md §4 requires both halves:
+// log the real error, return a safe one).
+func (h *Handler) Logger() *zap.Logger { return h.logger }
+
 // NewHandler creates a new Handler. logger receives detailed error context for
 // every failed request so infra can diagnose issues from container logs alone;
 // pass zap.NewNop() if no logger is available.
@@ -380,6 +387,15 @@ func (h *Handler) UpsertAuthProvider(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Never echo the plaintext client_secret back on a write response —
+	// same class of bug as app_providers.go's UpdateAppProviders (this
+	// endpoint's per-app twin) fixed for: mergeProviderConfig above may
+	// have just pulled the *stored* secret back in when the caller sent
+	// an empty client_secret, so this response could hand back a secret
+	// the caller never actually typed. GetAuthProvider has an explicit
+	// ?reveal=true escape hatch for viewing it; this write endpoint has
+	// no equivalent need to.
+	result.Config = stripSecretFromConfig(provider, result.Config)
 	writeJSON(w, http.StatusOK, result)
 	h.audit(r.Context(), user.ID, user.Email, "auth.provider.update", "auth_provider", provider, provider, nil, r.RemoteAddr)
 }
@@ -851,6 +867,9 @@ func (h *Handler) ListApps(w http.ResponseWriter, r *http.Request) {
 	if apps == nil {
 		apps = []*AppRow{}
 	}
+	for _, app := range apps {
+		app.RedactSecrets()
+	}
 	writeJSON(w, http.StatusOK, apps)
 }
 
@@ -937,7 +956,7 @@ func (h *Handler) CreateAppForUser(ctx context.Context, user *DashboardUser, bod
 
 	h.reg.Register(appRowToRegistryApp(app))
 
-	app.JWTSecret = ""
+	app.RedactSecrets()
 	h.audit(ctx, user.ID, user.Email, "app.create", "app", app.ID, app.Name, nil, ip)
 	return app, nil
 }
@@ -979,6 +998,7 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	app.RedactSecrets()
 	writeJSON(w, http.StatusCreated, app)
 }
 
@@ -1002,7 +1022,7 @@ func (h *Handler) GetApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app.JWTSecret = ""
+	app.RedactSecrets()
 	writeJSON(w, http.StatusOK, app)
 }
 
@@ -1055,11 +1075,22 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(body.AuthProviders) > 0 {
-		if err := UpdateAppAuthProvidersRaw(r.Context(), h.pool, app.ID, body.AuthProviders); err != nil {
+		// app.AuthProviders still holds the pre-update stored value here
+		// (the UPDATE above only touched auth_email_enabled) — merge onto
+		// it rather than overwriting the column outright, so a client_secret
+		// this specific request doesn't mention (the dashboard UI never
+		// gets the plaintext back to resend) survives instead of being
+		// silently wiped.
+		merged, err := mergeAppAuthProviders(app.AuthProviders, body.AuthProviders)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		if err := UpdateAppAuthProvidersRaw(r.Context(), h.pool, app.ID, merged); err != nil {
 			h.writeError(w, r, http.StatusInternalServerError, "failed to save auth providers", err)
 			return
 		}
-		app.AuthProviders = body.AuthProviders
+		app.AuthProviders = merged
 	}
 
 	if body.StorageConfig != nil && body.StorageConfig.Bucket != "" {
@@ -1096,7 +1127,7 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 
 	h.reg.Register(appRowToRegistryApp(app))
 
-	app.JWTSecret = ""
+	app.RedactSecrets()
 	writeJSON(w, http.StatusOK, app)
 	h.audit(r.Context(), user.ID, user.Email, "app.update", "app", app.ID, app.Name, nil, r.RemoteAddr)
 }
@@ -1404,6 +1435,158 @@ func (h *Handler) UpdateTableRLSModeForUser(ctx context.Context, user *Dashboard
 	return &row, nil
 }
 
+// ErrColumnAlreadyExists is returned by AddTableColumnForUser when the
+// requested column name already exists on the table — an "add" operation
+// must never silently turn into a "replace", so this is rejected rather
+// than merged/overwritten.
+var ErrColumnAlreadyExists = errors.New("dashboard: column already exists")
+
+// AddTableColumnForUser adds exactly one new column to an existing table by
+// merging it server-side into the table's current stored Columns before
+// validating/applying/persisting the whole merged set — mirroring
+// UpdateTableRLSModeForUser's fetch-then-mutate-one-field-then-persist
+// pattern. This exists because UpdateAppTable's full-replace endpoint is
+// unsafe for an agent to resend a partial columns array against (silently
+// orphans any column it omits, since validateTableInput/config.ValidateTables
+// has no incremental single-column entry point and apps_store.UpdateAppTable
+// always overwrites the whole columns array) — see
+// .specs/features/mcp-safe-mutation-tools/design.md.
+func (h *Handler) AddTableColumnForUser(ctx context.Context, user *DashboardUser, appID, tableName string, col config.ColumnConfig, ip string) (*AppTableRow, error) {
+	app, role, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, err
+	}
+	if !role.CanWrite() {
+		return nil, ErrForbidden
+	}
+
+	existingTable := findAppTableByName(app, tableName)
+	if existingTable == nil {
+		return nil, ErrNotFound
+	}
+
+	for _, c := range existingTable.Columns {
+		if c.Name == col.Name {
+			return nil, ErrColumnAlreadyExists
+		}
+	}
+
+	// A brand-new column has nothing to rename from — force-clear it so a
+	// caller can't smuggle a rename of an existing column through this
+	// additive-only endpoint.
+	col.RenameFrom = ""
+
+	mergedColumns := make([]config.ColumnConfig, 0, len(existingTable.Columns)+1)
+	mergedColumns = append(mergedColumns, existingTable.Columns...)
+	mergedColumns = append(mergedColumns, col)
+
+	otherTables := make([]AppTableRow, 0, len(app.Tables))
+	for _, t := range app.Tables {
+		if t.ID != existingTable.ID {
+			otherTables = append(otherTables, t)
+		}
+	}
+
+	table := AppTableRow{Name: existingTable.Name, RLS: existingTable.RLS, Columns: mergedColumns, Indexes: existingTable.Indexes}
+	if err := validateTableInput(table, app.AuthEmailEnabled, otherTables); err != nil {
+		return nil, &ValidationError{msg: err.Error()}
+	}
+
+	cfg := buildAppConfig(app)
+	cfg.Tables = []config.TableConfig{{Name: table.Name, RLS: table.RLS, Columns: table.Columns, Indexes: table.Indexes}}
+	if _, err := h.prov.Apply(ctx, &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
+		return nil, err
+	}
+
+	row, err := UpdateAppTable(ctx, h.pool, appID, existingTable.ID, schemaNameForDB(app.Name), existingTable.RLS, mergedColumns, existingTable.Indexes)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+	}
+
+	updated, _, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+	}
+	h.reg.Register(appRowToRegistryApp(updated))
+
+	h.audit(ctx, user.ID, user.Email, "app.table_column.create", "app_table", row.ID, app.Name+"/"+row.Name+"/"+col.Name, nil, ip)
+	return &row, nil
+}
+
+// ErrIndexAlreadyExists is returned by AddTableIndexForUser when the
+// requested index name already exists on the table.
+var ErrIndexAlreadyExists = errors.New("dashboard: index already exists")
+
+// AddTableIndexForUser adds exactly one new index to an existing table,
+// mirroring AddTableColumnForUser's merge-then-validate-then-apply-then-
+// persist shape for Indexes instead of Columns. Uses the current blocking
+// CREATE INDEX IF NOT EXISTS (not CONCURRENTLY) — see
+// .specs/features/mcp-safe-mutation-tools/design.md's Tech Decisions for why
+// CONCURRENTLY was deferred (missing INVALID-index cleanup logic, not a
+// transactional blocker).
+func (h *Handler) AddTableIndexForUser(ctx context.Context, user *DashboardUser, appID, tableName string, idx config.IndexConfig, ip string) (*AppTableRow, error) {
+	app, role, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, err
+	}
+	if !role.CanWrite() {
+		return nil, ErrForbidden
+	}
+
+	existingTable := findAppTableByName(app, tableName)
+	if existingTable == nil {
+		return nil, ErrNotFound
+	}
+
+	for _, existing := range existingTable.Indexes {
+		if existing.Name == idx.Name {
+			return nil, ErrIndexAlreadyExists
+		}
+	}
+
+	mergedIndexes := make([]config.IndexConfig, 0, len(existingTable.Indexes)+1)
+	mergedIndexes = append(mergedIndexes, existingTable.Indexes...)
+	mergedIndexes = append(mergedIndexes, idx)
+
+	otherTables := make([]AppTableRow, 0, len(app.Tables))
+	for _, t := range app.Tables {
+		if t.ID != existingTable.ID {
+			otherTables = append(otherTables, t)
+		}
+	}
+
+	table := AppTableRow{Name: existingTable.Name, RLS: existingTable.RLS, Columns: existingTable.Columns, Indexes: mergedIndexes}
+	if err := validateTableInput(table, app.AuthEmailEnabled, otherTables); err != nil {
+		return nil, &ValidationError{msg: err.Error()}
+	}
+
+	cfg := buildAppConfig(app)
+	cfg.Tables = []config.TableConfig{{Name: table.Name, RLS: table.RLS, Columns: table.Columns, Indexes: table.Indexes}}
+	if _, err := h.prov.Apply(ctx, &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
+		return nil, err
+	}
+
+	row, err := UpdateAppTable(ctx, h.pool, appID, existingTable.ID, schemaNameForDB(app.Name), existingTable.RLS, existingTable.Columns, mergedIndexes)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+	}
+
+	updated, _, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+	}
+	h.reg.Register(appRowToRegistryApp(updated))
+
+	h.audit(ctx, user.ID, user.Email, "app.table_index.create", "app_table", row.ID, app.Name+"/"+row.Name+"/"+idx.Name, nil, ip)
+	return &row, nil
+}
+
 // DeleteAppTable handles DELETE /dashboard/api/apps/{id}/tables/{tableId}.
 // Removes the metadata row and drops the physical table — unlike the old
 // bulk UpdateApp flow, a removed table is never left behind in the database.
@@ -1482,27 +1665,18 @@ func (h *Handler) ListTablePolicies(w http.ResponseWriter, r *http.Request) {
 
 	appID := chi.URLParam(r, "id")
 	tableName := chi.URLParam(r, "table")
-	app, role, err := GetApp(r.Context(), h.pool, appID, user)
+	policies, err := ListTablePoliciesForUser(r.Context(), h.pool, user, appID, tableName)
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
+		switch {
+		case errors.Is(err, ErrNotFound):
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
-			return
+		case errors.Is(err, ErrForbidden):
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		case errors.Is(err, ErrTableNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
+		default:
+			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		}
-		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
-		return
-	}
-	if !role.CanManage() {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
-		return
-	}
-	if findAppTableByName(app, tableName) == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
-		return
-	}
-
-	policies, err := ListTablePolicies(r.Context(), h.pool, appID, tableName)
-	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, policies)
@@ -2006,13 +2180,13 @@ func (h *Handler) LogsMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	allowedApps, err := ListOwnedAppNames(r.Context(), h.pool, user)
+	metrics, err := LogsMetricsForUser(r.Context(), h.pool, h.Logs, user)
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, h.Logs.Metrics(allowedApps))
+	writeJSON(w, http.StatusOK, metrics)
 }
 
 // DataBrowserTableColumn represents a column in the data browser tree.
@@ -2884,19 +3058,16 @@ func (h *Handler) ListAppTokens(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appID := chi.URLParam(r, "id")
-	app, _, err := GetApp(r.Context(), h.pool, appID, user)
+	tokens, err := ListAppTokensForUser(r.Context(), h.pool, user, appID)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
-		return
-	}
-	if app.AuthEmailEnabled {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "app tokens only available for apps without email auth"})
-		return
-	}
-
-	tokens, err := ListAppTokens(r.Context(), h.pool, appID)
-	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "failed to list tokens", err)
+		switch {
+		case errors.Is(err, ErrNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		case errors.Is(err, ErrAppTokensNotSupported):
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": ErrAppTokensNotSupported.Error()})
+		default:
+			h.writeError(w, r, http.StatusInternalServerError, "failed to list tokens", err)
+		}
 		return
 	}
 	writeJSON(w, http.StatusOK, tokens)

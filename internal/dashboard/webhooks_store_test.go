@@ -7,7 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
+	"github.com/zeeplabs/zeep-orbit/internal/registry"
 )
 
 func webhooksTestPool(t *testing.T) *db.Pool {
@@ -50,6 +52,296 @@ func webhooksTestApp(t *testing.T, pool *db.Pool) (appID, userID string) {
 		t.Fatalf("create test app: %v", err)
 	}
 	return appID, userID
+}
+
+// webhooksTestAppWithMembers seeds an app owned by a real "member"-role
+// admin (not the superadmin bypass webhooksTestApp uses), plus an editor
+// member — needed by the *ForUser tests (T10-T12) to exercise the
+// CanManage() forbidden tier explicitly, the way table_policies' tests do.
+func webhooksTestAppWithMembers(t *testing.T, pool *db.Pool) (appID string, actors map[string]*DashboardUser) {
+	t.Helper()
+	ctx := context.Background()
+	actors = map[string]*DashboardUser{
+		"admin":    {ID: testUser(t, pool, "wh-foruser-admin@example.com", "member"), Role: "member"},
+		"editor":   {ID: testUser(t, pool, "wh-foruser-editor@example.com", "member"), Role: "member"},
+		"outsider": {ID: testUser(t, pool, "wh-foruser-outsider@example.com", "member"), Role: "member"},
+	}
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO zeep_system.apps (name, owner_id) VALUES ($1, $2) RETURNING id`,
+		"webhook-foruser-app", actors["admin"].ID,
+	).Scan(&appID); err != nil {
+		t.Fatalf("create test app: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO zeep_system.app_members (backend_app_id, user_id, role) VALUES ($1, $2, 'admin')`,
+		appID, actors["admin"].ID,
+	); err != nil {
+		t.Fatalf("seed admin membership: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO zeep_system.app_members (backend_app_id, user_id, role) VALUES ($1, $2, 'editor')`,
+		appID, actors["editor"].ID,
+	); err != nil {
+		t.Fatalf("seed editor membership: %v", err)
+	}
+	return appID, actors
+}
+
+// TestListWebhooksForUser_HappyPathMatchesRESTShape covers T10's Done-when:
+// ListWebhooksForUser returns the same webhook list ListWebhooks itself
+// returns, for a manager.
+func TestListWebhooksForUser_HappyPathMatchesRESTShape(t *testing.T) {
+	pool := webhooksTestPool(t)
+	ctx := context.Background()
+	appID, actors := webhooksTestAppWithMembers(t, pool)
+
+	created, _, err := CreateWebhook(ctx, pool, CreateWebhookInput{
+		AppID: appID, Name: "for-user list", Method: "POST", EventTypePath: "eventType", CreatedBy: actors["admin"].ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateWebhook: %v", err)
+	}
+
+	rows, err := ListWebhooksForUser(ctx, pool, actors["admin"], appID)
+	if err != nil {
+		t.Fatalf("ListWebhooksForUser: %v", err)
+	}
+	if len(rows) != 1 || rows[0].ID != created.ID {
+		t.Fatalf("expected 1 webhook matching %+v, got %+v", created, rows)
+	}
+}
+
+// TestListWebhooksForUser_NonManagerForbidden covers T10's Done-when: an
+// editor (a real app member whose role fails CanManage()) is rejected with
+// ErrForbidden, the explicit CanManage() tier test design.md's Authorization
+// Matrix requires.
+func TestListWebhooksForUser_NonManagerForbidden(t *testing.T) {
+	pool := webhooksTestPool(t)
+	ctx := context.Background()
+	appID, actors := webhooksTestAppWithMembers(t, pool)
+
+	_, err := ListWebhooksForUser(ctx, pool, actors["editor"], appID)
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("expected ErrForbidden for an editor (CanManage()==false), got %v", err)
+	}
+}
+
+// TestListWebhooksForUser_OutsiderReturnsErrNotFound covers T10's Done-when
+// authorization path: an outsider with no membership at all (and not
+// superadmin/CanReadAnyApp) gets the same not-found GetApp already returns.
+func TestListWebhooksForUser_OutsiderReturnsErrNotFound(t *testing.T) {
+	pool := webhooksTestPool(t)
+	ctx := context.Background()
+	appID, actors := webhooksTestAppWithMembers(t, pool)
+
+	_, err := ListWebhooksForUser(ctx, pool, actors["outsider"], appID)
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound for an outsider with no app visibility, got %v", err)
+	}
+}
+
+// TestGetWebhookForUser_HappyPathReturnsWebhookAndMappings covers T11's
+// Done-when: GetWebhookForUser returns the webhook config plus its event
+// mappings for a webhookID belonging to the given appID (spec AC2).
+func TestGetWebhookForUser_HappyPathReturnsWebhookAndMappings(t *testing.T) {
+	pool := webhooksTestPool(t)
+	ctx := context.Background()
+	appID, actors := webhooksTestAppWithMembers(t, pool)
+
+	created, _, err := CreateWebhook(ctx, pool, CreateWebhookInput{
+		AppID: appID, Name: "for-user get", Method: "POST", EventTypePath: "eventType", CreatedBy: actors["admin"].ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateWebhook: %v", err)
+	}
+	reg := registry.New()
+	reg.Register(&registry.App{
+		Config:     config.AppConfig{Name: "webhook-foruser-app"},
+		SchemaName: "webhook-foruser-app",
+		Tables: map[string]*registry.Table{
+			"requests": {
+				Name:    "requests",
+				Columns: []registry.Column{{Name: "external_id", Type: "text"}},
+			},
+		},
+	})
+	if _, err := SaveEventMapping(ctx, pool, reg, "webhook-foruser-app", created.ID, EventMappingDef{
+		EventTypeValue: "created",
+		Action:         "insert",
+		TargetTable:    "requests",
+		FieldMappings:  []FieldMappingDef{{SourcePath: "id", Column: "external_id"}},
+	}); err != nil {
+		t.Fatalf("SaveEventMapping: %v", err)
+	}
+
+	wh, mappings, err := GetWebhookForUser(ctx, pool, actors["admin"], appID, created.ID)
+	if err != nil {
+		t.Fatalf("GetWebhookForUser: %v", err)
+	}
+	if wh.ID != created.ID {
+		t.Fatalf("expected webhook %s, got %s", created.ID, wh.ID)
+	}
+	if len(mappings) != 1 || mappings[0].EventTypeValue != "created" {
+		t.Fatalf("expected 1 mapping for 'created', got %+v", mappings)
+	}
+}
+
+// TestGetWebhookForUser_CrossAppWebhookReturnsErrWebhookNotFound covers T11's
+// Done-when: a webhookID that belongs to a DIFFERENT app than the given
+// appID returns not-found — the explicit cross-app scoping edge case the
+// spec calls out (Edge Cases: "never returning another app's webhook data
+// through a mismatched app_id").
+func TestGetWebhookForUser_CrossAppWebhookReturnsErrWebhookNotFound(t *testing.T) {
+	pool := webhooksTestPool(t)
+	ctx := context.Background()
+	appID, actors := webhooksTestAppWithMembers(t, pool)
+
+	created, _, err := CreateWebhook(ctx, pool, CreateWebhookInput{
+		AppID: appID, Name: "owned-by-app-a", Method: "POST", EventTypePath: "eventType", CreatedBy: actors["admin"].ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateWebhook: %v", err)
+	}
+
+	var otherAppID string
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO zeep_system.apps (name, owner_id) VALUES ($1, $2) RETURNING id`,
+		"webhook-foruser-other-app", actors["admin"].ID,
+	).Scan(&otherAppID); err != nil {
+		t.Fatalf("create other app: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO zeep_system.app_members (backend_app_id, user_id, role) VALUES ($1, $2, 'admin')`,
+		otherAppID, actors["admin"].ID,
+	); err != nil {
+		t.Fatalf("seed admin membership on other app: %v", err)
+	}
+
+	_, _, err = GetWebhookForUser(ctx, pool, actors["admin"], otherAppID, created.ID)
+	if !errors.Is(err, ErrWebhookNotFound) {
+		t.Fatalf("expected ErrWebhookNotFound for a webhook belonging to a different app, got %v", err)
+	}
+}
+
+// TestGetWebhookForUser_NonManagerForbidden covers T11's Done-when: an
+// editor (fails CanManage()) is rejected with ErrForbidden.
+func TestGetWebhookForUser_NonManagerForbidden(t *testing.T) {
+	pool := webhooksTestPool(t)
+	ctx := context.Background()
+	appID, actors := webhooksTestAppWithMembers(t, pool)
+
+	created, _, err := CreateWebhook(ctx, pool, CreateWebhookInput{
+		AppID: appID, Name: "editor-attempt", Method: "POST", EventTypePath: "eventType", CreatedBy: actors["admin"].ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateWebhook: %v", err)
+	}
+
+	_, _, err = GetWebhookForUser(ctx, pool, actors["editor"], appID, created.ID)
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("expected ErrForbidden for an editor (CanManage()==false), got %v", err)
+	}
+}
+
+// TestListWebhookDeliveriesForUser_RespectsLimitAndReturnsNewestFirst covers
+// T12's Done-when: delivery history respecting the same limit/offset bounds
+// ListDeliveries already enforces.
+func TestListWebhookDeliveriesForUser_RespectsLimitAndReturnsNewestFirst(t *testing.T) {
+	pool := webhooksTestPool(t)
+	ctx := context.Background()
+	appID, actors := webhooksTestAppWithMembers(t, pool)
+
+	created, _, err := CreateWebhook(ctx, pool, CreateWebhookInput{
+		AppID: appID, Name: "for-user deliveries", Method: "POST", EventTypePath: "eventType", CreatedBy: actors["admin"].ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateWebhook: %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		if err := InsertDelivery(ctx, pool, DeliveryEntry{WebhookID: created.ID, HTTPStatus: 200, Outcome: "captured"}); err != nil {
+			t.Fatalf("InsertDelivery %d: %v", i, err)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	rows, err := ListWebhookDeliveriesForUser(ctx, pool, actors["admin"], appID, created.ID, 2, 0)
+	if err != nil {
+		t.Fatalf("ListWebhookDeliveriesForUser: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected limit=2 to return 2 rows, got %d", len(rows))
+	}
+}
+
+// TestListWebhookDeliveriesForUser_OutOfBoundsLimitClampedToDefault covers
+// T12's Done-when: an out-of-bounds limit is clamped the same way the REST
+// handler already clamps it (>200 or <=0 falls back to the 50-row default),
+// not rejected and not honored verbatim.
+func TestListWebhookDeliveriesForUser_OutOfBoundsLimitClampedToDefault(t *testing.T) {
+	pool := webhooksTestPool(t)
+	ctx := context.Background()
+	appID, actors := webhooksTestAppWithMembers(t, pool)
+
+	created, _, err := CreateWebhook(ctx, pool, CreateWebhookInput{
+		AppID: appID, Name: "for-user deliveries clamp", Method: "POST", EventTypePath: "eventType", CreatedBy: actors["admin"].ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateWebhook: %v", err)
+	}
+	if err := InsertDelivery(ctx, pool, DeliveryEntry{WebhookID: created.ID, HTTPStatus: 200, Outcome: "captured"}); err != nil {
+		t.Fatalf("InsertDelivery: %v", err)
+	}
+
+	rowsOverMax, err := ListWebhookDeliveriesForUser(ctx, pool, actors["admin"], appID, created.ID, 999, -5)
+	if err != nil {
+		t.Fatalf("ListWebhookDeliveriesForUser (over-max limit, negative offset): %v", err)
+	}
+	if len(rowsOverMax) != 1 {
+		t.Fatalf("expected the single seeded delivery back (clamped, not rejected), got %d rows", len(rowsOverMax))
+	}
+
+	rowsZero, err := ListWebhookDeliveriesForUser(ctx, pool, actors["admin"], appID, created.ID, 0, 0)
+	if err != nil {
+		t.Fatalf("ListWebhookDeliveriesForUser (zero limit): %v", err)
+	}
+	if len(rowsZero) != 1 {
+		t.Fatalf("expected limit=0 to fall back to the default page size and return the seeded delivery, got %d rows", len(rowsZero))
+	}
+}
+
+// TestListWebhookDeliveriesForUser_CrossAppWebhookReturnsErrWebhookNotFound
+// covers T12's Done-when: a webhookID belonging to a different app returns
+// not-found, mirroring T11's cross-app scoping edge case.
+func TestListWebhookDeliveriesForUser_CrossAppWebhookReturnsErrWebhookNotFound(t *testing.T) {
+	pool := webhooksTestPool(t)
+	ctx := context.Background()
+	appID, actors := webhooksTestAppWithMembers(t, pool)
+
+	created, _, err := CreateWebhook(ctx, pool, CreateWebhookInput{
+		AppID: appID, Name: "owned-by-app-a-deliveries", Method: "POST", EventTypePath: "eventType", CreatedBy: actors["admin"].ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateWebhook: %v", err)
+	}
+
+	var otherAppID string
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO zeep_system.apps (name, owner_id) VALUES ($1, $2) RETURNING id`,
+		"webhook-foruser-other-app-deliveries", actors["admin"].ID,
+	).Scan(&otherAppID); err != nil {
+		t.Fatalf("create other app: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO zeep_system.app_members (backend_app_id, user_id, role) VALUES ($1, $2, 'admin')`,
+		otherAppID, actors["admin"].ID,
+	); err != nil {
+		t.Fatalf("seed admin membership on other app: %v", err)
+	}
+
+	_, err = ListWebhookDeliveriesForUser(ctx, pool, actors["admin"], otherAppID, created.ID, 50, 0)
+	if !errors.Is(err, ErrWebhookNotFound) {
+		t.Fatalf("expected ErrWebhookNotFound for a webhook belonging to a different app, got %v", err)
+	}
 }
 
 func TestCreateWebhook_HappyPath(t *testing.T) {

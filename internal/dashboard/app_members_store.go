@@ -385,3 +385,37 @@ func isUniqueViolation(err error) bool {
 	}
 	return false
 }
+
+// ListAppMembersForUser is the shared operation behind ListAppMembers' REST
+// handler and the mcp-read-only-tools spec's orbit_list_app_members tool —
+// backend-app case only (this spec excludes frontend-apps). Resolves the
+// caller's role via ResolveAppRole and requires role.CanManage(), matching
+// app_members.go:93's exact check, then returns the member list.
+//
+// SPEC_DEVIATION: unlike GetApp-based tools (orbit_get_app,
+// orbit_list_table_policies), this function has no distinct "app not
+// found" error for a well-formed but nonexistent/invisible appID —
+// ResolveAppRole has no app-existence check of its own, so a caller
+// without a matching app_members row (whether the app exists and they're
+// just not a member, or the app id doesn't exist at all) resolves to the
+// zero-value role and fails CanManage() the same way, returning
+// ErrForbidden either way. This mirrors ListAppMembers' REST handler
+// verbatim, including its own doc comment's stated reasoning: "the caller
+// already knows the app id from the URL, so 403 doesn't leak existence the
+// way 404 would" (app_members.go:64-67). ErrNotFound is returned only for
+// a malformed AppRef (ErrInvalidAppRef, e.g. an empty appID), the one case
+// the REST handler itself maps to 404.
+func ListAppMembersForUser(ctx context.Context, pool *db.Pool, user *DashboardUser, appID string) ([]*AppMember, error) {
+	ref := AppRef{BackendAppID: appID}
+	role, err := ResolveAppRole(ctx, pool, user, ref)
+	if err != nil {
+		if errors.Is(err, ErrInvalidAppRef) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	if !role.CanManage() {
+		return nil, ErrForbidden
+	}
+	return ListAppMembers(ctx, pool, ref)
+}

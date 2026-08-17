@@ -118,7 +118,7 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/myapp/tasks
 | **i18n**                | Dashboard in pt-BR / English, language switcher          |
 | **Changelog**           | In-app release history, shipped with the binary          |
 | **Update Notifications**| Sidebar alert when a new release is available on GitHub  |
-| **MCP Server**          | Model Context Protocol server — manage apps, tables, and row policies from Claude Code, Codex, Cursor, OpenCode (PAT) or Claude Desktop (OAuth 2.1) |
+| **MCP Server**          | Model Context Protocol server — create and inspect apps, tables, row policies, members, tokens, and webhooks from Claude Code, Codex, Cursor, OpenCode (PAT) or Claude Desktop (OAuth 2.1) |
 
 ---
 
@@ -376,7 +376,7 @@ Apps and tables are created and managed entirely through the Dashboard (or, goin
 
 ## 🔌 MCP Server
 
-Zeep Orbit ships a [Model Context Protocol](https://modelcontextprotocol.io) server so AI coding assistants can manage apps, tables, and row policies directly — no dashboard clicks needed.
+Zeep Orbit ships a [Model Context Protocol](https://modelcontextprotocol.io) server so AI coding assistants can create and inspect apps, tables, row policies, members, tokens, and webhooks directly — no dashboard clicks needed.
 
 - **Endpoint:** `https://<host>/dashboard/mcp` — Streamable HTTP, stateless (safe behind a non-sticky load balancer / multiple replicas)
 - **Auth:** two methods, both resolved against the same Personal Access Token store:

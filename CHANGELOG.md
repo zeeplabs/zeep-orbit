@@ -9,6 +9,24 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-08-17
+
+### Added
+
+- **10 new read-only MCP tools** let an AI agent inspect an app's own configuration and operational surface without asking a human to check the Dashboard UI: `orbit_get_app`, `orbit_list_table_policies`, `orbit_list_app_members`, `orbit_list_app_tokens`, `orbit_list_app_auth_providers`, `orbit_list_my_pats`, `orbit_list_webhooks`, `orbit_get_webhook`, `orbit_list_webhook_deliveries`, `orbit_get_logs_metrics`. Every tool authorizes through the exact same `GetApp`/role-check path (or ownership scoping) its REST equivalent already uses — no new permission model — and never returns a secret/credential value its REST equivalent doesn't already redact.
+- **4 new safe mutation MCP tools** let an AI agent evolve an existing table's schema and manage webhooks without the risk of the full-replace `PUT .../tables/{tableId}` endpoint: `orbit_add_table_column` and `orbit_add_table_index` add exactly one new column/index, merged server-side against the table's current stored definition — the request can never omit or corrupt an existing column/index, unlike a naive full-replace resend. `orbit_create_webhook` and `orbit_save_webhook_event_mapping` wrap the existing, already-additive webhook endpoints. Table-schema tools require `role.CanWrite()`; webhook tools require the stricter `role.CanManage()`, matching each operation's existing REST authorization tier exactly.
+
+### Fixed
+
+- **`GET /docs/{app}/openapi.json` could serve a stale spec missing recently added tables.** The response carried no `Cache-Control` header, so a browser or intermediate proxy could cache the spec from before a table was added and keep serving it after — the endpoint's data was always correct on an uncached request. Responses are now marked `Cache-Control: no-store`.
+
+### Security
+
+- **The dashboard API and the MCP tool `orbit_list_apps` no longer return an app's real credentials in plaintext.** `GET /dashboard/api/apps`, `GET /dashboard/api/apps/{id}`, and `orbit_list_apps` were all serializing the app's storage config (AWS `access_key_id`/`secret_access_key`) and every configured auth provider's OAuth `client_secret` — plus, on `GET .../apps/{id}` before an existing partial fix, the app's own `jwt_secret` — to any caller who could see the app at all (any app member, not just an admin). Confirmed as a live incident on a production app before this fix. Responses now carry only what a dashboard UI legitimately needs to display (bucket/region/client_id/etc.) plus a `client_secret_set` boolean; `orbit_get_app_schema` was never affected (its response shape never carried these fields). **If you have apps with a configured storage bucket or OAuth login provider, treat those credentials as exposed and rotate them** — this fix stops further disclosure, it doesn't invalidate what may already have been read.
+- **Saving an app's Login settings without retyping its Google OAuth `client_secret` no longer silently deletes that secret and breaks the app's Google login.** `PUT /dashboard/api/apps/{id}` did a raw overwrite of the stored `auth_providers` config; the dashboard's Login tab never re-populates the `client_secret` field from a GET (it can't — see above), so every save that didn't involve retyping the secret sent an empty value, wiping it. Auth provider updates now merge onto the existing stored config field-by-field, matching the merge-on-absent-key convention already used for the separate system-wide auth providers config: an absent, `null`, or empty-string field in the request keeps whatever's already stored; a non-empty value still overwrites (secret rotation keeps working).
+- **Turning an app's Google login toggle off in the dashboard now actually disables it.** The Login tab only sent `auth_providers` in its save request when the toggle was on, so switching it off changed nothing server-side — the toggle looked saved but the provider stayed enabled in the database. The toggle's state is now always sent explicitly.
+- Credential redaction (both the per-app and the system-wide auth provider config) now projects onto an allow-list of known-safe display fields instead of deleting the one known secret field name — a credential stored under an unexpected or nested key can no longer slip through a redaction path unmasked. The system-wide config's write-response endpoint (`PUT /dashboard/api/config/auth/providers/{provider}`) also stopped echoing the caller's raw request body, which could otherwise hand back a real `client_secret` the caller never actually sent (the same merge-pulls-in-the-stored-secret pattern as the app-level bug above). A malformed (non-object) provider config payload no longer risks a nil-map panic on either merge path.
+
 ## [1.4.0] — 2026-08-16
 
 ### Added
