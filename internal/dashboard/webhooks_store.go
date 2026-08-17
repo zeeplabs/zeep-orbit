@@ -199,6 +199,23 @@ func GetWebhookByID(ctx context.Context, pool *db.Pool, appID, webhookID string)
 	return w, nil
 }
 
+// ListWebhooksForUser is the shared operation behind the ListWebhooks REST
+// handler and orbit_list_webhooks (mcp-read-only-tools T10/T13):
+// resolve+authorize the app via the same check webhookRBACGate performs
+// (GetApp + role.CanManage() — webhooks are part of the app's
+// access-control surface, same tier as table policies/members), then
+// return its webhooks.
+func ListWebhooksForUser(ctx context.Context, pool *db.Pool, user *DashboardUser, appID string) ([]WebhookRow, error) {
+	_, role, err := GetApp(ctx, pool, appID, user)
+	if err != nil {
+		return nil, err
+	}
+	if !role.CanManage() {
+		return nil, ErrForbidden
+	}
+	return ListWebhooks(ctx, pool, appID)
+}
+
 // ListWebhooks returns every non-soft-deleted webhook for an app, newest first.
 func ListWebhooks(ctx context.Context, pool *db.Pool, appID string) ([]WebhookRow, error) {
 	rows, err := pool.Query(ctx,

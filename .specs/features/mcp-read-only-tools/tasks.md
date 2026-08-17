@@ -323,10 +323,10 @@ T14 → T15
 - Skill: NONE
 
 **Done when**:
-- [ ] `ListWebhooksForUser` returns the same webhook list `ListWebhooks`'s existing REST test expects
-- [ ] Returns forbidden for a caller whose role fails `CanManage()` on that app
-- [ ] Existing `ListWebhooks` REST handler test(s) still pass unmodified
-- [ ] Gate passes: `go test ./internal/dashboard/... -race`
+- [x] `ListWebhooksForUser` returns the same webhook list `ListWebhooks`'s existing REST test expects
+- [x] Returns forbidden for a caller whose role fails `CanManage()` on that app
+- [x] Existing `ListWebhooks` REST handler test(s) still pass unmodified
+- [x] Gate passes: `go test ./internal/dashboard/... -race`
 
 **Tests**: integration (real Postgres)
 **Gate**: quick

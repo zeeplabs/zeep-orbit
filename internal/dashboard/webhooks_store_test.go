@@ -52,6 +52,92 @@ func webhooksTestApp(t *testing.T, pool *db.Pool) (appID, userID string) {
 	return appID, userID
 }
 
+// webhooksTestAppWithMembers seeds an app owned by a real "member"-role
+// admin (not the superadmin bypass webhooksTestApp uses), plus an editor
+// member — needed by the *ForUser tests (T10-T12) to exercise the
+// CanManage() forbidden tier explicitly, the way table_policies' tests do.
+func webhooksTestAppWithMembers(t *testing.T, pool *db.Pool) (appID string, actors map[string]*DashboardUser) {
+	t.Helper()
+	ctx := context.Background()
+	actors = map[string]*DashboardUser{
+		"admin":    {ID: testUser(t, pool, "wh-foruser-admin@example.com", "member"), Role: "member"},
+		"editor":   {ID: testUser(t, pool, "wh-foruser-editor@example.com", "member"), Role: "member"},
+		"outsider": {ID: testUser(t, pool, "wh-foruser-outsider@example.com", "member"), Role: "member"},
+	}
+	if err := pool.QueryRow(ctx,
+		`INSERT INTO zeep_system.apps (name, owner_id) VALUES ($1, $2) RETURNING id`,
+		"webhook-foruser-app", actors["admin"].ID,
+	).Scan(&appID); err != nil {
+		t.Fatalf("create test app: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO zeep_system.app_members (backend_app_id, user_id, role) VALUES ($1, $2, 'admin')`,
+		appID, actors["admin"].ID,
+	); err != nil {
+		t.Fatalf("seed admin membership: %v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO zeep_system.app_members (backend_app_id, user_id, role) VALUES ($1, $2, 'editor')`,
+		appID, actors["editor"].ID,
+	); err != nil {
+		t.Fatalf("seed editor membership: %v", err)
+	}
+	return appID, actors
+}
+
+// TestListWebhooksForUser_HappyPathMatchesRESTShape covers T10's Done-when:
+// ListWebhooksForUser returns the same webhook list ListWebhooks itself
+// returns, for a manager.
+func TestListWebhooksForUser_HappyPathMatchesRESTShape(t *testing.T) {
+	pool := webhooksTestPool(t)
+	ctx := context.Background()
+	appID, actors := webhooksTestAppWithMembers(t, pool)
+
+	created, _, err := CreateWebhook(ctx, pool, CreateWebhookInput{
+		AppID: appID, Name: "for-user list", Method: "POST", EventTypePath: "eventType", CreatedBy: actors["admin"].ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateWebhook: %v", err)
+	}
+
+	rows, err := ListWebhooksForUser(ctx, pool, actors["admin"], appID)
+	if err != nil {
+		t.Fatalf("ListWebhooksForUser: %v", err)
+	}
+	if len(rows) != 1 || rows[0].ID != created.ID {
+		t.Fatalf("expected 1 webhook matching %+v, got %+v", created, rows)
+	}
+}
+
+// TestListWebhooksForUser_NonManagerForbidden covers T10's Done-when: an
+// editor (a real app member whose role fails CanManage()) is rejected with
+// ErrForbidden, the explicit CanManage() tier test design.md's Authorization
+// Matrix requires.
+func TestListWebhooksForUser_NonManagerForbidden(t *testing.T) {
+	pool := webhooksTestPool(t)
+	ctx := context.Background()
+	appID, actors := webhooksTestAppWithMembers(t, pool)
+
+	_, err := ListWebhooksForUser(ctx, pool, actors["editor"], appID)
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("expected ErrForbidden for an editor (CanManage()==false), got %v", err)
+	}
+}
+
+// TestListWebhooksForUser_OutsiderReturnsErrNotFound covers T10's Done-when
+// authorization path: an outsider with no membership at all (and not
+// superadmin/CanReadAnyApp) gets the same not-found GetApp already returns.
+func TestListWebhooksForUser_OutsiderReturnsErrNotFound(t *testing.T) {
+	pool := webhooksTestPool(t)
+	ctx := context.Background()
+	appID, actors := webhooksTestAppWithMembers(t, pool)
+
+	_, err := ListWebhooksForUser(ctx, pool, actors["outsider"], appID)
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound for an outsider with no app visibility, got %v", err)
+	}
+}
+
 func TestCreateWebhook_HappyPath(t *testing.T) {
 	pool := webhooksTestPool(t)
 	appID, userID := webhooksTestApp(t, pool)

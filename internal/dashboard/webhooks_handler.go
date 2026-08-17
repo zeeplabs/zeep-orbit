@@ -210,14 +210,22 @@ func (h *Handler) UpdateWebhook(w http.ResponseWriter, r *http.Request) {
 
 // ListWebhooks handles GET /dashboard/api/apps/{id}/webhooks.
 func (h *Handler) ListWebhooks(w http.ResponseWriter, r *http.Request) {
-	appID := chi.URLParam(r, "id")
-	if _, ok := h.webhookRBACGate(w, r, appID); !ok {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
-
-	rows, err := ListWebhooks(r.Context(), h.pool, appID)
+	appID := chi.URLParam(r, "id")
+	rows, err := ListWebhooksForUser(r.Context(), h.pool, user, appID)
 	if err != nil {
-		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		switch {
+		case errors.Is(err, ErrNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		case errors.Is(err, ErrForbidden):
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		default:
+			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		}
 		return
 	}
 	resp := make([]webhookResponse, 0, len(rows))
