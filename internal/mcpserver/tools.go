@@ -447,6 +447,8 @@ func mapReadError(err error) error {
 		return errors.New("not found")
 	case errors.Is(err, dashboard.ErrForbidden):
 		return errors.New("forbidden")
+	case errors.Is(err, dashboard.ErrTableNotFound):
+		return errors.New("table not found")
 	default:
 		return errInternal
 	}
@@ -460,6 +462,19 @@ type orbitGetAppInput struct {
 // orbitListAppAuthProvidersInput is the input for orbit_list_app_auth_providers.
 type orbitListAppAuthProvidersInput struct {
 	AppID string `json:"app_id" jsonschema:"id of the app to fetch auth providers for"`
+}
+
+// orbitListTablePoliciesInput is the input for orbit_list_table_policies.
+type orbitListTablePoliciesInput struct {
+	AppID     string `json:"app_id" jsonschema:"id of the app that owns the table"`
+	TableName string `json:"table_name" jsonschema:"name of the table to list row policies for"`
+}
+
+// orbitListTablePoliciesOutput mirrors ListTablePolicies' REST response
+// shape (a JSON array of policies) wrapped in an object, since MCP tool
+// outputs are objects.
+type orbitListTablePoliciesOutput struct {
+	Policies []dashboard.TablePolicyRow `json:"policies"`
 }
 
 // registerAppConfigReadTools registers the read-only tools that expose an
@@ -499,6 +514,21 @@ func registerAppConfigReadTools(server *mcp.Server, deps ToolDeps) {
 			return nil, nil, mapReadError(err)
 		}
 		return nil, providers, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_list_table_policies",
+		Description: "List every row policy on a table. Requires the caller to be able to manage the app (role.CanManage()) — table policies are part of the app's access-control surface, same tier as CreateTablePolicy.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitListTablePoliciesInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		policies, err := dashboard.ListTablePoliciesForUser(ctx, deps.Pool, user, in.AppID, in.TableName)
+		if err != nil {
+			return nil, nil, mapReadError(err)
+		}
+		return nil, orbitListTablePoliciesOutput{Policies: policies}, nil
 	})
 }
 

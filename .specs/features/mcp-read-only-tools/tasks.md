@@ -198,10 +198,10 @@ T14 → T15
 - Skill: NONE
 
 **Done when**:
-- [ ] Returns policies for a table the caller can manage
-- [ ] Returns forbidden tool error for a caller whose role fails `CanManage()` on that app (explicit tier test, not reused from `orbit_get_app`'s tier)
-- [ ] Returns not-found tool error for a nonexistent table name on a visible app
-- [ ] Gate passes: `go test ./internal/mcpserver/... -race`
+- [x] Returns policies for a table the caller can manage
+- [x] Returns forbidden tool error for a caller whose role fails `CanManage()` on that app (explicit tier test, not reused from `orbit_get_app`'s tier)
+- [x] Returns not-found tool error for a nonexistent table name on a visible app
+- [x] Gate passes: `go test ./internal/mcpserver/... -race`
 
 **Tests**: integration (real MCP client roundtrip)
 **Gate**: full

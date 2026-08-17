@@ -24,8 +24,19 @@ import (
 // requirement for internal/mcpserver/tools.go.
 func startMCPSession(t *testing.T, pool *db.Pool, token string) *mcp.ClientSession {
 	t.Helper()
+	return startMCPSessionWithHandler(t, pool, newTestDashboardHandler(pool), token)
+}
+
+// startMCPSessionWithHandler is startMCPSession's variant for tests that
+// need to seed data through a specific *dashboard.Handler instance first
+// (e.g. via CreateTablePolicyForUser) before spinning up the MCP server
+// that wraps it — the seeding and the tool-call path must share the same
+// Handler (and therefore the same *dashboard.Handler-scoped state) for the
+// seeded data to be visible to the tool call.
+func startMCPSessionWithHandler(t *testing.T, pool *db.Pool, h *dashboard.Handler, token string) *mcp.ClientSession {
+	t.Helper()
 	rl := dashboard.NewRateLimiter(1000, time.Minute)
-	srv := httptest.NewServer(NewHandler(pool, newTestDashboardHandler(pool), rl))
+	srv := httptest.NewServer(NewHandler(pool, h, rl))
 	sess, err := connectClient(context.Background(), srv.URL, token)
 	if err != nil {
 		t.Fatalf("connect MCP client: %v", err)
@@ -497,5 +508,160 @@ func TestOrbitListMyPats_EmptyForUserWithNoPATsReturnsEmptyArray(t *testing.T) {
 	}
 	if !strings.Contains(string(data), `"pats":[]`) {
 		t.Fatalf("expected serialized output to contain \"pats\":[], got %s", data)
+	}
+}
+
+// seedAppWithTableAndPolicy provisions a real app schema + physical table
+// (CreateTablePolicyForUser runs actual DDL, so a metadata-only app_tables
+// row isn't enough) with one row policy already created, and adds member
+// (userID, role) to the app. Returns the app id and the physical table's
+// name. Used by orbit_list_table_policies tests (mcp-read-only-tools T5).
+func seedAppWithTableAndPolicy(t *testing.T, pool *db.Pool, h *dashboard.Handler, ownerID string) (appID, tableName string) {
+	t.Helper()
+	ctx := context.Background()
+	app, err := dashboard.CreateApp(ctx, pool, fmt.Sprintf("toolstpapp%d", time.Now().UnixNano()), ownerID, true)
+	if err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+	schemaName := app.Name // no hyphens in the generated name above, so schemaNameForDB(app.Name) == app.Name
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE SCHEMA %q`, schemaName)); err != nil {
+		t.Fatalf("create app schema: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), fmt.Sprintf(`DROP SCHEMA IF EXISTS %q CASCADE`, schemaName))
+	})
+	if _, err := pool.Exec(ctx, fmt.Sprintf(
+		`CREATE TABLE %q.requests (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), status TEXT NOT NULL DEFAULT 'pending')`,
+		schemaName,
+	)); err != nil {
+		t.Fatalf("create physical table: %v", err)
+	}
+	if _, err := dashboard.InsertAppTable(ctx, pool, app.ID, dashboard.AppTableRow{
+		Name:    "requests",
+		RLS:     "",
+		Columns: []config.ColumnConfig{{Name: "status", Type: "text"}},
+	}); err != nil {
+		t.Fatalf("InsertAppTable: %v", err)
+	}
+	owner := &dashboard.DashboardUser{ID: ownerID, Role: "member"}
+	if _, err := h.CreateTablePolicyForUser(ctx, owner, app.ID, "requests", dashboard.PolicyDef{
+		Name:    "seed_policy",
+		Action:  "select",
+		Roles:   []string{"member"},
+		Clauses: []dashboard.PolicyClause{{Column: "status", Operator: "IS NOT NULL"}},
+	}, "127.0.0.1"); err != nil {
+		t.Fatalf("CreateTablePolicyForUser (seed): %v", err)
+	}
+	return app.ID, "requests"
+}
+
+// TestOrbitListTablePolicies_ReturnsPoliciesForManager covers
+// mcp-read-only-tools T5's Done-when: a caller who can manage the app
+// (admin, the app owner) gets back the table's policies.
+func TestOrbitListTablePolicies_ReturnsPoliciesForManager(t *testing.T) {
+	pool := authTestPool(t)
+	h := newTestDashboardHandler(pool)
+	owner := authTestUser(t, pool, "tools-tp-owner@example.com")
+	token, _, err := dashboard.CreatePAT(context.Background(), pool, owner.ID, "cli", dashboard.PATKindManual, nil)
+	if err != nil {
+		t.Fatalf("CreatePAT: %v", err)
+	}
+	appID, tableName := seedAppWithTableAndPolicy(t, pool, h, owner.ID)
+
+	sess := startMCPSessionWithHandler(t, pool, h, token)
+
+	res, err := sess.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "orbit_list_table_policies",
+		Arguments: map[string]any{"app_id": appID, "table_name": tableName},
+	})
+	if err != nil {
+		t.Fatalf("CallTool orbit_list_table_policies: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("expected a successful tool result, got an error result: %+v", res.Content)
+	}
+	var out struct {
+		Policies []struct {
+			PgPolicyName string `json:"pg_policy_name"`
+		} `json:"policies"`
+	}
+	decodeToolResult(t, res, &out)
+	if len(out.Policies) != 1 || out.Policies[0].PgPolicyName != "seed_policy" {
+		t.Fatalf("expected 1 policy named %q, got %+v", "seed_policy", out.Policies)
+	}
+}
+
+// TestOrbitListTablePolicies_EditorForbidden covers mcp-read-only-tools T5's
+// Done-when: a caller whose role fails CanManage() on the app (a real
+// editor member, not just "no membership") gets a forbidden tool error —
+// the explicit CanManage() tier test the design's Authorization Matrix
+// requires, distinct from orbit_get_app's plain-visibility tier.
+func TestOrbitListTablePolicies_EditorForbidden(t *testing.T) {
+	pool := authTestPool(t)
+	h := newTestDashboardHandler(pool)
+	owner := authTestUser(t, pool, "tools-tp-owner2@example.com")
+	editor := authTestUser(t, pool, "tools-tp-editor@example.com")
+	appID, tableName := seedAppWithTableAndPolicy(t, pool, h, owner.ID)
+	if _, err := dashboard.AddAppMember(context.Background(), pool, dashboard.AppRef{BackendAppID: appID}, editor.ID, dashboard.AppRoleEditor); err != nil {
+		t.Fatalf("AddAppMember (editor): %v", err)
+	}
+	editorToken, _, err := dashboard.CreatePAT(context.Background(), pool, editor.ID, "cli", dashboard.PATKindManual, nil)
+	if err != nil {
+		t.Fatalf("CreatePAT: %v", err)
+	}
+
+	sess := startMCPSessionWithHandler(t, pool, h, editorToken)
+
+	res, err := sess.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "orbit_list_table_policies",
+		Arguments: map[string]any{"app_id": appID, "table_name": tableName},
+	})
+	if err != nil {
+		t.Fatalf("CallTool orbit_list_table_policies (protocol-level): %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected a forbidden tool error for an editor (CanManage()==false)")
+	}
+	text, ok := res.Content[0].(*mcp.TextContent)
+	if !ok {
+		t.Fatalf("expected TextContent error, got %T", res.Content[0])
+	}
+	if text.Text != "forbidden" {
+		t.Fatalf("expected \"forbidden\", got %q", text.Text)
+	}
+}
+
+// TestOrbitListTablePolicies_UnknownTableReturnsNotFound covers
+// mcp-read-only-tools T5's Done-when: a nonexistent table name on a
+// visible/manageable app returns a not-found tool error, never `[]` (spec
+// AC4: an empty list means "table exists, zero policies").
+func TestOrbitListTablePolicies_UnknownTableReturnsNotFound(t *testing.T) {
+	pool := authTestPool(t)
+	h := newTestDashboardHandler(pool)
+	owner := authTestUser(t, pool, "tools-tp-owner3@example.com")
+	token, _, err := dashboard.CreatePAT(context.Background(), pool, owner.ID, "cli", dashboard.PATKindManual, nil)
+	if err != nil {
+		t.Fatalf("CreatePAT: %v", err)
+	}
+	appID, _ := seedAppWithTableAndPolicy(t, pool, h, owner.ID)
+
+	sess := startMCPSessionWithHandler(t, pool, h, token)
+
+	res, err := sess.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "orbit_list_table_policies",
+		Arguments: map[string]any{"app_id": appID, "table_name": "no-such-table"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool orbit_list_table_policies (protocol-level): %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected a not-found tool error for a nonexistent table name")
+	}
+	text, ok := res.Content[0].(*mcp.TextContent)
+	if !ok {
+		t.Fatalf("expected TextContent error, got %T", res.Content[0])
+	}
+	if text.Text != "table not found" {
+		t.Fatalf("expected \"table not found\", got %q", text.Text)
 	}
 }
