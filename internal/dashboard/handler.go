@@ -851,6 +851,9 @@ func (h *Handler) ListApps(w http.ResponseWriter, r *http.Request) {
 	if apps == nil {
 		apps = []*AppRow{}
 	}
+	for _, app := range apps {
+		app.RedactSecrets()
+	}
 	writeJSON(w, http.StatusOK, apps)
 }
 
@@ -937,7 +940,7 @@ func (h *Handler) CreateAppForUser(ctx context.Context, user *DashboardUser, bod
 
 	h.reg.Register(appRowToRegistryApp(app))
 
-	app.JWTSecret = ""
+	app.RedactSecrets()
 	h.audit(ctx, user.ID, user.Email, "app.create", "app", app.ID, app.Name, nil, ip)
 	return app, nil
 }
@@ -979,6 +982,7 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	app.RedactSecrets()
 	writeJSON(w, http.StatusCreated, app)
 }
 
@@ -1002,7 +1006,7 @@ func (h *Handler) GetApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app.JWTSecret = ""
+	app.RedactSecrets()
 	writeJSON(w, http.StatusOK, app)
 }
 
@@ -1096,7 +1100,7 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 
 	h.reg.Register(appRowToRegistryApp(app))
 
-	app.JWTSecret = ""
+	app.RedactSecrets()
 	writeJSON(w, http.StatusOK, app)
 	h.audit(r.Context(), user.ID, user.Email, "app.update", "app", app.ID, app.Name, nil, r.RemoteAddr)
 }

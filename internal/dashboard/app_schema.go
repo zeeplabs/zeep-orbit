@@ -11,7 +11,17 @@ import (
 // MCP tool registry (orbit_list_apps, mcp-server spec, T10) has a stable
 // name to wrap, even though it does not add any new logic.
 func ListAppsForUser(ctx context.Context, pool *db.Pool, user *DashboardUser) ([]*AppRow, error) {
-	return ListApps(ctx, pool, user)
+	apps, err := ListApps(ctx, pool, user)
+	if err != nil {
+		return nil, err
+	}
+	// Unlike ListApps' own REST handler, nothing downstream of this
+	// wrapper needs the real secrets — orbit_list_apps (tools.go) hands
+	// its return value straight to the MCP client as the tool response.
+	for _, app := range apps {
+		app.RedactSecrets()
+	}
+	return apps, nil
 }
 
 // AppSchemaColumn is one column in AppSchemaTable.Columns.

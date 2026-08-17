@@ -2,14 +2,17 @@ package dashboard
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
+	"github.com/zeeplabs/zeep-orbit/internal/storage"
 )
 
 func appsStoreTestPool(t *testing.T) *db.Pool {
@@ -52,6 +55,129 @@ func appsStoreTestApp(t *testing.T, pool *db.Pool) (appID string) {
 		t.Fatalf("create test app: %v", err)
 	}
 	return appID
+}
+
+// TestRedactAuthProviderSecrets covers redactAuthProviderSecrets in
+// isolation (no DB needed) — the exact shape internal/auth/google.go's
+// getGoogleConfig reads (enabled/client_id/client_secret/redirect_url).
+func TestRedactAuthProviderSecrets(t *testing.T) {
+	in := json.RawMessage(`{"google":{"enabled":true,"client_id":"abc123","client_secret":"super-secret-value","redirect_url":"https://example.com/cb"}}`)
+	out := redactAuthProviderSecrets(in)
+
+	if strings.Contains(string(out), "super-secret-value") {
+		t.Fatalf("expected client_secret to be stripped, got %s", out)
+	}
+	var decoded map[string]map[string]any
+	if err := json.Unmarshal(out, &decoded); err != nil {
+		t.Fatalf("unmarshal redacted output: %v", err)
+	}
+	google := decoded["google"]
+	if google["client_id"] != "abc123" {
+		t.Errorf("expected client_id to survive redaction, got %+v", google)
+	}
+	if google["redirect_url"] != "https://example.com/cb" {
+		t.Errorf("expected redirect_url to survive redaction, got %+v", google)
+	}
+	if _, hasSecret := google["client_secret"]; hasSecret {
+		t.Errorf("expected client_secret key to be removed entirely, got %+v", google)
+	}
+	if set, _ := google["client_secret_set"].(bool); !set {
+		t.Errorf("expected client_secret_set=true, got %+v", google)
+	}
+
+	// Malformed input fails closed to {} rather than passing anything
+	// unrecognized through unredacted.
+	if got := string(redactAuthProviderSecrets(json.RawMessage(`not json`))); got != "{}" {
+		t.Errorf("expected malformed input to fail closed to {}, got %s", got)
+	}
+}
+
+// TestAppRowRedactSecrets_StripsCredentialsButKeepsDisplayFields is the
+// regression test for the incident that motivated RedactSecrets: a real
+// production app's schema (asset-manager) returned a plaintext Google
+// OAuth client_secret and AWS S3 secret_access_key through
+// GetApp/ListApps/orbit_list_apps, none of which masked anything before
+// this fix. Seeds real-looking secrets via the same store functions the
+// dashboard UI uses to save them, fetches through both GetApp and
+// ListApps, and proves the secret values are gone after RedactSecrets()
+// while the fields a UI legitimately needs to display (bucket, region,
+// client_id, jwt_secret presence) survive.
+func TestAppRowRedactSecrets_StripsCredentialsButKeepsDisplayFields(t *testing.T) {
+	pool := appsStoreTestPool(t)
+	ctx := context.Background()
+	appID := appsStoreTestApp(t, pool)
+
+	const fakeSecretKey = "AKIAFAKESECRETACCESSKEYVALUE"
+	const fakeClientSecret = "fake-google-oauth-client-secret"
+
+	if err := UpdateAppStorageConfig(ctx, pool, appID, &storage.StorageConfig{
+		Bucket:          "starbem-apps",
+		Region:          "us-east-1",
+		Endpoint:        "https://s3.amazonaws.com",
+		AccessKeyID:     "AKIAFAKEACCESSKEYID",
+		SecretAccessKey: fakeSecretKey,
+	}); err != nil {
+		t.Fatalf("UpdateAppStorageConfig: %v", err)
+	}
+	authProviders := json.RawMessage(fmt.Sprintf(
+		`{"google":{"enabled":true,"client_id":"fake-client-id.apps.googleusercontent.com","client_secret":%q,"redirect_url":"https://example.com/cb"}}`,
+		fakeClientSecret,
+	))
+	if err := UpdateAppAuthProvidersRaw(ctx, pool, appID, authProviders); err != nil {
+		t.Fatalf("UpdateAppAuthProvidersRaw: %v", err)
+	}
+
+	user := &DashboardUser{ID: testUser(t, pool, "reader@example.com", "superadmin"), Role: "superadmin"}
+
+	assertRedacted := func(t *testing.T, app *AppRow, label string) {
+		t.Helper()
+		app.RedactSecrets()
+		if app.JWTSecret != "" {
+			t.Errorf("%s: expected JWTSecret stripped, got non-empty", label)
+		}
+		if app.StorageConfig == nil {
+			t.Fatalf("%s: expected StorageConfig to survive redaction (non-secret fields still needed)", label)
+		}
+		if app.StorageConfig.SecretAccessKey != "" {
+			t.Errorf("%s: expected SecretAccessKey stripped, got non-empty", label)
+		}
+		if app.StorageConfig.Bucket != "starbem-apps" {
+			t.Errorf("%s: expected Bucket to survive redaction, got %q", label, app.StorageConfig.Bucket)
+		}
+		if strings.Contains(string(app.AuthProviders), fakeClientSecret) {
+			t.Errorf("%s: expected client_secret value gone from AuthProviders, found in %s", label, app.AuthProviders)
+		}
+		if !strings.Contains(string(app.AuthProviders), "fake-client-id.apps.googleusercontent.com") {
+			t.Errorf("%s: expected client_id to survive redaction, got %s", label, app.AuthProviders)
+		}
+	}
+
+	getApp, _, err := GetApp(ctx, pool, appID, user)
+	if err != nil {
+		t.Fatalf("GetApp: %v", err)
+	}
+	if getApp.StorageConfig.SecretAccessKey != fakeSecretKey {
+		t.Fatal("sanity check failed: GetApp should return the real secret before redaction")
+	}
+	assertRedacted(t, getApp, "GetApp")
+
+	listed, err := ListApps(ctx, pool, user)
+	if err != nil {
+		t.Fatalf("ListApps: %v", err)
+	}
+	var found *AppRow
+	for _, a := range listed {
+		if a.ID == appID {
+			found = a
+		}
+	}
+	if found == nil {
+		t.Fatal("expected the test app in ListApps results")
+	}
+	if found.StorageConfig.SecretAccessKey != fakeSecretKey {
+		t.Fatal("sanity check failed: ListApps should return the real secret before redaction")
+	}
+	assertRedacted(t, found, "ListApps")
 }
 
 func TestInsertAppTable_RoundTripsIndexes(t *testing.T) {

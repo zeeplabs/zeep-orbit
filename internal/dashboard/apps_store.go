@@ -31,6 +31,65 @@ type AppRow struct {
 	Tables             []AppTableRow           `json:"tables"`
 }
 
+// RedactSecrets strips every credential AppRow can carry before it's ever
+// serialized to a caller — the dashboard REST API (ListApps/GetApp
+// handlers) and the MCP tool orbit_list_apps both hand a *AppRow straight
+// to a JSON encoder, and until this existed neither one masked anything:
+// StorageConfig.SecretAccessKey (a real AWS secret key), every configured
+// auth provider's client_secret (e.g. a real Google OAuth client secret),
+// and JWTSecret were all returned in plaintext to any caller who could see
+// the app at all (any app member, not just an admin) — confirmed as a live
+// incident on a production app's asset-manager schema before this fix.
+//
+// This must NEVER be called on the AppRow that appRowToRegistryApp
+// (handler.go) converts into a live registry.App — that path needs the
+// real secrets to actually operate the app (sign JWTs, talk to S3). Only
+// call this immediately before a response leaves the process.
+func (a *AppRow) RedactSecrets() {
+	if a == nil {
+		return
+	}
+	a.JWTSecret = ""
+	if a.StorageConfig != nil {
+		a.StorageConfig.SecretAccessKey = ""
+	}
+	a.AuthProviders = redactAuthProviderSecrets(a.AuthProviders)
+}
+
+// redactAuthProviderSecrets parses the auth_providers JSONB shape
+// (map[provider]map[field]value — see internal/auth/google.go's
+// getGoogleConfig for the fields a provider config actually carries) and
+// replaces each provider's client_secret with a client_secret_set boolean,
+// the same reveal-nothing-but-whether-it's-configured pattern
+// auth_providers_store.go's GoogleProviderConfig already uses for the
+// separate (dashboard-login, not per-app) auth providers table. Fails
+// closed to an empty object on anything that doesn't parse as expected,
+// rather than risk passing an unrecognized shape through unredacted.
+func redactAuthProviderSecrets(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
+		return raw
+	}
+	var providers map[string]map[string]any
+	if err := json.Unmarshal(raw, &providers); err != nil {
+		return json.RawMessage(`{}`)
+	}
+	for _, cfg := range providers {
+		secret, hasSecret := cfg["client_secret"]
+		if !hasSecret {
+			continue
+		}
+		delete(cfg, "client_secret")
+		if s, ok := secret.(string); ok && s != "" {
+			cfg["client_secret_set"] = true
+		}
+	}
+	out, err := json.Marshal(providers)
+	if err != nil {
+		return json.RawMessage(`{}`)
+	}
+	return out
+}
+
 // decodeEnduserRolesConfig unmarshals the enduser_roles_config JSONB column.
 // The column is NOT NULL DEFAULT '["member"]' (see ProvisionZeepSystem), so
 // raw is never empty for a provisioned row — this only guards against a

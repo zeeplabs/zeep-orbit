@@ -18,7 +18,12 @@ type AppProviderConfig struct {
 	RedirectURL string `json:"redirect_url,omitempty"`
 }
 
-// GetAppAuthProviders returns the auth providers configuration for an app.
+// GetAppAuthProviders returns the auth providers configuration for an app,
+// with each provider's client_secret masked to a client_secret_set boolean
+// (AppRow.RedactSecrets' redactAuthProviderSecrets) — this is a read
+// endpoint for the dashboard UI, not the internal path that actually
+// performs an OAuth exchange (internal/auth/google.go reads the real,
+// unmasked value straight from the DB).
 func GetAppAuthProviders(ctx context.Context, pool *db.Pool, appID string, user *DashboardUser) (json.RawMessage, error) {
 	app, _, err := GetApp(ctx, pool, appID, user)
 	if err != nil {
@@ -27,7 +32,7 @@ func GetAppAuthProviders(ctx context.Context, pool *db.Pool, appID string, user 
 	if app.AuthProviders == nil || string(app.AuthProviders) == "{}" || string(app.AuthProviders) == "" {
 		return json.RawMessage(`{}`), nil
 	}
-	return app.AuthProviders, nil
+	return redactAuthProviderSecrets(app.AuthProviders), nil
 }
 
 // UpdateAppAuthProviders updates the auth_providers JSONB for an app.
