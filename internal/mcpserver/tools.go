@@ -941,6 +941,20 @@ type orbitCreateWebhookInput struct {
 	EventIDPath   string `json:"event_id_path,omitempty" jsonschema:"optional JSON path used to deduplicate events"`
 }
 
+// orbitSaveWebhookEventMappingInput is the input for
+// orbit_save_webhook_event_mapping. dashboard.EventMappingDef carries no
+// json tags (internal store parameter struct), so a bespoke translation
+// struct is needed here too.
+type orbitSaveWebhookEventMappingInput struct {
+	AppID          string                      `json:"app_id" jsonschema:"id of the app that owns the webhook"`
+	WebhookID      string                      `json:"webhook_id" jsonschema:"id of the webhook to add the mapping to"`
+	EventTypeValue string                      `json:"event_type_value" jsonschema:"the event type value this mapping applies to"`
+	Action         string                      `json:"action" jsonschema:"one of insert, update, delete"`
+	TargetTable    string                      `json:"target_table" jsonschema:"name of the app table this event writes to"`
+	MatchKeyColumn string                      `json:"match_key_column,omitempty" jsonschema:"required when action is update or delete: the column used to find the target row"`
+	FieldMappings  []dashboard.FieldMappingDef `json:"field_mappings" jsonschema:"how fields in the incoming event map to columns on the target table"`
+}
+
 // registerOperationalWriteTools registers the additive webhook mutation
 // tools (mcp-safe-mutation-tools spec): create a webhook, save an event
 // mapping. Both gate on role.CanManage() — a stricter tier than the table
@@ -965,5 +979,26 @@ func registerOperationalWriteTools(server *mcp.Server, deps ToolDeps) {
 			return nil, nil, mapWriteError(err)
 		}
 		return nil, toOrbitWebhookSummary(*row), nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_save_webhook_event_mapping",
+		Description: "Register (or replace, if the same event_type_value already exists and no conflicting mapping is present) an event-type-to-target-table mapping on a webhook, without affecting any other mapping. Requires the caller to be able to manage the app (role.CanManage()).",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitSaveWebhookEventMappingInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		row, err := deps.DashH.SaveEventMappingForUser(ctx, user, in.AppID, in.WebhookID, dashboard.EventMappingDef{
+			EventTypeValue: in.EventTypeValue,
+			Action:         in.Action,
+			TargetTable:    in.TargetTable,
+			MatchKeyColumn: in.MatchKeyColumn,
+			FieldMappings:  in.FieldMappings,
+		}, "mcp")
+		if err != nil {
+			return nil, nil, mapWriteError(err)
+		}
+		return nil, toOrbitEventMapping(*row), nil
 	})
 }

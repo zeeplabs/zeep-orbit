@@ -273,12 +273,12 @@ T7 → T8
 - Skill: NONE
 
 **Done when**:
-- [ ] Registers an event mapping to a known table/column for a caller who can manage the app
-- [ ] Returns distinct tool errors for unknown target table/column, and for a conflicting mapping (409-equivalent), leaving the first mapping intact
-- [ ] Returns not-found for a `webhook_id` belonging to a different app
-- [ ] Returns forbidden for a caller whose role fails `CanManage()`
-- [ ] Gate passes: `go test ./internal/mcpserver/... -race`
-- [ ] Full feature build gate passes: `go build ./... && go vet ./... && gofmt -l $(git diff --name-only --diff-filter=ACM -- '*.go') && go test ./... -race`
+- [x] Registers an event mapping to a known table/column for a caller who can manage the app
+- [x] Returns distinct tool errors for unknown target table/column, and for a conflicting mapping (409-equivalent), leaving the first mapping intact
+- [x] Returns not-found for a `webhook_id` belonging to a different app
+- [x] Returns forbidden for a caller whose role fails `CanManage()`
+- [x] Gate passes: `go test ./internal/mcpserver/... -race`
+- [x] Full feature build gate passes: `go build ./... && go vet ./... && gofmt -l $(git diff --name-only --diff-filter=ACM -- '*.go') && go test ./... -race`
 
 **Tests**: integration (real MCP client roundtrip)
 **Gate**: build
