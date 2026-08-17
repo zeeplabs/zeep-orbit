@@ -516,10 +516,26 @@ helm install zeep-orbit zeeplabs/zeep-orbit --values values.yaml
 
 ```bash
 helm repo update zeeplabs
-helm upgrade zeep-orbit zeeplabs/zeep-orbit --values values.yaml --atomic
+helm upgrade zeep-orbit zeeplabs/zeep-orbit -n <namespace> --reuse-values --atomic
 ```
 
-A flag `--atomic` reverte automaticamente caso a atualização falhe.
+`--reuse-values` mantém os values já configurados no release (secrets, configuração) — não é
+preciso ter um `values.yaml` local à mão; use `--values values.yaml` em vez disso se for alterar
+alguma configuração. `-n <namespace>` tem de corresponder ao namespace onde o release foi
+instalado (verificar com `helm list -A`). A flag `--atomic` reverte automaticamente caso a
+atualização falhe.
+
+O `image.tag` predefinido é `latest`, pelo que só o `helm upgrade` não recria os pods se a
+string da tag não mudou — o Kubernetes só faz rollout quando o pod spec muda. Force o pull da
+nova imagem com:
+
+```bash
+kubectl rollout restart deploy/zeep-orbit -n <namespace>
+kubectl rollout status deploy/zeep-orbit -n <namespace>
+```
+
+Em produção, fixe `image.tag` ou `image.digest` no `values.yaml` em vez de depender do
+`latest` — assim o `helm upgrade` sozinho já dispara o rollout.
 
 ---
 
