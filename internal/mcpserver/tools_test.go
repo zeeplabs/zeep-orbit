@@ -665,3 +665,103 @@ func TestOrbitListTablePolicies_UnknownTableReturnsNotFound(t *testing.T) {
 		t.Fatalf("expected \"table not found\", got %q", text.Text)
 	}
 }
+
+// TestOrbitListAppMembers_ReturnsMembersForManager covers mcp-read-only-tools
+// T7's Done-when: a caller who can manage the app (admin, the app owner)
+// gets back member rows (user_id, role, created_at) for every member,
+// including a seeded editor.
+func TestOrbitListAppMembers_ReturnsMembersForManager(t *testing.T) {
+	pool := authTestPool(t)
+	owner := authTestUser(t, pool, "tools-members-owner@example.com")
+	editor := authTestUser(t, pool, "tools-members-editor@example.com")
+	token, _, err := dashboard.CreatePAT(context.Background(), pool, owner.ID, "cli", dashboard.PATKindManual, nil)
+	if err != nil {
+		t.Fatalf("CreatePAT: %v", err)
+	}
+	app, err := dashboard.CreateApp(context.Background(), pool, "tools-members-app", owner.ID, true)
+	if err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+	if _, err := dashboard.AddAppMember(context.Background(), pool, dashboard.AppRef{BackendAppID: app.ID}, editor.ID, dashboard.AppRoleEditor); err != nil {
+		t.Fatalf("AddAppMember (editor): %v", err)
+	}
+
+	sess := startMCPSession(t, pool, token)
+
+	res, err := sess.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "orbit_list_app_members",
+		Arguments: map[string]any{"app_id": app.ID},
+	})
+	if err != nil {
+		t.Fatalf("CallTool orbit_list_app_members: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("expected a successful tool result, got an error result: %+v", res.Content)
+	}
+	var out struct {
+		Members []struct {
+			UserID    string `json:"user_id"`
+			Role      string `json:"role"`
+			CreatedAt string `json:"created_at"`
+		} `json:"members"`
+	}
+	decodeToolResult(t, res, &out)
+	if len(out.Members) != 2 {
+		t.Fatalf("expected 2 members (owner admin + editor), got %d: %+v", len(out.Members), out.Members)
+	}
+	var sawAdmin, sawEditor bool
+	for _, m := range out.Members {
+		if m.CreatedAt == "" {
+			t.Fatalf("expected a non-empty created_at, got %+v", m)
+		}
+		switch m.UserID {
+		case owner.ID:
+			sawAdmin = m.Role == "admin"
+		case editor.ID:
+			sawEditor = m.Role == "editor"
+		}
+	}
+	if !sawAdmin || !sawEditor {
+		t.Fatalf("expected owner=admin and editor=editor in the member list, got %+v", out.Members)
+	}
+}
+
+// TestOrbitListAppMembers_EditorForbidden covers mcp-read-only-tools T7's
+// Done-when: a caller whose role fails CanManage() on the app (a real
+// editor member, not just "no membership") gets a forbidden tool error.
+func TestOrbitListAppMembers_EditorForbidden(t *testing.T) {
+	pool := authTestPool(t)
+	owner := authTestUser(t, pool, "tools-members-owner2@example.com")
+	editor := authTestUser(t, pool, "tools-members-editor2@example.com")
+	app, err := dashboard.CreateApp(context.Background(), pool, "tools-members-app2", owner.ID, true)
+	if err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+	if _, err := dashboard.AddAppMember(context.Background(), pool, dashboard.AppRef{BackendAppID: app.ID}, editor.ID, dashboard.AppRoleEditor); err != nil {
+		t.Fatalf("AddAppMember (editor): %v", err)
+	}
+	editorToken, _, err := dashboard.CreatePAT(context.Background(), pool, editor.ID, "cli", dashboard.PATKindManual, nil)
+	if err != nil {
+		t.Fatalf("CreatePAT: %v", err)
+	}
+
+	sess := startMCPSession(t, pool, editorToken)
+
+	res, err := sess.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "orbit_list_app_members",
+		Arguments: map[string]any{"app_id": app.ID},
+	})
+	if err != nil {
+		t.Fatalf("CallTool orbit_list_app_members (protocol-level): %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected a forbidden tool error for an editor (CanManage()==false)")
+	}
+	text, ok := res.Content[0].(*mcp.TextContent)
+	if !ok {
+		t.Fatalf("expected TextContent error, got %T", res.Content[0])
+	}
+	if text.Text != "forbidden" {
+		t.Fatalf("expected \"forbidden\", got %q", text.Text)
+	}
+}

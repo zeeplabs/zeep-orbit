@@ -249,9 +249,9 @@ T14 → T15
 - Skill: NONE
 
 **Done when**:
-- [ ] Returns member rows (`user_id`, `role`, `created_at`) for a caller who can manage the app
-- [ ] Returns forbidden for a caller whose role fails `CanManage()` on that app
-- [ ] Gate passes: `go test ./internal/mcpserver/... -race`
+- [x] Returns member rows (`user_id`, `role`, `created_at`) for a caller who can manage the app
+- [x] Returns forbidden for a caller whose role fails `CanManage()` on that app
+- [x] Gate passes: `go test ./internal/mcpserver/... -race`
 
 **Tests**: integration (real MCP client roundtrip)
 **Gate**: full

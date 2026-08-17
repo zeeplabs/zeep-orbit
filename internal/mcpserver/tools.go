@@ -544,6 +544,18 @@ type orbitListMyPatsOutput struct {
 	PATs []dashboard.PATRow `json:"pats"`
 }
 
+// orbitListAppMembersInput is the input for orbit_list_app_members.
+type orbitListAppMembersInput struct {
+	AppID string `json:"app_id" jsonschema:"id of the app to list members for"`
+}
+
+// orbitListAppMembersOutput mirrors ListAppMembers' REST response shape
+// (a JSON array of members) wrapped in an object, since MCP tool outputs
+// are objects.
+type orbitListAppMembersOutput struct {
+	Members []*dashboard.AppMember `json:"members"`
+}
+
 // registerAccessReadTools registers the read-only tools that expose who
 // and what has access to an app, plus the caller's own identity-scoped
 // resources (mcp-read-only-tools spec P2: T3 adds orbit_list_my_pats; T7
@@ -562,5 +574,20 @@ func registerAccessReadTools(server *mcp.Server, deps ToolDeps) {
 			return nil, nil, errInternal
 		}
 		return nil, orbitListMyPatsOutput{PATs: pats}, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_list_app_members",
+		Description: "List an app's team members (user_id, role, created_at). Requires the caller to be able to manage the app (role.CanManage()) — membership is part of the app's access-control surface, same tier as table policies.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitListAppMembersInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		members, err := dashboard.ListAppMembersForUser(ctx, deps.Pool, user, in.AppID)
+		if err != nil {
+			return nil, nil, mapReadError(err)
+		}
+		return nil, orbitListAppMembersOutput{Members: members}, nil
 	})
 }
