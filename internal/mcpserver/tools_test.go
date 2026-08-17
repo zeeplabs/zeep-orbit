@@ -869,3 +869,290 @@ func TestOrbitListAppTokens_EmailAuthAppReturnsDistinctToolError(t *testing.T) {
 		t.Fatalf("expected %q, got %q", dashboard.ErrAppTokensNotSupported.Error(), text.Text)
 	}
 }
+
+// TestOrbitListWebhooks_ReturnsWebhooksForManager covers mcp-read-only-tools
+// T13's Done-when: orbit_list_webhooks returns webhooks for a caller who
+// can manage the app.
+func TestOrbitListWebhooks_ReturnsWebhooksForManager(t *testing.T) {
+	pool := authTestPool(t)
+	owner := authTestUser(t, pool, "tools-webhooks-owner@example.com")
+	token, _, err := dashboard.CreatePAT(context.Background(), pool, owner.ID, "cli", dashboard.PATKindManual, nil)
+	if err != nil {
+		t.Fatalf("CreatePAT: %v", err)
+	}
+	app, err := dashboard.CreateApp(context.Background(), pool, "tools-webhooks-app", owner.ID, true)
+	if err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+	created, _, err := dashboard.CreateWebhook(context.Background(), pool, dashboard.CreateWebhookInput{
+		AppID: app.ID, Name: "mcp-webhook", Method: "POST", EventTypePath: "eventType", CreatedBy: owner.ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateWebhook: %v", err)
+	}
+
+	sess := startMCPSession(t, pool, token)
+
+	res, err := sess.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "orbit_list_webhooks",
+		Arguments: map[string]any{"app_id": app.ID},
+	})
+	if err != nil {
+		t.Fatalf("CallTool orbit_list_webhooks: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("expected a successful tool result, got an error result: %+v", res.Content)
+	}
+	var out struct {
+		Webhooks []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"webhooks"`
+	}
+	decodeToolResult(t, res, &out)
+	if len(out.Webhooks) != 1 || out.Webhooks[0].ID != created.ID || out.Webhooks[0].Name != "mcp-webhook" {
+		t.Fatalf("expected 1 webhook matching %+v, got %+v", created, out.Webhooks)
+	}
+	data, err := json.Marshal(res.StructuredContent)
+	if err != nil {
+		t.Fatalf("marshal StructuredContent: %v", err)
+	}
+	if strings.Contains(string(data), "token_secret") || strings.Contains(string(data), `"token"`) {
+		t.Fatalf("orbit_list_webhooks leaked a signing-secret field: %s", data)
+	}
+}
+
+// TestOrbitListWebhooks_EditorForbidden covers mcp-read-only-tools T13's
+// Done-when: a caller whose role fails CanManage() gets a forbidden tool
+// error.
+func TestOrbitListWebhooks_EditorForbidden(t *testing.T) {
+	pool := authTestPool(t)
+	owner := authTestUser(t, pool, "tools-webhooks-owner2@example.com")
+	editor := authTestUser(t, pool, "tools-webhooks-editor2@example.com")
+	app, err := dashboard.CreateApp(context.Background(), pool, "tools-webhooks-app2", owner.ID, true)
+	if err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+	if _, err := dashboard.AddAppMember(context.Background(), pool, dashboard.AppRef{BackendAppID: app.ID}, editor.ID, dashboard.AppRoleEditor); err != nil {
+		t.Fatalf("AddAppMember (editor): %v", err)
+	}
+	editorToken, _, err := dashboard.CreatePAT(context.Background(), pool, editor.ID, "cli", dashboard.PATKindManual, nil)
+	if err != nil {
+		t.Fatalf("CreatePAT: %v", err)
+	}
+
+	sess := startMCPSession(t, pool, editorToken)
+
+	res, err := sess.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "orbit_list_webhooks",
+		Arguments: map[string]any{"app_id": app.ID},
+	})
+	if err != nil {
+		t.Fatalf("CallTool orbit_list_webhooks (protocol-level): %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected a forbidden tool error for an editor (CanManage()==false)")
+	}
+	text, ok := res.Content[0].(*mcp.TextContent)
+	if !ok {
+		t.Fatalf("expected TextContent error, got %T", res.Content[0])
+	}
+	if text.Text != "forbidden" {
+		t.Fatalf("expected \"forbidden\", got %q", text.Text)
+	}
+}
+
+// TestOrbitGetWebhook_ReturnsConfigAndMappings covers mcp-read-only-tools
+// T13's Done-when: orbit_get_webhook returns config + event mappings for a
+// valid webhook.
+func TestOrbitGetWebhook_ReturnsConfigAndMappings(t *testing.T) {
+	pool := authTestPool(t)
+	owner := authTestUser(t, pool, "tools-getwh-owner@example.com")
+	token, _, err := dashboard.CreatePAT(context.Background(), pool, owner.ID, "cli", dashboard.PATKindManual, nil)
+	if err != nil {
+		t.Fatalf("CreatePAT: %v", err)
+	}
+	app, err := dashboard.CreateApp(context.Background(), pool, "tools-getwh-app", owner.ID, true)
+	if err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+	created, _, err := dashboard.CreateWebhook(context.Background(), pool, dashboard.CreateWebhookInput{
+		AppID: app.ID, Name: "mcp-get-webhook", Method: "POST", EventTypePath: "eventType", CreatedBy: owner.ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateWebhook: %v", err)
+	}
+
+	sess := startMCPSession(t, pool, token)
+
+	res, err := sess.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "orbit_get_webhook",
+		Arguments: map[string]any{"app_id": app.ID, "webhook_id": created.ID},
+	})
+	if err != nil {
+		t.Fatalf("CallTool orbit_get_webhook: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("expected a successful tool result, got an error result: %+v", res.Content)
+	}
+	var out struct {
+		Webhook struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"webhook"`
+		EventMappings []struct {
+			ID string `json:"id"`
+		} `json:"event_mappings"`
+	}
+	decodeToolResult(t, res, &out)
+	if out.Webhook.ID != created.ID || out.Webhook.Name != "mcp-get-webhook" {
+		t.Fatalf("expected webhook matching %+v, got %+v", created, out.Webhook)
+	}
+	if out.EventMappings == nil || len(out.EventMappings) != 0 {
+		t.Fatalf("expected an empty (not nil) event_mappings array for a fresh webhook, got %+v", out.EventMappings)
+	}
+}
+
+// TestOrbitGetWebhook_CrossAppWebhookReturnsNotFound covers mcp-read-only-tools
+// T13's Done-when: a webhook belonging to a different app_id than the one
+// requested returns not-found.
+func TestOrbitGetWebhook_CrossAppWebhookReturnsNotFound(t *testing.T) {
+	pool := authTestPool(t)
+	owner := authTestUser(t, pool, "tools-getwh-owner2@example.com")
+	token, _, err := dashboard.CreatePAT(context.Background(), pool, owner.ID, "cli", dashboard.PATKindManual, nil)
+	if err != nil {
+		t.Fatalf("CreatePAT: %v", err)
+	}
+	appA, err := dashboard.CreateApp(context.Background(), pool, "tools-getwh-app-a", owner.ID, true)
+	if err != nil {
+		t.Fatalf("CreateApp (A): %v", err)
+	}
+	appB, err := dashboard.CreateApp(context.Background(), pool, "tools-getwh-app-b", owner.ID, true)
+	if err != nil {
+		t.Fatalf("CreateApp (B): %v", err)
+	}
+	created, _, err := dashboard.CreateWebhook(context.Background(), pool, dashboard.CreateWebhookInput{
+		AppID: appA.ID, Name: "owned-by-a", Method: "POST", EventTypePath: "eventType", CreatedBy: owner.ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateWebhook: %v", err)
+	}
+
+	sess := startMCPSession(t, pool, token)
+
+	res, err := sess.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "orbit_get_webhook",
+		Arguments: map[string]any{"app_id": appB.ID, "webhook_id": created.ID},
+	})
+	if err != nil {
+		t.Fatalf("CallTool orbit_get_webhook (protocol-level): %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected a not-found tool error for a webhook belonging to a different app")
+	}
+	text, ok := res.Content[0].(*mcp.TextContent)
+	if !ok {
+		t.Fatalf("expected TextContent error, got %T", res.Content[0])
+	}
+	if text.Text != "webhook not found" {
+		t.Fatalf("expected \"webhook not found\", got %q", text.Text)
+	}
+}
+
+// TestOrbitListWebhookDeliveries_RespectsLimitBounds covers
+// mcp-read-only-tools T13's Done-when: orbit_list_webhook_deliveries
+// returns delivery history within the enforced limit/offset bounds.
+func TestOrbitListWebhookDeliveries_RespectsLimitBounds(t *testing.T) {
+	pool := authTestPool(t)
+	owner := authTestUser(t, pool, "tools-deliveries-owner@example.com")
+	token, _, err := dashboard.CreatePAT(context.Background(), pool, owner.ID, "cli", dashboard.PATKindManual, nil)
+	if err != nil {
+		t.Fatalf("CreatePAT: %v", err)
+	}
+	app, err := dashboard.CreateApp(context.Background(), pool, "tools-deliveries-app", owner.ID, true)
+	if err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+	created, _, err := dashboard.CreateWebhook(context.Background(), pool, dashboard.CreateWebhookInput{
+		AppID: app.ID, Name: "mcp-deliveries", Method: "POST", EventTypePath: "eventType", CreatedBy: owner.ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateWebhook: %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		if err := dashboard.InsertDelivery(context.Background(), pool, dashboard.DeliveryEntry{
+			WebhookID: created.ID, HTTPStatus: 200, Outcome: "captured",
+		}); err != nil {
+			t.Fatalf("InsertDelivery %d: %v", i, err)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	sess := startMCPSession(t, pool, token)
+
+	res, err := sess.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "orbit_list_webhook_deliveries",
+		Arguments: map[string]any{"app_id": app.ID, "webhook_id": created.ID, "limit": 2},
+	})
+	if err != nil {
+		t.Fatalf("CallTool orbit_list_webhook_deliveries: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("expected a successful tool result, got an error result: %+v", res.Content)
+	}
+	var out struct {
+		Deliveries []struct {
+			ID string `json:"id"`
+		} `json:"deliveries"`
+	}
+	decodeToolResult(t, res, &out)
+	if len(out.Deliveries) != 2 {
+		t.Fatalf("expected limit=2 to return 2 deliveries, got %d", len(out.Deliveries))
+	}
+}
+
+// TestOrbitListWebhookDeliveries_EditorForbidden covers mcp-read-only-tools
+// T13's Done-when: all three webhook tools return forbidden for a caller
+// whose role fails CanManage() on that app.
+func TestOrbitListWebhookDeliveries_EditorForbidden(t *testing.T) {
+	pool := authTestPool(t)
+	owner := authTestUser(t, pool, "tools-deliveries-owner2@example.com")
+	editor := authTestUser(t, pool, "tools-deliveries-editor2@example.com")
+	app, err := dashboard.CreateApp(context.Background(), pool, "tools-deliveries-app2", owner.ID, true)
+	if err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+	if _, err := dashboard.AddAppMember(context.Background(), pool, dashboard.AppRef{BackendAppID: app.ID}, editor.ID, dashboard.AppRoleEditor); err != nil {
+		t.Fatalf("AddAppMember (editor): %v", err)
+	}
+	created, _, err := dashboard.CreateWebhook(context.Background(), pool, dashboard.CreateWebhookInput{
+		AppID: app.ID, Name: "mcp-deliveries-forbidden", Method: "POST", EventTypePath: "eventType", CreatedBy: owner.ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateWebhook: %v", err)
+	}
+	editorToken, _, err := dashboard.CreatePAT(context.Background(), pool, editor.ID, "cli", dashboard.PATKindManual, nil)
+	if err != nil {
+		t.Fatalf("CreatePAT: %v", err)
+	}
+
+	sess := startMCPSession(t, pool, editorToken)
+
+	res, err := sess.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "orbit_list_webhook_deliveries",
+		Arguments: map[string]any{"app_id": app.ID, "webhook_id": created.ID},
+	})
+	if err != nil {
+		t.Fatalf("CallTool orbit_list_webhook_deliveries (protocol-level): %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected a forbidden tool error for an editor (CanManage()==false)")
+	}
+	text, ok := res.Content[0].(*mcp.TextContent)
+	if !ok {
+		t.Fatalf("expected TextContent error, got %T", res.Content[0])
+	}
+	if text.Text != "forbidden" {
+		t.Fatalf("expected \"forbidden\", got %q", text.Text)
+	}
+}

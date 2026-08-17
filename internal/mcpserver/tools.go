@@ -13,6 +13,7 @@ package mcpserver
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -52,6 +53,7 @@ func RegisterTools(server *mcp.Server, deps ToolDeps) {
 	registerTemplateTools(server, deps)
 	registerAppConfigReadTools(server, deps)
 	registerAccessReadTools(server, deps)
+	registerOperationalReadTools(server, deps)
 }
 
 // orbitListAppsInput takes no arguments — the tool always lists the calling
@@ -451,6 +453,8 @@ func mapReadError(err error) error {
 		return errors.New("table not found")
 	case errors.Is(err, dashboard.ErrAppTokensNotSupported):
 		return dashboard.ErrAppTokensNotSupported
+	case errors.Is(err, dashboard.ErrWebhookNotFound):
+		return errors.New("webhook not found")
 	default:
 		return errInternal
 	}
@@ -618,5 +622,215 @@ func registerAccessReadTools(server *mcp.Server, deps ToolDeps) {
 			return nil, nil, mapReadError(err)
 		}
 		return nil, orbitListAppTokensOutput{Tokens: tokens}, nil
+	})
+}
+
+// orbitWebhookSummary is the MCP-facing shape of a dashboard.WebhookRow —
+// the same fields webhooks_handler.go's webhookResponse exposes over REST,
+// minus Token: webhookResponse decrypts and returns the plaintext callback
+// token for the dashboard session's own use, but design.md's Tech Decisions
+// require "no signing-secret value" for the read-only MCP tools, so the
+// token is never included here (WebhookRow's own TokenSecret ciphertext
+// field is dropped too — same reasoning, different form of the same
+// secret). WebhookRow itself carries no json tags, so this translation also
+// avoids emitting Go's default PascalCase field names.
+type orbitWebhookSummary struct {
+	ID             string         `json:"id"`
+	AppID          string         `json:"app_id"`
+	Name           string         `json:"name"`
+	Method         string         `json:"method"`
+	EventTypePath  string         `json:"event_type_path"`
+	EventIDPath    *string        `json:"event_id_path"`
+	Status         string         `json:"status"`
+	CapturedSample map[string]any `json:"captured_sample"`
+	DeletedAt      *time.Time     `json:"deleted_at"`
+	CreatedBy      string         `json:"created_by"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+}
+
+func toOrbitWebhookSummary(w dashboard.WebhookRow) orbitWebhookSummary {
+	return orbitWebhookSummary{
+		ID:             w.ID,
+		AppID:          w.AppID,
+		Name:           w.Name,
+		Method:         w.Method,
+		EventTypePath:  w.EventTypePath,
+		EventIDPath:    w.EventIDPath,
+		Status:         w.Status,
+		CapturedSample: w.CapturedSample,
+		DeletedAt:      w.DeletedAt,
+		CreatedBy:      w.CreatedBy,
+		CreatedAt:      w.CreatedAt,
+		UpdatedAt:      w.UpdatedAt,
+	}
+}
+
+// orbitEventMapping is the MCP-facing shape of a dashboard.EventMappingRow
+// (also carries no json tags in its store form) — snake_case, matching
+// webhooks_handler.go's own mappingResponse translation.
+type orbitEventMapping struct {
+	ID             string                      `json:"id"`
+	WebhookID      string                      `json:"webhook_id"`
+	EventTypeValue string                      `json:"event_type_value"`
+	Action         string                      `json:"action"`
+	TargetTable    string                      `json:"target_table"`
+	MatchKeyColumn *string                     `json:"match_key_column"`
+	FieldMappings  []dashboard.FieldMappingDef `json:"field_mappings"`
+	CreatedAt      time.Time                   `json:"created_at"`
+	UpdatedAt      time.Time                   `json:"updated_at"`
+}
+
+func toOrbitEventMapping(m dashboard.EventMappingRow) orbitEventMapping {
+	return orbitEventMapping{
+		ID:             m.ID,
+		WebhookID:      m.WebhookID,
+		EventTypeValue: m.EventTypeValue,
+		Action:         m.Action,
+		TargetTable:    m.TargetTable,
+		MatchKeyColumn: m.MatchKeyColumn,
+		FieldMappings:  m.FieldMappings,
+		CreatedAt:      m.CreatedAt,
+		UpdatedAt:      m.UpdatedAt,
+	}
+}
+
+// orbitListWebhooksInput is the input for orbit_list_webhooks.
+type orbitListWebhooksInput struct {
+	AppID string `json:"app_id" jsonschema:"id of the app to list webhooks for"`
+}
+
+// orbitListWebhooksOutput wraps a JSON array of webhook summaries, since MCP
+// tool outputs are objects.
+type orbitListWebhooksOutput struct {
+	Webhooks []orbitWebhookSummary `json:"webhooks"`
+}
+
+// orbitGetWebhookInput is the input for orbit_get_webhook.
+type orbitGetWebhookInput struct {
+	AppID     string `json:"app_id" jsonschema:"id of the app that owns the webhook"`
+	WebhookID string `json:"webhook_id" jsonschema:"id of the webhook to fetch"`
+}
+
+// orbitGetWebhookOutput combines a webhook's config with its event mappings
+// in one response (design.md Tech Decisions: matches spec AC2 exactly,
+// avoids a second round-trip for what's conceptually one "show me this
+// webhook" question).
+type orbitGetWebhookOutput struct {
+	Webhook       orbitWebhookSummary `json:"webhook"`
+	EventMappings []orbitEventMapping `json:"event_mappings"`
+}
+
+// orbitListWebhookDeliveriesInput is the input for
+// orbit_list_webhook_deliveries. Limit/offset mirror the same bounds the
+// REST endpoint already enforces (ListWebhookDeliveriesForUser clamps
+// silently, it never rejects) — no new query capability is invented here,
+// per design.md's Tech Decisions.
+type orbitListWebhookDeliveriesInput struct {
+	AppID     string `json:"app_id" jsonschema:"id of the app that owns the webhook"`
+	WebhookID string `json:"webhook_id" jsonschema:"id of the webhook to list deliveries for"`
+	Limit     int    `json:"limit,omitempty" jsonschema:"max rows to return (default 50, max 200)"`
+	Offset    int    `json:"offset,omitempty" jsonschema:"rows to skip (default 0)"`
+}
+
+// orbitDelivery is the MCP-facing shape of a dashboard.DeliveryRow (also
+// carries no json tags in its store form) — snake_case, matching
+// webhooks_handler.go's own deliveryResponse translation.
+type orbitDelivery struct {
+	ID             string         `json:"id"`
+	WebhookID      string         `json:"webhook_id"`
+	ReceivedAt     time.Time      `json:"received_at"`
+	HTTPStatus     int            `json:"http_status"`
+	Outcome        string         `json:"outcome"`
+	EventTypeValue *string        `json:"event_type_value"`
+	EventID        *string        `json:"event_id"`
+	RawPayload     map[string]any `json:"raw_payload"`
+	TargetRowID    *string        `json:"target_row_id"`
+	ErrorDetail    *string        `json:"error_detail"`
+}
+
+func toOrbitDelivery(d dashboard.DeliveryRow) orbitDelivery {
+	return orbitDelivery{
+		ID:             d.ID,
+		WebhookID:      d.WebhookID,
+		ReceivedAt:     d.ReceivedAt,
+		HTTPStatus:     d.HTTPStatus,
+		Outcome:        d.Outcome,
+		EventTypeValue: d.EventTypeValue,
+		EventID:        d.EventID,
+		RawPayload:     d.RawPayload,
+		TargetRowID:    d.TargetRowID,
+		ErrorDetail:    d.ErrorDetail,
+	}
+}
+
+// orbitListWebhookDeliveriesOutput mirrors ListWebhookDeliveries' REST
+// response shape (a JSON array of deliveries) wrapped in an object.
+type orbitListWebhookDeliveriesOutput struct {
+	Deliveries []orbitDelivery `json:"deliveries"`
+}
+
+// registerOperationalReadTools registers the read-only tools that expose an
+// app's operational history — webhooks, their event mappings, delivery
+// history, and (T15) caller-wide log metrics (mcp-read-only-tools spec P3:
+// T13 adds the three webhook tools here). All three webhook tools share the
+// same CanManage() tier as table policies/members (design.md's
+// Authorization Matrix).
+func registerOperationalReadTools(server *mcp.Server, deps ToolDeps) {
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_list_webhooks",
+		Description: "List every webhook configured for an app (no signing-secret value). Requires the caller to be able to manage the app (role.CanManage()).",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitListWebhooksInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		rows, err := dashboard.ListWebhooksForUser(ctx, deps.Pool, user, in.AppID)
+		if err != nil {
+			return nil, nil, mapReadError(err)
+		}
+		out := make([]orbitWebhookSummary, 0, len(rows))
+		for _, row := range rows {
+			out = append(out, toOrbitWebhookSummary(row))
+		}
+		return nil, orbitListWebhooksOutput{Webhooks: out}, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_get_webhook",
+		Description: "Get one webhook's full config (no signing-secret value) plus its event mappings. Requires the caller to be able to manage the app (role.CanManage()). webhook_id must belong to app_id — a webhook from a different app returns not-found.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitGetWebhookInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		wh, mappings, err := dashboard.GetWebhookForUser(ctx, deps.Pool, user, in.AppID, in.WebhookID)
+		if err != nil {
+			return nil, nil, mapReadError(err)
+		}
+		outMappings := make([]orbitEventMapping, 0, len(mappings))
+		for _, m := range mappings {
+			outMappings = append(outMappings, toOrbitEventMapping(m))
+		}
+		return nil, orbitGetWebhookOutput{Webhook: toOrbitWebhookSummary(*wh), EventMappings: outMappings}, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_list_webhook_deliveries",
+		Description: "List a webhook's delivery history, newest first (limit defaults to 50, max 200; offset defaults to 0 — same bounds the REST endpoint enforces). Requires the caller to be able to manage the app (role.CanManage()). webhook_id must belong to app_id.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitListWebhookDeliveriesInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		rows, err := dashboard.ListWebhookDeliveriesForUser(ctx, deps.Pool, user, in.AppID, in.WebhookID, in.Limit, in.Offset)
+		if err != nil {
+			return nil, nil, mapReadError(err)
+		}
+		out := make([]orbitDelivery, 0, len(rows))
+		for _, row := range rows {
+			out = append(out, toOrbitDelivery(row))
+		}
+		return nil, orbitListWebhookDeliveriesOutput{Deliveries: out}, nil
 	})
 }

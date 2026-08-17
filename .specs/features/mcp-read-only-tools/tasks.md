@@ -399,11 +399,11 @@ T14 → T15
 - Skill: NONE
 
 **Done when**:
-- [ ] `orbit_list_webhooks` returns webhooks for a caller who can manage the app
-- [ ] `orbit_get_webhook` returns config + event mappings for a valid webhook, and not-found for a webhook belonging to a different `app_id`
-- [ ] `orbit_list_webhook_deliveries` returns delivery history within the enforced `limit`/`offset` bounds
-- [ ] All three return forbidden for a caller whose role fails `CanManage()` on that app
-- [ ] Gate passes: `go test ./internal/mcpserver/... -race`
+- [x] `orbit_list_webhooks` returns webhooks for a caller who can manage the app
+- [x] `orbit_get_webhook` returns config + event mappings for a valid webhook, and not-found for a webhook belonging to a different `app_id`
+- [x] `orbit_list_webhook_deliveries` returns delivery history within the enforced `limit`/`offset` bounds
+- [x] All three return forbidden for a caller whose role fails `CanManage()` on that app
+- [x] Gate passes: `go test ./internal/mcpserver/... -race`
 
 **Tests**: integration (real MCP client roundtrip)
 **Gate**: full
