@@ -314,6 +314,40 @@ func (h *Handler) CreateWebhookForUser(ctx context.Context, user *DashboardUser,
 	return &row, nil
 }
 
+// SaveEventMappingForUser is the shared operation behind the
+// SaveEventMapping REST handler and orbit_save_webhook_event_mapping
+// (mcp-safe-mutation-tools spec T7/T8): resolve+authorize the app
+// (GetApp+role.CanManage(), same as CreateWebhookForUser), scope the
+// webhook to the given app the same way GetWebhookForUser does
+// (GetWebhookByID already scopes by appID, so a webhookID belonging to a
+// different app returns ErrWebhookNotFound), then call the existing
+// SaveEventMapping store function as-is — it already rejects conflicting
+// mappings with ErrMappingConflict instead of overwriting, and unknown
+// targets with ErrUnknownTargetTable/ErrUnknownTargetColumn, all propagated
+// unchanged. Audits under "webhook.mapping.save", reusing the REST
+// handler's existing action string.
+func (h *Handler) SaveEventMappingForUser(ctx context.Context, user *DashboardUser, appID, webhookID string, def EventMappingDef, ip string) (*EventMappingRow, error) {
+	app, role, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, err
+	}
+	if !role.CanManage() {
+		return nil, ErrForbidden
+	}
+	wh, err := GetWebhookByID(ctx, h.pool, appID, webhookID)
+	if err != nil {
+		return nil, err
+	}
+
+	row, err := SaveEventMapping(ctx, h.pool, h.reg, app.Name, wh.ID, def)
+	if err != nil {
+		return nil, err
+	}
+
+	h.audit(ctx, user.ID, user.Email, "webhook.mapping.save", "webhook_event_mapping", row.ID, app.Name+"/"+wh.Name+"/"+row.EventTypeValue, nil, ip)
+	return &row, nil
+}
+
 // ListWebhooks returns every non-soft-deleted webhook for an app, newest first.
 func ListWebhooks(ctx context.Context, pool *db.Pool, appID string) ([]WebhookRow, error) {
 	rows, err := pool.Query(ctx,

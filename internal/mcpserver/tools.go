@@ -171,6 +171,14 @@ func mapWriteError(err error) error {
 		return dashboard.ErrColumnAlreadyExists
 	case errors.Is(err, dashboard.ErrIndexAlreadyExists):
 		return dashboard.ErrIndexAlreadyExists
+	case errors.Is(err, dashboard.ErrWebhookNotFound):
+		return errors.New("webhook not found")
+	case errors.Is(err, dashboard.ErrUnknownTargetTable):
+		return dashboard.ErrUnknownTargetTable
+	case errors.Is(err, dashboard.ErrUnknownTargetColumn):
+		return dashboard.ErrUnknownTargetColumn
+	case errors.Is(err, dashboard.ErrMappingConflict):
+		return dashboard.ErrMappingConflict
 	case errors.As(err, &valErr):
 		return valErr
 	case errors.As(err, &typeErr):

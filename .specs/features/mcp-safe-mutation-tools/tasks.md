@@ -245,13 +245,13 @@ T7 → T8
 - Skill: NONE
 
 **Done when**:
-- [ ] `SaveEventMappingForUser` creates the mapping using the same validation `SaveEventMapping` already applies
-- [ ] Returns `ErrUnknownTargetTable`/`ErrUnknownTargetColumn` for an unknown mapping target, matching the REST endpoint exactly
-- [ ] Returns `ErrMappingConflict` for a conflicting `event_type_value`, and the existing mapping is left intact (re-fetch and compare)
-- [ ] Returns not-found for a `webhook_id` belonging to a **different** app than the given `app_id` (explicit cross-app scoping test)
-- [ ] Returns forbidden for a caller whose role fails `CanManage()`
-- [ ] Existing `SaveEventMapping` REST handler test(s) still pass unmodified
-- [ ] Gate passes: `go test ./internal/dashboard/... -race`
+- [x] `SaveEventMappingForUser` creates the mapping using the same validation `SaveEventMapping` already applies
+- [x] Returns `ErrUnknownTargetTable`/`ErrUnknownTargetColumn` for an unknown mapping target, matching the REST endpoint exactly
+- [x] Returns `ErrMappingConflict` for a conflicting `event_type_value`, and the existing mapping is left intact (re-fetch and compare)
+- [x] Returns not-found for a `webhook_id` belonging to a **different** app than the given `app_id` (explicit cross-app scoping test)
+- [x] Returns forbidden for a caller whose role fails `CanManage()`
+- [x] Existing `SaveEventMapping` REST handler test(s) still pass unmodified
+- [x] Gate passes: `go test ./internal/dashboard/... -race`
 
 **Tests**: integration (real Postgres)
 **Gate**: quick

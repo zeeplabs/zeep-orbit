@@ -369,17 +369,14 @@ type saveEventMappingRequest struct {
 
 // SaveEventMapping handles POST /dashboard/api/apps/{id}/webhooks/{webhookId}/mappings.
 func (h *Handler) SaveEventMapping(w http.ResponseWriter, r *http.Request) {
-	appID := chi.URLParam(r, "id")
-	app, ok := h.webhookRBACGate(w, r, appID)
+	user, ok := UserFromContext(r.Context())
 	if !ok {
-		return
-	}
-	webhookID := chi.URLParam(r, "webhookId")
-	wh, ok := h.getScopedWebhook(w, r, appID, webhookID)
-	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
 
+	appID := chi.URLParam(r, "id")
+	webhookID := chi.URLParam(r, "webhookId")
 	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
 	var body saveEventMappingRequest
 	if !h.decodeJSONBody(w, r, &body) {
@@ -393,9 +390,15 @@ func (h *Handler) SaveEventMapping(w http.ResponseWriter, r *http.Request) {
 		MatchKeyColumn: body.MatchKeyColumn,
 		FieldMappings:  body.FieldMappings,
 	}
-	row, err := SaveEventMapping(r.Context(), h.pool, h.reg, app.Name, wh.ID, def)
+	row, err := h.SaveEventMappingForUser(r.Context(), user, appID, webhookID, def, r.RemoteAddr)
 	if err != nil {
 		switch {
+		case errors.Is(err, ErrNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		case errors.Is(err, ErrForbidden):
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		case errors.Is(err, ErrWebhookNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "webhook not found"})
 		case errors.Is(err, ErrInvalidAction),
 			errors.Is(err, ErrMatchKeyRequired),
 			errors.Is(err, ErrUnknownTargetTable),
@@ -413,9 +416,7 @@ func (h *Handler) SaveEventMapping(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, toMappingResponse(row))
-	user, _ := UserFromContext(r.Context())
-	h.audit(r.Context(), user.ID, user.Email, "webhook.mapping.save", "webhook_event_mapping", row.ID, app.Name+"/"+wh.Name+"/"+row.EventTypeValue, nil, r.RemoteAddr)
+	writeJSON(w, http.StatusCreated, toMappingResponse(*row))
 }
 
 // ListEventMappings handles GET /dashboard/api/apps/{id}/webhooks/{webhookId}/mappings.
