@@ -177,6 +177,98 @@ func TestAddTableColumnForUser_BadReferenceRejected(t *testing.T) {
 	}
 }
 
+// TestAddTableColumnForUser_ReferenceCompletingCycleRejected covers the
+// whole-app-graph FK-cycle detector (config.ValidateTables'
+// detectReferenceCycle) via this new incremental path — a Verifier gap
+// flagged after mcp-safe-mutation-tools shipped: cycle detection was only
+// ever exercised at table-creation/full-replace time, never through
+// AddTableColumnForUser's merge-then-validate-whole-graph flow. Table "a"
+// references "b" (one-directional, valid); then adding a column to "b" that
+// references "a" would complete the cycle a→b→a and must be rejected.
+func TestAddTableColumnForUser_ReferenceCompletingCycleRejected(t *testing.T) {
+	pool, h, actors, _, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{Name: "col-cycle-app"}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppForUser: %v", err)
+	}
+	tableB, err := h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
+		Name:    "b",
+		Columns: []config.ColumnConfig{{Name: "name", Type: "text"}},
+	}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppTableForUser b: %v", err)
+	}
+	if _, err := h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
+		Name:    "a",
+		Columns: []config.ColumnConfig{{Name: "name", Type: "text"}},
+	}, "127.0.0.1"); err != nil {
+		t.Fatalf("CreateAppTableForUser a: %v", err)
+	}
+
+	// a -> b (one-directional, valid on its own).
+	if _, err := h.AddTableColumnForUser(ctx, actors["loner"], app.ID, "a", config.ColumnConfig{
+		Name: "b_id", Type: "uuid",
+		References: &config.ReferenceConfig{Table: "b", Column: "id"},
+	}, "127.0.0.1"); err != nil {
+		t.Fatalf("AddTableColumnForUser a->b: %v", err)
+	}
+
+	// b -> a would complete the cycle a->b->a — must be rejected.
+	_, err = h.AddTableColumnForUser(ctx, actors["loner"], app.ID, "b", config.ColumnConfig{
+		Name: "a_id", Type: "uuid",
+		References: &config.ReferenceConfig{Table: "a", Column: "id"},
+	}, "127.0.0.1")
+	var valErr *ValidationError
+	if !errors.As(err, &valErr) {
+		t.Fatalf("expected *ValidationError for a reference completing a cycle, got %v (%T)", err, err)
+	}
+
+	refreshed, _, err := GetApp(ctx, pool, app.ID, actors["loner"])
+	if err != nil {
+		t.Fatalf("GetApp: %v", err)
+	}
+	refreshedB := findAppTableByName(refreshed, tableB.Name)
+	if refreshedB == nil || len(refreshedB.Columns) != 1 {
+		t.Fatalf("expected table b untouched with 1 column (no a_id added), got %+v", refreshedB)
+	}
+}
+
+// TestAddTableColumnForUser_SuperadminBypassesMembership covers the spec's
+// Edge Cases line: a superadmin behaves exactly as the equivalent identity's
+// REST call would, with no additional restriction from the MCP layer — here,
+// no app_members row at all, yet the mutation still succeeds (ResolveAppRole's
+// superadmin bypass grants AppRoleAdmin, satisfying CanWrite()).
+func TestAddTableColumnForUser_SuperadminBypassesMembership(t *testing.T) {
+	pool, h, actors, _, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{Name: "col-super-app"}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppForUser: %v", err)
+	}
+	table, err := h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
+		Name:    "items",
+		Columns: []config.ColumnConfig{{Name: "title", Type: "text"}},
+	}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppTableForUser: %v", err)
+	}
+
+	updated, err := h.AddTableColumnForUser(ctx, actors["super"], app.ID, table.Name, config.ColumnConfig{
+		Name: "price", Type: "integer",
+	}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("AddTableColumnForUser as superadmin with no app_members row: %v", err)
+	}
+	if len(updated.Columns) != 2 {
+		t.Fatalf("expected 2 columns after superadmin add, got %d: %+v", len(updated.Columns), updated.Columns)
+	}
+}
+
 // TestAddTableColumnForUser_ViewerForbidden covers spec P1 AC5 — CanWrite()
 // gate, tested with an explicit viewer role (not just "no membership").
 func TestAddTableColumnForUser_ViewerForbidden(t *testing.T) {

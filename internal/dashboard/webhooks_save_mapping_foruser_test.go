@@ -44,6 +44,32 @@ func TestSaveEventMappingForUser_HappyPath(t *testing.T) {
 	}
 }
 
+// TestSaveEventMappingForUser_SuperadminBypassesMembership covers the
+// spec's Edge Cases line: a superadmin with no app_members row still
+// succeeds (ResolveAppRole's superadmin bypass grants AppRoleAdmin,
+// satisfying CanManage()) — no additional restriction from the MCP layer.
+func TestSaveEventMappingForUser_SuperadminBypassesMembership(t *testing.T) {
+	pool, h, actors, appID, _ := webhooksHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	created := createTestWebhook(t, h, appID, actors["appadmin"])
+	super := &DashboardUser{ID: testUser(t, pool, "wh-mapping-super@example.com", "superadmin"), Role: "superadmin"}
+
+	row, err := h.SaveEventMappingForUser(ctx, super, appID, created.ID, EventMappingDef{
+		EventTypeValue: "employee.created",
+		Action:         "insert",
+		TargetTable:    "employees",
+		FieldMappings:  []FieldMappingDef{{SourcePath: "id", Column: "external_id"}},
+	}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("SaveEventMappingForUser as superadmin with no app_members row: %v", err)
+	}
+	if row.TargetTable != "employees" {
+		t.Fatalf("unexpected mapping row: %+v", row)
+	}
+}
+
 // TestSaveEventMappingForUser_UnknownTargetTable covers spec P3 AC3.
 func TestSaveEventMappingForUser_UnknownTargetTable(t *testing.T) {
 	pool, h, actors, appID, _ := webhooksHandlerTestPool(t)

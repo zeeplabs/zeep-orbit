@@ -37,6 +37,28 @@ func TestCreateWebhookForUser_HappyPathCreatesWebhook(t *testing.T) {
 	}
 }
 
+// TestCreateWebhookForUser_SuperadminBypassesMembership covers the spec's
+// Edge Cases line: a superadmin with no app_members row still succeeds
+// (ResolveAppRole's superadmin bypass grants AppRoleAdmin, satisfying
+// CanManage()) — no additional restriction from the MCP layer.
+func TestCreateWebhookForUser_SuperadminBypassesMembership(t *testing.T) {
+	pool := webhooksTestPool(t)
+	h := NewHandler(pool, registry.New(), zap.NewNop())
+	ctx := context.Background()
+	appID, _ := webhooksTestAppWithMembers(t, pool)
+	super := &DashboardUser{ID: testUser(t, pool, "wh-super@example.com", "superadmin"), Role: "superadmin"}
+
+	row, err := h.CreateWebhookForUser(ctx, super, appID, CreateWebhookInput{
+		Name: "superadmin webhook", Method: "POST", EventTypePath: "eventType",
+	}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateWebhookForUser as superadmin with no app_members row: %v", err)
+	}
+	if row.Name != "superadmin webhook" {
+		t.Fatalf("unexpected webhook row: %+v", row)
+	}
+}
+
 // TestCreateWebhookForUser_NonManagerForbidden covers the CanManage() tier
 // this endpoint actually enforces (matching webhookRBACGate, not CanWrite()
 // like the table-schema tools).

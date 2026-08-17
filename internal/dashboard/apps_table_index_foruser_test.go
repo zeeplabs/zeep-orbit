@@ -123,6 +123,38 @@ func TestAddTableIndexForUser_UnknownColumnRejected(t *testing.T) {
 	}
 }
 
+// TestAddTableIndexForUser_SuperadminBypassesMembership covers the spec's
+// Edge Cases line: a superadmin with no app_members row still succeeds
+// (ResolveAppRole's superadmin bypass grants AppRoleAdmin, satisfying
+// CanWrite()) — no additional restriction from the MCP layer.
+func TestAddTableIndexForUser_SuperadminBypassesMembership(t *testing.T) {
+	pool, h, actors, _, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{Name: "idx-super-app"}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppForUser: %v", err)
+	}
+	table, err := h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
+		Name:    "items",
+		Columns: []config.ColumnConfig{{Name: "title", Type: "text"}},
+	}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppTableForUser: %v", err)
+	}
+
+	updated, err := h.AddTableIndexForUser(ctx, actors["super"], app.ID, table.Name, config.IndexConfig{
+		Name: "items_title_idx", Columns: []string{"title"},
+	}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("AddTableIndexForUser as superadmin with no app_members row: %v", err)
+	}
+	if len(updated.Indexes) != 1 {
+		t.Fatalf("expected 1 index after superadmin add, got %d: %+v", len(updated.Indexes), updated.Indexes)
+	}
+}
+
 // TestAddTableIndexForUser_ViewerForbidden covers spec P2 AC4.
 func TestAddTableIndexForUser_ViewerForbidden(t *testing.T) {
 	pool, h, actors, appID, _ := appsHandlerTestPool(t)
