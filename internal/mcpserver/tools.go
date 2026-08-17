@@ -770,6 +770,13 @@ type orbitListWebhookDeliveriesOutput struct {
 	Deliveries []orbitDelivery `json:"deliveries"`
 }
 
+// orbitGetLogsMetricsInput takes no arguments — the wrapped REST endpoint
+// (LogsMetrics) itself takes no app_id or filter parameters (design.md's
+// "orbit_get_logs_metrics takes no input" Tech Decision): it always
+// returns one caller-wide aggregate across whichever apps ListOwnedAppNames
+// grants the caller.
+type orbitGetLogsMetricsInput struct{}
+
 // registerOperationalReadTools registers the read-only tools that expose an
 // app's operational history — webhooks, their event mappings, delivery
 // history, and (T15) caller-wide log metrics (mcp-read-only-tools spec P3:
@@ -832,5 +839,20 @@ func registerOperationalReadTools(server *mcp.Server, deps ToolDeps) {
 			out = append(out, toOrbitDelivery(row))
 		}
 		return nil, orbitListWebhookDeliveriesOutput{Deliveries: out}, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_get_logs_metrics",
+		Description: "Get a one-minute request-volume/latency/error-rate aggregate across every app the caller can see (RequestsPerApp breaks it down per app). Not app-scoped — takes no input. Ownership-only: unrestricted for superadmin/CanReadAnyApp, restricted to the caller's own apps otherwise. Reflects the last minute on whichever server instance handled this request — a load-balanced deployment may show different results per call.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ orbitGetLogsMetricsInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		metrics, err := dashboard.LogsMetricsForUser(ctx, deps.Pool, deps.DashH.Logs, user)
+		if err != nil {
+			return nil, nil, errInternal
+		}
+		return nil, metrics, nil
 	})
 }

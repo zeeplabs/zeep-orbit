@@ -1156,3 +1156,95 @@ func TestOrbitListWebhookDeliveries_EditorForbidden(t *testing.T) {
 		t.Fatalf("expected \"forbidden\", got %q", text.Text)
 	}
 }
+
+// TestOrbitGetLogsMetrics_MemberRestrictedToOwnApps covers mcp-read-only-tools
+// T15's Done-when: RequestsPerApp is restricted to the caller's own apps for
+// a regular member.
+func TestOrbitGetLogsMetrics_MemberRestrictedToOwnApps(t *testing.T) {
+	pool := authTestPool(t)
+	h := newTestDashboardHandler(pool)
+	// A real "member" role (not authTestUser's "admin" default, which has
+	// CanReadAnyApp==true and would mask the restricted-set branch this
+	// test needs) — same reasoning as TestOrbitGetAppSchema_NoAccessReturnsStructuredToolError.
+	owner, err := dashboard.CreateUser(context.Background(), pool, "tools-logsmetrics-member@example.com", "member", "hash", "member")
+	if err != nil {
+		t.Fatalf("create member user: %v", err)
+	}
+	token, _, err := dashboard.CreatePAT(context.Background(), pool, owner.ID, "cli", dashboard.PATKindManual, nil)
+	if err != nil {
+		t.Fatalf("CreatePAT: %v", err)
+	}
+	app, err := dashboard.CreateApp(context.Background(), pool, "tools-logsmetrics-app", owner.ID, true)
+	if err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+	h.Logs.Push(dashboard.LogEntry{Timestamp: time.Now(), App: app.Name, Method: "GET", Path: "/" + app.Name + "/widgets", Status: 200, LatencyMs: 10})
+	h.Logs.Push(dashboard.LogEntry{Timestamp: time.Now(), App: "some-other-app", Method: "GET", Path: "/some-other-app/widgets", Status: 200, LatencyMs: 20})
+
+	sess := startMCPSessionWithHandler(t, pool, h, token)
+
+	res, err := sess.CallTool(context.Background(), &mcp.CallToolParams{Name: "orbit_get_logs_metrics"})
+	if err != nil {
+		t.Fatalf("CallTool orbit_get_logs_metrics: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("expected a successful tool result, got an error result: %+v", res.Content)
+	}
+	var out struct {
+		TotalRequests  int            `json:"total_requests"`
+		RequestsPerApp map[string]int `json:"requests_per_app"`
+	}
+	decodeToolResult(t, res, &out)
+	if out.TotalRequests != 1 {
+		t.Fatalf("expected a member to see only their own app's requests (total=1), got %+v", out)
+	}
+	if _, ok := out.RequestsPerApp[app.Name]; !ok {
+		t.Fatalf("expected %s in requests_per_app, got %+v", app.Name, out.RequestsPerApp)
+	}
+	if _, ok := out.RequestsPerApp["some-other-app"]; ok {
+		t.Fatalf("expected some-other-app to be excluded from a member's requests_per_app, got %+v", out.RequestsPerApp)
+	}
+}
+
+// TestOrbitGetLogsMetrics_SuperadminSeesEveryApp covers mcp-read-only-tools
+// T15's Done-when: RequestsPerApp is unrestricted for a superadmin.
+func TestOrbitGetLogsMetrics_SuperadminSeesEveryApp(t *testing.T) {
+	pool := authTestPool(t)
+	h := newTestDashboardHandler(pool)
+	owner := authTestUser(t, pool, "tools-logsmetrics-owner@example.com")
+	superadmin, err := dashboard.CreateUser(context.Background(), pool, "tools-logsmetrics-super@example.com", "super", "hash", "superadmin")
+	if err != nil {
+		t.Fatalf("create superadmin user: %v", err)
+	}
+	superToken, _, err := dashboard.CreatePAT(context.Background(), pool, superadmin.ID, "cli", dashboard.PATKindManual, nil)
+	if err != nil {
+		t.Fatalf("CreatePAT: %v", err)
+	}
+	app, err := dashboard.CreateApp(context.Background(), pool, "tools-logsmetrics-super-app", owner.ID, true)
+	if err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+	h.Logs.Push(dashboard.LogEntry{Timestamp: time.Now(), App: app.Name, Method: "GET", Path: "/" + app.Name + "/widgets", Status: 200, LatencyMs: 10})
+	h.Logs.Push(dashboard.LogEntry{Timestamp: time.Now(), App: "some-other-app-2", Method: "GET", Path: "/some-other-app-2/widgets", Status: 200, LatencyMs: 20})
+
+	sess := startMCPSessionWithHandler(t, pool, h, superToken)
+
+	res, err := sess.CallTool(context.Background(), &mcp.CallToolParams{Name: "orbit_get_logs_metrics"})
+	if err != nil {
+		t.Fatalf("CallTool orbit_get_logs_metrics: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("expected a successful tool result, got an error result: %+v", res.Content)
+	}
+	var out struct {
+		TotalRequests  int            `json:"total_requests"`
+		RequestsPerApp map[string]int `json:"requests_per_app"`
+	}
+	decodeToolResult(t, res, &out)
+	if out.TotalRequests != 2 {
+		t.Fatalf("expected a superadmin to see requests across both apps (total=2), got %+v", out)
+	}
+	if out.RequestsPerApp[app.Name] != 1 || out.RequestsPerApp["some-other-app-2"] != 1 {
+		t.Fatalf("expected both apps represented in requests_per_app for a superadmin, got %+v", out.RequestsPerApp)
+	}
+}

@@ -449,10 +449,10 @@ T14 → T15
 - Skill: NONE
 
 **Done when**:
-- [ ] Returns `RequestsPerApp` restricted to the caller's own apps for a regular member, unrestricted for a superadmin (both seeded and asserted explicitly)
-- [ ] Tool description text includes the per-replica caveat
-- [ ] Gate passes: `go test ./internal/mcpserver/... -race`
-- [ ] Full feature build gate passes: `go build ./... && go vet ./... && gofmt -l $(git diff --name-only --diff-filter=ACM -- '*.go') && go test ./... -race`
+- [x] Returns `RequestsPerApp` restricted to the caller's own apps for a regular member, unrestricted for a superadmin (both seeded and asserted explicitly)
+- [x] Tool description text includes the per-replica caveat
+- [x] Gate passes: `go test ./internal/mcpserver/... -race`
+- [x] Full feature build gate passes: `go build ./... && go vet ./... && gofmt -l $(git diff --name-only --diff-filter=ACM -- '*.go') && go test ./... -race`
 
 **Tests**: integration (real MCP client roundtrip)
 **Gate**: build
