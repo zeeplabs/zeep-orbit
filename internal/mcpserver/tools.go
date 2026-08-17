@@ -55,6 +55,7 @@ func RegisterTools(server *mcp.Server, deps ToolDeps) {
 	registerAccessReadTools(server, deps)
 	registerOperationalReadTools(server, deps)
 	registerAppConfigWriteTools(server, deps)
+	registerOperationalWriteTools(server, deps)
 }
 
 // orbitListAppsInput takes no arguments — the tool always lists the calling
@@ -916,5 +917,45 @@ func registerOperationalReadTools(server *mcp.Server, deps ToolDeps) {
 			return nil, nil, errInternal
 		}
 		return nil, metrics, nil
+	})
+}
+
+// orbitCreateWebhookInput is the input for orbit_create_webhook.
+// dashboard.CreateWebhookInput carries no json tags (it's an internal store
+// parameter struct, never serialized directly), so a bespoke translation
+// struct is needed here — same reasoning as orbitWebhookSummary's existence
+// for the read-side tools.
+type orbitCreateWebhookInput struct {
+	AppID         string `json:"app_id" jsonschema:"id of the app to create the webhook on"`
+	Name          string `json:"name" jsonschema:"a human-readable name for the webhook"`
+	Method        string `json:"method" jsonschema:"HTTP method the webhook's target endpoint expects: one of GET, POST, PUT, PATCH"`
+	EventTypePath string `json:"event_type_path" jsonschema:"JSON path into the target table's row used to determine the event type"`
+	EventIDPath   string `json:"event_id_path,omitempty" jsonschema:"optional JSON path used to deduplicate events"`
+}
+
+// registerOperationalWriteTools registers the additive webhook mutation
+// tools (mcp-safe-mutation-tools spec): create a webhook, save an event
+// mapping. Both gate on role.CanManage() — a stricter tier than the table
+// tools' CanWrite(), matching webhookRBACGate exactly (design.md's Tech
+// Decisions: this is a real, confirmed tier difference, not an oversight).
+func registerOperationalWriteTools(server *mcp.Server, deps ToolDeps) {
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_create_webhook",
+		Description: "Create a new webhook on an app, without affecting any other webhook on that app. Requires the caller to be able to manage the app (role.CanManage()).",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitCreateWebhookInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		row, err := deps.DashH.CreateWebhookForUser(ctx, user, in.AppID, dashboard.CreateWebhookInput{
+			Name:          in.Name,
+			Method:        in.Method,
+			EventTypePath: in.EventTypePath,
+			EventIDPath:   in.EventIDPath,
+		}, "mcp")
+		if err != nil {
+			return nil, nil, mapWriteError(err)
+		}
+		return nil, toOrbitWebhookSummary(*row), nil
 	})
 }

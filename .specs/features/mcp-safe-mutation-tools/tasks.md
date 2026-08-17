@@ -221,9 +221,9 @@ T7 → T8
 - Skill: NONE
 
 **Done when**:
-- [ ] Creates a webhook for a caller who can manage the app; returned config matches what the Dashboard's Webhooks page would show
-- [ ] Returns forbidden for a caller whose role fails `CanManage()` on that app (explicit tier test, distinct from the table tools' `CanWrite()` tier test)
-- [ ] Gate passes: `go test ./internal/mcpserver/... -race`
+- [x] Creates a webhook for a caller who can manage the app; returned config matches what the Dashboard's Webhooks page would show
+- [x] Returns forbidden for a caller whose role fails `CanManage()` on that app (explicit tier test, distinct from the table tools' `CanWrite()` tier test)
+- [x] Gate passes: `go test ./internal/mcpserver/... -race`
 
 **Tests**: integration (real MCP client roundtrip)
 **Gate**: full
