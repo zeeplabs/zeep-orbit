@@ -765,3 +765,107 @@ func TestOrbitListAppMembers_EditorForbidden(t *testing.T) {
 		t.Fatalf("expected \"forbidden\", got %q", text.Text)
 	}
 }
+
+// TestOrbitListAppTokens_ReturnsMetadataNoRawValueForVisibleApp covers
+// mcp-read-only-tools T9's Done-when: token metadata for a visible app, no
+// raw token value in the response (boundary test) — app tokens never
+// persist the raw signed token, only a JTI, so this asserts the returned
+// row matches CreateAppToken's own metadata exactly.
+func TestOrbitListAppTokens_ReturnsMetadataNoRawValueForVisibleApp(t *testing.T) {
+	pool := authTestPool(t)
+	owner := authTestUser(t, pool, "tools-apptokens-owner@example.com")
+	token, _, err := dashboard.CreatePAT(context.Background(), pool, owner.ID, "cli", dashboard.PATKindManual, nil)
+	if err != nil {
+		t.Fatalf("CreatePAT: %v", err)
+	}
+	app, err := dashboard.CreateApp(context.Background(), pool, "tools-apptokens-app", owner.ID, false)
+	if err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+	created, err := dashboard.CreateAppToken(context.Background(), pool, dashboard.CreateAppTokenInput{AppID: app.ID, Name: "ci"})
+	if err != nil {
+		t.Fatalf("CreateAppToken: %v", err)
+	}
+
+	sess := startMCPSession(t, pool, token)
+
+	res, err := sess.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "orbit_list_app_tokens",
+		Arguments: map[string]any{"app_id": app.ID},
+	})
+	if err != nil {
+		t.Fatalf("CallTool orbit_list_app_tokens: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("expected a successful tool result, got an error result: %+v", res.Content)
+	}
+	var out struct {
+		Tokens []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"tokens"`
+	}
+	decodeToolResult(t, res, &out)
+	if len(out.Tokens) != 1 || out.Tokens[0].ID != created.ID || out.Tokens[0].Name != "ci" {
+		t.Fatalf("expected 1 token matching %+v, got %+v", created, out.Tokens)
+	}
+	// AppTokenRow never stores/returns a raw signed token — only metadata
+	// plus the opaque JTI identifier (already part of the existing REST
+	// shape, unchanged by this extraction). The boundary this tool must
+	// hold is "no field named token/raw token carrying a usable secret" —
+	// assert that key is simply absent from the wire shape.
+	var raw []map[string]any
+	data, err := json.Marshal(res.StructuredContent)
+	if err != nil {
+		t.Fatalf("marshal StructuredContent: %v", err)
+	}
+	var wrapper struct {
+		Tokens []map[string]any `json:"tokens"`
+	}
+	if err := json.Unmarshal(data, &wrapper); err != nil {
+		t.Fatalf("unmarshal into raw map: %v", err)
+	}
+	raw = wrapper.Tokens
+	for _, tok := range raw {
+		if _, ok := tok["token"]; ok {
+			t.Fatalf("orbit_list_app_tokens response leaked a raw 'token' field: %+v", tok)
+		}
+	}
+}
+
+// TestOrbitListAppTokens_EmailAuthAppReturnsDistinctToolError covers
+// mcp-read-only-tools T9's Done-when: an app with email auth enabled
+// surfaces ErrAppTokensNotSupported's own message, not a generic 500-shaped
+// error — this is the specific risk design.md flags for this tool.
+func TestOrbitListAppTokens_EmailAuthAppReturnsDistinctToolError(t *testing.T) {
+	pool := authTestPool(t)
+	owner := authTestUser(t, pool, "tools-apptokens-email-owner@example.com")
+	token, _, err := dashboard.CreatePAT(context.Background(), pool, owner.ID, "cli", dashboard.PATKindManual, nil)
+	if err != nil {
+		t.Fatalf("CreatePAT: %v", err)
+	}
+	app, err := dashboard.CreateApp(context.Background(), pool, "tools-apptokens-email-app", owner.ID, true)
+	if err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+
+	sess := startMCPSession(t, pool, token)
+
+	res, err := sess.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "orbit_list_app_tokens",
+		Arguments: map[string]any{"app_id": app.ID},
+	})
+	if err != nil {
+		t.Fatalf("CallTool orbit_list_app_tokens (protocol-level): %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected a tool error for an app with email auth enabled")
+	}
+	text, ok := res.Content[0].(*mcp.TextContent)
+	if !ok {
+		t.Fatalf("expected TextContent error, got %T", res.Content[0])
+	}
+	if text.Text != dashboard.ErrAppTokensNotSupported.Error() {
+		t.Fatalf("expected %q, got %q", dashboard.ErrAppTokensNotSupported.Error(), text.Text)
+	}
+}

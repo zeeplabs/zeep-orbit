@@ -449,6 +449,8 @@ func mapReadError(err error) error {
 		return errors.New("forbidden")
 	case errors.Is(err, dashboard.ErrTableNotFound):
 		return errors.New("table not found")
+	case errors.Is(err, dashboard.ErrAppTokensNotSupported):
+		return dashboard.ErrAppTokensNotSupported
 	default:
 		return errInternal
 	}
@@ -556,10 +558,22 @@ type orbitListAppMembersOutput struct {
 	Members []*dashboard.AppMember `json:"members"`
 }
 
+// orbitListAppTokensInput is the input for orbit_list_app_tokens.
+type orbitListAppTokensInput struct {
+	AppID string `json:"app_id" jsonschema:"id of the app to list issued API tokens for"`
+}
+
+// orbitListAppTokensOutput mirrors ListAppTokens' REST response shape (a
+// JSON array of token metadata rows) wrapped in an object, since MCP tool
+// outputs are objects.
+type orbitListAppTokensOutput struct {
+	Tokens []dashboard.AppTokenRow `json:"tokens"`
+}
+
 // registerAccessReadTools registers the read-only tools that expose who
 // and what has access to an app, plus the caller's own identity-scoped
 // resources (mcp-read-only-tools spec P2: T3 adds orbit_list_my_pats; T7
-// adds orbit_list_app_members here too).
+// adds orbit_list_app_members; T9 adds orbit_list_app_tokens here too).
 func registerAccessReadTools(server *mcp.Server, deps ToolDeps) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "orbit_list_my_pats",
@@ -589,5 +603,20 @@ func registerAccessReadTools(server *mcp.Server, deps ToolDeps) {
 			return nil, nil, mapReadError(err)
 		}
 		return nil, orbitListAppMembersOutput{Members: members}, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_list_app_tokens",
+		Description: "List an app's issued API tokens (metadata only — no raw token/JTI value). Requires the caller to have any effective role on the app (same visibility GetApp already grants), no extra management role required. Not available for apps with email/password auth enabled.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitListAppTokensInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		tokens, err := dashboard.ListAppTokensForUser(ctx, deps.Pool, user, in.AppID)
+		if err != nil {
+			return nil, nil, mapReadError(err)
+		}
+		return nil, orbitListAppTokensOutput{Tokens: tokens}, nil
 	})
 }

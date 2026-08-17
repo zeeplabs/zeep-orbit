@@ -299,9 +299,9 @@ T14 → T15
 - Skill: NONE
 
 **Done when**:
-- [ ] Returns token metadata for a visible app, no raw token value in the response (boundary test)
-- [ ] Returns a distinct tool error (not a generic 500-shaped one) for an app with email auth enabled, surfacing `ErrAppTokensNotSupported`'s message
-- [ ] Gate passes: `go test ./internal/mcpserver/... -race`
+- [x] Returns token metadata for a visible app, no raw token value in the response (boundary test)
+- [x] Returns a distinct tool error (not a generic 500-shaped one) for an app with email auth enabled, surfacing `ErrAppTokensNotSupported`'s message
+- [x] Gate passes: `go test ./internal/mcpserver/... -race`
 
 **Tests**: integration (real MCP client roundtrip)
 **Gate**: full
