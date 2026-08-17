@@ -9,6 +9,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-08-17
+
 ### Added
 
 - **10 new read-only MCP tools** let an AI agent inspect an app's own configuration and operational surface without asking a human to check the Dashboard UI: `orbit_get_app`, `orbit_list_table_policies`, `orbit_list_app_members`, `orbit_list_app_tokens`, `orbit_list_app_auth_providers`, `orbit_list_my_pats`, `orbit_list_webhooks`, `orbit_get_webhook`, `orbit_list_webhook_deliveries`, `orbit_get_logs_metrics`. Every tool authorizes through the exact same `GetApp`/role-check path (or ownership scoping) its REST equivalent already uses — no new permission model — and never returns a secret/credential value its REST equivalent doesn't already redact.
