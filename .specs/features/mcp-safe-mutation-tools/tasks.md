@@ -167,12 +167,12 @@ T7 → T8
 - Skill: NONE
 
 **Done when**:
-- [ ] Adds an index on an existing column; index is reflected in the schema afterward
-- [ ] Returns `"index already exists"` distinct tool error for a duplicate name
-- [ ] Returns a validation tool error for an index referencing a nonexistent column
-- [ ] Returns forbidden for a caller whose role fails `CanWrite()`
-- [ ] Tool description text includes the blocking-write disclosure
-- [ ] Gate passes: `go test ./internal/mcpserver/... -race`
+- [x] Adds an index on an existing column; index is reflected in the schema afterward
+- [x] Returns `"index already exists"` distinct tool error for a duplicate name
+- [x] Returns a validation tool error for an index referencing a nonexistent column
+- [x] Returns forbidden for a caller whose role fails `CanWrite()`
+- [x] Tool description text includes the blocking-write disclosure
+- [x] Gate passes: `go test ./internal/mcpserver/... -race`
 
 **Tests**: integration (real MCP client roundtrip)
 **Gate**: full
