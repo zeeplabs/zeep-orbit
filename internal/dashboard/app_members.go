@@ -103,6 +103,13 @@ func (h *Handler) ListAppMembers(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"members": members})
 		return
 	}
+	if !strings.HasPrefix(r.URL.Path, "/dashboard/api/apps/") {
+		// Neither axis matched — same "not found" appRefFromRequest's own
+		// default case returns, so a future third route mounted at this
+		// handler can't silently fall through as a backend-app lookup.
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
 
 	members, err := ListAppMembersForUser(r.Context(), h.pool, actor, id)
 	if err != nil {
