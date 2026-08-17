@@ -241,8 +241,9 @@ func (h *Handler) GetWebhook(w http.ResponseWriter, r *http.Request) {
 	webhookID := chi.URLParam(r, "webhookId")
 	// Event mappings aren't part of this REST response shape (webhookResponse
 	// has no mappings field) — only orbit_get_webhook's combined response
-	// needs them, per design.md's Tech Decisions. Discarded here.
-	wh, _, err := GetWebhookForUser(r.Context(), h.pool, user, appID, webhookID)
+	// needs them, per design.md's Tech Decisions. GetWebhookConfigForUser
+	// skips that query entirely rather than fetching and discarding it.
+	wh, err := GetWebhookConfigForUser(r.Context(), h.pool, user, appID, webhookID)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrNotFound):

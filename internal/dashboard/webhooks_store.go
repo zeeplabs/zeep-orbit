@@ -226,14 +226,7 @@ func ListWebhooksForUser(ctx context.Context, pool *db.Pool, user *DashboardUser
 // same cross-app-scoping behavior getScopedWebhook already enforces for the
 // REST handler.
 func GetWebhookForUser(ctx context.Context, pool *db.Pool, user *DashboardUser, appID, webhookID string) (*WebhookRow, []EventMappingRow, error) {
-	_, role, err := GetApp(ctx, pool, appID, user)
-	if err != nil {
-		return nil, nil, err
-	}
-	if !role.CanManage() {
-		return nil, nil, ErrForbidden
-	}
-	wh, err := GetWebhookByID(ctx, pool, appID, webhookID)
+	wh, err := resolveManagedWebhook(ctx, pool, user, appID, webhookID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -242,6 +235,32 @@ func GetWebhookForUser(ctx context.Context, pool *db.Pool, user *DashboardUser, 
 		return nil, nil, err
 	}
 	return &wh, mappings, nil
+}
+
+// GetWebhookConfigForUser is the shared operation behind the GetWebhook REST
+// handler: same auth+cross-app-scoping as GetWebhookForUser, but skips the
+// ListEventMappings query — webhookResponse (the REST shape) has no mappings
+// field, so fetching them there was a wasted round-trip only orbit_get_webhook's
+// combined response actually needs.
+func GetWebhookConfigForUser(ctx context.Context, pool *db.Pool, user *DashboardUser, appID, webhookID string) (*WebhookRow, error) {
+	wh, err := resolveManagedWebhook(ctx, pool, user, appID, webhookID)
+	if err != nil {
+		return nil, err
+	}
+	return &wh, nil
+}
+
+// resolveManagedWebhook is the shared GetApp+role.CanManage()+cross-app-scoped
+// webhook lookup every webhook read/write *ForUser function composes.
+func resolveManagedWebhook(ctx context.Context, pool *db.Pool, user *DashboardUser, appID, webhookID string) (WebhookRow, error) {
+	_, role, err := GetApp(ctx, pool, appID, user)
+	if err != nil {
+		return WebhookRow{}, err
+	}
+	if !role.CanManage() {
+		return WebhookRow{}, ErrForbidden
+	}
+	return GetWebhookByID(ctx, pool, appID, webhookID)
 }
 
 // ListWebhookDeliveriesForUser is the shared operation behind the
