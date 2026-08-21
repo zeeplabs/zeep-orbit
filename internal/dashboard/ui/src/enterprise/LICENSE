@@ -1,0 +1,9 @@
+This directory is governed by the Zeep Orbit Enterprise Source License, whose
+controlling text lives at internal/enterprise/LICENSE (English, controlling)
+and internal/enterprise/LICENSE.pt-BR.md (Portuguese translation, for
+convenience only). It is not licensed under the MIT License that applies to
+the rest of this repository.
+
+No enterprise frontend code exists in this directory yet. This file exists
+only to mark the license boundary ahead of that code being added, per the
+project's enterprise-licensing spec (.specs/features/enterprise-licensing/).
