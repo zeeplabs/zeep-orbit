@@ -1,0 +1,329 @@
+Zeep Orbit Enterprise Source License
+Version 1.0
+Intended Effective Date: August 21, 2026
+
+Copyright (c) 2026 JULIO AUGUSTO MORAIS DE SOUSA DESENVOLVIMENTO DE
+SOFTWARE LTDA. All rights reserved.
+
+This Zeep Orbit Enterprise Source License (the "License") is granted by JULIO
+AUGUSTO MORAIS DE SOUSA DESENVOLVIMENTO DE SOFTWARE LTDA, a Brazilian limited
+liability company registered under CNPJ No. 37.818.214/0001-80, registered
+trade name XPASS TECNOLOGY (the "Licensor").
+
+By exercising any right granted under this License, you accept and agree to
+be bound by its terms.
+
+1. Scope
+
+This License governs only source code expressly identified as enterprise code
+and contained in either of the following directories in the Zeep Orbit
+repository, together with modifications and derivative works of that code
+(collectively, the "Licensed Code"):
+
+- internal/enterprise/
+- internal/dashboard/ui/src/enterprise/
+
+The Licensed Code must also carry a license notice referring to this License.
+This License does not apply to the remainder of the Zeep Orbit repository,
+which remains governed by the MIT License found in the repository's root
+LICENSE file.
+
+If code is not located within a designated enterprise directory and does not
+carry an enterprise license notice, it is not Licensed Code under this License.
+
+2. Definitions
+
+"Affiliate" means an entity that controls, is controlled by, or is under
+common control with the Licensee.
+
+"Authorized Personnel" means the Licensee's employees and individual
+contractors who access the Licensed Code solely on the Licensee's behalf, are
+bound by confidentiality and use restrictions at least as protective as this
+License, and do not use the Licensed Code for their own or another customer's
+benefit.
+
+"Commercial Agreement" means the applicable Zeep Orbit Commercial
+Subscription Terms, order form, checkout terms, invoice, or other written
+commercial agreement accepted by the Licensee.
+
+"Competing Offering" means a product or service made available to third
+parties that substitutes for Zeep Orbit, offers Zeep Orbit itself as a hosted
+or managed service, or provides the same or substantially similar backend
+platform, BaaS, PaaS, administrative APIs, dashboard, or enterprise
+functionality as a commercial service.
+
+"Enterprise License Key" means an active cryptographically signed license key
+issued by the Licensor under a Commercial Agreement.
+
+"Reseller License Key" means an Enterprise License Key expressly designated
+by the Licensor, under a separate written Commercial Agreement covering
+resale or hosting rights, as authorizing the specific Competing Offering
+described in that Commercial Agreement. A standard Enterprise License Key
+issued for a Licensee's own internal use is not a Reseller License Key and
+does not authorize any activity described in Section 6.
+
+"Licensee" means the individual or single legal entity that acquired the
+applicable Enterprise License Key. Affiliates are not Licensees unless they
+separately acquire a key or are expressly included in an order form.
+
+"Non-Production Environment" means an environment used exclusively for
+internal evaluation, development, automated testing, continuous integration,
+staging, demonstration, or acceptance testing, and not used to provide live
+services or production workloads to end users or customers.
+
+"Production Environment" means any environment used to provide live services,
+process production workloads or data, support ordinary business operations, or
+make functionality available to end users or customers.
+
+3. Worldwide Grant for Non-Production Use
+
+Subject to this License, the Licensor grants the Licensee a worldwide,
+limited, non-exclusive, non-transferable, non-sublicensable, and terminable
+right to:
+
+a. view and study the Licensed Code;
+
+b. modify, compile, and test the Licensed Code solely in Non-Production
+   Environments; and
+
+c. prepare and submit contributions to the official Zeep Orbit repository,
+   subject to any contributor agreement required by the Licensor.
+
+No Enterprise License Key is required for the activities expressly permitted
+by this Section 3.
+
+4. Production Grant
+
+While the Licensee holds a valid Enterprise License Key, the Licensor grants
+the Licensee a worldwide, limited, non-exclusive, non-transferable,
+non-sublicensable, and terminable right to compile, install, deploy, and run the
+Licensed Code in Production Environments for the Licensee's own internal
+business operations and for software products or services operated by the
+Licensee that do not constitute a Competing Offering.
+
+Unless an order form expressly states otherwise, the Production Grant is not
+limited by number of users, seats, applications, projects, servers, clusters,
+instances, environments, or end users, provided every installation is owned or
+controlled by the same Licensee and complies with this License.
+
+The Licensed Code may be deployed on infrastructure located in any country,
+subject to applicable law, sanctions, export controls, and provider
+restrictions.
+
+5. Permitted Customer Products and Professional Services
+
+The Licensee may use Zeep Orbit, including the Licensed Code, as internal
+infrastructure to build and operate its own websites, applications, APIs, and
+software-as-a-service products. A product does not become a Competing Offering
+merely because it is a SaaS product that uses Zeep Orbit as an internal
+technology component.
+
+A contractor or service provider may install, configure, maintain, or operate
+Zeep Orbit solely on behalf of a Licensee that holds its own Enterprise License
+Key. The contractor or service provider may not reuse that key or installation
+for another customer.
+
+6. Prohibited Competitive Use
+
+The Licensee may not, directly or indirectly, unless expressly authorized by a
+Reseller License Key:
+
+a. make the Licensed Code or its enterprise functionality available as part
+   of a Competing Offering;
+
+b. offer Zeep Orbit hosting, managed Zeep Orbit, backend-as-a-service,
+   platform-as-a-service, white-label, OEM, resale, or substantially similar
+   services to third parties using the Licensed Code;
+
+c. allow third parties to create, administer, or operate their own independent
+   Orbit tenants, projects, or backend environments as customers of a hosted
+   or managed Orbit service; or
+
+d. use one Enterprise License Key to provide Zeep Orbit installations or
+   managed services to multiple independent customers.
+
+A standard Enterprise License Key issued for internal use never authorizes
+any activity in this Section 6. Any use that may reasonably constitute a
+Competing Offering requires a Reseller License Key issued under a separate
+written commercial agreement with the Licensor.
+
+7. Additional Restrictions
+
+Except as expressly permitted by this License, the Licensee may not:
+
+a. sell, sublicense, rent, lease, transfer, publish, distribute, or otherwise
+   make the Licensed Code or an Enterprise License Key available to any third
+   party;
+
+b. remove or alter copyright, attribution, or license notices;
+
+c. remove, disable, modify, bypass, or circumvent any license-verification or
+   enforcement mechanism;
+
+d. falsely represent that enterprise functionality is licensed, open source,
+   or authorized by the Licensor;
+
+e. use the Licensed Code in violation of applicable law; or
+
+f. enable an Affiliate to exercise rights under this License unless that
+   Affiliate is expressly covered by an order form.
+
+The Licensee may maintain internal backups and provide copies to Authorized
+Personnel. Public GitHub forks are permitted only to the extent necessary for
+non-production evaluation or contribution to the official project, must retain
+this License, and do not grant any Production or redistribution right.
+
+8. Modifications and Derivative Works
+
+The Licensee may own its original additions to the extent permitted by law,
+but every modification or derivative work containing or based on Licensed Code
+remains subject to this License. Creating a modification or derivative work
+does not expand the Licensee's rights or permit separate distribution,
+sublicensing, a Competing Offering, any Prohibited Competitive Use under
+Section 6, or Production Use without an active Enterprise License Key.
+
+Code that is independently created, does not contain Licensed Code, and is not
+a derivative work of Licensed Code is not governed by this License.
+
+9. License Key, Subscription, and Grace Period
+
+Enterprise License Keys are issued under a Commercial Agreement. Subscription
+term, price, billing, automatic renewal, cancellation, grace period, and other
+commercial conditions are governed by that Commercial Agreement. A Reseller
+License Key is issued under a distinct Commercial Agreement covering resale
+or hosting rights and does not share the terms of a standard Enterprise
+License Key unless that agreement says so.
+
+Signed metadata embedded in an Enterprise License Key implements and evidences
+the applicable Commercial Agreement but does not amend or supersede it.
+
+Unless a Commercial Agreement states otherwise, a seven-calendar-day grace
+period applies after a subscription expires or a renewal payment fails. During
+the grace period, Production Use may continue. After the grace period, the
+Production Grant automatically suspends until payment and key status are
+regularized.
+
+Suspension or expiration affects only enterprise functionality. It does not
+terminate MIT License rights for the rest of the repository and must not, by
+itself, delete Licensee data.
+
+10. Ownership
+
+The Licensed Code is licensed, not sold. The Licensor and its licensors retain
+all right, title, and interest in the Licensed Code, subject only to the rights
+expressly granted by this License. No implied rights are granted.
+
+11. Trademarks
+
+This License grants no right to use the names, trademarks, logos, or brand
+assets of Zeep Orbit, Zeep Tecnologia, Zeep Labs, XPASS TECNOLOGY, or the
+Licensor, except for accurate factual identification of the origin of the
+software.
+
+12. Updates and Support
+
+An active subscription provides access to enterprise releases and updates made
+generally available under the applicable Commercial Agreement. No service
+level agreement, dedicated support, maintenance commitment, or professional
+service is included unless expressly stated in an order form or separate
+written agreement.
+
+13. Suspension and Termination
+
+The Production Grant automatically suspends upon expiration or suspension of
+the corresponding Enterprise License Key. Rights expressly granted for
+Non-Production Use remain available unless this License is terminated for
+breach.
+
+The Licensor may terminate this License immediately for fraud, unauthorized
+key sharing, circumvention of license verification, prohibited redistribution,
+illegal use, sanctions requirements, or Prohibited Competitive Use under
+Section 6. For any
+other material breach, the Licensor may terminate if the Licensee fails to cure
+the breach within ten calendar days after written notice.
+
+Upon termination, the Licensee must stop all Production Use of the Licensed
+Code and delete Enterprise License Keys in its possession. Sections concerning
+restrictions, ownership, disclaimers, liability, governing law, and any accrued
+rights or obligations survive termination.
+
+14. Disclaimer of Warranties
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE LICENSED CODE IS
+PROVIDED "AS IS" AND "AS AVAILABLE," WITHOUT WARRANTIES OF ANY KIND, EXPRESS,
+IMPLIED, OR STATUTORY, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE, TITLE, NON-INFRINGEMENT, AVAILABILITY, SECURITY, OR
+ERROR-FREE OPERATION. THE LICENSOR DOES NOT WARRANT THAT THE LICENSED CODE WILL
+MEET THE LICENSEE'S REQUIREMENTS OR OPERATE WITHOUT INTERRUPTION OR DATA LOSS.
+
+MANDATORY WARRANTIES OR REMEDIES THAT CANNOT LAWFULLY BE EXCLUDED REMAIN
+UNAFFECTED.
+
+15. Limitation of Liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, NEITHER THE LICENSOR NOR ITS
+SUPPLIERS WILL BE LIABLE FOR INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
+PUNITIVE, OR CONSEQUENTIAL DAMAGES, OR FOR LOSS OF PROFITS, REVENUE, DATA,
+GOODWILL, BUSINESS OPPORTUNITY, OR BUSINESS INTERRUPTION, ARISING OUT OF OR
+RELATING TO THE LICENSED CODE OR THIS LICENSE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGES.
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE LICENSOR'S AGGREGATE
+LIABILITY ARISING OUT OF OR RELATING TO THE LICENSED CODE, THIS LICENSE, AND
+THE RELATED COMMERCIAL AGREEMENT WILL NOT EXCEED THE AMOUNTS ACTUALLY PAID BY
+THE LICENSEE FOR THE ENTERPRISE SUBSCRIPTION DURING THE TWELVE MONTHS
+IMMEDIATELY PRECEDING THE EVENT GIVING RISE TO LIABILITY.
+
+THESE LIMITATIONS DO NOT APPLY TO FRAUD, WILLFUL MISCONDUCT, GROSS NEGLIGENCE,
+OR LIABILITY THAT CANNOT LAWFULLY BE EXCLUDED OR LIMITED, INCLUDING MANDATORY
+CONSUMER RIGHTS.
+
+16. Compliance with Law
+
+This License is available worldwide, subject to applicable law, trade
+sanctions, export controls, payment-provider restrictions, and other mandatory
+legal requirements. The Licensee is responsible for laws applicable to its
+deployment, data, users, industry, and jurisdiction.
+
+17. Governing Law and Jurisdiction
+
+This License is governed by the laws of the Federative Republic of Brazil,
+without regard to conflict-of-law principles.
+
+Subject to mandatory jurisdiction and consumer-protection rights established
+by applicable law, disputes arising out of or relating to this License will be
+submitted to the courts of the Judicial District of Sao Paulo, State of Sao
+Paulo, Brazil, which has a direct connection with the Licensor's registered
+office.
+
+18. Language
+
+The official and controlling language of this License is English. A Portuguese
+translation may be provided for convenience. If the versions conflict, the
+English version controls, except to the extent mandatory law requires
+otherwise.
+
+19. Severability and No Waiver
+
+If any provision is held invalid or unenforceable, it will be enforced to the
+maximum extent permitted and the remaining provisions will remain effective.
+Failure to enforce a provision is not a waiver.
+
+20. Entire License and Order of Precedence
+
+This License governs intellectual-property and source-code usage rights for the
+Licensed Code. The Commercial Agreement governs commercial terms. If the two
+conflict, this License controls source-code and intellectual-property matters,
+while the Commercial Agreement controls pricing, billing, term, renewal,
+support, and other commercial matters. A signed order form may expressly grant
+additional rights.
+
+21. Contact
+
+Legal notices concerning this License may be sent to:
+
+JULIO AUGUSTO MORAIS DE SOUSA DESENVOLVIMENTO DE SOFTWARE LTDA
+Registered trade name: XPASS TECNOLOGY
+CNPJ: 37.818.214/0001-80
+Email: legal@zeeptecnologia.com.br
+Websites: https://zeeplabs.com.br and https://zeeptecnologia.com.br
