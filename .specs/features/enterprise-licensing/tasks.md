@@ -52,7 +52,7 @@ Fase 5: Frontend                          Fase 6: Licença do repositório
 
 ### T-01: `License` — tipos e `Verify` (Ed25519)
 
-- **What**: Struct `License` (`Org`, `Plan`, `Ref`, `Trial`, `IssuedAt`, `ExpiresAt *time.Time`, `RenewalDueAt *time.Time` — D-133/D-134: `ExpiresAt` já vem do `license-server` com os 7 dias de graça embutidos, `RenewalDueAt` é só a data real de cobrança pra exibição, nunca usada em lógica de gating), constantes `PlanOSS`/`PlanEnterprise`, função `Verify(key string) *License` que faz split/decode base64url, `ed25519.Verify` contra chave pública embutida, parse do JSON, checagem de `exp`. Nunca retorna erro fatal — qualquer falha de verificação retorna `License{Plan: PlanOSS}` e loga warning.
+- **What**: Struct `License` (`Org string` — UUID interno do license-server, não nome legível; `Product string` — SHALL ser `"orbit"`, payload de outro produto é inválido; `Plan`, `Ref`, `Trial`, `IssuedAt`, `ExpiresAt time.Time`, `RenewalDueAt time.Time` — D-133/D-134: `ExpiresAt` já vem do `license-server` com os 7 dias de graça embutidos, verificado contra a implementação real em 2026-08-21, `RenewalDueAt` é só a data real de cobrança pra exibição, nunca usada em lógica de gating), constantes `PlanOSS`/`PlanEnterprise`, função `Verify(key string) *License` que faz split/decode base64url, `ed25519.Verify` contra chave pública embutida, parse do JSON (campos `iat`/`exp`/`renewal_due_at` são Unix timestamp `int64`, não string ISO), checagem de `exp` e de `product == "orbit"`. Nunca retorna erro fatal — qualquer falha de verificação (incluindo `product` errado/ausente) retorna `License{Plan: PlanOSS}` e loga warning.
 - **Where**: `internal/enterprise/license/license.go`, `internal/enterprise/license/publickey.go`
 - **Depends on**: nenhuma
 - **Reuses**: nenhum (pacote novo)
@@ -112,14 +112,14 @@ Fase 5: Frontend                          Fase 6: Licença do repositório
 
 ### T-05: Refresh periódico de revogação (client do `license-server`)
 
-- **What**: Cliente HTTP simples (`net/http`, timeout curto, sem retry) para `GET {LICENSE_SERVER_URL}/v1/status?ref={ref}`; `StartRefresh(ctx, serverURL, interval)` roda em goroutine com `time.Ticker`, atualiza `State` só se `revoked: true`; qualquer erro de rede/timeout/5xx mantém o estado atual (fail-open, AC LIC-23).
+- **What**: Cliente HTTP simples (`net/http`, timeout curto, sem retry) para `GET {LICENSE_SERVER_URL}/v1/status?product=orbit&ref={ref}` (`product` obrigatório — contrato verificado contra a implementação real do `zeep-license-server` em 2026-08-21, ausente na versão original desta task); `StartRefresh(ctx, serverURL, interval)` roda em goroutine com `time.Ticker`, atualiza `State` só se `revoked: true`; resposta real também traz `expires_at` (ignorado por este MVP, ver design.md); qualquer erro de rede/timeout/5xx/404 mantém o estado atual (fail-open, AC LIC-23 — o servidor real não implementa fail-open nenhum, é responsabilidade só do client).
 - **Where**: `internal/enterprise/license/refresh.go`
 - **Depends on**: T-03, T-04 (para saber quando iniciar a goroutine)
 - **Reuses**: nenhum cliente HTTP genérico identificado no repo para reusar — `net/http.Client` direto, sem lib externa
-- **Requirement**: LIC-20, LIC-21, LIC-22, LIC-23, LIC-24
+- **Requirement**: LIC-20, LIC-21, LIC-22, LIC-23, LIC-24, LIC-25
 - **Tools**: nenhum — servidor de teste local (`httptest.Server`) simula `license-server` real e falso-fora-do-ar
-- **Done when**: revogação confirmada transiciona `State` para `PlanOSS` no ciclo seguinte; servidor fora do ar não altera nada; `LICENSE_SERVER_URL` vazio nunca dispara request
-- **Tests**: `httptest.Server` respondendo `revoked: true`, `revoked: false`, 500, timeout — 4 casos mínimos
+- **Done when**: revogação confirmada transiciona `State` para `PlanOSS` no ciclo seguinte; servidor fora do ar não altera nada; `LICENSE_SERVER_URL` vazio nunca dispara request; request sempre inclui `product=orbit`
+- **Tests**: `httptest.Server` respondendo `revoked: true`, `revoked: false`, 500, timeout, e um caso confirmando que a query string enviada inclui `product=orbit` — 5 casos mínimos
 - **Gate**: `go test ./internal/enterprise/... -run TestRefresh`
 - **Commit**: `feat(license): add optional revocation refresh against license-server` (T-05 sozinho)
 

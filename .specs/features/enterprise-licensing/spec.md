@@ -7,7 +7,7 @@ zeep-orbit hoje é 100% MIT, sem nenhum mecanismo de monetização embutido no c
 Esta feature cobre dois componentes:
 
 1. **Mecanismo de licenciamento no zeep-orbit** — verificação de license key, gating de features enterprise, UX de upgrade.
-2. **`license-server`** — serviço separado (repo próprio da Zeep Labs, fora do zeep-orbit) responsável por emitir, vender (Stripe) e revogar licenças. Descrito aqui em nível de design/contrato porque o zeep-orbit depende do formato de dados e do protocolo de revogação que ele expõe, mas sua implementação, deploy e testes pertencem a um spec próprio nesse outro repositório.
+2. **`license-server`** — serviço separado (repo próprio da Zeep Labs, `zeep-license-server`, fora do zeep-orbit — **já existe e está ~70-80% pronto pro escopo v1 dele**, auditado em 2026-08-21, ver D-211) responsável por emitir, vender (Stripe) e revogar licenças. Descrito aqui em nível de design/contrato porque o zeep-orbit depende do formato de dados e do protocolo de revogação que ele expõe, mas sua implementação, deploy e testes pertencem ao spec próprio desse outro repositório.
 
 Modelo de negócio: licença por **assinatura anual recorrente** via Stripe (D-133) — cobrança automática a cada 12 meses. Sem renovação (cancelamento, cartão recusado sem retry bem-sucedido), a licença expira e a instância perde acesso às features enterprise, voltando ao plano `oss` (estilo JetBrains). Sem cap numérico de seats/usuários/apps — o único eixo de restrição é *quais features* estão disponíveis por plano, e se a assinatura está em dia.
 
@@ -39,11 +39,11 @@ Modelo de negócio: licença por **assinatura anual recorrente** via Stripe (D-1
 
 | Assumption / decision | Chosen default | Rationale | Confirmed? |
 |---|---|---|---|
-| Texto legal da `LICENSE-ENTERPRISE`/`internal/enterprise/LICENSE` | Placeholder "DRAFT — pending legal review" até validação jurídica | D-088/D-132 marcam o texto como pendência jurídica bloqueante; nenhuma implementação de código depende do texto final, só T-11 (LICENSE) bloqueia publicação | y |
+| Texto legal da `LICENSE`/`internal/enterprise/LICENSE`/`COMMERCIAL_TERMS.md` | **Aprovado juridicamente e publicado** (D-209, 2026-08-21) — não é mais placeholder/draft | D-088/D-132 marcavam o texto como pendência jurídica bloqueante; usuário confirmou aprovação e removeu os avisos "DRAFT"/"PENDING LEGAL COUNSEL SIGN-OFF" dos 6 documentos. T-11 (LICENSE) já concluída, incluindo D-206 (Reseller License Key) e D-207/D-208 (titular/endereço) | y |
 | Modelo BSL avaliado para o zeep-orbit | Descartado — MIT+enclave (D-088) é o modelo correto | D-132: BSL trava só "hospedar como serviço competidor" (binário), não seletivo por feature; objetivo aqui é monetizar feature específica via license key paga | y |
 | Modelo comercial: vitalícia vs. TablePlus-style (perpétua+updates pagos) vs. assinatura anual real | Assinatura anual real, com trava ao expirar | D-133: usuário escolheu por motivo financeiro explícito (receita recorrente > pagamento único) | y |
-| Duração do período de graça após vencimento sem renovação | 7 dias antes de travar features enterprise | D-134: mitiga churn involuntário (cartão recusado) sem virar isenção permanente; prática comum de mercado — **não confirmado explicitamente pelo usuário, default aplicado** | n |
-| Onde a lógica de graça é aplicada | No `license-server` (embute `exp` = fim do período pago + 7 dias na própria key), não no zeep-orbit | Mantém o mecanismo de verificação offline do zeep-orbit inalterado (D-089) — zero campo novo de "grace" pra verificar, só o `exp` já existente | y |
+| Duração do período de graça após vencimento sem renovação | 7 dias antes de travar features enterprise | D-134: mitiga churn involuntário (cartão recusado) sem virar isenção permanente; prática comum de mercado. **Confirmado na prática em 2026-08-21**: auditoria do `zeep-license-server` achou a lógica implementada ao contrário (sem graça real); corrigido no próprio servidor (D-211) pra bater com esta suposição | y |
+| Onde a lógica de graça é aplicada | No `license-server` (embute `exp` = fim do período pago + 7 dias na própria key), não no zeep-orbit | Mantém o mecanismo de verificação offline do zeep-orbit inalterado (D-089) — zero campo novo de "grace" pra verificar, só o `exp` já existente. **Verificado e corrigido no servidor real em 2026-08-21** (D-211) — antes disso `renewal_due_at` era `exp - 7 dias` (aviso, não folga) e a renovação não somava graça nenhuma | y |
 | Campo `renewal_due_at` no payload, distinto de `exp` | Adicionado — `exp` é o corte duro (já com graça embutida), `renewal_due_at` é a data real de cobrança, usado só para exibição de aviso na UI | Sem esse campo, a UI teria que reverse-engineer a data de cobrança real a partir do `exp` com graça, ou mostraria o aviso 7 dias tarde demais | y |
 | Rotação de chave pública/privada Ed25519 | Manual — nova chave pública embutida em release, chaves antigas continuam válidas até deprecação documentada | Fora de escopo automatizar rotação no MVP; ver Out of Scope | y |
 | Qual feature concreta é a primeira gateada como enterprise | Nenhuma — mecanismo nasce genérico/vazio (T-01/T-02/T-03) | D-093: usuário pediu mecanismo extensível, não lista fixa agora; Observability Integrations (Datadog/New Relic, D-095) é candidata natural mas fica pra spec futuro separado | y |
@@ -103,10 +103,11 @@ Modelo de negócio: licença por **assinatura anual recorrente** via Stripe (D-1
 **Acceptance Criteria**:
 
 1. WHEN `LICENSE_SERVER_URL` está configurado THEN o sistema SHALL consultar periodicamente (intervalo configurável, default diário) se o `ref` da licença ativa consta como revogado.
-2. WHEN a consulta confirma que a licença foi revogada THEN o sistema SHALL transicionar o plano ativo para `oss` a partir do próximo ciclo, sem reiniciar o processo e sem perda de dados do cliente.
-3. WHEN o `license-server` está inacessível durante a consulta (timeout, erro de rede, 5xx) THEN o sistema SHALL manter o último estado de licença válido conhecido, sem penalizar o cliente pela indisponibilidade do servidor da Zeep Labs.
-4. WHEN `LICENSE_SERVER_URL` não está configurado (vazio) THEN o sistema SHALL operar apenas com verificação offline (User Story 1), sem nenhuma tentativa de rede.
-5. A consulta de revogação SHALL rodar em goroutine própria, sem bloquear requisições HTTP em andamento.
+2. A consulta SHALL incluir `product=orbit` como query param, além de `ref` (`GET /v1/status?product=orbit&ref={ref}`) — o `license-server` real atende múltiplos produtos e rejeita (404) uma consulta sem `product` identificável; requisito ausente na versão original deste AC, adicionado 2026-08-21 ao verificar a implementação real.
+3. WHEN a consulta confirma que a licença foi revogada THEN o sistema SHALL transicionar o plano ativo para `oss` a partir do próximo ciclo, sem reiniciar o processo e sem perda de dados do cliente.
+4. WHEN o `license-server` está inacessível durante a consulta (timeout, erro de rede, 5xx) THEN o sistema SHALL manter o último estado de licença válido conhecido, sem penalizar o cliente pela indisponibilidade do servidor da Zeep Labs. Esse fail-open é responsabilidade do zeep-orbit — o `license-server` real não implementa nenhuma lógica de graça no endpoint de status, só devolve o estado atual do registro.
+5. WHEN `LICENSE_SERVER_URL` não está configurado (vazio) THEN o sistema SHALL operar apenas com verificação offline (User Story 1), sem nenhuma tentativa de rede.
+6. A consulta de revogação SHALL rodar em goroutine própria, sem bloquear requisições HTTP em andamento.
 
 **Independent Test**: Simular `license-server` de teste que responde "revogado" para um `ref` específico; confirmar que a instância transiciona para `oss` no ciclo seguinte; simular servidor fora do ar e confirmar que o plano anterior é mantido.
 
@@ -120,7 +121,7 @@ Modelo de negócio: licença por **assinatura anual recorrente** via Stripe (D-1
 
 **Acceptance Criteria**:
 
-1. O payload da license key SHALL conter, no mínimo: `org` (identificador do comprador), `plan`, `iat` (data de emissão), `exp` (data de expiração — corte duro, já incluindo os 7 dias de graça de D-134), `renewal_due_at` (data real de cobrança/vencimento da assinatura, usada só para exibição de aviso), `trial` (bool), `ref` (identificador único da licença, usado para revogação).
+1. O payload da license key SHALL conter, no mínimo: `org` (identificador do comprador — UUID interno do `license-server`, não nome legível), `product` (slug do produto no `license-server`, SHALL ser `"orbit"` — o servidor real atende múltiplos produtos), `plan`, `iat` (data de emissão, Unix timestamp inteiro), `exp` (data de expiração — corte duro, já incluindo os 7 dias de graça de D-134, Unix timestamp inteiro), `renewal_due_at` (data real de cobrança/vencimento da assinatura, usada só para exibição de aviso, Unix timestamp inteiro), `trial` (bool), `ref` (identificador único da licença, UUID, usado para revogação). Contrato verificado contra a implementação real do `zeep-license-server` em 2026-08-21 — `product` e o formato Unix (não ISO 8601) não estavam na versão original deste AC.
 2. WHEN o `license-server` confirma a primeira assinatura via webhook do Stripe (`checkout.session.completed`, modo `subscription`) THEN ele SHALL gerar e assinar a license key correspondente e disponibilizá-la ao comprador (e-mail e/ou portal).
 3. WHEN o `license-server` recebe `invoice.payment_succeeded` numa renovação anual THEN ele SHALL emitir e disponibilizar uma nova license key com `exp`/`renewal_due_at` avançados em 1 ano.
 4. WHEN a assinatura é cancelada ou uma cobrança falha sem retry bem-sucedido dentro da janela do Stripe (`customer.subscription.deleted` ou `invoice.payment_failed` esgotado) THEN o `license-server` SHALL NOT emitir nova key — a key vigente expira normalmente no seu próprio `exp` (já com graça embutida), sem necessidade de revogação ativa.
@@ -160,6 +161,7 @@ Modelo de negócio: licença por **assinatura anual recorrente** via Stripe (D-1
 | LIC-15 | P1: Gating de features | Design | Pending |
 | LIC-16 | P1: Gating de features (aviso de renovação) | Design | Pending |
 | LIC-20 | P2: Revogação | Design | Pending |
+| LIC-25 | P2: Revogação (query param `product`) | Design | Pending |
 | LIC-21 | P2: Revogação | Design | Pending |
 | LIC-22 | P2: Revogação | Design | Pending |
 | LIC-23 | P2: Revogação | Design | Pending |
@@ -173,7 +175,7 @@ Modelo de negócio: licença por **assinatura anual recorrente** via Stripe (D-1
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 24 total, 0 mapeados a tasks, 24 não mapeados ⚠️ (mapeamento acontece na fase Tasks)
+**Coverage:** 25 total, 0 mapeados a tasks, 25 não mapeados ⚠️ (mapeamento acontece na fase Tasks)
 
 ---
 
