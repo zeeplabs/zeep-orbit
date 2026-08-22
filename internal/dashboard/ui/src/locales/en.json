@@ -845,6 +845,8 @@
   "dataBrowser.appsLabel": "Apps",
   "dataBrowser.columnsCount": "{{count}} columns",
   "dataBrowser.columnPlaceholder": "Column...",
+  "dataBrowser.simpleMode": "Simple view",
+  "dataBrowser.advancedMode": "Advanced view",
   "nav.more": "More",
   "theme.dark": "Dark theme",
   "theme.light": "Light theme",

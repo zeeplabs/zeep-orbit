@@ -59,7 +59,7 @@ type Row = Record<string, unknown>;
 export default function DataBrowserPage() {
   const { t } = useTranslation();
   const filterOps = filterOperators(t);
-  const [collapsedApps, setCollapsedApps] = useState<Set<string>>(new Set());
+  const [expandedApps, setExpandedApps] = useState<Set<string>>(new Set());
   const [selectedTable, setSelectedTable] = useState<{
     app: string;
     table: string;
@@ -75,6 +75,7 @@ export default function DataBrowserPage() {
   const [draftOp, setDraftOp] = useState("eq");
   const [draftValue, setDraftValue] = useState("");
   const [isExporting, setIsExporting] = useState(false);
+  const [simpleMode, setSimpleMode] = useState(true);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingRow, setEditingRow] = useState<Row | null>(null);
@@ -106,7 +107,7 @@ export default function DataBrowserPage() {
   const deleteRow = useDeleteDataBrowserRow();
 
   const toggleApp = (name: string) => {
-    setCollapsedApps((prev) => {
+    setExpandedApps((prev) => {
       const next = new Set(prev);
       if (next.has(name)) next.delete(name);
       else next.add(name);
@@ -250,6 +251,7 @@ export default function DataBrowserPage() {
   };
 
   const columns = selectedTable?.columns || [];
+  const visibleColumns = simpleMode ? columns.filter((col) => !systemDisplayColumns.has(col.name)) : columns;
   const data: Row[] = queryResult?.data || [];
   const totalCount = queryResult?.count || 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / limit));
@@ -260,7 +262,7 @@ export default function DataBrowserPage() {
     ? { key: sortOrder.split(".")[0], dir: (sortOrder.endsWith(".desc") ? "desc" : "asc") as SortDir }
     : undefined;
 
-  const tableColumns: Column<Row>[] = columns.map((col) => ({
+  const tableColumns: Column<Row>[] = visibleColumns.map((col) => ({
     key: col.name,
     sortable: true,
     className: "max-w-[260px] normal-case font-normal",
@@ -274,7 +276,7 @@ export default function DataBrowserPage() {
           className="block max-w-[260px] truncate"
           style={{
             fontFamily: isId ? "var(--font-mono)" : undefined,
-            fontSize: isId ? 12 : undefined,
+            fontSize: isId ? 12 : 13,
             color: isNull ? "var(--text-tertiary)" : col.name === "id" ? "var(--text-tertiary)" : undefined,
             fontStyle: isNull ? "italic" : undefined,
           }}
@@ -296,7 +298,7 @@ export default function DataBrowserPage() {
         ) : (
           <div className="flex flex-col gap-3">
             {(apps || []).map((app) => {
-              const isCollapsed = collapsedApps.has(app.name);
+              const isCollapsed = !expandedApps.has(app.name);
               return (
                 <div key={app.name} className="flex flex-col gap-0.5">
                   <button
@@ -349,10 +351,19 @@ export default function DataBrowserPage() {
               <div className="flex items-baseline gap-2 text-[var(--text-primary)]">
                 <span className="text-lg font-bold">{selectedTable.table}</span>
                 <span className="text-xs text-[var(--text-tertiary)]">
-                  {t("dataBrowser.columnsCount", { count: columns.length })}
+                  {t("dataBrowser.columnsCount", { count: visibleColumns.length })}
                 </span>
               </div>
               <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={cn("gap-1.5", !simpleMode && "border-[var(--primary)] text-[var(--primary)]")}
+                  onClick={() => setSimpleMode((v) => !v)}
+                >
+                  <Icon name={simpleMode ? "toggle_off" : "toggle_on"} size={15} />
+                  {simpleMode ? t("dataBrowser.simpleMode") : t("dataBrowser.advancedMode")}
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -384,7 +395,7 @@ export default function DataBrowserPage() {
               </div>
             </div>
 
-            {showFilters && columns.length > 0 && (
+            {showFilters && visibleColumns.length > 0 && (
               <div className="flex flex-col gap-3 rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <Select value={draftCol} onValueChange={setDraftCol}>
@@ -392,7 +403,7 @@ export default function DataBrowserPage() {
                       <SelectValue placeholder={t("dataBrowser.columnPlaceholder")} />
                     </SelectTrigger>
                     <SelectContent>
-                      {columns.map((col) => (
+                      {visibleColumns.map((col) => (
                         <SelectItem key={col.name} value={col.name}>{col.name}</SelectItem>
                       ))}
                     </SelectContent>

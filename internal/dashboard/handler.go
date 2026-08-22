@@ -12,6 +12,7 @@ import (
 	"net/mail"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -2249,6 +2250,7 @@ func (h *Handler) ListDataBrowserApps(w http.ResponseWriter, r *http.Request) {
 
 			tables = append(tables, DataBrowserTable{Name: t.Name, Columns: cols, Count: count})
 		}
+		sort.Slice(tables, func(i, j int) bool { return tables[i].Name < tables[j].Name })
 		resp = append(resp, DataBrowserApp{Name: app.Config.Name, Tables: tables})
 	}
 
