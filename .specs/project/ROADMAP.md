@@ -24,7 +24,8 @@ Features:
 
 - [x] TypeScript SDK (`@zeeptech/orbit-client`) — plus Go, Python, Rust, Java, PHP clients, all published
 - [ ] Official prompt snippets for Claude Code / Cursor / Lovable
-- [ ] MCP server for zeep-orbit operations
+- [x] MCP server for zeep-orbit operations — spec: `.specs/features/mcp-server/`, `.specs/features/mcp-read-only-tools/`, `.specs/features/mcp-safe-mutation-tools/` (todas as tasks concluídas)
+- [ ] MCP settings page (gerenciar tokens/OAuth clients pela UI) — spec: `.specs/features/mcp-settings-page/` (só spec/validation, sem `tasks.md`)
 - [x] Table relationships (foreign keys) and indexes in schema builder (backend) — spec: `.specs/features/schema-relationships-and-indexes/`
 - [ ] Table relationships (foreign keys) and indexes in Dashboard UI — spec: `.specs/features/dashboard-relationships-ui/`
 - [x] Web dashboard (app catalog, schema viewer, logs, data browser, SDKs page, API tab)
@@ -44,6 +45,7 @@ Features:
 - [x] Deploy provider integration (Render) — spec: `.specs/features/deploy-provider-integration/`
 - [x] Custom domains
 - [x] Local repo sync — spec: `.specs/features/sync-local-repo/`
+- [ ] Frontend app ZIP import (subir app existente como ZIP em vez de partir de template) — spec: `.specs/features/frontend-app-zip-import/` (design pronto, tasks.md não iniciado)
 
 ---
 
@@ -64,7 +66,8 @@ Features:
 
 - [x] File storage per app (S3/MinIO compatible)
 - [x] Signed upload/download URLs
-- [ ] Webhook support (on insert/update/delete)
+- [x] Inbound webhooks (receber payload externo, mapear pra tabela) — spec: `.specs/features/inbound-webhooks/`
+- [ ] Outbound webhook support (notificar externo on insert/update/delete) — zero spec ainda, não confundir com inbound acima
 - [ ] Event bus integration
 
 ---
