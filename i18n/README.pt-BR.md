@@ -665,7 +665,21 @@ Veja [CONTRIBUTING.md](../CONTRIBUTING.md). Toda contribuição é bem-vinda —
 
 ## 📄 Licença
 
-MIT — veja [LICENSE](../LICENSE).
+O Zeep Orbit usa um modelo de licença dupla. O núcleo (todo o repositório,
+exceto os diretórios enterprise abaixo) é **MIT** — veja [LICENSE](../LICENSE).
+
+O código em `internal/enterprise/` e seu espelho de frontend
+`internal/dashboard/ui/src/enterprise/` é source-available sob a
+[Zeep Orbit Enterprise Source License](../internal/enterprise/LICENSE):
+livre para ler, estudar e modificar, mas uso em produção exige uma Chave de
+Licença Enterprise ativa. Veja [LICENSING.md](../LICENSING.md) para o
+overview do modelo, [docs/docs/enterprise-licensing.md](../docs/docs/enterprise-licensing.md)
+para uma explicação orientada a produto, e [COMMERCIAL_TERMS.md](../COMMERCIAL_TERMS.md)
+para os termos de assinatura.
+
+Nenhuma feature enterprise existe ainda — isso só estabelece o limite de
+licença antes do próprio mecanismo de licenciamento enterprise
+([spec](../.specs/features/enterprise-licensing/)).
 
 ---
 
