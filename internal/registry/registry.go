@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -128,6 +129,7 @@ func (r *Registry) Apps() []*App {
 		result = append(result, app)
 	}
 	r.mu.RUnlock()
+	sort.Slice(result, func(i, j int) bool { return result[i].Config.Name < result[j].Config.Name })
 	return result
 }
 
