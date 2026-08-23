@@ -239,12 +239,12 @@ T10 -> T11 -> T12
 - Skill: NONE
 
 **Done when**:
-- [ ] Clarifying-question turn persists a plain message with no `plan_json`
-- [ ] Each of the 6 tool-call shapes results in a message with the correct `EditOp` persisted
-- [ ] Off-topic input is declined per the ported guard, matching the creation flow's existing off-topic test pattern
-- [ ] Model/network failure surfaces the same generic error used by `ai-build-chat`, session stays `in_progress`
-- [ ] At least one test asserts the actual `tools` array sent to the mocked model call includes the edit-mode schemas (closes lesson `L-026` from `ai-build-chat`, applied proactively here)
-- [ ] Gate passes: `go build ./... && go test ./internal/dashboard/... && go vet ./... && gofmt -l internal/dashboard/ai_edit_chat_handlers.go`
+- [x] Clarifying-question turn persists a plain message with no `plan_json`
+- [x] Each of the 6 tool-call shapes results in a message with the correct `EditOp` persisted
+- [x] Off-topic input is declined per the ported guard, matching the creation flow's existing off-topic test pattern
+- [x] Model/network failure surfaces the same generic error used by `ai-build-chat`, session stays `in_progress`
+- [x] At least one test asserts the actual `tools` array sent to the mocked model call includes the edit-mode schemas (closes lesson `L-026` from `ai-build-chat`, applied proactively here)
+- [x] Gate passes: `go build ./... && go test ./internal/dashboard/... && go vet ./... && gofmt -l internal/dashboard/ai_edit_chat_handlers.go`
 
 **Tests**: unit
 **Gate**: quick
