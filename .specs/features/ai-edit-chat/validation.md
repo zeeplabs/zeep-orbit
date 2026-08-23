@@ -60,7 +60,7 @@ Isolated scratch: `git worktree add /tmp/zeep-orbit-verifier-scratch HEAD` (neve
 | 4 | `internal/dashboard/ai_edit_chat_handlers.go:237` (`EditChatConfirm`) | `if session.Status != "in_progress"` → `if false && session.Status != "in_progress"`, so confirming against an `abandoned`/`completed` session no longer gets rejected | ❌ **Survived** — full `go test ./internal/dashboard/...` suite (134s) passes unchanged with this mutation in place |
 
 **Sensor depth**: lightweight (4 targeted mutations, standard-risk feature; not P0/critical-path)
-**Result**: 3/4 killed — ❌ FAIL (a surviving mutant blocks a clean verdict per the skill's rule: "do not mark the feature done if the sensor found weak tests")
+**Round 1 sensor tally**: 3/4 killed — mutant 4 survived at this point, blocking a clean verdict per the skill's rule: "do not mark the feature done if the sensor found weak tests" (see Round 2 below for the re-run that closes this)
 
 Mutation 4 points at a real, narrow gap: no test ever confirms `EditChatConfirm` rejects a session that isn't `in_progress` (e.g., already `abandoned` via restart, or a stale client retrying against an old session). The guard code is almost certainly correct — it's a one-line status comparison identical in shape to guards tested elsewhere in this codebase — but nothing in this feature's test suite would catch someone accidentally deleting or inverting it in a future change.
 
@@ -195,7 +195,7 @@ A second instance of the same mislabeling pattern exists in test comments: `ai_e
 | AIEC-15 | Implementing | ⚠️ Verified (spec-precision gap, accepted) |
 | AIEC-16 | Implementing | ✅ Verified |
 | AIEC-17 | Implementing | ✅ Verified |
-| AIEC-18 | Implementing | ❌ Needs Fix |
+| AIEC-18 | Implementing | ✅ Verified (round 2) |
 
 ---
 
@@ -215,3 +215,75 @@ A second instance of the same mislabeling pattern exists in test comments: `ai_e
 3. Cosmetic AIEC mislabeling in `tasks.md` and one test comment — Fix 3
 
 **Next steps**: route Fix 1 and Fix 2 to an implementer as fix tasks (both are additive test-only changes, no production code implicated); apply Fix 3's comment corrections in the same pass. Re-run this Verifier after both land — expect a clean PASS at that point, since no design or handler-level change is required.
+
+---
+
+## Round 2 — Independent re-verification of commit `a4d2d6a`
+
+**Date**: 2026-08-23
+**Diff range under review**: `2630481..a4d2d6a` (the fix commit only; round 1's `2a11764..2630481` stands unchanged)
+**Verifier**: independent sub-agent (author ≠ verifier, fresh session — did not trust the commit message, re-derived every claim from the code and a live test run)
+
+### Overall Verdict: ✅ PASS
+
+Both round-1 gaps are genuinely closed. `TestEditChatConfirm_NonexistentTableSurfacesNotFound` and `TestEditChatConfirm_AbandonedSessionRejected` each assert the exact spec-defined outcome, not a looser one. The round-1 sensor's surviving mutant (mutation 4) was reapplied byte-for-byte in an isolated worktree and is now killed by the new test. The two AIEC-16 mislabel corrections landed as described, file:line-verified. Full gate re-run clean for every ai-edit-chat-relevant package.
+
+### 1. New test assertions — verified genuine, not loosened
+
+- `TestEditChatConfirm_NonexistentTableSurfacesNotFound` (`internal/dashboard/ai_edit_chat_handlers_test.go:679-708`): persists an `add_column` op against table `does_not_exist`, calls `EditChatConfirm`, asserts `w.Code == http.StatusNotFound` (line 697-699) **and** reloads the session via `loadOwnedEditChatSession` to assert `finalSession.Status == "in_progress"` (line 705-707). This is exactly AIEC-18's spec-defined outcome (404 + session unchanged) — not a substring/error-message-only check, not a skipped session-state assertion.
+- `TestEditChatConfirm_AbandonedSessionRejected` (`internal/dashboard/ai_edit_chat_handlers_test.go:714-760`): creates a table, persists a pending `add_column` op, calls `AbandonAndRestartEditSession` to drive the original session to `abandoned`, then confirms against that now-abandoned session ID. Asserts `w.Code == http.StatusBadRequest` (line 742-744) **and** re-reads the live schema via `GetAppSchemaForUser` to assert the `email` column was never actually added (line 750-759, `t.Fatalf` if found). This proves both the HTTP-level rejection and "no mutation applied" — matches the fix plan's stated target exactly.
+
+Neither test is a rubber-stamp: both re-read persisted state after the handler call rather than trusting only the HTTP status code.
+
+### 2. Discrimination sensor re-run — mutation 4 confirmed killed
+
+Per AGENTS.md's git-safety rules and the skill's isolated-worktree convention, used `git worktree add`, never `git stash`.
+
+- Verified the exact mutation site first: `internal/dashboard/ai_edit_chat_handlers.go:237` reads `if session.Status != "in_progress" {` — matches round 1's citation precisely.
+- Created `git worktree add /tmp/zeep-orbit-verifier-scratch2 HEAD` (HEAD = `a4d2d6a`).
+- Applied the identical round-1 mutation: `if session.Status != "in_progress"` → `if false && session.Status != "in_progress"`.
+- Copied the gitignored `internal/dashboard/static/` build output from the real tree into the scratch worktree (required for `go:embed` in `embed.go` to compile — the worktree has no build artifacts of its own; this is a build-environment necessity, not a code change).
+- Ran `go test -p 1 ./internal/dashboard/... -run 'TestEditChatConfirm_AbandonedSessionRejected' -v`:
+  ```
+  --- FAIL: TestEditChatConfirm_AbandonedSessionRejected (1.08s)
+      ai_edit_chat_handlers_test.go:743: expected 400 for a confirm against an abandoned session, got 200: {"applied":true,...,"columns":[{"name":"name",...},{"name":"email",...}]}
+  ```
+  The mutant is killed: with the guard disabled, the confirm call now returns 200 and the JSON body shows the `email` column was actually applied against the abandoned session — exactly the failure mode the guard exists to prevent.
+- Removed the scratch worktree: `git worktree remove /tmp/zeep-orbit-verifier-scratch2 --force` + `rm -rf`.
+- `git status --porcelain` in the real tree: empty both before and after the sensor work (this session started from a fully clean tree, unlike round 1 which had one unrelated pre-existing `M .specs/STATE.md`) — confirms the sensor work left no trace and `git worktree list` shows only the main worktree afterward.
+
+**Result**: 4/4 mutations now killed — ✅ PASS (3 already killed in round 1 + mutation 4 killed by the new test). No new mutation probed this round — round 1's 4-mutation set was already declared complete depth for a standard-risk feature.
+
+### 3. Full gate re-run
+
+- `go build ./...`: ✅ clean, no output.
+- `go vet ./...`: ✅ clean, no output.
+- `gofmt -l $(git diff --name-only 2a11764..HEAD -- '*.go')`: ✅ clean, no files listed.
+- `go test -p 1 ./internal/dashboard/... ./internal/dashboard/ai/... ./internal/mcpserver/...`:
+  - `internal/dashboard`: ✅ PASS (re-ran with `-count=1` to bypass cache, confirmed exit code 0 — includes both new tests)
+  - `internal/dashboard/ai`: ✅ PASS
+  - `internal/mcpserver`: ❌ FAIL, but the failure list is identical in *kind* to round 1's documented environmental failures — every failing test is a webhook test (`TestOrbitCreateWebhook_CreatesWebhookForManager`, `TestOrbitSaveWebhookEventMapping_*` ×6, `TestOrbitListWebhooks_ReturnsWebhooksForManager`, `TestOrbitGetWebhook_*` ×2, `TestOrbitListWebhookDeliveries_*` ×2), all failing on the same root cause round 1 identified: `crypto: neither WEBHOOK_TOKEN_ENCRYPTION_KEY nor DASHBOARD_BOOTSTRAP_SECRET is set` in this environment. Grepped the full failure list for `editchat|updateapp|orbit_update_app`: zero matches. The failure set has not grown to touch anything in this commit's diff (`ai_edit_chat_handlers_test.go`, `tasks.md`, `.specs/*`) — it remains fully isolated to `internal/mcpserver`'s webhook tests, confirming round 1's "environmental, predating this feature" finding still holds.
+- Frontend/i18n gates were not re-run this round (this commit touches zero frontend/i18n files — `git show --stat a4d2d6a` confirms only `.go`, `.md`, and `.json` (STATE/LESSONS/lessons.json) files changed); round 1's frontend PASS stands unchanged since nothing frontend-relevant landed since.
+
+### 4. AIEC-16 mislabel corrections — verified landed
+
+- `tasks.md:274` — Done-when for T8 now reads: *"Double-confirm on an already-applied operation is a no-op, not a duplicate mutation (design.md Error Handling Strategy — a design-level guarantee, not a spec.md AC; AIEC-16 is the separate 'Recomeçar' edge case, covered by T9)"*. This matches Judgment Call 2's recommendation exactly — cites the design-decision rationale instead of a wrong AIEC number.
+- `internal/dashboard/ai_edit_chat_handlers_test.go:213` — the comment on `TestEditChatTurn_ModelFailureReturnsGenericMessage` now reads `// AIEC-14 (mirrors AIBC-16): a model-call failure returns the fixed...` — corrected from the round-1-flagged "AIEC-18" to "AIEC-14", matching spec.md's actual edge-case ordering.
+
+Both are file:line-checked against the live file content, not inferred from the commit message.
+
+### Requirement Traceability Update
+
+| Requirement | Round 1 Status | Round 2 Status |
+| --- | --- | --- |
+| AIEC-18 | ❌ Needs Fix | ✅ Verified |
+
+All other AIEC-01..17 rows are unchanged from round 1's table above (this commit touched no production code for any other requirement).
+
+### Completion gate script
+
+Ran `python3 /Users/juliosousa/.cache/agent-skills/skills/tlc-spec-driven/scripts/validate_state.py ai-edit-chat` — see terminal output captured alongside this report; gate passed for the `ai-edit-chat` feature state.
+
+### Summary
+
+**Overall**: ✅ Ready. Both round-1 gaps (AIEC-18 zero coverage; surviving mutation 4) are closed by genuine, spec-anchored tests — independently re-verified by re-deriving the assertions from the test file and by physically reapplying and killing the exact mutation in an isolated worktree, not by trusting the commit message. Gate is clean; pre-existing webhook-test failures remain isolated and unrelated. No new issues found.
