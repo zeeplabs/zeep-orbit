@@ -236,12 +236,12 @@ T10 -> T12
 
 **Done when**:
 
-- [ ] `GetOrCreateInProgressSession` resumes an existing `in_progress` session for the user, or creates one, per AIBC-07/08
-- [ ] `AbandonAndRestartSession` sets the old session to `abandoned` and creates a new `in_progress` one, preserving old messages (AIBC-09)
-- [ ] `SetSessionCreatedApp` is callable independently of `CompleteSession` (supports the partial-failure requirement, AIBC-22)
-- [ ] Sessions/messages are scoped to `owner_user_id` — a different user's query returns nothing (AIBC-11)
-- [ ] Full gate passes: `go build ./... && go vet ./... && go test ./...`
-- [ ] Test count: at least 6 new tests (resume existing, create new, restart preserves history, scoping enforcement, complete sets status+app id, set-created-app-id independent of complete) pass
+- [x] `GetOrCreateInProgressSession` resumes an existing `in_progress` session for the user, or creates one, per AIBC-07/08
+- [x] `AbandonAndRestartSession` sets the old session to `abandoned` and creates a new `in_progress` one, preserving old messages (AIBC-09)
+- [x] `SetSessionCreatedApp` is callable independently of `CompleteSession` (supports the partial-failure requirement, AIBC-22)
+- [x] Sessions/messages are scoped to `owner_user_id` — a different user's query returns nothing (AIBC-11)
+- [x] Full gate passes: `go build ./... && go vet ./... && go test ./...` (see T3 note on pre-existing env gap for the unrelated webhook/OAuth suite; all 6 new session-store tests pass)
+- [x] Test count: at least 6 new tests (resume existing, create new, restart preserves history, scoping enforcement, complete sets status+app id, set-created-app-id independent of complete) pass
 
 **Tests**: integration
 **Gate**: full
