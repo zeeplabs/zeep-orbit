@@ -607,6 +607,21 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS ai_build_messages_session_idx
 		 ON zeep_system.ai_build_messages (session_id, created_at)`,
+		// mode/target_app_id (ai-edit-chat spec, T1) let one row on
+		// ai_build_sessions represent either a "create" session (mode's
+		// default, target_app_id stays NULL) or an "edit" session scoped to
+		// an existing app (target_app_id populated at creation). Additive
+		// only — created_app_id above is untouched and stays create-mode-only.
+		`ALTER TABLE zeep_system.ai_build_sessions ADD COLUMN IF NOT EXISTS mode TEXT NOT NULL DEFAULT 'create'`,
+		`ALTER TABLE zeep_system.ai_build_sessions ADD COLUMN IF NOT EXISTS target_app_id UUID REFERENCES zeep_system.apps(id)`,
+		// One in_progress edit session per (owner_user_id, target_app_id) —
+		// enforced at the database level, not just in application code, so a
+		// race between two concurrent "Edit with AI" opens for the same
+		// (user, app) can't create two in_progress rows (design.md Data
+		// Models).
+		`CREATE UNIQUE INDEX IF NOT EXISTS ai_build_sessions_edit_in_progress_uidx
+		 ON zeep_system.ai_build_sessions (owner_user_id, target_app_id)
+		 WHERE mode = 'edit' AND status = 'in_progress'`,
 	}
 
 	for _, stmt := range stmts {

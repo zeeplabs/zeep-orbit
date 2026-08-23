@@ -94,9 +94,9 @@ T10 -> T11 -> T12
 - Skill: NONE
 
 **Done when**:
-- [ ] Statements appended, each idempotent (`IF NOT EXISTS`)
-- [ ] Comment explains the new columns' purpose, matching the file's existing comment style
-- [ ] `go build ./...` passes
+- [x] Statements appended, each idempotent (`IF NOT EXISTS`)
+- [x] Comment explains the new columns' purpose, matching the file's existing comment style
+- [x] `go build ./...` passes
 
 **Tests**: none
 **Gate**: build
