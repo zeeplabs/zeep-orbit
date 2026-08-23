@@ -141,10 +141,10 @@ T10 -> T11 -> T12
 - Skill: NONE
 
 **Done when**:
-- [ ] `CanWrite()` denial returns an authorization error before the store is touched
-- [ ] Success path updates `auth_email_enabled` and writes an audit entry with the passed `origin`
-- [ ] Unit tests: success, RBAC-denied, store-error paths
-- [ ] Gate passes: `go build ./... && go test ./internal/dashboard/... && go vet ./... && gofmt -l internal/dashboard/handler.go`
+- [x] `CanWrite()` denial returns an authorization error before the store is touched
+- [x] Success path updates `auth_email_enabled` and writes an audit entry with the passed `origin`
+- [x] Unit tests: success, RBAC-denied, store-error paths
+- [x] Gate passes: `go build ./... && go test ./internal/dashboard/... && go vet ./... && gofmt -l internal/dashboard/handler.go`
 
 **Tests**: unit
 **Gate**: quick

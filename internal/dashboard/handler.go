@@ -1436,6 +1436,42 @@ func (h *Handler) UpdateTableRLSModeForUser(ctx context.Context, user *Dashboard
 	return &row, nil
 }
 
+// UpdateAppForUser is the shared operation behind orbit_update_app
+// (ai-edit-chat spec, AIEC-12/AIEC-13) — toggles email/password auth
+// (auth_email_enabled) on an existing app, following the same store-call +
+// registry-refresh + audit shape as UpdateTableRLSModeForUser/
+// AddTableColumnForUser.
+//
+// SPEC_DEVIATION: design.md's signature lists both an `origin` and an `ip`
+// parameter; every sibling *ForUser function in this file (
+// AddTableColumnForUser, AddTableIndexForUser, UpdateTableRLSModeForUser)
+// instead takes exactly one trailing string, overloaded to carry either a
+// real IP (REST callers) or a fixed origin marker like "ai_chat"/"mcp"
+// (chat/MCP callers) — see CreateAppTableForUser's REST call (real
+// r.RemoteAddr) vs. tools.go's orbit_add_table_column call ("mcp"). Reason:
+// matching that single-param convention keeps this handler identical in
+// shape to its siblings instead of introducing a two-param calling
+// convention only this one function uses; the value passed still becomes
+// the audit log's `ip` column exactly as design.md intends.
+//
+// RBAC: CanWrite() (not CanManage(), which UpdateApp's REST handler
+// requires for auth_providers/storage/rate-limit changes) — matching every
+// other edit-chat mutation's authorization tier (AIEC-05). The store-level
+// UpdateApp already performs this exact check (via GetApp + role.CanWrite()),
+// so it is not duplicated here.
+func (h *Handler) UpdateAppForUser(ctx context.Context, user *DashboardUser, appID string, authEmailEnabled bool, ip string) (*AppRow, error) {
+	app, err := UpdateApp(ctx, h.pool, appID, user, authEmailEnabled)
+	if err != nil {
+		return nil, err
+	}
+
+	h.reg.Register(appRowToRegistryApp(app))
+
+	app.RedactSecrets()
+	h.audit(ctx, user.ID, user.Email, "app.update", "app", app.ID, app.Name, nil, ip)
+	return app, nil
+}
+
 // ErrColumnAlreadyExists is returned by AddTableColumnForUser when the
 // requested column name already exists on the table — an "add" operation
 // must never silently turn into a "replace", so this is rejected rather
