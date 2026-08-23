@@ -1,14 +1,21 @@
 package server
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"go.uber.org/zap"
 
 	"github.com/zeeplabs/zeep-orbit/internal/dashboard"
+	"github.com/zeeplabs/zeep-orbit/internal/db"
 	"github.com/zeeplabs/zeep-orbit/internal/registry"
 )
 
@@ -126,6 +133,188 @@ func TestServerUpdateWebhookRouteRegistered(t *testing.T) {
 
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("status = %d, want 401 (route registered, rejected by auth)", resp.StatusCode)
+	}
+}
+
+// buildChatRoutesTestPool provisions a real DB-backed Server (ai-build-chat
+// T10) so the "Build with AI" routes can be exercised end-to-end through
+// the real chi router, plus a logged-in user's session cookie for the
+// authenticated cases. Skips if TEST_DATABASE_URL is unset, following the
+// same convention as rls_policy_mode_test.go/rls_policy_test.go.
+func buildChatRoutesTestPool(t *testing.T) (*Server, *http.Cookie) {
+	t.Helper()
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("TEST_DATABASE_URL not set")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	pool, err := db.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("connect to test DB: %v", err)
+	}
+	if err := dashboard.ProvisionZeepSystem(ctx, pool); err != nil {
+		t.Fatalf("provision zeep_system: %v", err)
+	}
+
+	truncate := func() {
+		_, _ = pool.Exec(context.Background(), `TRUNCATE zeep_system.sessions`)
+		_, _ = pool.Exec(context.Background(), `TRUNCATE zeep_system.ai_build_messages`)
+		_, _ = pool.Exec(context.Background(), `TRUNCATE zeep_system.ai_build_sessions`)
+		_, _ = pool.Exec(context.Background(), `TRUNCATE zeep_system.dashboard_users CASCADE`)
+	}
+	truncate()
+	t.Cleanup(truncate)
+
+	user, err := dashboard.CreateUser(ctx, pool, fmt.Sprintf("build-chat-route-%d@example.com", time.Now().UnixNano()), "Route User", "hash", "admin")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	token := fmt.Sprintf("test-session-token-%d", time.Now().UnixNano())
+	if err := dashboard.CreateSession(ctx, pool, token, user.ID, time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	s, err := New(registry.New(), pool, 0)
+	if err != nil {
+		t.Fatalf("New() error: %v", err)
+	}
+	return s, &http.Cookie{Name: "zeep_session", Value: token}
+}
+
+// TestServerBuildChatRoutesRegistered_Unauthenticated covers ai-build-chat
+// T10: all four "Build with AI" routes must be reachable through the real
+// chi router (not just unit-callable). With no session cookie, RequireAuth
+// rejects each with 401 before touching the pool — a 404 here would mean
+// chi never matched the route at all, so 401 is the proof each is wired up
+// (same pattern as TestServerEnduserRolesRouteRegistered above).
+func TestServerBuildChatRoutesRegistered_Unauthenticated(t *testing.T) {
+	s := newTestServer(t)
+	ts := httptest.NewServer(s.Router())
+	defer ts.Close()
+
+	cases := []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{http.MethodGet, "/dashboard/api/ai/build-chat/session", ""},
+		{http.MethodPost, "/dashboard/api/ai/build-chat", `{"content":"hi"}`},
+		{http.MethodPost, "/dashboard/api/ai/build-chat/some-session-id/confirm", ""},
+		{http.MethodPost, "/dashboard/api/ai/build-chat/restart", ""},
+	}
+	for _, c := range cases {
+		var body io.Reader
+		if c.body != "" {
+			body = strings.NewReader(c.body)
+		}
+		req, err := http.NewRequest(c.method, ts.URL+c.path, body)
+		if err != nil {
+			t.Fatalf("build request for %s %s: %v", c.method, c.path, err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("%s %s error: %v", c.method, c.path, err)
+		}
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("%s %s: status = %d, want 401 (route registered, rejected by auth)", c.method, c.path, resp.StatusCode)
+		}
+	}
+}
+
+// TestServerRestartBuildChatSession_EndToEnd covers AIBC-09 through the real
+// router with a real authenticated session: POST .../restart abandons any
+// current in_progress session and returns a fresh empty one.
+func TestServerRestartBuildChatSession_EndToEnd(t *testing.T) {
+	s, cookie := buildChatRoutesTestPool(t)
+	ts := httptest.NewServer(s.Router())
+	defer ts.Close()
+
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/dashboard/api/ai/build-chat/restart", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.AddCookie(cookie)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST .../restart error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var got struct {
+		Session struct {
+			Status string `json:"status"`
+		} `json:"session"`
+		Messages []any `json:"messages"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got.Session.Status != "in_progress" {
+		t.Errorf("expected status in_progress, got %q", got.Session.Status)
+	}
+	if len(got.Messages) != 0 {
+		t.Errorf("expected an empty message history on the fresh session, got %d", len(got.Messages))
+	}
+}
+
+// TestServerBuildChatConfirmRoute_ResolvesSessionIDParam covers ai-build-chat
+// T10: POST /dashboard/api/ai/build-chat/{session_id}/confirm must bind
+// {session_id} through the real router — distinguishing it from the static
+// .../restart path registered alongside it — rather than 404ing or being
+// shadowed by the static route. A 400 ("no proposed plan to confirm", not a
+// 404 or an auth error) proves the templated route matched and the handler
+// ran with the real session ID.
+func TestServerBuildChatConfirmRoute_ResolvesSessionIDParam(t *testing.T) {
+	s, cookie := buildChatRoutesTestPool(t)
+	ts := httptest.NewServer(s.Router())
+	defer ts.Close()
+
+	sessionReq, err := http.NewRequest(http.MethodGet, ts.URL+"/dashboard/api/ai/build-chat/session", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	sessionReq.AddCookie(cookie)
+	sessionResp, err := http.DefaultClient.Do(sessionReq)
+	if err != nil {
+		t.Fatalf("GET .../session error: %v", err)
+	}
+	defer sessionResp.Body.Close()
+	var sessionGot struct {
+		Session struct {
+			ID string `json:"id"`
+		} `json:"session"`
+	}
+	if err := json.NewDecoder(sessionResp.Body).Decode(&sessionGot); err != nil {
+		t.Fatalf("decode session response: %v", err)
+	}
+	if sessionGot.Session.ID == "" {
+		t.Fatal("expected a real session ID from GET .../session")
+	}
+
+	confirmReq, err := http.NewRequest(http.MethodPost, ts.URL+"/dashboard/api/ai/build-chat/"+sessionGot.Session.ID+"/confirm", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	confirmReq.AddCookie(cookie)
+	confirmResp, err := http.DefaultClient.Do(confirmReq)
+	if err != nil {
+		t.Fatalf("POST .../confirm error: %v", err)
+	}
+	defer confirmResp.Body.Close()
+
+	if confirmResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (route matched, {session_id} resolved, rejected for lacking a proposed plan)", confirmResp.StatusCode)
 	}
 }
 

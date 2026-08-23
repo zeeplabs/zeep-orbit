@@ -453,3 +453,23 @@ func planColumnsToConfig(cols []ai.PlanColumn) []config.ColumnConfig {
 	}
 	return out
 }
+
+// RestartBuildChatSession handles POST /dashboard/api/ai/build-chat/restart.
+// A thin wrapper over AbandonAndRestartSession (T6): marks the caller's
+// current in_progress session (if any) abandoned — preserving its messages
+// — and returns a fresh in_progress session with an empty history (AIBC-09).
+func (h *Handler) RestartBuildChatSession(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	session, err := AbandonAndRestartSession(r.Context(), h.pool, user.ID)
+	if err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, buildChatSessionResponse{Session: session, Messages: []AIBuildMessage{}})
+}
