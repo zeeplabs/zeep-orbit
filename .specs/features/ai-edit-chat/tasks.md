@@ -116,10 +116,10 @@ T10 -> T11 -> T12
 - Skill: NONE
 
 **Done when**:
-- [ ] `GetOrCreateInProgressEditSession` returns the existing `in_progress` row for `(ownerUserID, appID)` if present, else creates one with `target_app_id` set at creation (AIEC-01)
-- [ ] A create-mode session for the same user and an edit-mode session for a different/same app coexist without collision (AIEC-17)
-- [ ] Unit tests: create-new, reuse-existing, and coexistence-with-create-session cases
-- [ ] Gate passes: `go build ./... && go test ./internal/dashboard/... && go vet ./... && gofmt -l internal/dashboard/ai_build_sessions_store.go`
+- [x] `GetOrCreateInProgressEditSession` returns the existing `in_progress` row for `(ownerUserID, appID)` if present, else creates one with `target_app_id` set at creation (AIEC-01)
+- [x] A create-mode session for the same user and an edit-mode session for a different/same app coexist without collision (AIEC-17)
+- [x] Unit tests: create-new, reuse-existing, and coexistence-with-create-session cases
+- [x] Gate passes: `go build ./... && go test ./internal/dashboard/... && go vet ./... && gofmt -l internal/dashboard/ai_build_sessions_store.go`
 
 **Tests**: unit
 **Gate**: quick
