@@ -386,12 +386,16 @@ T10 -> T12
 
 **Done when**:
 
-- [ ] Panel visible only to superadmin (`RequireRole` gate)
-- [ ] Saving a key/model calls `PUT`; the key input never pre-fills with a real value (only `has_key` state shown)
-- [ ] Model-only update UX doesn't require re-entering the key
-- [ ] Gemini/Claude rows show "em breve" badge, disabled, no submission possible
-- [ ] All user-facing strings added to `src/locales/en.json` AND `src/locales/pt-BR.json` in this same task
-- [ ] Build gate passes: `cd internal/dashboard/ui && npx tsc -b && npm run build`; `python3 -c "import json; json.load(open('src/locales/en.json'))"` and same for `pt-BR.json`
+- [x] Panel visible only to superadmin (`RequireRole` gate)
+- [x] Saving a key/model calls `PUT`; the key input never pre-fills with a real value (only `has_key` state shown)
+- [x] Model-only update UX doesn't require re-entering the key
+- [x] Gemini/Claude rows show "em breve" badge, disabled, no submission possible
+- [x] All user-facing strings added to `src/locales/en.json` AND `src/locales/pt-BR.json` in this same task
+- [x] Build gate passes: `cd internal/dashboard/ui && npx tsc -b && npm run build`; `python3 -c "import json; json.load(open('src/locales/en.json'))"` and same for `pt-BR.json`
+
+**SPEC_DEVIATION**: this task's briefing (and tasks.md's own "Reuses" line) assumed a superadmin-gated settings page pattern to mirror — confirmed at `GitHubIntegrationPage.tsx`, which is the real "Integrations" page (route `/integracoes/github`, nav `platformAction: 'integrations'` = backend's `ActionManageIntegrations`, the same gate T4 already uses for this endpoint). Rather than a brand-new standalone page/route/nav-entry, the AI Provider panel was added as a 4th tab (`ai`) on that existing page, reusing its superadmin check, `ProviderTabs`, `PageFooter`, and `AboutPanel` patterns verbatim — no new route, no new nav entry, no new permission needed since the gate is already the exact one this feature needs.
+
+**SPEC_DEVIATION**: `enabled` is not a merge-on-absent-key field on the backend (`UpsertAIProvider` always writes whatever the PUT body's `enabled` says — only `api_key` is preserve-on-absent). The frontend form tracks the fetched `enabled` state and always sends it explicitly on every save, so a model-only update can never silently flip the provider off by omission.
 
 **Tests**: none (no frontend test framework in repo — build gate only)
 **Gate**: build

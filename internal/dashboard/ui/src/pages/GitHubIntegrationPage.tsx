@@ -39,6 +39,15 @@ interface GitHubStatus {
   org_login: string
 }
 
+// AIProviderStatus mirrors internal/dashboard's AIProviderResponse — the key
+// itself is never present in any form (cleartext or masked), only whether
+// one is stored (AIBC-04).
+interface AIProviderStatus {
+  has_key: boolean
+  model: string
+  enabled: boolean
+}
+
 interface GitHubTemplate {
   id: string
   name: string
@@ -150,6 +159,13 @@ export default function GitHubIntegrationPage() {
             <Icon name="rocket_launch" size={14} />
             {t('deploy.tabDeploy')}
           </TabsTrigger>
+          <TabsTrigger
+            value="ai"
+            className="gap-1.5 rounded-[8px] text-[13px] text-[var(--text-secondary)] data-[state=active]:bg-[var(--hover-surface)] data-[state=active]:text-[var(--text-primary)] data-[state=active]:shadow-none"
+          >
+            <Icon name="bolt" size={14} />
+            {t('aiProvider.tabTitle')}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="config" className="mt-0">
@@ -160,6 +176,9 @@ export default function GitHubIntegrationPage() {
         </TabsContent>
         <TabsContent value="deploy" className="mt-0">
           <DeployTab />
+        </TabsContent>
+        <TabsContent value="ai" className="mt-0">
+          <AIProviderTab />
         </TabsContent>
       </Tabs>
     </>
@@ -1170,6 +1189,186 @@ function DeployTab() {
       <AboutPanel
         title={t('integrations.aboutDeployProvidersTitle')}
         lines={[t('integrations.aboutDeployProvidersLine1')]}
+      />
+    </div>
+  )
+}
+
+// AIProviderTab — ai-build-chat T11. Superadmin-only config for the single
+// global OpenAI provider row (spec.md P1, AIBC-01/02/04/06). Gemini/Claude
+// are shown disabled with an "em breve" badge (t('apps.soon')) and never
+// submit — the PUT endpoint itself also rejects them with 501 (AIBC-06),
+// this is defense-in-depth on the frontend, matching the GitHub/Deploy tabs'
+// existing not-yet-implemented-provider convention (ProviderTabs).
+//
+// The API key input never pre-fills with a real value — GET never returns
+// the key (AIBC-04) — and is cleared after every successful save so the
+// plaintext never lingers in the form (same convention as GitHubConfigTab's
+// clientSecret/privateKey). `enabled` is NOT a merge-on-absent-key field on
+// the backend (UpsertAIProvider always overwrites it with whatever the PUT
+// body sends), so every save always sends the current `enabled` state
+// explicitly — never omitted — or a model-only update would silently
+// disable the provider (AGENTS.md §4's partial-update rule, applied in the
+// direction of "never send a false default by omission").
+function AIProviderTab() {
+  const { t } = useTranslation()
+  const [model, setModel] = useState('')
+  const [apiKey, setApiKey] = useState('')
+  const [enabled, setEnabled] = useState(false)
+  const [hasKey, setHasKey] = useState(false)
+  const [showKey, setShowKey] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+  const [messageType, setMessageType] = useState<'success' | 'error'>('success')
+
+  useEffect(() => {
+    fetchStatus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const fetchStatus = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/dashboard/api/ai-providers/openai', { credentials: 'include' })
+      if (res.ok) {
+        const data = (await res.json()) as AIProviderStatus
+        setModel(data.model || '')
+        setEnabled(!!data.enabled)
+        setHasKey(!!data.has_key)
+      }
+    } catch {
+      // non-critical, form just renders empty
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    setMessage(null)
+    try {
+      const res = await fetch('/dashboard/api/ai-providers/openai', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, api_key: apiKey, enabled }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setMessage(data.error || t('common.errorSaving'))
+        setMessageType('error')
+        return
+      }
+      setMessage(t('aiProvider.configSaved'))
+      setMessageType('success')
+      setApiKey('')
+      setHasKey(!!(data as AIProviderStatus).has_key)
+    } catch {
+      setMessage(t('common.connectionError'))
+      setMessageType('error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) return <LoadingState rows={3} />
+
+  return (
+    <div className="flex flex-wrap items-start gap-6">
+      <div className="flex min-w-[420px] flex-1 flex-col gap-6">
+        <div className="flex flex-col gap-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
+            {t('aiProvider.sectionTitle')}
+          </div>
+          <ProviderTabs
+            value="openai"
+            items={[
+              { key: 'openai', name: 'OpenAI', icon: 'bolt' },
+              { key: 'gemini', name: 'Gemini', icon: 'auto_awesome', disabled: true, badge: t('apps.soon') },
+              { key: 'claude', name: 'Claude', icon: 'diamond', disabled: true, badge: t('apps.soon') },
+            ]}
+          />
+        </div>
+
+        <div
+          className="flex flex-col gap-6 rounded-[14px] border p-6"
+          style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-[15px] font-bold" style={{ color: 'var(--text-primary)' }}>
+                OpenAI
+              </div>
+              <p className="mt-0.5 text-[12px]" style={{ color: 'var(--text-secondary)' }}>
+                {t('aiProvider.configDesc')}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch checked={enabled} onCheckedChange={setEnabled} />
+              <span
+                className="text-[12px] font-medium"
+                style={{ color: enabled ? 'var(--success)' : 'var(--text-tertiary)' }}
+              >
+                {enabled ? t('aiProvider.enabled') : t('aiProvider.disabled')}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="ai-model" className="text-[12px] font-semibold">
+                {t('aiProvider.model')}
+              </Label>
+              <Input id="ai-model" value={model} onChange={(e) => setModel(e.target.value)} placeholder="gpt-4o" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="ai-api-key" className="text-[12px] font-semibold">
+                {t('aiProvider.apiKey')}
+              </Label>
+              <div className="relative">
+                <Input
+                  id="ai-api-key"
+                  type={showKey ? 'text' : 'password'}
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder={hasKey ? t('aiProvider.apiKeyKeepCurrent') : t('aiProvider.apiKeyPlaceholder')}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowKey(!showKey)}
+                  aria-label={showKey ? t('login.hidePassword') : t('login.showPassword')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center justify-center"
+                  style={{ color: 'var(--text-tertiary)' }}
+                >
+                  <Icon name={showKey ? 'visibility_off' : 'visibility'} size={16} />
+                </button>
+              </div>
+              <p className="mt-1 text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
+                {hasKey ? t('aiProvider.apiKeyHintConfigured') : t('aiProvider.apiKeyHint')}
+              </p>
+            </div>
+          </div>
+
+          <PageFooter message={message} type={messageType} />
+
+          <Button onClick={handleSave} disabled={saving} className="gap-2 self-start">
+            {saving ? (
+              <>
+                <Icon name="progress_activity" size={14} className="animate-spin" /> {t('brand.saving')}
+              </>
+            ) : (
+              <>
+                <Icon name="check" size={14} /> {t('brand.save')}
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+      <AboutPanel
+        title={t('aiProvider.aboutTitle')}
+        lines={[t('aiProvider.aboutLine1'), t('aiProvider.aboutLine2')]}
       />
     </div>
   )
