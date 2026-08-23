@@ -16,9 +16,14 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
+	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/dashboard/ai"
+	"github.com/zeeplabs/zeep-orbit/internal/db"
+	"github.com/zeeplabs/zeep-orbit/internal/provisioner"
 )
 
 // buildChatSystemPrompt is the fixed system message prepended to every
@@ -212,4 +217,239 @@ func (h *Handler) buildChatReadToolInvoker(user *DashboardUser) ai.ReadToolInvok
 			return nil, fmt.Errorf("dashboard: unknown read tool %q", name)
 		}
 	}
+}
+
+// buildChatConfirmResponse is BuildChatConfirm's success payload — the
+// fully created (or already-existing, on a successful retry) app.
+type buildChatConfirmResponse struct {
+	App *AppRow `json:"app"`
+}
+
+// loadOwnedBuildChatSession loads sessionID's row and full message history,
+// scoped to ownerUserID (AIBC-11) so one user can never confirm — or even
+// see — another user's session. Reuses listMessages, the package-private
+// helper ai_build_sessions_store.go (T6) already defines, instead of
+// duplicating its query.
+func loadOwnedBuildChatSession(ctx context.Context, pool *db.Pool, sessionID, ownerUserID string) (*AIBuildSession, []AIBuildMessage, error) {
+	var s AIBuildSession
+	err := pool.QueryRow(ctx,
+		`SELECT id, owner_user_id, status, created_app_id, created_at, updated_at
+		 FROM zeep_system.ai_build_sessions
+		 WHERE id = $1 AND owner_user_id = $2`,
+		sessionID, ownerUserID,
+	).Scan(&s.ID, &s.OwnerUserID, &s.Status, &s.CreatedAppID, &s.CreatedAt, &s.UpdatedAt)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil, ErrNotFound
+		}
+		return nil, nil, fmt.Errorf("dashboard: load owned ai build session: %w", err)
+	}
+
+	messages, err := listMessages(ctx, pool, s.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &s, messages, nil
+}
+
+// BuildChatConfirm handles POST /dashboard/api/ai/build-chat/{session_id}/confirm.
+//
+// SPEC_DEVIATION: this handler reads no plan from the request body at all —
+// the plan it executes is always the one BuildChatTurn (T8) already
+// persisted on the session's latest assistant message. design.md's Confirm
+// section doesn't specify where the plan comes from at request time; reading
+// the request body was one option, but AIBC-24 ("SHALL NOT accept a
+// free-form/unstructured plan payload... only the structured shape produced
+// by propose_app_plan") is satisfied more strongly by never trusting any
+// client-supplied plan JSON in the first place, closing the prompt-
+// injection-into-schema risk spec.md's function-calling assumption exists to
+// prevent. Reason: a body-accepting confirm would still need this exact
+// "does it match the last propose_app_plan call" check to satisfy AIBC-24,
+// so skipping the body entirely is simpler and strictly safer, not a lesser
+// implementation of the same contract.
+//
+// It never trusts a client-supplied plan payload (AIBC-24): the plan is
+// always the one the model itself proposed and the server already persisted
+// on the session's latest assistant message (propose_app_plan's structured
+// output, T8). It validates every table name before any mutation runs
+// (rejecting a plan with a reserved/invalid name up front), then calls
+// CreateAppForUser once and CreateAppTableForUser per table — re-checking
+// GetApp fresh before each table attempt so a retry after a partial failure
+// skips tables that already exist instead of erroring as a duplicate
+// (AIBC-19 through AIBC-24).
+func (h *Handler) BuildChatConfirm(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	sessionID := chi.URLParam(r, "session_id")
+
+	session, messages, err := loadOwnedBuildChatSession(r.Context(), h.pool, sessionID, user.ID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+	if session.Status != "in_progress" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "session is not in progress"})
+		return
+	}
+
+	plan := latestProposedPlan(messages)
+	if plan == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "no proposed plan to confirm"})
+		return
+	}
+	if err := validatePlanTableNames(plan); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var app *AppRow
+	if session.CreatedAppID == nil || *session.CreatedAppID == "" {
+		created, err := h.CreateAppForUser(r.Context(), user, AppRequestBody{
+			Name:             plan.Name,
+			AuthEmailEnabled: plan.Auth,
+		}, "ai_chat")
+		if err != nil {
+			h.respondBuildChatConfirmError(w, r, err)
+			return
+		}
+		if err := SetSessionCreatedApp(r.Context(), h.pool, session.ID, created.ID); err != nil {
+			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+			return
+		}
+		app = created
+	} else {
+		existing, _, err := GetApp(r.Context(), h.pool, *session.CreatedAppID, user)
+		if err != nil {
+			h.respondBuildChatConfirmError(w, r, err)
+			return
+		}
+		app = existing
+	}
+
+	for _, table := range plan.Tables {
+		fresh, _, err := GetApp(r.Context(), h.pool, app.ID, user)
+		if err != nil {
+			h.respondBuildChatConfirmError(w, r, err)
+			return
+		}
+		if appTableRowExists(fresh.Tables, table.Name) {
+			continue
+		}
+
+		_, err = h.CreateAppTableForUser(r.Context(), user, app.ID, TableRequestBody{
+			Name:    table.Name,
+			Columns: planColumnsToConfig(table.Columns),
+		}, "ai_chat")
+		if err != nil {
+			var valErr *ValidationError
+			if errors.As(err, &valErr) && strings.Contains(valErr.Error(), "duplicate table name") {
+				// A previous attempt already created this table — a
+				// concurrent retry raced past the fresh GetApp check above.
+				// Treat as a successful no-op, not a failure (AIBC-23).
+				continue
+			}
+			h.respondBuildChatConfirmError(w, r, err)
+			return
+		}
+	}
+
+	if err := CompleteSession(r.Context(), h.pool, session.ID, app.ID); err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+
+	final, _, err := GetApp(r.Context(), h.pool, app.ID, user)
+	if err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+	final.RedactSecrets()
+	writeJSON(w, http.StatusOK, buildChatConfirmResponse{App: final})
+}
+
+// respondBuildChatConfirmError maps an error from CreateAppForUser/
+// CreateAppTableForUser/GetApp to the same HTTP status the manual REST
+// create-app/create-table handlers already use for each error class
+// (CreateApp/CreateAppTable in handler.go) — a partial failure here leaves
+// the session in_progress (the caller already recorded created_app_id, if
+// any, before this point), never rolling back what succeeded (AIBC-22).
+func (h *Handler) respondBuildChatConfirmError(w http.ResponseWriter, r *http.Request, err error) {
+	var valErr *ValidationError
+	var typeErr *provisioner.TypeChangeError
+	switch {
+	case errors.Is(err, ErrNotFound):
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+	case errors.Is(err, ErrForbidden):
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+	case errors.As(err, &valErr):
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": valErr.Error()})
+	case errors.As(err, &typeErr):
+		h.writeError(w, r, http.StatusBadRequest, typeErr.Error(), err)
+	default:
+		h.writeError(w, r, http.StatusInternalServerError, genericAIChatError, err)
+	}
+}
+
+// latestProposedPlan returns the most recent assistant message's plan, or
+// nil if the session has no proposed plan yet.
+func latestProposedPlan(messages []AIBuildMessage) *ai.AppPlan {
+	for i := len(messages) - 1; i >= 0; i-- {
+		if len(messages[i].Plan) == 0 {
+			continue
+		}
+		var plan ai.AppPlan
+		if err := json.Unmarshal(messages[i].Plan, &plan); err != nil {
+			continue
+		}
+		return &plan
+	}
+	return nil
+}
+
+// validatePlanTableNames rejects a plan containing any table name that
+// doesn't match the same identifier rule CreateAppTableForUser enforces
+// (identRe, handler.go) — including reserved-looking names like
+// "_auth_users" which fail it by starting with an underscore — before any
+// provisioner or CreateAppForUser call runs (spec Edge Cases).
+func validatePlanTableNames(plan *ai.AppPlan) error {
+	for _, t := range plan.Tables {
+		if !identRe.MatchString(t.Name) {
+			return &ValidationError{msg: "invalid table name: " + t.Name}
+		}
+	}
+	return nil
+}
+
+// appTableRowExists reports whether name is already present in tables — the
+// idempotent-retry skip check, evaluated against a freshly fetched app on
+// every table attempt (never a stale in-memory list) so a table that
+// provisioned but failed to persist its metadata row on a prior attempt is
+// retried, not skipped (design.md Risks & Concerns).
+func appTableRowExists(tables []AppTableRow, name string) bool {
+	for _, t := range tables {
+		if t.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// planColumnsToConfig maps the AI-proposed plan's simplified {name, type}
+// columns onto config.ColumnConfig — only Name/Type are populated; the plan
+// has no notion of Required/Default/Unique/References (spec's
+// propose_app_plan tool schema), so those stay at their zero values.
+func planColumnsToConfig(cols []ai.PlanColumn) []config.ColumnConfig {
+	out := make([]config.ColumnConfig, 0, len(cols))
+	for _, c := range cols {
+		out = append(out, config.ColumnConfig{Name: c.Name, Type: c.Type})
+	}
+	return out
 }

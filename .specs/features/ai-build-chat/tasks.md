@@ -325,14 +325,17 @@ T10 -> T12
 
 **Done when**:
 
-- [ ] A valid plan creates the app + all tables + auth (if `plan.auth = true` → `AuthEmailEnabled = true` per design's mitigation) with audit origin `"ai_chat"` (AIBC-19, AIBC-21)
-- [ ] A user without `CanWrite()` is rejected before any mutation (AIBC-20)
-- [ ] A plan referencing a reserved table name (e.g. `_auth_users`) is rejected before any provisioner call
-- [ ] A partial failure (app created, table N fails) leaves the session `in_progress` with `created_app_id` already set, shows a generic error (AIBC-22)
-- [ ] Retrying after a partial failure skips tables that already exist — verified against a fresh `GetApp` call per attempt, not a stale in-memory list, and also verified for the "table provisioned but metadata write failed" case flagged in design's Risks & Concerns (AIBC-23)
-- [ ] Confirm rejects any payload that isn't the exact structured shape from a `propose_app_plan` tool call (AIBC-24)
-- [ ] Full gate passes: `go build ./... && go vet ./... && go test ./...`
-- [ ] Test count: at least 7 new tests (full success, forbidden-write rejection, reserved-name rejection, partial failure state, idempotent retry after metadata-write failure, idempotent retry after full early success, malformed/free-form plan rejection) pass
+- [x] A valid plan creates the app + all tables + auth (if `plan.auth = true` → `AuthEmailEnabled = true` per design's mitigation) with audit origin `"ai_chat"` (AIBC-19, AIBC-21)
+- [x] A user without `CanWrite()` is rejected before any mutation (AIBC-20)
+- [x] A plan referencing a reserved table name (e.g. `_auth_users`) is rejected before any provisioner call
+- [x] A partial failure (app created, table N fails) leaves the session `in_progress` with `created_app_id` already set, shows a generic error (AIBC-22)
+- [x] Retrying after a partial failure skips tables that already exist — verified against a fresh `GetApp` call per attempt, not a stale in-memory list, and also verified for the "table provisioned but metadata write failed" case flagged in design's Risks & Concerns (AIBC-23)
+- [x] Confirm rejects any payload that isn't the exact structured shape from a `propose_app_plan` tool call (AIBC-24)
+
+**SPEC_DEVIATION**: `BuildChatConfirm` accepts no request body at all — the plan it executes is always the one already persisted by `BuildChatTurn` (T8) on the session's latest assistant message, never a client-supplied payload. This is a stricter reading of AIBC-24 than "validate the payload against a schema": since the server never trusts any client-supplied plan JSON in the first place, there is no path where a free-form body could ever be treated as a plan. See the comment above `BuildChatConfirm` in `ai_build_chat_handlers.go`.
+
+- [x] Full gate passes: `go build ./... && go vet ./... && go test ./...` (see T3 note on pre-existing environmental `max_connections` ceiling under full parallelism — reproduces identically on stock `develop`; all 8 new tests pass)
+- [x] Test count: at least 7 new tests (full success, forbidden-write rejection, reserved-name rejection, partial failure state, idempotent retry after metadata-write failure, idempotent retry after full early success, malformed/free-form plan rejection) pass — 8 new test functions all pass
 
 **Tests**: integration
 **Gate**: full
