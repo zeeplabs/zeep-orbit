@@ -156,12 +156,12 @@ Every ambiguity is resolved or recorded here — nothing is left silently unclea
 | AIBC-09 | P2: Persisted per-app chat session | Tasks | Implementing |
 | AIBC-10 | P2: Persisted per-app chat session | Tasks | Implementing |
 | AIBC-11 | P2: Persisted per-app chat session | Tasks | Implementing |
-| AIBC-12 | P3: Chat-driven plan proposal via function-calling | Design | Pending |
-| AIBC-13 | P3: Chat-driven plan proposal via function-calling | Design | Pending |
-| AIBC-14 | P3: Chat-driven plan proposal via function-calling | Design | Pending |
-| AIBC-15 | P3: Chat-driven plan proposal via function-calling | Design | Pending |
+| AIBC-12 | P3: Chat-driven plan proposal via function-calling | Tasks | Implementing |
+| AIBC-13 | P3: Chat-driven plan proposal via function-calling | Tasks | Implementing |
+| AIBC-14 | P3: Chat-driven plan proposal via function-calling | Tasks | Implementing |
+| AIBC-15 | P3: Chat-driven plan proposal via function-calling | Tasks | Implementing |
 | AIBC-16 | P3: Chat-driven plan proposal via function-calling | Design | Pending |
-| AIBC-17 | P3: Chat-driven plan proposal via function-calling | Design | Pending |
+| AIBC-17 | P3: Chat-driven plan proposal via function-calling | Tasks | Implementing |
 | AIBC-18 | P3: Chat-driven plan proposal via function-calling | Design | Pending |
 | AIBC-19 | P4: Confirm plan → real app creation | Design | Pending |
 | AIBC-20 | P4: Confirm plan → real app creation | Design | Pending |
@@ -174,7 +174,7 @@ Every ambiguity is resolved or recorded here — nothing is left silently unclea
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 24 total, 11 mapped to tasks (AIBC-01 through AIBC-11, via T1-T6), 13 unmapped (P3-P4 tasks pending — batch 2)
+**Coverage:** 24 total, 15 mapped to tasks (AIBC-01 through AIBC-15, AIBC-17, via T1-T7), 9 unmapped (AIBC-16, AIBC-18 through AIBC-24 land with T8-T12 — batch 2)
 
 ---
 
