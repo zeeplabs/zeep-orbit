@@ -300,14 +300,21 @@ type orbitAddTableIndexInput struct {
 	Index     config.IndexConfig `json:"index" jsonschema:"the single new index to add"`
 }
 
-// registerAppConfigWriteTools registers the two additive table-schema
-// mutation tools (mcp-safe-mutation-tools spec): add one column, add one
-// index, each server-side-merged against the table's current stored
-// definition so the request body can never omit or corrupt an existing
-// column/index (see design.md's Architecture Overview — this is exactly why
-// UpdateAppTable's full-replace endpoint isn't safe to expose directly).
-// Both gate on role.CanWrite(), matching CreateAppTableForUser/
-// UpdateTableRLSModeForUser.
+// orbitUpdateAppInput is the input for orbit_update_app.
+type orbitUpdateAppInput struct {
+	AppID            string `json:"app_id" jsonschema:"id of the app to update"`
+	AuthEmailEnabled bool   `json:"auth_email_enabled" jsonschema:"whether email/password authentication is enabled for this app"`
+}
+
+// registerAppConfigWriteTools registers the additive table-schema mutation
+// tools (mcp-safe-mutation-tools spec: add one column, add one index, each
+// server-side-merged against the table's current stored definition so the
+// request body can never omit or corrupt an existing column/index — see
+// design.md's Architecture Overview, this is exactly why UpdateAppTable's
+// full-replace endpoint isn't safe to expose directly) plus orbit_update_app
+// (ai-edit-chat spec, AIEC-13), which closes the REST/MCP parity gap
+// UpdateAppForUser (T3) would otherwise introduce. All three gate on
+// role.CanWrite(), matching CreateAppTableForUser/UpdateTableRLSModeForUser.
 func registerAppConfigWriteTools(server *mcp.Server, deps ToolDeps) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "orbit_add_table_column",
@@ -337,6 +344,21 @@ func registerAppConfigWriteTools(server *mcp.Server, deps ToolDeps) {
 			return nil, nil, mapWriteError(err)
 		}
 		return nil, row, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_update_app",
+		Description: "Update an existing app's email/password authentication setting.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitUpdateAppInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		app, err := deps.DashH.UpdateAppForUser(ctx, user, in.AppID, in.AuthEmailEnabled, "mcp")
+		if err != nil {
+			return nil, nil, mapWriteError(err)
+		}
+		return nil, app, nil
 	})
 }
 

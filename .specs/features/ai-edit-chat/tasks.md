@@ -166,10 +166,10 @@ T10 -> T11 -> T12
 - Skill: NONE
 
 **Done when**:
-- [ ] Tool registered with input schema for `app_id`/`auth_email_enabled`
-- [ ] Calls `UpdateAppForUser` with MCP origin, matching the audit-parity pattern of sibling tools
-- [ ] Unit tests in `internal/mcpserver/tools_update_app_test.go`: happy path, RBAC-denied
-- [ ] Gate passes: `go build ./... && go test ./internal/mcpserver/... && go vet ./... && gofmt -l internal/mcpserver/tools.go internal/mcpserver/tools_update_app_test.go`
+- [x] Tool registered with input schema for `app_id`/`auth_email_enabled`
+- [x] Calls `UpdateAppForUser` with MCP origin, matching the audit-parity pattern of sibling tools
+- [x] Unit tests in `internal/mcpserver/tools_update_app_test.go`: happy path, RBAC-denied
+- [x] Gate passes: `go build ./... && go test ./internal/mcpserver/... && go vet ./... && gofmt -l internal/mcpserver/tools.go internal/mcpserver/tools_update_app_test.go`
 
 **Tests**: unit
 **Gate**: quick
