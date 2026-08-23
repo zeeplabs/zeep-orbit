@@ -210,9 +210,9 @@ T10 -> T12
 
 **Done when**:
 
-- [ ] Both tables created with exact columns/indexes/FK from design.md
-- [ ] Migration applies cleanly and is idempotent
-- [ ] Build gate passes: `go build ./... && go vet ./...`
+- [x] Both tables created with exact columns/indexes/FK from design.md
+- [x] Migration applies cleanly and is idempotent
+- [x] Build gate passes: `go build ./... && go vet ./...`
 
 **Tests**: none
 **Gate**: build
