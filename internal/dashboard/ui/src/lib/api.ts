@@ -1547,3 +1547,161 @@ export function useRestartBuildChatSession(): UseMutationResult<BuildChatSession
     },
   })
 }
+
+// ---- Edit with AI chat (ai-edit-chat T11) ----
+// Mirrors the build-chat types/hooks above, scoped to one existing app
+// instead of a global session: one EditOperation proposed/confirmed at a
+// time (never a batched plan), reusing the exact *ForUser response shapes
+// (TableDef/AppDef) the manual dashboard form already returns.
+
+export interface EditChatPlanTable {
+  name: string
+  columns: BuildChatPlanColumn[]
+}
+
+export interface EditChatColumnOp {
+  table: string
+  column: BuildChatPlanColumn
+}
+
+export interface EditChatIndexOp {
+  table: string
+  name: string
+  columns: string[]
+  unique: boolean
+}
+
+export interface EditChatReferenceOp {
+  table: string
+  column: BuildChatPlanColumn
+  ref_table: string
+  ref_column: string
+  on_delete?: string
+}
+
+export interface EditChatRLSOp {
+  table: string
+  mode: string
+}
+
+export interface EditChatAuthOp {
+  email_enabled: boolean
+}
+
+// EditOperation mirrors internal/dashboard/ai/client.go's Go type of the
+// same name — exactly one of the optional fields is populated, matching
+// `kind`.
+export interface EditOperation {
+  kind: 'add_table' | 'add_column' | 'add_index' | 'add_reference' | 'set_rls_mode' | 'toggle_auth'
+  add_table?: EditChatPlanTable
+  add_column?: EditChatColumnOp
+  add_index?: EditChatIndexOp
+  add_reference?: EditChatReferenceOp
+  set_rls_mode?: EditChatRLSOp
+  toggle_auth?: EditChatAuthOp
+}
+
+export interface EditChatMessage {
+  id: string
+  session_id: string
+  role: 'user' | 'assistant'
+  content: string
+  plan?: EditOperation
+  created_at: string
+}
+
+export interface EditChatSession {
+  id: string
+  owner_user_id: string
+  status: 'in_progress' | 'completed' | 'abandoned'
+  mode: string
+  target_app_id?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface EditChatSessionResponse {
+  session: EditChatSession
+  messages: EditChatMessage[]
+}
+
+// useEditChatSession resumes appId's in_progress edit session for the
+// caller (or creates one) — `enabled` gates the fetch so the drawer only
+// requests this once mounted with `open: true`.
+export function useEditChatSession(appId: string, enabled: boolean): UseQueryResult<EditChatSessionResponse> {
+  return useQuery({
+    queryKey: ['edit-chat-session', appId],
+    queryFn: () => apiFetch<EditChatSessionResponse>(`/dashboard/api/apps/${appId}/ai/edit-chat`),
+    enabled: enabled && Boolean(appId),
+    refetchOnWindowFocus: false,
+  })
+}
+
+export interface EditChatTurnResponse {
+  type: 'message' | 'edit_op'
+  content?: string
+  edit_op?: EditOperation
+}
+
+export function useSendEditChatMessage(appId: string): UseMutationResult<EditChatTurnResponse, Error, string> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (content: string) =>
+      apiFetch<EditChatTurnResponse>(`/dashboard/api/apps/${appId}/ai/edit-chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['edit-chat-session', appId] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+export interface EditChatConfirmResponse {
+  applied: boolean
+  kind?: string
+  table?: TableDef
+  app?: AppDef
+}
+
+// useConfirmEditChatOperation never sends the operation in the request
+// body — the server always re-derives and applies the session's last
+// persisted EditOperation (AIEC-16's double-confirm guard) — sessionId in
+// the URL is the only input.
+export function useConfirmEditChatOperation(appId: string): UseMutationResult<EditChatConfirmResponse, Error, string> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (sessionId: string) =>
+      apiFetch<EditChatConfirmResponse>(`/dashboard/api/apps/${appId}/ai/edit-chat/${sessionId}/confirm`, {
+        method: 'POST',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['apps'] })
+      qc.invalidateQueries({ queryKey: ['apps', appId] })
+      qc.invalidateQueries({ queryKey: ['edit-chat-session', appId] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+export function useRestartEditChatSession(appId: string): UseMutationResult<EditChatSessionResponse, Error, void> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<EditChatSessionResponse>(`/dashboard/api/apps/${appId}/ai/edit-chat/restart`, {
+        method: 'POST',
+      }),
+    onSuccess: (data) => {
+      qc.setQueryData(['edit-chat-session', appId], data)
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
