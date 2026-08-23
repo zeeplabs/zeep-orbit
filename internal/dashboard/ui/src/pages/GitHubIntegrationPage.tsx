@@ -1210,9 +1210,18 @@ function DeployTab() {
 // explicitly — never omitted — or a model-only update would silently
 // disable the provider (AGENTS.md §4's partial-update rule, applied in the
 // direction of "never send a false default by omission").
+// OPENAI_MODEL_PRESETS is the curated set of current, generally-recommended
+// OpenAI models offered in the select — kept short and reviewed
+// periodically rather than mirroring OpenAI's full catalog. "custom" always
+// stays last and reveals a free-text input, so a model added by OpenAI
+// after this list was last reviewed (or already saved by a previous PUT)
+// is never blocked.
+const OPENAI_MODEL_PRESETS = ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'o3-mini'] as const
+
 function AIProviderTab() {
   const { t } = useTranslation()
   const [model, setModel] = useState('')
+  const [customModel, setCustomModel] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [enabled, setEnabled] = useState(false)
   const [hasKey, setHasKey] = useState(false)
@@ -1233,7 +1242,11 @@ function AIProviderTab() {
       const res = await fetch('/dashboard/api/ai-providers/openai', { credentials: 'include' })
       if (res.ok) {
         const data = (await res.json()) as AIProviderStatus
-        setModel(data.model || '')
+        const savedModel = data.model || ''
+        setModel(savedModel)
+        if (savedModel && !(OPENAI_MODEL_PRESETS as readonly string[]).includes(savedModel)) {
+          setCustomModel(savedModel)
+        }
         setEnabled(!!data.enabled)
         setHasKey(!!data.has_key)
       }
@@ -1320,7 +1333,33 @@ function AIProviderTab() {
               <Label htmlFor="ai-model" className="text-[12px] font-semibold">
                 {t('aiProvider.model')}
               </Label>
-              <Input id="ai-model" value={model} onChange={(e) => setModel(e.target.value)} placeholder="gpt-4o" />
+              <Select
+                value={(OPENAI_MODEL_PRESETS as readonly string[]).includes(model) ? model : 'custom'}
+                onValueChange={(value) => setModel(value === 'custom' ? customModel : value)}
+              >
+                <SelectTrigger id="ai-model">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {OPENAI_MODEL_PRESETS.map((preset) => (
+                    <SelectItem key={preset} value={preset}>
+                      {preset}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="custom">{t('aiProvider.customModel')}</SelectItem>
+                </SelectContent>
+              </Select>
+              {!(OPENAI_MODEL_PRESETS as readonly string[]).includes(model) && (
+                <Input
+                  aria-label={t('aiProvider.customModel')}
+                  value={customModel}
+                  onChange={(e) => {
+                    setCustomModel(e.target.value)
+                    setModel(e.target.value)
+                  }}
+                  placeholder="gpt-4-turbo"
+                />
+              )}
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="ai-api-key" className="text-[12px] font-semibold">

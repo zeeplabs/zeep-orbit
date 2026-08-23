@@ -551,6 +551,7 @@
   "aiProvider.enabled": "Enabled",
   "aiProvider.disabled": "Disabled",
   "aiProvider.model": "Model",
+  "aiProvider.customModel": "Custom…",
   "aiProvider.apiKey": "API Key",
   "aiProvider.apiKeyPlaceholder": "sk-...",
   "aiProvider.apiKeyKeepCurrent": "•••••••• (empty = keep current)",
