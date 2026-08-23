@@ -26,6 +26,8 @@ Features:
 - [ ] Official prompt snippets for Claude Code / Cursor / Lovable
 - [x] MCP server for zeep-orbit operations — spec: `.specs/features/mcp-server/`, `.specs/features/mcp-read-only-tools/`, `.specs/features/mcp-safe-mutation-tools/` (todas as tasks concluídas)
 - [ ] MCP settings page (gerenciar tokens/OAuth clients pela UI) — spec: `.specs/features/mcp-settings-page/` (só spec/validation, sem `tasks.md`)
+- [ ] MCP tools para criar/importar frontend apps (`orbit_create_frontend_app` / `orbit_import_frontend_zip`) — hoje MCP só cria app backend (`orbit_create_app`), sem paridade com dashboard para `frontend_apps`; depende de `frontend-app-zip-import` (M3) implementado antes ou em conjunto — sem spec/task ainda em `mcp-safe-mutation-tools`
+- [x] "Build with AI" — chat no dashboard para criar app backend via linguagem natural, com módulo de configuração global de AI provider (superadmin, só OpenAI funcional no MVP; Gemini/Claude com badge "em breve") — spec: `.specs/features/ai-build-chat/` (implementado e verificado, ver `validation.md`; ainda não liberado em release)
 - [x] Table relationships (foreign keys) and indexes in schema builder (backend) — spec: `.specs/features/schema-relationships-and-indexes/`
 - [ ] Table relationships (foreign keys) and indexes in Dashboard UI — spec: `.specs/features/dashboard-relationships-ui/`
 - [x] Web dashboard (app catalog, schema viewer, logs, data browser, SDKs page, API tab)
