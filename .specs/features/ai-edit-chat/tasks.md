@@ -345,11 +345,11 @@ T10 -> T11 -> T12
 - Skill: NONE
 
 **Done when**:
-- [ ] Drawer shows chat history, a single pending-operation confirmation affordance, and a "Recomeçar" action
-- [ ] Every new string present in both `en.json` and `pt-BR.json`
-- [ ] Mutation errors toast via `onError` (`sonner`)
-- [ ] `npx tsc -b && npm run build` pass
-- [ ] i18n JSON validated: `python3 -c "import json; json.load(open('internal/dashboard/ui/src/locales/en.json'))"` and same for `pt-BR.json`
+- [x] Drawer shows chat history, a single pending-operation confirmation affordance, and a "Recomeçar" action
+- [x] Every new string present in both `en.json` and `pt-BR.json`
+- [x] Mutation errors toast via `onError` (`sonner`)
+- [x] `npx tsc -b && npm run build` pass
+- [x] i18n JSON validated: `python3 -c "import json; json.load(open('internal/dashboard/ui/src/locales/en.json'))"` and same for `pt-BR.json`
 
 **Tests**: none (no frontend test framework in this repo)
 **Gate**: build
