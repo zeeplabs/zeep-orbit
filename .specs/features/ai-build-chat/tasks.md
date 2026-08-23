@@ -265,13 +265,13 @@ T10 -> T12
 
 **Done when**:
 
-- [ ] A response with plain assistant content (no tool call) returns `ChatTurnResult{Kind: "message", ...}`
-- [ ] A response with a `propose_app_plan` tool call and valid arguments returns `ChatTurnResult{Kind: "plan", Plan: ...}`
-- [ ] A response with a `list_apps`/`get_app_schema` tool call invokes the provided `ReadToolInvoker`, feeds the result back, and returns the final round's result (not the intermediate one)
-- [ ] Malformed/incomplete `propose_app_plan` arguments return an error, never a partially-populated `Plan`
-- [ ] A bounded client-side HTTP timeout (per design's Risks & Concerns) is applied to the OpenAI call
-- [ ] Quick gate passes: `go build ./... && go vet ./... && go test ./internal/dashboard/ai/...`
-- [ ] Test count: at least 6 new tests (message shape, plan shape, tool-call round-trip via `httptest.Server`, malformed plan args, timeout behavior, no OpenAI SDK dependency added to `go.mod`) pass
+- [x] A response with plain assistant content (no tool call) returns `ChatTurnResult{Kind: "message", ...}`
+- [x] A response with a `propose_app_plan` tool call and valid arguments returns `ChatTurnResult{Kind: "plan", Plan: ...}`
+- [x] A response with a `list_apps`/`get_app_schema` tool call invokes the provided `ReadToolInvoker`, feeds the result back, and returns the final round's result (not the intermediate one)
+- [x] Malformed/incomplete `propose_app_plan` arguments return an error, never a partially-populated `Plan`
+- [x] A bounded client-side HTTP timeout (per design's Risks & Concerns) is applied to the OpenAI call
+- [x] Quick gate passes: `go build ./... && go vet ./... && go test ./internal/dashboard/ai/...`
+- [x] Test count: at least 6 new tests (message shape, plan shape, tool-call round-trip via `httptest.Server`, malformed plan args, timeout behavior, no OpenAI SDK dependency added to `go.mod`) pass — 6 test functions (9 sub-tests) all pass
 
 **Tests**: unit
 **Gate**: quick
