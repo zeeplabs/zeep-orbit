@@ -151,11 +151,11 @@ Every ambiguity is resolved or recorded here — nothing is left silently unclea
 | AIBC-04 | P1: Configure the OpenAI provider | Tasks | Implementing |
 | AIBC-05 | P1: Configure the OpenAI provider | Tasks | Implementing |
 | AIBC-06 | P1: Configure the OpenAI provider | Tasks | Implementing |
-| AIBC-07 | P2: Persisted per-app chat session | Design | Pending |
-| AIBC-08 | P2: Persisted per-app chat session | Design | Pending |
-| AIBC-09 | P2: Persisted per-app chat session | Design | Pending |
-| AIBC-10 | P2: Persisted per-app chat session | Design | Pending |
-| AIBC-11 | P2: Persisted per-app chat session | Design | Pending |
+| AIBC-07 | P2: Persisted per-app chat session | Tasks | Implementing |
+| AIBC-08 | P2: Persisted per-app chat session | Tasks | Implementing |
+| AIBC-09 | P2: Persisted per-app chat session | Tasks | Implementing |
+| AIBC-10 | P2: Persisted per-app chat session | Tasks | Implementing |
+| AIBC-11 | P2: Persisted per-app chat session | Tasks | Implementing |
 | AIBC-12 | P3: Chat-driven plan proposal via function-calling | Design | Pending |
 | AIBC-13 | P3: Chat-driven plan proposal via function-calling | Design | Pending |
 | AIBC-14 | P3: Chat-driven plan proposal via function-calling | Design | Pending |
@@ -174,7 +174,7 @@ Every ambiguity is resolved or recorded here — nothing is left silently unclea
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 24 total, 6 mapped to tasks (AIBC-01 through AIBC-06, via T1-T4), 18 unmapped (P2-P4 tasks pending — batch 2)
+**Coverage:** 24 total, 11 mapped to tasks (AIBC-01 through AIBC-11, via T1-T6), 13 unmapped (P3-P4 tasks pending — batch 2)
 
 ---
 
