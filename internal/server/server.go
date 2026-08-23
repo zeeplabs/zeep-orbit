@@ -256,6 +256,8 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Get("/api/config/auth/providers", dashH.ListAuthProviders)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/config/auth/providers/{provider}", dashH.GetAuthProvider)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/config/auth/providers/{provider}", dashH.UpsertAuthProvider)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/ai-providers/{provider}", dashH.GetAIProviderConfig)
+		r.With(dashboard.RequireAuth(pool)).Put("/api/ai-providers/{provider}", dashH.UpsertAIProviderConfig)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/config/system", dashH.GetSystemConfig)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/config/system", dashH.UpdateSystemConfig)
 		r.Get("/api/brand/config", dashH.GetPublicBrandConfig)
