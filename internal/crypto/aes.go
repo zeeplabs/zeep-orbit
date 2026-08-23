@@ -36,6 +36,23 @@ func webhookTokenEncryptionKey() ([]byte, error) {
 	return normalizeKey(key), nil
 }
 
+// aiProviderEncryptionKey resolves the key used for AI provider (e.g.
+// OpenAI) API key encryption — deliberately its own env var, not
+// GOOGLE_OAUTH_ENCRYPTION_KEY or WEBHOOK_TOKEN_ENCRYPTION_KEY, so rotating
+// any one of these secrets doesn't also invalidate the others' ciphertexts.
+// Falls back to DASHBOARD_BOOTSTRAP_SECRET (a required var, see README), so
+// this only errors if that fallback was itself left unset.
+func aiProviderEncryptionKey() ([]byte, error) {
+	key := os.Getenv("AI_PROVIDER_ENCRYPTION_KEY")
+	if key == "" {
+		key = os.Getenv("DASHBOARD_BOOTSTRAP_SECRET")
+	}
+	if key == "" {
+		return nil, errors.New("crypto: neither AI_PROVIDER_ENCRYPTION_KEY nor DASHBOARD_BOOTSTRAP_SECRET is set")
+	}
+	return normalizeKey(key), nil
+}
+
 func normalizeKey(key string) []byte {
 	if len(key) >= 32 {
 		return []byte(key[:32])
@@ -68,6 +85,25 @@ func EncryptWebhookToken(plaintext string) (string, error) {
 // DecryptWebhookToken decrypts a ciphertext produced by EncryptWebhookToken.
 func DecryptWebhookToken(encoded string) (string, error) {
 	key, err := webhookTokenEncryptionKey()
+	if err != nil {
+		return "", err
+	}
+	return decryptWithKey(encoded, key)
+}
+
+// EncryptAIProviderKey encrypts an AI provider's plaintext API key under the
+// dedicated AI-provider key (see aiProviderEncryptionKey).
+func EncryptAIProviderKey(plaintext string) (string, error) {
+	key, err := aiProviderEncryptionKey()
+	if err != nil {
+		return "", err
+	}
+	return encryptWithKey(plaintext, key)
+}
+
+// DecryptAIProviderKey decrypts a ciphertext produced by EncryptAIProviderKey.
+func DecryptAIProviderKey(encoded string) (string, error) {
+	key, err := aiProviderEncryptionKey()
 	if err != nil {
 		return "", err
 	}
