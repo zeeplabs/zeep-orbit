@@ -1,7 +1,7 @@
 # Build with AI — Chat-Driven App Creation Design
 
 **Spec**: `.specs/features/ai-build-chat/spec.md`
-**Status**: Draft
+**Status**: Approved
 
 ---
 

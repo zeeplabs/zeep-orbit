@@ -145,36 +145,36 @@ Every ambiguity is resolved or recorded here — nothing is left silently unclea
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| AIBC-01 | P1: Configure the OpenAI provider | Tasks | Implementing |
-| AIBC-02 | P1: Configure the OpenAI provider | Tasks | Implementing |
-| AIBC-03 | P1: Configure the OpenAI provider | Tasks | Implementing |
-| AIBC-04 | P1: Configure the OpenAI provider | Tasks | Implementing |
-| AIBC-05 | P1: Configure the OpenAI provider | Tasks | Implementing |
-| AIBC-06 | P1: Configure the OpenAI provider | Tasks | Implementing |
-| AIBC-07 | P2: Persisted per-app chat session | Tasks | Implementing |
-| AIBC-08 | P2: Persisted per-app chat session | Tasks | Implementing |
-| AIBC-09 | P2: Persisted per-app chat session | Tasks | Implementing |
-| AIBC-10 | P2: Persisted per-app chat session | Tasks | Implementing |
-| AIBC-11 | P2: Persisted per-app chat session | Tasks | Implementing |
-| AIBC-12 | P3: Chat-driven plan proposal via function-calling | Tasks | Implementing |
-| AIBC-13 | P3: Chat-driven plan proposal via function-calling | Tasks | Implementing |
-| AIBC-14 | P3: Chat-driven plan proposal via function-calling | Tasks | Implementing |
-| AIBC-15 | P3: Chat-driven plan proposal via function-calling | Tasks | Implementing |
-| AIBC-16 | P3: Chat-driven plan proposal via function-calling | Design | Pending |
-| AIBC-17 | P3: Chat-driven plan proposal via function-calling | Tasks | Implementing |
-| AIBC-18 | P3: Chat-driven plan proposal via function-calling | Design | Pending |
-| AIBC-19 | P4: Confirm plan → real app creation | Design | Pending |
-| AIBC-20 | P4: Confirm plan → real app creation | Design | Pending |
-| AIBC-21 | P4: Confirm plan → real app creation | Design | Pending |
-| AIBC-22 | P4: Confirm plan → real app creation | Design | Pending |
-| AIBC-23 | P4: Confirm plan → real app creation | Design | Pending |
-| AIBC-24 | P4: Confirm plan → real app creation | Design | Pending |
+| AIBC-01 | P1: Configure the OpenAI provider | Verify | Verified |
+| AIBC-02 | P1: Configure the OpenAI provider | Verify | Verified |
+| AIBC-03 | P1: Configure the OpenAI provider | Verify | Verified |
+| AIBC-04 | P1: Configure the OpenAI provider | Verify | Verified |
+| AIBC-05 | P1: Configure the OpenAI provider | Verify | Verified |
+| AIBC-06 | P1: Configure the OpenAI provider | Verify | Verified |
+| AIBC-07 | P2: Persisted per-app chat session | Verify | Verified |
+| AIBC-08 | P2: Persisted per-app chat session | Verify | Verified |
+| AIBC-09 | P2: Persisted per-app chat session | Verify | Verified |
+| AIBC-10 | P2: Persisted per-app chat session | Verify | Verified |
+| AIBC-11 | P2: Persisted per-app chat session | Verify | Verified |
+| AIBC-12 | P3: Chat-driven plan proposal via function-calling | Verify | Verified |
+| AIBC-13 | P3: Chat-driven plan proposal via function-calling | Verify | Verified |
+| AIBC-14 | P3: Chat-driven plan proposal via function-calling | Verify | Verified |
+| AIBC-15 | P3: Chat-driven plan proposal via function-calling | Verify | Verified |
+| AIBC-16 | P3: Chat-driven plan proposal via function-calling | Verify | Verified |
+| AIBC-17 | P3: Chat-driven plan proposal via function-calling | Verify | Verified |
+| AIBC-18 | P3: Chat-driven plan proposal via function-calling | Verify | Verified (frontend half by inspection — no test framework in repo, per Test Coverage Matrix) |
+| AIBC-19 | P4: Confirm plan → real app creation | Verify | Verified |
+| AIBC-20 | P4: Confirm plan → real app creation | Verify | Verified |
+| AIBC-21 | P4: Confirm plan → real app creation | Verify | Verified |
+| AIBC-22 | P4: Confirm plan → real app creation | Verify | Verified (see `respondBuildChatConfirmError`'s `SPEC_DEVIATION` comment — validation-class errors surface a specific message, not the generic string, for the reasons documented there) |
+| AIBC-23 | P4: Confirm plan → real app creation | Verify | Verified |
+| AIBC-24 | P4: Confirm plan → real app creation | Verify | Verified |
 
 **ID format:** `AIBC-[NUMBER]` (AI Build Chat)
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 24 total, 15 mapped to tasks (AIBC-01 through AIBC-15, AIBC-17, via T1-T7), 9 unmapped (AIBC-16, AIBC-18 through AIBC-24 land with T8-T12 — batch 2)
+**Coverage:** 24 total, 24 mapped to tasks and verified (T1-T12 + a post-Verifier fix pass closing AIBC-11/16/17 evidence gaps and documenting the AIBC-22 deviation). See `.specs/features/ai-build-chat/validation.md` for the full independent Verifier report (round 1: FAIL on 6 evidence/precision gaps, 0 behavioral defects, 5/5 discrimination-sensor mutations killed).
 
 ---
 

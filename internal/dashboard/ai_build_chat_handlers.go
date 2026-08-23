@@ -389,6 +389,20 @@ func (h *Handler) respondBuildChatConfirmError(w http.ResponseWriter, r *http.Re
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 	case errors.Is(err, ErrForbidden):
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+	// SPEC_DEVIATION: a validation-class failure (e.g. a reserved/invalid
+	// table name caught by validatePlanTableNames, or a duplicate-name
+	// rejection from CreateAppTableForUser that isn't the idempotent-retry
+	// case) surfaces its own specific message instead of genericAIChatError.
+	// spec.md's AIBC-22 literally says "surface a generic error in the
+	// chat" for the partial-failure case; this handler intentionally
+	// exposes the precise validation message here because it's a safe,
+	// input-class error (AGENTS.md §4's carved-out exception for
+	// ValidationError, same as the manual create-app/create-table REST
+	// handlers already do), not an internal/provider failure. Only the
+	// default branch below (internal/unexpected errors) uses the fixed
+	// generic string. design.md's Error Handling table already documents
+	// this split; genericAIChatError remains reserved for the
+	// internal/unexpected-error case.
 	case errors.As(err, &valErr):
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": valErr.Error()})
 	case errors.As(err, &typeErr):
