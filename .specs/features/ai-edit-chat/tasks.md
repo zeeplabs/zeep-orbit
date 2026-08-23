@@ -216,10 +216,10 @@ T10 -> T11 -> T12
 - Skill: NONE
 
 **Done when**:
-- [ ] Prompt text includes the same type/naming rules and off-topic guard as the creation prompt
-- [ ] Prompt explicitly instructs reading `get_app_schema` before proposing any operation on an existing table
-- [ ] Prompt explicitly instructs declining FK-on-existing-column requests
-- [ ] `go build ./...` passes (no behavior yet to unit-test beyond compiling — covered by T7's turn tests)
+- [x] Prompt text includes the same type/naming rules and off-topic guard as the creation prompt
+- [x] Prompt explicitly instructs reading `get_app_schema` before proposing any operation on an existing table
+- [x] Prompt explicitly instructs declining FK-on-existing-column requests
+- [x] `go build ./...` passes (no behavior yet to unit-test beyond compiling — covered by T7's turn tests)
 
 **Tests**: none (content-only constant; exercised by T7's tests)
 **Gate**: build
