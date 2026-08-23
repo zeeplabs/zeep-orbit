@@ -125,9 +125,9 @@ T10 -> T12
 
 **Done when**:
 
-- [ ] Table created with the exact columns from design.md's Data Models section
-- [ ] Migration applies cleanly on a fresh DB and is idempotent per the repo's existing migration convention
-- [ ] Build gate passes: `go build ./... && go vet ./...`
+- [x] Table created with the exact columns from design.md's Data Models section
+- [x] Migration applies cleanly on a fresh DB and is idempotent per the repo's existing migration convention
+- [x] Build gate passes: `go build ./... && go vet ./...`
 
 **Tests**: none
 **Gate**: build
