@@ -266,13 +266,13 @@ T10 -> T11 -> T12
 - Skill: NONE
 
 **Done when**:
-- [ ] Each of the 6 `Kind` values dispatches to the correct handler with correctly-mapped fields
-- [ ] Handler validation errors (duplicate column, bad identifier, disallowed type, invalid reference) surface verbatim in the chat response, session stays `in_progress`, app unmodified (AIEC-04)
-- [ ] RBAC denial (`CanWrite()` false) returns an authorization error before any handler runs, for every `Kind` (AIEC-05)
-- [ ] Every applied mutation is audit-logged with origin `ai_chat` (AIEC-06)
-- [ ] Session belonging to another user returns not-found with no mutation (IDOR guard, mirrors `TestBuildChatConfirm_AnotherUsersSessionReturnsNotFoundNoMutation`)
-- [ ] Double-confirm on an already-applied operation is a no-op, not a duplicate mutation (AIEC-16)
-- [ ] Gate passes: `go build ./... && go test ./internal/dashboard/... && go vet ./... && gofmt -l internal/dashboard/ai_edit_chat_handlers.go`
+- [x] Each of the 6 `Kind` values dispatches to the correct handler with correctly-mapped fields
+- [x] Handler validation errors (duplicate column, bad identifier, disallowed type, invalid reference) surface verbatim in the chat response, session stays `in_progress`, app unmodified (AIEC-04)
+- [x] RBAC denial (`CanWrite()` false) returns an authorization error before any handler runs, for every `Kind` (AIEC-05)
+- [x] Every applied mutation is audit-logged with origin `ai_chat` (AIEC-06)
+- [x] Session belonging to another user returns not-found with no mutation (IDOR guard, mirrors `TestBuildChatConfirm_AnotherUsersSessionReturnsNotFoundNoMutation`)
+- [x] Double-confirm on an already-applied operation is a no-op, not a duplicate mutation (AIEC-16)
+- [x] Gate passes: `go build ./... && go test ./internal/dashboard/... && go vet ./... && gofmt -l internal/dashboard/ai_edit_chat_handlers.go`
 
 **Tests**: unit
 **Gate**: quick
