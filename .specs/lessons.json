@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 26,
+  "next_id": 27,
   "lessons": [
     {
       "id": "L-001",
@@ -454,6 +454,24 @@
       ],
       "created": "2026-08-17T18:19:39Z",
       "last_seen": "2026-08-17T18:19:39Z"
+    },
+    {
+      "id": "L-026",
+      "key": "ac_gap::when a fake stub replaces a model or history consuming dependency in a test assert on the captured input payload e g history system prompt content not just the fake s canned output otherwise a regression in payload assembly dropped system prompt truncated history is invisible to the suite",
+      "text": "When a fake/stub replaces a model or history-consuming dependency in a test, assert on the captured input payload (e.g. history/system-prompt content), not just the fake's canned output — otherwise a regression in payload assembly (dropped system prompt, truncated history) is invisible to the suite.",
+      "signal": "ac_gap",
+      "scope": "internal/dashboard/ai_build_chat_handlers.go",
+      "status": "candidate",
+      "features": [
+        "ai-build-chat"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "AIBC-12 (internal/dashboard/ai_build_chat_handlers.go)"
+      ],
+      "created": "2026-08-23T17:03:42Z",
+      "last_seen": "2026-08-23T17:03:42Z"
     }
   ]
 }

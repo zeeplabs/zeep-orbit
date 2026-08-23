@@ -164,6 +164,12 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: spec.md:119-137 vs tasks.md T11-T15 (.specs/features/*/spec.md)
 - last seen: 2026-08-17T18:19:39Z
 
+### L-026 - When a fake/stub replaces a model or history-consuming dependency in a test, assert on the captured input payload (e.g. history/system-prompt content), not just the fake's canned output — otherwise a regression in payload assembly (dropped system prompt, truncated history) is invisible to the suite.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `internal/dashboard/ai_build_chat_handlers.go` · harmful: 0
+- features: ai-build-chat
+- evidence: AIBC-12 (internal/dashboard/ai_build_chat_handlers.go)
+- last seen: 2026-08-23T17:03:42Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.
