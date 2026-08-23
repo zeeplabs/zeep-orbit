@@ -843,6 +843,153 @@ func TestEditChatConfirm_DoubleConfirmIsNoOp(t *testing.T) {
 	}
 }
 
+// editChatSessionRequestFor builds an httptest request carrying user in
+// context and appID set as the chi "id" URL param — for GetEditChatSession/
+// RestartEditChatSession, which take no request body.
+func editChatSessionRequestFor(user *DashboardUser, appID string) *http.Request {
+	r := httptest.NewRequest(http.MethodGet, "/dashboard/api/apps/"+appID+"/ai/edit-chat", nil)
+	if user != nil {
+		r = withUser(r, user)
+	}
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", appID)
+	r = r.WithContext(withCtx(r, rctx))
+	return r
+}
+
+// AIEC-01 (reload half): reopening the drawer for an app with an
+// in_progress edit session reloads its messages instead of creating a new
+// one.
+func TestGetEditChatSession_ReloadsExistingHistory(t *testing.T) {
+	pool, h, user, appID := aiEditChatHandlerTestPool(t)
+
+	session, err := createEditSessionWithMessage(t, pool, user.ID, appID, "add an email column")
+	if err != nil {
+		t.Fatalf("seed session: %v", err)
+	}
+
+	req := editChatSessionRequestFor(&DashboardUser{ID: user.ID, Role: "admin"}, appID)
+	w := httptest.NewRecorder()
+	h.GetEditChatSession(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var got editChatSessionResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Session == nil || got.Session.ID != session.ID {
+		t.Fatalf("expected the existing in_progress session to be reloaded, got %+v", got.Session)
+	}
+	if len(got.Messages) != 1 || got.Messages[0].Content != "add an email column" {
+		t.Fatalf("expected the prior message reloaded, got %+v", got.Messages)
+	}
+}
+
+// AIEC-01 (create half) + AIEC-05: a fresh app with no in_progress edit
+// session yet gets a newly created one; a viewer is forbidden instead.
+func TestGetEditChatSession_CreatesFreshSessionAndEnforcesWriteAccess(t *testing.T) {
+	pool, h, owner, appID := aiEditChatHandlerTestPool(t)
+
+	req := editChatSessionRequestFor(&DashboardUser{ID: owner.ID, Role: "admin"}, appID)
+	w := httptest.NewRecorder()
+	h.GetEditChatSession(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var got editChatSessionResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Session == nil || got.Session.Status != "in_progress" || len(got.Messages) != 0 {
+		t.Fatalf("expected a fresh empty in_progress session, got %+v / %d messages", got.Session, len(got.Messages))
+	}
+
+	viewer, err := CreateUser(context.Background(), pool, fmt.Sprintf("edit-chat-getsession-viewer-%d@example.com", time.Now().UnixNano()), "Viewer", "hash", "member")
+	if err != nil {
+		t.Fatalf("create viewer: %v", err)
+	}
+	if _, err := AddAppMember(context.Background(), pool, AppRef{BackendAppID: appID}, viewer.ID, AppRoleViewer); err != nil {
+		t.Fatalf("AddAppMember: %v", err)
+	}
+	viewerReq := editChatSessionRequestFor(&DashboardUser{ID: viewer.ID, Role: "member"}, appID)
+	viewerW := httptest.NewRecorder()
+	h.GetEditChatSession(viewerW, viewerReq)
+	if viewerW.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for a viewer, got %d: %s", viewerW.Code, viewerW.Body.String())
+	}
+}
+
+// Restart (spec Edge Cases, "Recomeçar"): abandons the current in_progress
+// edit session (preserving its messages) and returns a fresh empty one,
+// without requiring any pending operation to be resolved first.
+func TestRestartEditChatSession_AbandonsAndCreatesFresh(t *testing.T) {
+	pool, h, user, appID := aiEditChatHandlerTestPool(t)
+
+	session, err := createEditSessionWithMessage(t, pool, user.ID, appID, "add an email column")
+	if err != nil {
+		t.Fatalf("seed session: %v", err)
+	}
+	// A pending (unconfirmed) op left on the session — restart must not
+	// require it to be resolved first.
+	persistProposedEditOp(t, pool, session.ID, &ai.EditOperation{
+		Kind: "add_column",
+		AddColumn: &ai.PlanColumnOp{
+			Table:  "users",
+			Column: ai.PlanColumn{Name: "email", Type: "text"},
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/dashboard/api/apps/"+appID+"/ai/edit-chat/restart", nil)
+	req = withUser(req, &DashboardUser{ID: user.ID, Role: "admin"})
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", appID)
+	req = req.WithContext(withCtx(req, rctx))
+	w := httptest.NewRecorder()
+	h.RestartEditChatSession(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var got editChatSessionResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Session == nil || got.Session.ID == session.ID {
+		t.Fatalf("expected a new session distinct from the original, got %+v", got.Session)
+	}
+	if len(got.Messages) != 0 {
+		t.Fatalf("expected the fresh session to start with no messages, got %d", len(got.Messages))
+	}
+
+	var oldStatus string
+	if err := pool.QueryRow(context.Background(),
+		`SELECT status FROM zeep_system.ai_build_sessions WHERE id = $1`, session.ID,
+	).Scan(&oldStatus); err != nil {
+		t.Fatalf("query old session status: %v", err)
+	}
+	if oldStatus != "abandoned" {
+		t.Fatalf("expected the original session abandoned, got %q", oldStatus)
+	}
+}
+
+// createEditSessionWithMessage seeds an in_progress edit session for
+// (userID, appID) with one persisted user message — shared setup for the
+// GetEditChatSession/RestartEditChatSession tests above.
+func createEditSessionWithMessage(t *testing.T, pool *db.Pool, userID, appID, content string) (*AIBuildSession, error) {
+	t.Helper()
+	session, _, err := GetOrCreateInProgressEditSession(context.Background(), pool, userID, appID)
+	if err != nil {
+		return nil, err
+	}
+	if err := AppendMessage(context.Background(), pool, session.ID, "user", content, nil); err != nil {
+		return nil, err
+	}
+	return session, nil
+}
+
 // No pending operation at all (fresh session, never had a turn) is
 // rejected with a 400, matching BuildChatConfirm's equivalent guard.
 func TestEditChatConfirm_NoPendingOperationRejected(t *testing.T) {

@@ -345,6 +345,71 @@ func TestGetOrCreateInProgressEditSession_CoexistsWithCreateSession(t *testing.T
 	}
 }
 
+// Restart (spec Edge Cases, "Recomeçar"): AbandonAndRestartEditSession
+// abandons the current in_progress edit session for (user, app) —
+// preserving its messages — and creates a fresh one for the same pair,
+// mirroring TestAbandonAndRestartSession_PreservesHistoryAndCreatesFresh
+// for the edit-mode scoping.
+func TestAbandonAndRestartEditSession_PreservesHistoryAndCreatesFresh(t *testing.T) {
+	pool, userA, _ := aiBuildSessionsTestPool(t)
+	appID := aiEditSessionTestApp(t, pool, userA)
+	ctx := context.Background()
+
+	original, _, err := GetOrCreateInProgressEditSession(ctx, pool, userA, appID)
+	if err != nil {
+		t.Fatalf("GetOrCreateInProgressEditSession: %v", err)
+	}
+	if err := AppendMessage(ctx, pool, original.ID, "user", "add a column", nil); err != nil {
+		t.Fatalf("AppendMessage: %v", err)
+	}
+
+	fresh, err := AbandonAndRestartEditSession(ctx, pool, userA, appID)
+	if err != nil {
+		t.Fatalf("AbandonAndRestartEditSession: %v", err)
+	}
+	if fresh.ID == original.ID {
+		t.Fatal("expected a new session ID after restart")
+	}
+	if fresh.Status != "in_progress" || fresh.Mode != "edit" {
+		t.Errorf("expected a fresh in_progress edit session, got %+v", fresh)
+	}
+	if fresh.TargetAppID == nil || *fresh.TargetAppID != appID {
+		t.Errorf("expected target_app_id %q on the fresh session, got %v", appID, fresh.TargetAppID)
+	}
+
+	var oldStatus string
+	if err := pool.QueryRow(ctx,
+		`SELECT status FROM zeep_system.ai_build_sessions WHERE id = $1`, original.ID,
+	).Scan(&oldStatus); err != nil {
+		t.Fatalf("query old session status: %v", err)
+	}
+	if oldStatus != "abandoned" {
+		t.Errorf("expected old session status abandoned, got %q", oldStatus)
+	}
+
+	var oldMessageCount int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM zeep_system.ai_build_messages WHERE session_id = $1`, original.ID,
+	).Scan(&oldMessageCount); err != nil {
+		t.Fatalf("count old messages: %v", err)
+	}
+	if oldMessageCount != 1 {
+		t.Errorf("expected the abandoned session's message to remain in storage, got count %d", oldMessageCount)
+	}
+
+	// The fresh session must be the one now resumed for (userA, appID).
+	resumed, messages, err := GetOrCreateInProgressEditSession(ctx, pool, userA, appID)
+	if err != nil {
+		t.Fatalf("GetOrCreateInProgressEditSession (resume): %v", err)
+	}
+	if resumed.ID != fresh.ID {
+		t.Fatalf("expected the fresh session to be resumed, got a different ID (%q vs %q)", resumed.ID, fresh.ID)
+	}
+	if len(messages) != 0 {
+		t.Fatalf("expected the fresh session to start with no messages, got %d", len(messages))
+	}
+}
+
 // AIBC-14 (persistence half): AppendMessage stores the plan JSON on the
 // assistant message that carries a propose_app_plan result.
 func TestAppendMessage_PersistsPlanJSON(t *testing.T) {

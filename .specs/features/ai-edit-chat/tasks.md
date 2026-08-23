@@ -294,10 +294,10 @@ T10 -> T11 -> T12
 - Skill: NONE
 
 **Done when**:
-- [ ] Reopening the drawer for an app with an `in_progress` edit session reloads its messages (AIEC-01)
-- [ ] Restart marks the current session `abandoned` and creates a new one without requiring a pending operation to be resolved first
-- [ ] Unit tests for both paths
-- [ ] Gate passes: `go build ./... && go test ./internal/dashboard/... && go vet ./... && gofmt -l internal/dashboard/ai_edit_chat_handlers.go`
+- [x] Reopening the drawer for an app with an `in_progress` edit session reloads its messages (AIEC-01)
+- [x] Restart marks the current session `abandoned` and creates a new one without requiring a pending operation to be resolved first
+- [x] Unit tests for both paths
+- [x] Gate passes: `go build ./... && go test ./internal/dashboard/... && go vet ./... && gofmt -l internal/dashboard/ai_edit_chat_handlers.go`
 
 **Tests**: unit
 **Gate**: quick
