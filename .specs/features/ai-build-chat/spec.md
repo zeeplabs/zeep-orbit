@@ -146,11 +146,11 @@ Every ambiguity is resolved or recorded here — nothing is left silently unclea
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
 | AIBC-01 | P1: Configure the OpenAI provider | Tasks | Implementing |
-| AIBC-02 | P1: Configure the OpenAI provider | Design | Pending |
+| AIBC-02 | P1: Configure the OpenAI provider | Tasks | Implementing |
 | AIBC-03 | P1: Configure the OpenAI provider | Tasks | Implementing |
 | AIBC-04 | P1: Configure the OpenAI provider | Tasks | Implementing |
 | AIBC-05 | P1: Configure the OpenAI provider | Tasks | Implementing |
-| AIBC-06 | P1: Configure the OpenAI provider | Design | Pending |
+| AIBC-06 | P1: Configure the OpenAI provider | Tasks | Implementing |
 | AIBC-07 | P2: Persisted per-app chat session | Design | Pending |
 | AIBC-08 | P2: Persisted per-app chat session | Design | Pending |
 | AIBC-09 | P2: Persisted per-app chat session | Design | Pending |
@@ -174,7 +174,7 @@ Every ambiguity is resolved or recorded here — nothing is left silently unclea
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 24 total, 0 mapped to tasks, 24 unmapped ⚠️ (Design phase not yet run)
+**Coverage:** 24 total, 6 mapped to tasks (AIBC-01 through AIBC-06, via T1-T4), 18 unmapped (P2-P4 tasks pending — batch 2)
 
 ---
 

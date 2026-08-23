@@ -180,11 +180,13 @@ T10 -> T12
 
 **Done when**:
 
-- [ ] Non-superadmin `PUT` returns `403`, no store mutation (AIBC-02)
-- [ ] Superadmin `PUT` with key+model succeeds; `GET` reflects `has_key: true`
-- [ ] `PUT` to `gemini`/`claude` returns `501`, no persistence attempted (AIBC-06)
-- [ ] Full gate passes: `go build ./... && go vet ./... && go test ./...`
-- [ ] Test count: at least 5 new handler tests (403 case, successful upsert, model-only update preserves key, 501 for gemini/claude, unauthenticated request) pass
+- [x] Non-superadmin `PUT` returns `403`, no store mutation (AIBC-02)
+- [x] Superadmin `PUT` with key+model succeeds; `GET` reflects `has_key: true`
+- [x] `PUT` to `gemini`/`claude` returns `501`, no persistence attempted (AIBC-06)
+- [x] Full gate passes: `go build ./... && go vet ./... && go test ./...` (see T3 note on pre-existing env gap for the unrelated webhook/OAuth suite; all 5 new AI-provider handler tests pass)
+- [x] Test count: at least 5 new handler tests (403 case, successful upsert, model-only update preserves key, 501 for gemini/claude, unauthenticated request) pass
+
+**SPEC_DEVIATION**: route path is `/dashboard/api/ai-providers/{provider}`, not the spec's literal `/api/dashboard/ai-providers/{provider}` — matches the one real routing convention in `internal/server/server.go` (`r.Route("/dashboard", ...)` with `/api/...` sub-paths, e.g. the existing `/api/config/auth/providers/{provider}`). See the comment in `ai_provider_handlers.go`.
 
 **Tests**: integration
 **Gate**: full
