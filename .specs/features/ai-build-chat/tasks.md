@@ -295,13 +295,13 @@ T10 -> T12
 
 **Done when**:
 
-- [ ] Opening with an existing `in_progress` session returns its full history (AIBC-07)
-- [ ] Sending a message persists it, calls the model, persists and returns the assistant response
-- [ ] `list_apps`/`get_app_schema` tool calls resolve through the caller-side `ReadToolInvoker` closure wired to `List*ForUser`/`Get*ForUser` (AIBC-17), never fabricating schema
-- [ ] A provider/OpenAI failure returns the fixed generic chat message and logs the real error server-side (AIBC-16)
-- [ ] `enabled = false` on the provider disables the entry point at the API level (returns a state the frontend can gate on, AIBC-18)
-- [ ] Full gate passes: `go build ./... && go vet ./... && go test ./...`
-- [ ] Test count: at least 7 new tests (resume, new session creation, message-shape turn, plan-shape turn, read-tool round-trip, provider-failure generic message + server log assertion, disabled-provider response) pass
+- [x] Opening with an existing `in_progress` session returns its full history (AIBC-07)
+- [x] Sending a message persists it, calls the model, persists and returns the assistant response
+- [x] `list_apps`/`get_app_schema` tool calls resolve through the caller-side `ReadToolInvoker` closure wired to `List*ForUser`/`Get*ForUser` (AIBC-17), never fabricating schema
+- [x] A provider/OpenAI failure returns the fixed generic chat message and logs the real error server-side (AIBC-16)
+- [x] `enabled = false` on the provider disables the entry point at the API level (returns a state the frontend can gate on, AIBC-18)
+- [x] Full gate passes: `go build ./... && go vet ./... && go test ./...` (see T3 note on pre-existing environmental `max_connections` ceiling under full parallelism — reproduces identically on stock `develop`; all 8 new tests pass)
+- [x] Test count: at least 7 new tests (resume, new session creation, message-shape turn, plan-shape turn, read-tool round-trip, provider-failure generic message + server log assertion, disabled-provider response) pass — 8 new test functions all pass
 
 **Tests**: integration
 **Gate**: full
