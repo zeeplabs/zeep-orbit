@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Trans, useTranslation } from "react-i18next";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   useApp,
@@ -14,9 +15,12 @@ import {
   useRevokeAppToken,
   useRegenerateAppSecret,
   useSystemConfig,
+  useAIProviderStatus,
   AppToken,
   TableDef,
 } from "../lib/api";
+import { EditWithAIDrawer } from "@/components/patterns/EditWithAIDrawer";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -64,6 +68,30 @@ export default function AppDetailsPage() {
   const setTab = (value: string) => setSearchParams({ tab: value }, { replace: true });
 
   const { data: app, isLoading } = useApp(id!);
+  const [showEditWithAI, setShowEditWithAI] = useState(false);
+
+  // "Edit with AI" write-permission gate (AIEC-05): mirrors the backend's
+  // CanWrite() semantics for the two cases the frontend can determine
+  // without an admin-only endpoint — the app's owner (auto-added to
+  // app_members as admin on creation, apps_store.go CreateApp) and a
+  // superadmin (RBAC bypass, rbac.go ResolveAppRole). An explicit
+  // admin/editor app_members grant on a non-owner is CanWrite()=true
+  // server-side too, but /members is admin-only (T-06 AC-6) so a non-admin
+  // caller can't read their own row to prove it client-side — this fails
+  // closed (button hidden) rather than guessing, never shows the button to
+  // someone who lacks write access.
+  const { data: me } = useQuery({
+    queryKey: ["me"],
+    queryFn: async () => {
+      const res = await fetch("/dashboard/api/me", { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json() as Promise<{ id: string; email: string; name: string; role: string; language: string }>;
+    },
+    retry: false,
+  });
+  const { data: aiProviderStatus } = useAIProviderStatus();
+  const aiProviderReady = Boolean(aiProviderStatus?.enabled && aiProviderStatus?.has_key);
+  const canEditWithAI = Boolean(app && me && (app.owner_id === me.id || me.role === "superadmin"));
 
   if (isLoading) {
     return <p className="text-sm text-[var(--text-secondary)]">{t("app.loading")}</p>;
@@ -96,15 +124,36 @@ export default function AppDetailsPage() {
         {t("appForm.back")}
       </button>
 
-      <div className="mb-7">
-        <span className="mb-3 inline-block rounded-full bg-[var(--primary-tint)] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-[var(--primary)]">
-          {t("appDetails.backendBadge")}
-        </span>
-        <h1 className="text-[26px] font-bold leading-tight text-[var(--text-primary)]" style={{ fontFamily: "var(--font-display)" }}>
-          {app.name}
-        </h1>
-        <p className="mt-1.5 text-sm text-[var(--text-secondary)]">{t("appDetails.subtitle")}</p>
+      <div className="mb-7 flex items-start justify-between gap-4">
+        <div>
+          <span className="mb-3 inline-block rounded-full bg-[var(--primary-tint)] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-[var(--primary)]">
+            {t("appDetails.backendBadge")}
+          </span>
+          <h1 className="text-[26px] font-bold leading-tight text-[var(--text-primary)]" style={{ fontFamily: "var(--font-display)" }}>
+            {app.name}
+          </h1>
+          <p className="mt-1.5 text-sm text-[var(--text-secondary)]">{t("appDetails.subtitle")}</p>
+        </div>
+        {canEditWithAI && (
+          <button
+            type="button"
+            disabled={!aiProviderReady}
+            title={aiProviderReady ? undefined : t("editWithAI.notConfigured")}
+            onClick={() => setShowEditWithAI(true)}
+            className={cn(
+              "flex shrink-0 items-center gap-2 rounded-[10px] border border-[var(--accent)]/40 bg-[var(--accent-tint)] px-4 py-2.5 text-[13.5px] font-bold text-[var(--accent)]",
+              aiProviderReady ? "cursor-pointer" : "cursor-not-allowed opacity-70",
+            )}
+          >
+            <Icon name="auto_awesome" size={18} />
+            {t("editWithAI.entryPoint")}
+          </button>
+        )}
       </div>
+
+      {canEditWithAI && (
+        <EditWithAIDrawer appId={app.id} open={showEditWithAI} onOpenChange={setShowEditWithAI} />
+      )}
 
       <Tabs value={tab} onValueChange={setTab} className="w-full">
         <TabsList className="mb-7 flex h-auto w-full max-w-full justify-start gap-0.5 overflow-x-auto rounded-[10px] bg-[var(--sunken)] p-[3px]">

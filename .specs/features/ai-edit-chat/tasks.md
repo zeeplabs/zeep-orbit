@@ -372,9 +372,9 @@ T10 -> T11 -> T12
 - Skill: NONE
 
 **Done when**:
-- [ ] Button hidden when the current user lacks write access to the app (AIEC-05)
-- [ ] Button opens `EditWithAIDrawer` scoped to the current `app_id`
-- [ ] `npx tsc -b && npm run build` pass
+- [x] Button hidden when the current user lacks write access to the app (AIEC-05)
+- [x] Button opens `EditWithAIDrawer` scoped to the current `app_id`
+- [x] `npx tsc -b && npm run build` pass
 
 **Tests**: none (no frontend test framework in this repo)
 **Gate**: build
