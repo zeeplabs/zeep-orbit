@@ -20,6 +20,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/dashboard/ai"
@@ -70,6 +71,51 @@ func aiBuildChatHandlerTestPool(t *testing.T) (*db.Pool, *Handler, *DashboardUse
 		t.Fatalf("create user: %v", err)
 	}
 	return pool, h, user
+}
+
+// aiBuildChatHandlerTestPoolWithObservedLogger is aiBuildChatHandlerTestPool
+// but wires an observer.New logger instead of zap.NewNop, so a test can
+// assert on what got logged (AIBC-16's "logs the real error server-side"
+// clause — zap.NewNop discards everything, giving no observation point).
+func aiBuildChatHandlerTestPoolWithObservedLogger(t *testing.T) (*db.Pool, *Handler, *DashboardUser, *observer.ObservedLogs) {
+	t.Helper()
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("TEST_DATABASE_URL not set")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	pool, err := db.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("connect to test DB: %v", err)
+	}
+	if err := ProvisionZeepSystem(ctx, pool); err != nil {
+		t.Fatalf("provision zeep_system: %v", err)
+	}
+
+	truncate := func() {
+		_, _ = pool.Exec(context.Background(), `TRUNCATE zeep_system.audit_log`)
+		_, _ = pool.Exec(context.Background(), `TRUNCATE zeep_system.ai_build_messages`)
+		_, _ = pool.Exec(context.Background(), `TRUNCATE zeep_system.ai_build_sessions`)
+		_, _ = pool.Exec(context.Background(), `TRUNCATE zeep_system.ai_providers`)
+		_, _ = pool.Exec(context.Background(), `TRUNCATE zeep_system.app_tables CASCADE`)
+		_, _ = pool.Exec(context.Background(), `TRUNCATE zeep_system.apps CASCADE`)
+		_, _ = pool.Exec(context.Background(), `TRUNCATE zeep_system.dashboard_users CASCADE`)
+	}
+	truncate()
+	t.Cleanup(truncate)
+
+	os.Setenv("DASHBOARD_BOOTSTRAP_SECRET", "test-secret-for-ai-build-chat-handlers")
+
+	core, observed := observer.New(zap.ErrorLevel)
+	h := NewHandler(pool, registry.New(), zap.New(core))
+	user, err := CreateUser(ctx, pool, fmt.Sprintf("build-chat-handler-obs-%d@example.com", time.Now().UnixNano()), "Chat User", "hash", "admin")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	return pool, h, user, observed
 }
 
 // withFakeAIModel swaps callAIModel for a fake for the duration of one test,
@@ -245,6 +291,18 @@ func TestBuildChatTurn_PlanShapeTurn(t *testing.T) {
 	if decoded["name"] != "ticketing" {
 		t.Errorf("expected persisted plan name %q, got %+v", "ticketing", decoded)
 	}
+
+	// AIBC-17: a plan-shape turn alone must never mutate — no app named
+	// after the plan exists until an explicit confirm (T9) runs.
+	apps, err := ListAppsForUser(context.Background(), pool, user)
+	if err != nil {
+		t.Fatalf("ListAppsForUser: %v", err)
+	}
+	for _, a := range apps {
+		if a.Name == "ticketing" {
+			t.Fatalf("expected no app created from a plan-shape BuildChatTurn alone, found %+v", a)
+		}
+	}
 }
 
 // AIBC-16: a model-call failure returns the fixed generic chat message
@@ -280,6 +338,44 @@ func TestBuildChatTurn_ModelFailureReturnsGenericMessage(t *testing.T) {
 	}
 	if len(messages) != 1 {
 		t.Fatalf("expected only the user's own message persisted after a model failure, got %d", len(messages))
+	}
+}
+
+// AIBC-16 (second half): a model-call failure is logged server-side at
+// Error level with the session ID, not just swallowed — the leak-prevention
+// half is covered by TestBuildChatTurn_ModelFailureReturnsGenericMessage
+// above; this asserts the diagnosability half using an observed logger
+// (zap.NewNop, used elsewhere in this file, discards everything and can't
+// prove a log call happened).
+func TestBuildChatTurn_ModelFailureLogsRealErrorServerSide(t *testing.T) {
+	pool, h, user, observed := aiBuildChatHandlerTestPoolWithObservedLogger(t)
+	setOpenAIProvider(t, pool, true)
+	withFakeAIModel(t, func(ctx context.Context, model, apiKey string, history []ai.Message, readTools ai.ReadToolInvoker) (ai.ChatTurnResult, error) {
+		return ai.ChatTurnResult{}, fmt.Errorf("openai: rate limit exceeded for key sk-super-secret")
+	})
+
+	req := buildChatTurnRequestFor(user, "I want a ticketing app")
+	w := httptest.NewRecorder()
+	h.BuildChatTurn(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	entries := observed.All()
+	var found bool
+	for _, e := range entries {
+		if e.Level != zap.ErrorLevel {
+			continue
+		}
+		for _, f := range e.Context {
+			if f.Key == "session_id" && f.String != "" {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected an Error-level log entry carrying session_id after a model-call failure, got %+v", entries)
 	}
 }
 
@@ -812,5 +908,55 @@ func TestBuildChatConfirm_RevokedWritePermissionForbidden(t *testing.T) {
 	}
 	if finalSession.Status != "in_progress" {
 		t.Fatalf("expected session to remain in_progress after a forbidden retry, got %q", finalSession.Status)
+	}
+}
+
+// AIBC-11: BuildChatConfirm's own owner-scoped lookup (loadOwnedBuildChatSession)
+// rejects a session ID that belongs to a different user — an IDOR-shaped
+// check distinct from the store-level scoping already covered in
+// ai_build_sessions_store_test.go.
+func TestBuildChatConfirm_AnotherUsersSessionReturnsNotFoundNoMutation(t *testing.T) {
+	pool, h, owner := aiBuildChatHandlerTestPool(t)
+	ctx := context.Background()
+
+	otherUser, err := CreateUser(ctx, pool, fmt.Sprintf("build-chat-other-%d@example.com", time.Now().UnixNano()), "Other User", "hash", "admin")
+	if err != nil {
+		t.Fatalf("create second user: %v", err)
+	}
+
+	session, _, err := GetOrCreateInProgressSession(ctx, pool, owner.ID)
+	if err != nil {
+		t.Fatalf("GetOrCreateInProgressSession: %v", err)
+	}
+	plan := &ai.AppPlan{
+		Name:   "not-yours-app",
+		Tables: []ai.PlanTable{{Name: "tickets", Columns: []ai.PlanColumn{{Name: "title", Type: "text"}}}},
+	}
+	persistProposedPlan(t, pool, session.ID, plan)
+
+	req := confirmRequestFor(otherUser, session.ID, "")
+	w := httptest.NewRecorder()
+	h.BuildChatConfirm(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 confirming another user's session, got %d: %s", w.Code, w.Body.String())
+	}
+
+	apps, err := ListAppsForUser(ctx, pool, owner)
+	if err != nil {
+		t.Fatalf("ListAppsForUser: %v", err)
+	}
+	for _, a := range apps {
+		if a.Name == "not-yours-app" {
+			t.Fatalf("expected no app created from another user's confirm attempt, found %+v", a)
+		}
+	}
+
+	ownerSession, _, err := loadOwnedBuildChatSession(ctx, pool, session.ID, owner.ID)
+	if err != nil {
+		t.Fatalf("loadOwnedBuildChatSession: %v", err)
+	}
+	if ownerSession.Status != "in_progress" {
+		t.Fatalf("expected the owner's session to remain in_progress after another user's confirm attempt, got %q", ownerSession.Status)
 	}
 }
