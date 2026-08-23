@@ -566,6 +566,18 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 		// detection), not just the single reused row.
 		`ALTER TABLE zeep_system.dashboard_pats ADD COLUMN IF NOT EXISTS family_id UUID`,
 		`CREATE INDEX IF NOT EXISTS idx_dashboard_pats_family_id ON zeep_system.dashboard_pats(family_id) WHERE family_id IS NOT NULL`,
+		// Global, single-row-per-provider AI provider config (ai-build-chat
+		// spec, T2) — same shape as zeep_system.auth_providers, one row per
+		// provider name ('openai' | 'gemini' | 'claude'). api_key_encrypted
+		// is AES-256-GCM ciphertext (crypto.EncryptAIProviderKey), never the
+		// plaintext key. See design.md Data Models.
+		`CREATE TABLE IF NOT EXISTS zeep_system.ai_providers (
+			provider          TEXT        PRIMARY KEY,
+			model             TEXT        NOT NULL DEFAULT '',
+			api_key_encrypted TEXT        NOT NULL DEFAULT '',
+			enabled           BOOLEAN     NOT NULL DEFAULT false,
+			updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
 	}
 
 	for _, stmt := range stmts {
