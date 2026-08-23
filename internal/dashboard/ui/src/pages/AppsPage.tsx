@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation, Trans } from "react-i18next";
 import { toast } from "sonner";
-import { useApps, useDeleteApp, AppDef } from "../lib/api";
+import { useApps, useDeleteApp, useAIProviderStatus, AppDef } from "../lib/api";
+import { BuildWithAIDrawer } from "@/components/patterns/BuildWithAIDrawer";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -358,6 +359,13 @@ export default function AppsPage() {
   // Type selection modal
   const [showTypeModal, setShowTypeModal] = useState(false);
 
+  // Build with AI drawer (ai-build-chat T12) — the entry point is disabled
+  // whenever the provider isn't configured/enabled (AIBC-18), instead of
+  // opening a chat that can't call a model.
+  const [showBuildWithAI, setShowBuildWithAI] = useState(false);
+  const { data: aiProviderStatus } = useAIProviderStatus();
+  const aiProviderReady = Boolean(aiProviderStatus?.enabled && aiProviderStatus?.has_key);
+
   // Frontend create modal
   const [showFeCreate, setShowFeCreate] = useState(false);
   const [newFeName, setNewFeName] = useState("");
@@ -564,15 +572,21 @@ AFTER CLONE
           <div className="flex items-center gap-2.5">
             <button
               type="button"
-              disabled
-              title={t("apps.createWithAiSoon")}
-              className="flex cursor-not-allowed items-center gap-2 rounded-[10px] border border-[var(--accent)]/40 bg-[var(--accent-tint)] px-4 py-2.5 text-[13.5px] font-bold text-[var(--accent)] opacity-70"
+              disabled={!aiProviderReady}
+              title={aiProviderReady ? undefined : t("apps.createWithAiNotConfigured")}
+              onClick={() => setShowBuildWithAI(true)}
+              className={cn(
+                "flex items-center gap-2 rounded-[10px] border border-[var(--accent)]/40 bg-[var(--accent-tint)] px-4 py-2.5 text-[13.5px] font-bold text-[var(--accent)]",
+                aiProviderReady ? "cursor-pointer" : "cursor-not-allowed opacity-70",
+              )}
             >
               <Icon name="auto_awesome" size={18} />
               {t("apps.createWithAi")}
-              <span className="ml-0.5 rounded-full bg-[var(--accent)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
-                {t("apps.soon")}
-              </span>
+              {!aiProviderReady && (
+                <span className="ml-0.5 rounded-full bg-[var(--accent)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+                  {t("apps.soon")}
+                </span>
+              )}
             </button>
             <Button className="gap-2" onClick={() => setShowTypeModal(true)}>
               <Icon name="add" size={16} />
@@ -895,6 +909,8 @@ AFTER CLONE
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <BuildWithAIDrawer open={showBuildWithAI} onOpenChange={setShowBuildWithAI} />
     </>
   );
 }
