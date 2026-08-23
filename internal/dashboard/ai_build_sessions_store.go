@@ -229,6 +229,26 @@ func createEditSession(ctx context.Context, pool *db.Pool, ownerUserID, appID st
 	return &s, nil
 }
 
+// AbandonAndRestartEditSession marks ownerUserID's current mode='edit'
+// in_progress session for appID (if any) as abandoned — preserving its
+// messages — and creates a fresh in_progress edit session scoped to the
+// same (user, app) pair, without requiring any pending operation to be
+// confirmed first (spec Edge Cases). Mirrors AbandonAndRestartSession's
+// create-mode semantics, scoped by mode/target_app_id instead of just
+// owner_user_id.
+func AbandonAndRestartEditSession(ctx context.Context, pool *db.Pool, ownerUserID, appID string) (*AIBuildSession, error) {
+	if _, err := pool.Exec(ctx,
+		`UPDATE zeep_system.ai_build_sessions
+		 SET status = 'abandoned', updated_at = now()
+		 WHERE owner_user_id = $1 AND target_app_id = $2 AND status = 'in_progress' AND mode = 'edit'`,
+		ownerUserID, appID,
+	); err != nil {
+		return nil, fmt.Errorf("dashboard: abandon ai edit session: %w", err)
+	}
+
+	return createEditSession(ctx, pool, ownerUserID, appID)
+}
+
 func listMessages(ctx context.Context, pool *db.Pool, sessionID string) ([]AIBuildMessage, error) {
 	rows, err := pool.Query(ctx,
 		`SELECT id, session_id, role, content, plan_json, created_at

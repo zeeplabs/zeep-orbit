@@ -397,6 +397,66 @@ func (h *Handler) respondEditChatConfirmError(w http.ResponseWriter, r *http.Req
 	}
 }
 
+// editChatSessionResponse is the response shape shared by
+// GetEditChatSession and RestartEditChatSession.
+type editChatSessionResponse struct {
+	Session  *AIBuildSession  `json:"session"`
+	Messages []AIBuildMessage `json:"messages"`
+}
+
+// GetEditChatSession handles GET /dashboard/api/apps/{id}/ai/edit-chat. It
+// resumes the caller's in_progress edit session for this app with its full
+// history (AIEC-01's reload half), or creates a fresh one if none exists
+// (AIEC-01's create half) — mirrors GetBuildChatSession
+// (ai_build_chat_handlers.go).
+func (h *Handler) GetEditChatSession(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appID := chi.URLParam(r, "id")
+	if !h.requireEditChatWriteAccess(w, r, user, appID) {
+		return
+	}
+
+	session, messages, err := GetOrCreateInProgressEditSession(r.Context(), h.pool, user.ID, appID)
+	if err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, editChatSessionResponse{Session: session, Messages: messages})
+}
+
+// RestartEditChatSession handles POST /dashboard/api/apps/{id}/ai/edit-chat/restart.
+// A thin wrapper over AbandonAndRestartEditSession: marks the caller's
+// current in_progress edit session for this app (if any) abandoned —
+// preserving its messages — and returns a fresh in_progress session with
+// an empty history, without requiring any pending operation to be
+// confirmed first (spec Edge Cases: "Recomeçar").
+func (h *Handler) RestartEditChatSession(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appID := chi.URLParam(r, "id")
+	if !h.requireEditChatWriteAccess(w, r, user, appID) {
+		return
+	}
+
+	session, err := AbandonAndRestartEditSession(r.Context(), h.pool, user.ID, appID)
+	if err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, editChatSessionResponse{Session: session, Messages: []AIBuildMessage{}})
+}
+
 // editChatSystemPrompt is the fixed system message prepended to every
 // OpenAI call for an "Edit with AI" session. Unlike buildChatSystemPrompt
 // (which describes a brand-new app from scratch), this prompt starts from
