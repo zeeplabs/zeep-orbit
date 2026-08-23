@@ -10,6 +10,148 @@ package dashboard
 // .specs/features/ai-edit-chat/design.md's Components section for the
 // EditChatTurn/EditChatConfirm contract.
 
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strings"
+
+	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
+
+	"github.com/zeeplabs/zeep-orbit/internal/dashboard/ai"
+)
+
+// editCallAIModel is a package-level indirection over ai.CallEditModel,
+// mirroring callAIModel (ai_build_chat_handlers.go) so tests in this
+// package can substitute a fake model response without hitting the real
+// OpenAI API.
+var editCallAIModel = ai.CallEditModel
+
+// editChatTurnRequest is EditChatTurn's request body.
+type editChatTurnRequest struct {
+	Content string `json:"content"`
+}
+
+// editChatTurnResponse is exactly one of {type: "message", content} or
+// {type: "edit_op", edit_op}, never both — mirrors buildChatTurnResponse's
+// contract for the single-operation-at-a-time edit loop (spec.md's
+// Confirmation model assumption).
+type editChatTurnResponse struct {
+	Type    string            `json:"type"`
+	Content string            `json:"content,omitempty"`
+	EditOp  *ai.EditOperation `json:"edit_op,omitempty"`
+}
+
+// requireEditChatWriteAccess loads appID and checks CanWrite() for user,
+// writing the appropriate error response and returning ok=false if the
+// caller shouldn't proceed — every edit-chat endpoint scoped to an app
+// requires this same check before touching any session or handler
+// (spec AIEC-05: "for every edit-chat endpoint scoped to X").
+func (h *Handler) requireEditChatWriteAccess(w http.ResponseWriter, r *http.Request, user *DashboardUser, appID string) bool {
+	_, role, err := GetApp(r.Context(), h.pool, appID, user)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return false
+		}
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return false
+	}
+	if !role.CanWrite() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return false
+	}
+	return true
+}
+
+// EditChatTurn handles POST /dashboard/api/apps/{id}/ai/edit-chat. It
+// resumes/creates the (user, app) edit session, persists the user's
+// message, calls the configured OpenAI model with editChatSystemPrompt +
+// the session's full history, persists the assistant's response, and
+// returns exactly one of {type: "message"} or {type: "edit_op"}
+// (AIEC-01/02/07/08/09/11/12/15/18).
+func (h *Handler) EditChatTurn(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appID := chi.URLParam(r, "id")
+	if !h.requireEditChatWriteAccess(w, r, user, appID) {
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 16*1024)
+	var body editChatTurnRequest
+	if !h.decodeJSONBody(w, r, &body) {
+		return
+	}
+	if strings.TrimSpace(body.Content) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "content is required"})
+		return
+	}
+
+	session, history, err := GetOrCreateInProgressEditSession(r.Context(), h.pool, user.ID, appID)
+	if err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+
+	if err := AppendMessage(r.Context(), h.pool, session.ID, "user", body.Content, nil); err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+
+	model, apiKey, err := resolveDecryptedAIProviderKey(r.Context(), h.pool, aiProviderName)
+	if err != nil {
+		// Unconfigured/disabled/undecryptable provider — treated identically
+		// to a provider call failure from the user's point of view (spec
+		// Edge Cases), logged server-side for a superadmin to investigate.
+		h.logger.Warn("ai edit chat: provider unavailable", zap.String("session_id", session.ID), zap.Error(err))
+		writeJSON(w, http.StatusOK, editChatTurnResponse{Type: "message", Content: genericAIChatError})
+		return
+	}
+
+	messages := make([]ai.Message, 0, len(history)+2)
+	messages = append(messages, ai.Message{Role: "system", Content: editChatSystemPrompt})
+	for _, m := range history {
+		messages = append(messages, ai.Message{Role: m.Role, Content: m.Content})
+	}
+	messages = append(messages, ai.Message{Role: "user", Content: body.Content})
+
+	result, err := editCallAIModel(r.Context(), model, apiKey, messages, h.buildChatReadToolInvoker(user))
+	if err != nil {
+		// AIEC-18 (mirrors AIBC-16): generic chat-visible message, real
+		// error logged server-side only — never leaked to the caller.
+		h.logger.Error("ai edit chat: model call failed", zap.String("session_id", session.ID), zap.Error(err))
+		writeJSON(w, http.StatusOK, editChatTurnResponse{Type: "message", Content: genericAIChatError})
+		return
+	}
+
+	if result.Kind == "edit_op" && result.EditOp != nil {
+		opJSON, err := json.Marshal(result.EditOp)
+		if err != nil {
+			h.logger.Error("ai edit chat: marshal edit op failed", zap.String("session_id", session.ID), zap.Error(err))
+			writeJSON(w, http.StatusOK, editChatTurnResponse{Type: "message", Content: genericAIChatError})
+			return
+		}
+		if err := AppendMessage(r.Context(), h.pool, session.ID, "assistant", "", opJSON); err != nil {
+			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+			return
+		}
+		writeJSON(w, http.StatusOK, editChatTurnResponse{Type: "edit_op", EditOp: result.EditOp})
+		return
+	}
+
+	if err := AppendMessage(r.Context(), h.pool, session.ID, "assistant", result.Content, nil); err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, editChatTurnResponse{Type: "message", Content: result.Content})
+}
+
 // editChatSystemPrompt is the fixed system message prepended to every
 // OpenAI call for an "Edit with AI" session. Unlike buildChatSystemPrompt
 // (which describes a brand-new app from scratch), this prompt starts from

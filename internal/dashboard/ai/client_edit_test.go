@@ -260,6 +260,59 @@ func TestCallEditModel_MalformedArgumentsReturnErrorNotPartialOp(t *testing.T) {
 	}
 }
 
+// TestCallEditModel_RequestSendsEditToolDefsOverTheWire closes lesson
+// L-026 from ai-build-chat (applied proactively here, per tasks.md's T7
+// Done-when): asserts the actual HTTP request body CallEditModel sends
+// carries the edit-mode tool schemas, not merely that editToolDefs()
+// returns them in isolation — a wiring bug that dropped the tools field
+// from the real request would still pass a test that only inspected
+// editToolDefs() directly.
+func TestCallEditModel_RequestSendsEditToolDefsOverTheWire(t *testing.T) {
+	var capturedToolNames []string
+	withMockServer(t, func(w http.ResponseWriter, r *http.Request) {
+		var reqBody struct {
+			Tools []struct {
+				Function struct {
+					Name string `json:"name"`
+				} `json:"function"`
+			} `json:"tools"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		for _, tool := range reqBody.Tools {
+			capturedToolNames = append(capturedToolNames, tool.Function.Name)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, chatResponseBody(map[string]any{
+			"role":    "assistant",
+			"content": "ok",
+		}))
+	})
+
+	_, err := CallEditModel(context.Background(), "gpt-4o", "sk-test", []Message{
+		{Role: "user", Content: "add an email column"},
+	}, nil)
+	if err != nil {
+		t.Fatalf("CallEditModel: %v", err)
+	}
+
+	want := []string{
+		"propose_add_table", "propose_add_column", "propose_add_index",
+		"propose_add_reference", "propose_set_rls_mode", "propose_toggle_auth",
+		"list_apps", "get_app_schema",
+	}
+	got := make(map[string]bool, len(capturedToolNames))
+	for _, name := range capturedToolNames {
+		got[name] = true
+	}
+	for _, name := range want {
+		if !got[name] {
+			t.Errorf("expected the real request's tools array to include %q, got %+v", name, capturedToolNames)
+		}
+	}
+}
+
 // TestEditToolDefs_IncludesAllSixProposalsPlusReadTools closes lesson
 // L-026 from ai-build-chat (applied proactively here, per T7's Done-when):
 // asserts the actual tool set editToolDefs() advertises includes every one
