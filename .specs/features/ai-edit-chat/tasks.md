@@ -191,10 +191,10 @@ T10 -> T11 -> T12
 - Skill: NONE
 
 **Done when**:
-- [ ] All 6 tool schemas defined with their required fields per design's `EditOperation` shape
-- [ ] `CallModel` (or a parallel edit-mode entry point) returns a populated `EditOp` with exactly one non-nil sub-field matching `Kind`, for each of the 6 tool calls
-- [ ] Unit tests: one per `Kind`, asserting the parsed `EditOperation` shape from a mocked tool-call response
-- [ ] Gate passes: `go build ./... && go test ./internal/dashboard/ai/... && go vet ./... && gofmt -l internal/dashboard/ai/client.go`
+- [x] All 6 tool schemas defined with their required fields per design's `EditOperation` shape
+- [x] `CallModel` (or a parallel edit-mode entry point) returns a populated `EditOp` with exactly one non-nil sub-field matching `Kind`, for each of the 6 tool calls
+- [x] Unit tests: one per `Kind`, asserting the parsed `EditOperation` shape from a mocked tool-call response
+- [x] Gate passes: `go build ./... && go test ./internal/dashboard/ai/... && go vet ./... && gofmt -l internal/dashboard/ai/client.go`
 
 **Tests**: unit
 **Gate**: quick
