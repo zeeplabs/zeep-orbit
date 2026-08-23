@@ -30,6 +30,7 @@ func aiBuildSessionsTestPool(t *testing.T) (*db.Pool, string, string) {
 	if err != nil {
 		t.Fatalf("connect to test DB: %v", err)
 	}
+	t.Cleanup(pool.Close)
 	if err := ProvisionZeepSystem(ctx, pool); err != nil {
 		t.Fatalf("provision zeep_system: %v", err)
 	}
@@ -232,6 +233,115 @@ func TestCompleteSession_And_SetSessionCreatedApp_AreIndependent(t *testing.T) {
 	}
 	if appIDAfterComplete == nil || *appIDAfterComplete != finalAppID {
 		t.Errorf("expected created_app_id %q, got %v", finalAppID, appIDAfterComplete)
+	}
+}
+
+// aiEditSessionTestApp creates a real app owned by ownerUserID so
+// GetOrCreateInProgressEditSession has a real target_app_id to satisfy the
+// ai_build_sessions.target_app_id foreign key against zeep_system.apps.
+func aiEditSessionTestApp(t *testing.T, pool *db.Pool, ownerUserID string) string {
+	t.Helper()
+	app, err := CreateApp(context.Background(), pool, fmt.Sprintf("edit-chat-app-%d", time.Now().UnixNano()), ownerUserID, false)
+	if err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+	return app.ID
+}
+
+// AIEC-01 (create half): with no in_progress edit session for (user, app),
+// GetOrCreateInProgressEditSession creates a new one with target_app_id set
+// at creation and an empty message history.
+func TestGetOrCreateInProgressEditSession_CreatesWhenNoneExists(t *testing.T) {
+	pool, userA, _ := aiBuildSessionsTestPool(t)
+	appID := aiEditSessionTestApp(t, pool, userA)
+
+	session, messages, err := GetOrCreateInProgressEditSession(context.Background(), pool, userA, appID)
+	if err != nil {
+		t.Fatalf("GetOrCreateInProgressEditSession: %v", err)
+	}
+	if session.OwnerUserID != userA {
+		t.Errorf("expected owner_user_id %q, got %q", userA, session.OwnerUserID)
+	}
+	if session.Status != "in_progress" {
+		t.Errorf("expected status in_progress, got %q", session.Status)
+	}
+	if session.Mode != "edit" {
+		t.Errorf("expected mode %q, got %q", "edit", session.Mode)
+	}
+	if session.TargetAppID == nil || *session.TargetAppID != appID {
+		t.Errorf("expected target_app_id %q set at creation, got %v", appID, session.TargetAppID)
+	}
+	if len(messages) != 0 {
+		t.Errorf("expected empty message history for a freshly created edit session, got %d", len(messages))
+	}
+}
+
+// AIEC-01 (resume half): an existing in_progress edit session for the same
+// (user, app) is resumed (same ID) along with its full message history.
+func TestGetOrCreateInProgressEditSession_ResumesExistingWithHistory(t *testing.T) {
+	pool, userA, _ := aiBuildSessionsTestPool(t)
+	appID := aiEditSessionTestApp(t, pool, userA)
+	ctx := context.Background()
+
+	first, _, err := GetOrCreateInProgressEditSession(ctx, pool, userA, appID)
+	if err != nil {
+		t.Fatalf("GetOrCreateInProgressEditSession (first): %v", err)
+	}
+	if err := AppendMessage(ctx, pool, first.ID, "user", "add an email column to users", nil); err != nil {
+		t.Fatalf("AppendMessage: %v", err)
+	}
+
+	second, messages, err := GetOrCreateInProgressEditSession(ctx, pool, userA, appID)
+	if err != nil {
+		t.Fatalf("GetOrCreateInProgressEditSession (second): %v", err)
+	}
+	if second.ID != first.ID {
+		t.Fatalf("expected the same edit session to be resumed, got a different ID (%q vs %q)", second.ID, first.ID)
+	}
+	if len(messages) != 1 {
+		t.Fatalf("expected 1 message in history, got %d", len(messages))
+	}
+	if messages[0].Content != "add an email column to users" {
+		t.Errorf("expected the prior message content, got %+v", messages)
+	}
+}
+
+// AIEC-17: a create-mode session for the user and an edit-mode session for
+// an app coexist independently — creating/resuming the edit session must
+// never surface or interfere with the user's in_progress create session,
+// and vice versa.
+func TestGetOrCreateInProgressEditSession_CoexistsWithCreateSession(t *testing.T) {
+	pool, userA, _ := aiBuildSessionsTestPool(t)
+	appID := aiEditSessionTestApp(t, pool, userA)
+	ctx := context.Background()
+
+	createSession, _, err := GetOrCreateInProgressSession(ctx, pool, userA)
+	if err != nil {
+		t.Fatalf("GetOrCreateInProgressSession: %v", err)
+	}
+
+	editSession, editMessages, err := GetOrCreateInProgressEditSession(ctx, pool, userA, appID)
+	if err != nil {
+		t.Fatalf("GetOrCreateInProgressEditSession: %v", err)
+	}
+	if editSession.ID == createSession.ID {
+		t.Fatal("expected the edit session to be a distinct row from the create session")
+	}
+	if editSession.Mode != "edit" || createSession.Mode != "create" {
+		t.Errorf("expected modes edit/create, got %q/%q", editSession.Mode, createSession.Mode)
+	}
+	if len(editMessages) != 0 {
+		t.Fatalf("expected the edit session to start with no messages, got %d", len(editMessages))
+	}
+
+	// The create session's own resume path must still return the create
+	// session, unaffected by the edit session's existence.
+	resumedCreate, _, err := GetOrCreateInProgressSession(ctx, pool, userA)
+	if err != nil {
+		t.Fatalf("GetOrCreateInProgressSession (resume): %v", err)
+	}
+	if resumedCreate.ID != createSession.ID {
+		t.Fatalf("expected the create session to still be resumed, got a different ID (%q vs %q)", resumedCreate.ID, createSession.ID)
 	}
 }
 

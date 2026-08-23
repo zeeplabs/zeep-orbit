@@ -16,12 +16,17 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
 
-// AIBuildSession is a row from zeep_system.ai_build_sessions.
+// AIBuildSession is a row from zeep_system.ai_build_sessions. Mode is
+// "create" (the original ai-build-chat flow) or "edit" (ai-edit-chat,
+// scoped to TargetAppID) — the two never share a session row (design.md
+// Data Models).
 type AIBuildSession struct {
 	ID           string    `json:"id"`
 	OwnerUserID  string    `json:"owner_user_id"`
 	Status       string    `json:"status"`
 	CreatedAppID *string   `json:"created_app_id,omitempty"`
+	Mode         string    `json:"mode"`
+	TargetAppID  *string   `json:"target_app_id,omitempty"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
@@ -86,7 +91,7 @@ func AbandonAndRestartSession(ctx context.Context, pool *db.Pool, userID string)
 	if _, err := pool.Exec(ctx,
 		`UPDATE zeep_system.ai_build_sessions
 		 SET status = 'abandoned', updated_at = now()
-		 WHERE owner_user_id = $1 AND status = 'in_progress'`,
+		 WHERE owner_user_id = $1 AND status = 'in_progress' AND mode = 'create'`,
 		userID,
 	); err != nil {
 		return nil, fmt.Errorf("dashboard: abandon ai build session: %w", err)
@@ -127,16 +132,20 @@ func SetSessionCreatedApp(ctx context.Context, pool *db.Pool, sessionID string, 
 	return nil
 }
 
+// findInProgressSession looks up a mode='create' in_progress session only
+// (ai-edit-chat's mode='edit' rows are never returned here) — the two
+// session kinds are scoped independently (AIEC-17) so an edit-chat session
+// never leaks into the creation flow's resume path.
 func findInProgressSession(ctx context.Context, pool *db.Pool, userID string) (*AIBuildSession, error) {
 	var s AIBuildSession
 	err := pool.QueryRow(ctx,
-		`SELECT id, owner_user_id, status, created_app_id, created_at, updated_at
+		`SELECT id, owner_user_id, status, created_app_id, mode, target_app_id, created_at, updated_at
 		 FROM zeep_system.ai_build_sessions
-		 WHERE owner_user_id = $1 AND status = 'in_progress'
+		 WHERE owner_user_id = $1 AND status = 'in_progress' AND mode = 'create'
 		 ORDER BY created_at DESC
 		 LIMIT 1`,
 		userID,
-	).Scan(&s.ID, &s.OwnerUserID, &s.Status, &s.CreatedAppID, &s.CreatedAt, &s.UpdatedAt)
+	).Scan(&s.ID, &s.OwnerUserID, &s.Status, &s.CreatedAppID, &s.Mode, &s.TargetAppID, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, nil
@@ -149,13 +158,73 @@ func findInProgressSession(ctx context.Context, pool *db.Pool, userID string) (*
 func createSession(ctx context.Context, pool *db.Pool, userID string) (*AIBuildSession, error) {
 	var s AIBuildSession
 	err := pool.QueryRow(ctx,
-		`INSERT INTO zeep_system.ai_build_sessions (owner_user_id)
-		 VALUES ($1)
-		 RETURNING id, owner_user_id, status, created_app_id, created_at, updated_at`,
+		`INSERT INTO zeep_system.ai_build_sessions (owner_user_id, mode)
+		 VALUES ($1, 'create')
+		 RETURNING id, owner_user_id, status, created_app_id, mode, target_app_id, created_at, updated_at`,
 		userID,
-	).Scan(&s.ID, &s.OwnerUserID, &s.Status, &s.CreatedAppID, &s.CreatedAt, &s.UpdatedAt)
+	).Scan(&s.ID, &s.OwnerUserID, &s.Status, &s.CreatedAppID, &s.Mode, &s.TargetAppID, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: create ai build session: %w", err)
+	}
+	return &s, nil
+}
+
+// GetOrCreateInProgressEditSession resumes ownerUserID's existing
+// mode='edit' in_progress session scoped to appID (with its full message
+// history, oldest first) if one exists (AIEC-01), or creates a fresh one
+// with target_app_id populated at creation (design.md Data Models). A
+// create-mode session for the same user, or an edit-mode session for a
+// different app, never interferes with this lookup (AIEC-17) — scoping is
+// per (owner_user_id, target_app_id, mode='edit'), not global to the user.
+func GetOrCreateInProgressEditSession(ctx context.Context, pool *db.Pool, ownerUserID, appID string) (*AIBuildSession, []AIBuildMessage, error) {
+	session, err := findInProgressEditSession(ctx, pool, ownerUserID, appID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if session != nil {
+		messages, err := listMessages(ctx, pool, session.ID)
+		if err != nil {
+			return nil, nil, err
+		}
+		return session, messages, nil
+	}
+
+	created, err := createEditSession(ctx, pool, ownerUserID, appID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return created, []AIBuildMessage{}, nil
+}
+
+func findInProgressEditSession(ctx context.Context, pool *db.Pool, ownerUserID, appID string) (*AIBuildSession, error) {
+	var s AIBuildSession
+	err := pool.QueryRow(ctx,
+		`SELECT id, owner_user_id, status, created_app_id, mode, target_app_id, created_at, updated_at
+		 FROM zeep_system.ai_build_sessions
+		 WHERE owner_user_id = $1 AND target_app_id = $2 AND status = 'in_progress' AND mode = 'edit'
+		 ORDER BY created_at DESC
+		 LIMIT 1`,
+		ownerUserID, appID,
+	).Scan(&s.ID, &s.OwnerUserID, &s.Status, &s.CreatedAppID, &s.Mode, &s.TargetAppID, &s.CreatedAt, &s.UpdatedAt)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("dashboard: find in-progress ai edit session: %w", err)
+	}
+	return &s, nil
+}
+
+func createEditSession(ctx context.Context, pool *db.Pool, ownerUserID, appID string) (*AIBuildSession, error) {
+	var s AIBuildSession
+	err := pool.QueryRow(ctx,
+		`INSERT INTO zeep_system.ai_build_sessions (owner_user_id, mode, target_app_id)
+		 VALUES ($1, 'edit', $2)
+		 RETURNING id, owner_user_id, status, created_app_id, mode, target_app_id, created_at, updated_at`,
+		ownerUserID, appID,
+	).Scan(&s.ID, &s.OwnerUserID, &s.Status, &s.CreatedAppID, &s.Mode, &s.TargetAppID, &s.CreatedAt, &s.UpdatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("dashboard: create ai edit session: %w", err)
 	}
 	return &s, nil
 }
