@@ -1410,3 +1410,140 @@ export function useWebhookDeliveries(
     enabled: Boolean(appId) && Boolean(webhookId),
   })
 }
+
+// ----------------------------------------------------------------------------
+// Build with AI (ai-build-chat T12) — chat-driven app creation. Types mirror
+// internal/dashboard/ai_build_chat_handlers.go's response shapes and
+// internal/dashboard/ai/client.go's AppPlan exactly.
+// ----------------------------------------------------------------------------
+
+export interface AIProviderStatus {
+  provider?: string
+  has_key?: boolean
+  model?: string
+  enabled?: boolean
+  available?: boolean
+}
+
+export function useAIProviderStatus(provider = 'openai'): UseQueryResult<AIProviderStatus> {
+  return useQuery({
+    queryKey: ['ai-provider-status', provider],
+    queryFn: () => apiFetch<AIProviderStatus>(`/dashboard/api/ai-providers/${provider}`),
+    staleTime: 30000,
+  })
+}
+
+export interface BuildChatPlanColumn {
+  name: string
+  type: string
+}
+
+export interface BuildChatPlanTable {
+  name: string
+  columns: BuildChatPlanColumn[]
+}
+
+export interface BuildChatPlan {
+  name: string
+  tables: BuildChatPlanTable[]
+  auth: boolean
+}
+
+export interface BuildChatMessage {
+  id: string
+  session_id: string
+  role: 'user' | 'assistant'
+  content: string
+  plan?: BuildChatPlan
+  created_at: string
+}
+
+export interface BuildChatSession {
+  id: string
+  owner_user_id: string
+  status: 'in_progress' | 'completed' | 'abandoned'
+  created_app_id?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface BuildChatSessionResponse {
+  session: BuildChatSession
+  messages: BuildChatMessage[]
+}
+
+// useBuildChatSession resumes the caller's in_progress session (or creates
+// one) — `enabled` gates the fetch so the drawer only opens this request
+// once mounted with `open: true`, not on every AppsPage render.
+export function useBuildChatSession(enabled: boolean): UseQueryResult<BuildChatSessionResponse> {
+  return useQuery({
+    queryKey: ['build-chat-session'],
+    queryFn: () => apiFetch<BuildChatSessionResponse>('/dashboard/api/ai/build-chat/session'),
+    enabled,
+    refetchOnWindowFocus: false,
+  })
+}
+
+export interface BuildChatTurnResponse {
+  type: 'message' | 'plan'
+  content?: string
+  plan?: BuildChatPlan
+}
+
+export function useSendBuildChatMessage(): UseMutationResult<BuildChatTurnResponse, Error, string> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (content: string) =>
+      apiFetch<BuildChatTurnResponse>('/dashboard/api/ai/build-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['build-chat-session'] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+export interface BuildChatConfirmResponse {
+  app: AppDef
+}
+
+// useConfirmBuildChatPlan never sends a plan in the request body — the
+// server always executes the plan it already persisted on the session
+// (AIBC-24) — sessionId in the URL is the only input.
+export function useConfirmBuildChatPlan(): UseMutationResult<BuildChatConfirmResponse, Error, string> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (sessionId: string) =>
+      apiFetch<BuildChatConfirmResponse>(`/dashboard/api/ai/build-chat/${sessionId}/confirm`, {
+        method: 'POST',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['apps'] })
+      qc.invalidateQueries({ queryKey: ['build-chat-session'] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+export function useRestartBuildChatSession(): UseMutationResult<BuildChatSessionResponse, Error, void> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<BuildChatSessionResponse>('/dashboard/api/ai/build-chat/restart', {
+        method: 'POST',
+      }),
+    onSuccess: (data) => {
+      qc.setQueryData(['build-chat-session'], data)
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}

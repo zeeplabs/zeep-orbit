@@ -419,13 +419,15 @@ T10 -> T12
 
 **Done when**:
 
-- [ ] Opening the drawer resumes an in-progress session's history via the session-resume `GET`
-- [ ] Sending a message shows a loading state (no streaming) then renders either a message bubble or the plan card
-- [ ] "Confirm & create app" calls confirm, shows the created app on success, shows a toast + generic message on failure without losing the session state
-- [ ] "Restart" clears the visible history and starts a new session
-- [ ] Entry point is disabled/shows a "not configured" state when the provider isn't enabled
-- [ ] All user-facing strings added to both locale files in this same task
-- [ ] Build gate passes: `cd internal/dashboard/ui && npx tsc -b && npm run build`; locale JSON validation for both files
+- [x] Opening the drawer resumes an in-progress session's history via the session-resume `GET`
+- [x] Sending a message shows a loading state (no streaming) then renders either a message bubble or the plan card
+- [x] "Confirm & create app" calls confirm, shows the created app on success, shows a toast + generic message on failure without losing the session state
+- [x] "Restart" clears the visible history and starts a new session
+- [x] Entry point is disabled/shows a "not configured" state when the provider isn't enabled
+- [x] All user-facing strings added to both locale files in this same task
+- [x] Build gate passes: `cd internal/dashboard/ui && npx tsc -b && npm run build`; locale JSON validation for both files
+
+**SPEC_DEVIATION**: no `BuildWithAIDrawer` component existed to edit (confirmed by grep, same finding as T11) — the actual existing mockup is a disabled `<button>` + "em breve" badge inside `AppsPage.tsx`'s `PageHeader` actions (`apps.createWithAi`/`apps.createWithAiSoon`/`apps.soon` i18n keys already existed there), not a drawer. Built `BuildWithAIDrawer` as a new component under `src/components/patterns/` (mirroring the existing `FormDrawer` pattern this button's surrounding code already anticipated — `drawer.tsx`'s own doc comment says it's the "base do chat Create-with-AI"), and wired the existing button to open it instead of creating a second, redundant entry point. The button's disabled state is now driven by `useAIProviderStatus` (`enabled && has_key`) rather than being permanently disabled — the "em breve" badge only shows while unconfigured. A new `Textarea` UI primitive (`src/components/ui/textarea.tsx`, mirroring `input.tsx`) was added since none existed; four new hooks (`useAIProviderStatus`, `useBuildChatSession`, `useSendBuildChatMessage`, `useConfirmBuildChatPlan`, `useRestartBuildChatSession`) were added to `src/lib/api.ts` following the existing hook conventions.
 
 **Tests**: none (no frontend test framework in repo — build gate only)
 **Gate**: build
