@@ -100,7 +100,7 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/miapp/tareas
 | Funcionalidad           | Descripción                                              |
 | ----------------------- | -------------------------------------------------------- |
 | **Dashboard Web**       | UI oscura premium para gestionar todo                    |
-| **Build with AI**       | Describe una app en lenguaje natural en un panel de chat, revisa el plan propuesto (tablas, auth), confirma para crearla — usa una clave de OpenAI configurada por el superadmin (Gemini/Claude próximamente) |
+| **Build with AI**       | Describe una app en lenguaje natural en un panel de chat, revisa el plan propuesto (tablas, auth), confirma para crearla; una vez creada, usa "Edit with AI" en la app para añadir tablas/columnas/índices/relaciones o alternar RLS/auth un cambio a la vez — usa una clave de OpenAI configurada por el superadmin (Gemini/Claude próximamente) |
 | **Data Browser**        | GUI para navegar, filtrar, editar, eliminar filas y exportar CSV (límite de filas configurable) |
 | **Gestión de usuarios** | Administra usuarios del dashboard y usuarios de cada app |
 | **Acceso por rol**      | 4 roles de plataforma (superadmin/admin/auditor/member) con matriz de permisos para UI y backend |

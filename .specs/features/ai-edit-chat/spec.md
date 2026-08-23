@@ -112,24 +112,24 @@ Explicitly excluded. Documented to prevent scope creep.
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| AIEC-01 | P1 | Design | Pending |
-| AIEC-02 | P1 | Design | Pending |
-| AIEC-03 | P1 | Design | Pending |
-| AIEC-04 | P1 | Design | Pending |
-| AIEC-05 | P1 | Design | Pending |
-| AIEC-06 | P1 | Design | Pending |
-| AIEC-07 | P2 | Design | Pending |
-| AIEC-08 | P2 | Design | Pending |
-| AIEC-09 | P2 | Design | Pending |
-| AIEC-10 | P2 | Design | Pending |
-| AIEC-11 | P3 | Design | Pending |
-| AIEC-12 | P3 | Design | Pending |
-| AIEC-13 | P3 | Design | Pending |
-| AIEC-14 | Edge case | Design | Pending |
-| AIEC-15 | Edge case | Design | Pending |
-| AIEC-16 | Edge case | Design | Pending |
-| AIEC-17 | Edge case | Design | Pending |
-| AIEC-18 | Edge case | Design | Pending |
+| AIEC-01 | P1 | Verify | Verified |
+| AIEC-02 | P1 | Verify | Verified |
+| AIEC-03 | P1 | Verify | Verified |
+| AIEC-04 | P1 | Verify | Verified |
+| AIEC-05 | P1 | Verify | Verified |
+| AIEC-06 | P1 | Verify | Verified |
+| AIEC-07 | P2 | Verify | Verified |
+| AIEC-08 | P2 | Verify | Verified |
+| AIEC-09 | P2 | Verify | Verified |
+| AIEC-10 | P2 | Verify | Verified |
+| AIEC-11 | P3 | Verify | Verified |
+| AIEC-12 | P3 | Verify | Verified |
+| AIEC-13 | P3 | Verify | Verified |
+| AIEC-14 | Edge case | Verify | Verified |
+| AIEC-15 | Edge case | Verify | Verified |
+| AIEC-16 | Edge case | Verify | Verified |
+| AIEC-17 | Edge case | Verify | Verified |
+| AIEC-18 | Edge case | Verify | Verified |
 
 **ID format:** `AIEC-[NUMBER]`
 
