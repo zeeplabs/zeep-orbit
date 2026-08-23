@@ -147,8 +147,8 @@ Every ambiguity is resolved or recorded here — nothing is left silently unclea
 | --- | --- | --- | --- |
 | AIBC-01 | P1: Configure the OpenAI provider | Tasks | Implementing |
 | AIBC-02 | P1: Configure the OpenAI provider | Design | Pending |
-| AIBC-03 | P1: Configure the OpenAI provider | Design | Pending |
-| AIBC-04 | P1: Configure the OpenAI provider | Design | Pending |
+| AIBC-03 | P1: Configure the OpenAI provider | Tasks | Implementing |
+| AIBC-04 | P1: Configure the OpenAI provider | Tasks | Implementing |
 | AIBC-05 | P1: Configure the OpenAI provider | Tasks | Implementing |
 | AIBC-06 | P1: Configure the OpenAI provider | Design | Pending |
 | AIBC-07 | P2: Persisted per-app chat session | Design | Pending |
