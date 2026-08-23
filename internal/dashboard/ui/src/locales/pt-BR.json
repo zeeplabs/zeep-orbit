@@ -552,6 +552,7 @@
   "aiProvider.enabled": "Ativado",
   "aiProvider.disabled": "Desativado",
   "aiProvider.model": "Modelo",
+  "aiProvider.customModel": "Personalizado…",
   "aiProvider.apiKey": "Chave de API",
   "aiProvider.apiKeyPlaceholder": "sk-...",
   "aiProvider.apiKeyKeepCurrent": "•••••••• (vazio = manter atual)",
