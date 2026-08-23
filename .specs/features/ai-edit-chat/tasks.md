@@ -259,7 +259,7 @@ T10 -> T11 -> T12
 **Where**: `internal/dashboard/ai_edit_chat_handlers.go`
 **Depends on**: T7
 **Reuses**: The owner-scoped IDOR guard pattern from `loadOwnedBuildChatSession`, all 5 target handlers unchanged
-**Requirement**: AIEC-03, AIEC-04, AIEC-05, AIEC-06, AIEC-07, AIEC-08, AIEC-09, AIEC-11, AIEC-12, AIEC-14, AIEC-16, AIEC-18
+**Requirement**: AIEC-03, AIEC-04, AIEC-05, AIEC-06, AIEC-07, AIEC-08, AIEC-09, AIEC-11, AIEC-12, AIEC-14, AIEC-18
 
 **Tools**:
 - MCP: NONE
@@ -271,7 +271,8 @@ T10 -> T11 -> T12
 - [x] RBAC denial (`CanWrite()` false) returns an authorization error before any handler runs, for every `Kind` (AIEC-05)
 - [x] Every applied mutation is audit-logged with origin `ai_chat` (AIEC-06)
 - [x] Session belonging to another user returns not-found with no mutation (IDOR guard, mirrors `TestBuildChatConfirm_AnotherUsersSessionReturnsNotFoundNoMutation`)
-- [x] Double-confirm on an already-applied operation is a no-op, not a duplicate mutation (AIEC-16)
+- [x] Double-confirm on an already-applied operation is a no-op, not a duplicate mutation (design.md Error Handling Strategy — a design-level guarantee, not a spec.md AC; AIEC-16 is the separate "Recomeçar" edge case, covered by T9)
+- [x] Confirming against a session that isn't `in_progress` (e.g. already `abandoned`) is rejected, not applied
 - [x] Gate passes: `go build ./... && go test ./internal/dashboard/... && go vet ./... && gofmt -l internal/dashboard/ai_edit_chat_handlers.go`
 
 **Tests**: unit

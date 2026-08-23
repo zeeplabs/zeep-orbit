@@ -170,6 +170,18 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: AIBC-12 (internal/dashboard/ai_build_chat_handlers.go)
 - last seen: 2026-08-23T17:03:42Z
 
+### L-027 - When an edge case AC describes rejecting an operation against a nonexistent target (table/column/resource), add an explicit test that drives the confirm path against a missing target and asserts the underlying handler's own not-found error surfaces - do not assume the reused handler's existing coverage transfers to the new call site.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `backend/ai-chat` · harmful: 0
+- features: ai-edit-chat
+- evidence: AIEC-18 (backend/ai-chat)
+- last seen: 2026-08-23T20:12:07Z
+
+### L-028 - A confirm/apply endpoint's session-status guard (e.g. rejecting confirm on a non-in_progress session) needs its own explicit rejection test - state-machine guards are exactly the kind of one-line condition a full test suite can still pass without, if nothing exercises the rejected state directly.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `backend/ai-chat` · harmful: 0
+- features: ai-edit-chat
+- evidence: mutation-4:internal/dashboard/ai_edit_chat_handlers.go EditChatConfirm session-status guard (backend/ai-chat)
+- last seen: 2026-08-23T20:12:07Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.
