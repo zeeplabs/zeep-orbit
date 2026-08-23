@@ -151,12 +151,12 @@ T10 -> T12
 
 **Done when**:
 
-- [ ] `UpsertAIProvider` with a key present encrypts and persists it
-- [ ] `UpsertAIProvider` with no key field preserves the existing encrypted key, updating only `model`/`enabled` (AIBC-03)
-- [ ] `GetAIProvider` never returns the key in any form, only `{has_key, model, enabled}`
-- [ ] `resolveDecryptedAIProviderKey` returns a treatable error (not a panic) on decrypt failure — feeds the "provider unconfigured" fallback path
-- [ ] Full gate passes: `go build ./... && go vet ./... && go test ./...`
-- [ ] Test count: at least 6 new tests (encrypt-on-create, merge-preserves-key, get-never-leaks-key, decrypt-failure-path, gemini/claude return unconfigured, round-trip through real Postgres pool) pass
+- [x] `UpsertAIProvider` with a key present encrypts and persists it
+- [x] `UpsertAIProvider` with no key field preserves the existing encrypted key, updating only `model`/`enabled` (AIBC-03)
+- [x] `GetAIProvider` never returns the key in any form, only `{has_key, model, enabled}`
+- [x] `resolveDecryptedAIProviderKey` returns a treatable error (not a panic) on decrypt failure — feeds the "provider unconfigured" fallback path
+- [x] Full gate passes: `go build ./... && go vet ./... && go test ./...` (see T3 note: `internal/dashboard`'s pre-existing webhook/OAuth suite needs `WEBHOOK_TOKEN_ENCRYPTION_KEY`/`DASHBOARD_BOOTSTRAP_SECRET` set and hits local Postgres `max_connections` under full parallelism in this sandbox — environmental, reproduces identically on stock `develop`, unrelated to this task; all 6 new AI-provider tests pass in isolation and under `-p 1`)
+- [x] Test count: at least 6 new tests (encrypt-on-create, merge-preserves-key, get-never-leaks-key, decrypt-failure-path, gemini/claude return unconfigured, round-trip through real Postgres pool) pass
 
 **Tests**: integration
 **Gate**: full
