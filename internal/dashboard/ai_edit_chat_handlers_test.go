@@ -210,7 +210,7 @@ func TestEditChatTurn_EditOpShapeTurn(t *testing.T) {
 	}
 }
 
-// AIEC-18 (mirrors AIBC-16): a model-call failure returns the fixed
+// AIEC-14 (mirrors AIBC-16): a model-call failure returns the fixed
 // generic chat message and leaves the session in_progress (edit sessions
 // never reach completed, so this is just "unchanged").
 func TestEditChatTurn_ModelFailureReturnsGenericMessage(t *testing.T) {
@@ -668,6 +668,93 @@ func TestEditChatConfirm_DuplicateColumnSurfacesSpecificError(t *testing.T) {
 		}
 		if count != 1 {
 			t.Fatalf("expected exactly 1 email column (app unmodified), got %d", count)
+		}
+	}
+}
+
+// AIEC-18: a proposed operation referencing a table that doesn't exist in
+// the app's current schema is rejected with the underlying handler's own
+// not-found error, session unchanged, app unmodified — the chat never
+// silently invents or guesses the missing table.
+func TestEditChatConfirm_NonexistentTableSurfacesNotFound(t *testing.T) {
+	pool, h, user, appID := aiEditChatHandlerTestPool(t)
+	ctx := context.Background()
+
+	session, _, err := GetOrCreateInProgressEditSession(ctx, pool, user.ID, appID)
+	if err != nil {
+		t.Fatalf("GetOrCreateInProgressEditSession: %v", err)
+	}
+	op := &ai.EditOperation{Kind: "add_column", AddColumn: &ai.PlanColumnOp{
+		Table:  "does_not_exist",
+		Column: ai.PlanColumn{Name: "email", Type: "text"},
+	}}
+	persistProposedEditOp(t, pool, session.ID, op)
+
+	req := confirmEditChatRequestFor(&DashboardUser{ID: user.ID, Role: "admin"}, session.ID)
+	w := httptest.NewRecorder()
+	h.EditChatConfirm(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
+	}
+
+	finalSession, _, err := loadOwnedEditChatSession(ctx, pool, session.ID, user.ID)
+	if err != nil {
+		t.Fatalf("loadOwnedEditChatSession: %v", err)
+	}
+	if finalSession.Status != "in_progress" {
+		t.Fatalf("expected the session to remain in_progress, got %q", finalSession.Status)
+	}
+}
+
+// Discrimination-sensor coverage: the non-in_progress session guard in
+// EditChatConfirm must actually reject a confirm call against a session
+// that's already abandoned (e.g. via Recomeçar, or a stale client retrying
+// an old session) rather than silently applying the stale pending op.
+func TestEditChatConfirm_AbandonedSessionRejected(t *testing.T) {
+	pool, h, user, appID := aiEditChatHandlerTestPool(t)
+	ctx := context.Background()
+	if _, err := h.CreateAppTableForUser(ctx, &DashboardUser{ID: user.ID, Role: "admin"}, appID, TableRequestBody{
+		Name:    "users",
+		Columns: []config.ColumnConfig{{Name: "name", Type: "text"}},
+	}, "test"); err != nil {
+		t.Fatalf("CreateAppTableForUser: %v", err)
+	}
+
+	session, _, err := GetOrCreateInProgressEditSession(ctx, pool, user.ID, appID)
+	if err != nil {
+		t.Fatalf("GetOrCreateInProgressEditSession: %v", err)
+	}
+	op := &ai.EditOperation{Kind: "add_column", AddColumn: &ai.PlanColumnOp{
+		Table:  "users",
+		Column: ai.PlanColumn{Name: "email", Type: "text"},
+	}}
+	persistProposedEditOp(t, pool, session.ID, op)
+
+	if _, err := AbandonAndRestartEditSession(ctx, pool, user.ID, appID); err != nil {
+		t.Fatalf("AbandonAndRestartEditSession: %v", err)
+	}
+
+	req := confirmEditChatRequestFor(&DashboardUser{ID: user.ID, Role: "admin"}, session.ID)
+	w := httptest.NewRecorder()
+	h.EditChatConfirm(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for a confirm against an abandoned session, got %d: %s", w.Code, w.Body.String())
+	}
+
+	schema, err := GetAppSchemaForUser(ctx, pool, &DashboardUser{ID: user.ID, Role: "admin"}, appID)
+	if err != nil {
+		t.Fatalf("GetAppSchemaForUser: %v", err)
+	}
+	for _, tbl := range schema.Tables {
+		if tbl.Name != "users" {
+			continue
+		}
+		for _, c := range tbl.Columns {
+			if c.Name == "email" {
+				t.Fatalf("expected the pending op to NOT apply against an abandoned session, but found email column")
+			}
 		}
 	}
 }
