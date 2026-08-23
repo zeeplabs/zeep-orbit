@@ -102,6 +102,7 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/myapp/tasks
 | Feature                 | Description                                              |
 | ----------------------- | -------------------------------------------------------- |
 | **Web Dashboard**       | Premium dark UI to manage everything                    |
+| **Build with AI**       | Describe an app in plain language in a chat drawer, review the proposed plan (tables, auth), confirm to create it — backed by a superadmin-configured OpenAI key (Gemini/Claude coming soon) |
 | **Data Browser**        | GUI to browse, filter, edit, delete rows and export CSV (configurable row cap) |
 | **User Management**     | Manage dashboard users and app users                     |
 | **Role-based access**   | 4 platform roles (superadmin/admin/auditor/member) with a permission matrix for UI and backend |
@@ -554,6 +555,7 @@ on `latest` — that way `helm upgrade` alone triggers the rollout as expected.
 | `GOOGLE_ALLOWED_DOMAINS`     | No       | Comma-separated allowed email domains               |
 | `GOOGLE_OAUTH_ENCRYPTION_KEY` | No      | Encrypts Google OAuth client secrets at rest (defaults to `DASHBOARD_BOOTSTRAP_SECRET`) |
 | `WEBHOOK_TOKEN_ENCRYPTION_KEY` | No     | Encrypts inbound webhook tokens at rest (defaults to `DASHBOARD_BOOTSTRAP_SECRET`; kept separate so rotating one doesn't invalidate the other) |
+| `AI_PROVIDER_ENCRYPTION_KEY` | No       | Encrypts the "Build with AI" AI provider API key at rest (defaults to `DASHBOARD_BOOTSTRAP_SECRET`; kept separate for independent rotation) |
 | `BRAND_THEME`                | No       | Default theme (azure, emerald, ruby, amber, orange) |
 | `BRAND_COMPANY_NAME`         | No       | Company name for white-label                        |
 | `LOG_LEVEL`                  | No       | Set `debug` for development output                  |
