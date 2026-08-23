@@ -578,6 +578,35 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 			enabled           BOOLEAN     NOT NULL DEFAULT false,
 			updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
+		// Per-user "Build with AI" chat session (ai-build-chat spec, T5).
+		// One row per in-progress/completed/abandoned build; created_app_id
+		// is nullable until confirm succeeds (AIBC-08/AIBC-22) and is set
+		// immediately after CreateAppForUser, before the per-table loop, so
+		// a partial confirm failure still leaves it pointing at what was
+		// actually created. See design.md Data Models.
+		`CREATE TABLE IF NOT EXISTS zeep_system.ai_build_sessions (
+			id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+			owner_user_id  UUID        NOT NULL,
+			status         TEXT        NOT NULL DEFAULT 'in_progress',
+			created_app_id UUID,
+			created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS ai_build_sessions_owner_status_idx
+		 ON zeep_system.ai_build_sessions (owner_user_id, status)`,
+		// Chat turn history for a build session. plan_json is populated only
+		// on the assistant message that carries a propose_app_plan result
+		// (AIBC-14). ON DELETE CASCADE ties message lifetime to its session.
+		`CREATE TABLE IF NOT EXISTS zeep_system.ai_build_messages (
+			id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+			session_id UUID        NOT NULL REFERENCES zeep_system.ai_build_sessions(id) ON DELETE CASCADE,
+			role       TEXT        NOT NULL,
+			content    TEXT        NOT NULL DEFAULT '',
+			plan_json  JSONB,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS ai_build_messages_session_idx
+		 ON zeep_system.ai_build_messages (session_id, created_at)`,
 	}
 
 	for _, stmt := range stmts {
