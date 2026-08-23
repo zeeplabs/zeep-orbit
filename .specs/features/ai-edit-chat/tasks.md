@@ -319,10 +319,10 @@ T10 -> T11 -> T12
 - Skill: NONE
 
 **Done when**:
-- [ ] All 4 routes reachable and return the expected handler's response shape
-- [ ] Unauthenticated request rejected before any handler runs
-- [ ] Integration tests in `internal/server/server_test.go` covering route reachability + auth rejection
-- [ ] Gate passes: `go build ./... && go test ./internal/server/... && go vet ./... && gofmt -l internal/server/server.go`
+- [x] All 4 routes reachable and return the expected handler's response shape
+- [x] Unauthenticated request rejected before any handler runs
+- [x] Integration tests in `internal/server/server_test.go` covering route reachability + auth rejection
+- [x] Gate passes: `go build ./... && go test ./internal/server/... && go vet ./... && gofmt -l internal/server/server.go`
 
 **Tests**: integration
 **Gate**: full

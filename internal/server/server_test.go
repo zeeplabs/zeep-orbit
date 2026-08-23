@@ -318,6 +318,127 @@ func TestServerBuildChatConfirmRoute_ResolvesSessionIDParam(t *testing.T) {
 	}
 }
 
+// TestServerEditChatRoutesRegistered_Unauthenticated covers ai-edit-chat
+// T10: all four "Edit with AI" routes must be reachable through the real
+// chi router (not just unit-callable). With no session cookie, RequireAuth
+// rejects each with 401 before touching the pool — a 404 here would mean
+// chi never matched the route at all, so 401 is the proof each is wired up
+// (same pattern as TestServerBuildChatRoutesRegistered_Unauthenticated).
+func TestServerEditChatRoutesRegistered_Unauthenticated(t *testing.T) {
+	s := newTestServer(t)
+	ts := httptest.NewServer(s.Router())
+	defer ts.Close()
+
+	cases := []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{http.MethodGet, "/dashboard/api/apps/some-app-id/ai/edit-chat", ""},
+		{http.MethodPost, "/dashboard/api/apps/some-app-id/ai/edit-chat", `{"content":"hi"}`},
+		{http.MethodPost, "/dashboard/api/apps/some-app-id/ai/edit-chat/some-session-id/confirm", ""},
+		{http.MethodPost, "/dashboard/api/apps/some-app-id/ai/edit-chat/restart", ""},
+	}
+	for _, c := range cases {
+		var body io.Reader
+		if c.body != "" {
+			body = strings.NewReader(c.body)
+		}
+		req, err := http.NewRequest(c.method, ts.URL+c.path, body)
+		if err != nil {
+			t.Fatalf("build request for %s %s: %v", c.method, c.path, err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("%s %s error: %v", c.method, c.path, err)
+		}
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("%s %s: status = %d, want 401 (route registered, rejected by auth)", c.method, c.path, resp.StatusCode)
+		}
+	}
+}
+
+// TestServerEditChatRoutes_AuthenticatedNonexistentAppReturnsNotFound covers
+// ai-edit-chat T10's {id} param binding: GET/POST edit-chat and POST restart
+// all resolve {id} through the real router and call requireEditChatWriteAccess,
+// which looks up the app before doing anything else. A nonexistent app ID
+// with a real authenticated session proves the route (and {id}) is wired
+// correctly, distinct from the 401 unauthenticated case above.
+func TestServerEditChatRoutes_AuthenticatedNonexistentAppReturnsNotFound(t *testing.T) {
+	s, cookie := buildChatRoutesTestPool(t)
+	ts := httptest.NewServer(s.Router())
+	defer ts.Close()
+
+	const nonexistentAppID = "00000000-0000-0000-0000-000000000000"
+	cases := []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{http.MethodGet, "/dashboard/api/apps/" + nonexistentAppID + "/ai/edit-chat", ""},
+		{http.MethodPost, "/dashboard/api/apps/" + nonexistentAppID + "/ai/edit-chat", `{"content":"hi"}`},
+		{http.MethodPost, "/dashboard/api/apps/" + nonexistentAppID + "/ai/edit-chat/restart", ""},
+	}
+	for _, c := range cases {
+		var body io.Reader
+		if c.body != "" {
+			body = strings.NewReader(c.body)
+		}
+		req, err := http.NewRequest(c.method, ts.URL+c.path, body)
+		if err != nil {
+			t.Fatalf("build request for %s %s: %v", c.method, c.path, err)
+		}
+		req.AddCookie(cookie)
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("%s %s error: %v", c.method, c.path, err)
+		}
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("%s %s: status = %d, want 404 (route matched, {id} resolved, app not found)", c.method, c.path, resp.StatusCode)
+		}
+	}
+}
+
+// TestServerEditChatConfirmRoute_ResolvesSessionIDParam covers ai-edit-chat
+// T10: POST /dashboard/api/apps/{id}/ai/edit-chat/{session_id}/confirm must
+// bind {session_id} through the real router, distinguishing it from the
+// static .../restart path registered alongside it. A 404 ("not found", the
+// owner-scoped IDOR guard's response for a session that doesn't exist) proves
+// the templated route matched and the handler ran with the real path value,
+// rather than chi never matching the route at all — the unauthenticated case
+// and the nonexistent-app case above already rule out the "route missing
+// entirely" explanation for this route family.
+func TestServerEditChatConfirmRoute_ResolvesSessionIDParam(t *testing.T) {
+	s, cookie := buildChatRoutesTestPool(t)
+	ts := httptest.NewServer(s.Router())
+	defer ts.Close()
+
+	const nonexistentSessionID = "00000000-0000-0000-0000-000000000000"
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/dashboard/api/apps/some-app-id/ai/edit-chat/"+nonexistentSessionID+"/confirm", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	req.AddCookie(cookie)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST .../confirm error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 (route matched, {session_id} resolved, session not found)", resp.StatusCode)
+	}
+}
+
 // TestIsWebhookPath / TestRedactWebhookToken / TestIsDashboardWebhookTokenPath:
 // direct unit coverage for the path predicates logMiddleware relies on to
 // keep webhook tokens out of application logs (B1). The independent Verifier
