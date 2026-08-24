@@ -156,11 +156,11 @@ T13 → T14
 - Skill: NONE
 
 **Done when**:
-- [ ] Returns `nil` when source and target column real types match (both regular-table and `_auth_users` targets)
-- [ ] Returns a non-nil error naming both real types when they differ
-- [ ] Integration tests appended to `internal/provisioner/table_test.go` (`TEST_DATABASE_URL`-gated): match case, mismatch case, `_auth_users` target case
-- [ ] Gate check passes: `go build ./... && go vet ./... && gofmt -l internal/provisioner/table.go internal/provisioner/table_test.go && go test ./internal/provisioner/...`
-- [ ] Test count: 3+ new test cases pass (no silent deletions)
+- [x] Returns `nil` when source and target column real types match (both regular-table and `_auth_users` targets)
+- [x] Returns a non-nil error naming both real types when they differ
+- [x] Integration tests appended to `internal/provisioner/table_test.go` (`TEST_DATABASE_URL`-gated): match case, mismatch case, `_auth_users` target case
+- [x] Gate check passes: `go build ./... && go vet ./... && gofmt -l internal/provisioner/table.go internal/provisioner/table_test.go && go test ./internal/provisioner/...`
+- [x] Test count: 3+ new test cases pass (no silent deletions)
 
 **Tests**: integration
 **Gate**: full

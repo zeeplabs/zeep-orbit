@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -308,5 +309,91 @@ func TestCreateTable_OwnerAndEnabledUnaffected(t *testing.T) {
 				t.Fatalf("rls=%q: expected RLS NOT enabled at creation (still lazy, on first policy)", rls)
 			}
 		})
+	}
+}
+
+// TestCheckForeignKeyColumnTypesMatch_Match covers T3 AC (CFK-05): when the
+// existing column's real Postgres type matches the target column's real
+// type, the check returns nil.
+func TestCheckForeignKeyColumnTypesMatch_Match(t *testing.T) {
+	pool := ensureRLSTestPool(t)
+	defer pool.Close()
+
+	schema := fmt.Sprintf("fk_types_match_test_%d", time.Now().UnixNano())
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE SCHEMA %q`, schema)); err != nil {
+		t.Fatalf("create schema: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), fmt.Sprintf(`DROP SCHEMA IF EXISTS %q CASCADE`, schema))
+	})
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE TABLE %q.customers (id UUID PRIMARY KEY DEFAULT gen_random_uuid())`, schema)); err != nil {
+		t.Fatalf("create customers: %v", err)
+	}
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE TABLE %q.orders (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), customer_id UUID)`, schema)); err != nil {
+		t.Fatalf("create orders: %v", err)
+	}
+
+	p := New(pool)
+	if err := p.CheckForeignKeyColumnTypesMatch(ctx, schema, "orders", "customer_id", "customers", "id"); err != nil {
+		t.Fatalf("expected nil for matching types, got: %v", err)
+	}
+}
+
+// TestCheckForeignKeyColumnTypesMatch_Mismatch covers T3 AC (CFK-05): when
+// the real types differ, the check returns a non-nil error naming both
+// real types.
+func TestCheckForeignKeyColumnTypesMatch_Mismatch(t *testing.T) {
+	pool := ensureRLSTestPool(t)
+	defer pool.Close()
+
+	schema := fmt.Sprintf("fk_types_mismatch_test_%d", time.Now().UnixNano())
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE SCHEMA %q`, schema)); err != nil {
+		t.Fatalf("create schema: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), fmt.Sprintf(`DROP SCHEMA IF EXISTS %q CASCADE`, schema))
+	})
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE TABLE %q.customers (id UUID PRIMARY KEY DEFAULT gen_random_uuid())`, schema)); err != nil {
+		t.Fatalf("create customers: %v", err)
+	}
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE TABLE %q.orders (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), customer_id TEXT)`, schema)); err != nil {
+		t.Fatalf("create orders: %v", err)
+	}
+
+	p := New(pool)
+	err := p.CheckForeignKeyColumnTypesMatch(ctx, schema, "orders", "customer_id", "customers", "id")
+	if err == nil {
+		t.Fatal("expected error for mismatched types, got nil")
+	}
+	if !strings.Contains(err.Error(), "text") || !strings.Contains(err.Error(), "uuid") {
+		t.Fatalf("expected error to name both real types (text, uuid), got: %v", err)
+	}
+}
+
+// TestCheckForeignKeyColumnTypesMatch_AuthUsersTarget covers T3's
+// "_auth_users target" case: the check works against "_auth_users" the
+// same way it works against any other real physical table in the schema.
+func TestCheckForeignKeyColumnTypesMatch_AuthUsersTarget(t *testing.T) {
+	pool := ensureRLSTestPool(t)
+	defer pool.Close()
+
+	schema := fmt.Sprintf("fk_types_authusers_test_%d", time.Now().UnixNano())
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE SCHEMA %q`, schema)); err != nil {
+		t.Fatalf("create schema: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), fmt.Sprintf(`DROP SCHEMA IF EXISTS %q CASCADE`, schema))
+	})
+	createAuthUsersTable(t, pool, schema)
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE TABLE %q.posts (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), author_id UUID)`, schema)); err != nil {
+		t.Fatalf("create posts: %v", err)
+	}
+
+	p := New(pool)
+	if err := p.CheckForeignKeyColumnTypesMatch(ctx, schema, "posts", "author_id", "_auth_users", "id"); err != nil {
+		t.Fatalf("expected nil for matching types against _auth_users, got: %v", err)
 	}
 }
