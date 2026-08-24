@@ -1,6 +1,29 @@
 {
   "entries": [
     {
+      "version": "v1.6.0",
+      "release_date": "2026-08-24",
+      "title": {"en": "AI Chat Hardening: Foreign-Key Confirmation, Rate Limiting & Authorization Fix", "pt-BR": "Reforço do Chat de IA: Confirmação de Chave Estrangeira, Rate Limiting e Correção de Autorização"},
+      "summary": {"en": "A pre-release security review of everything shipped since v1.5.0 found and fixed 6 issues: an authorization gap letting an app editor disable an app's login, missing rate limits on the AI chat endpoints, an AI chat confirmation step that hid what a foreign-key change would do, and a config validation gap.", "pt-BR": "Uma revisão de segurança pré-release de tudo que foi lançado desde a v1.5.0 achou e corrigiu 6 problemas: uma brecha de autorização que deixava um editor de app desativar o login do app, falta de rate limit nos endpoints do chat de IA, um passo de confirmação do chat de IA que escondia o que uma mudança de chave estrangeira faria, e uma falha na validação de configuração."},
+      "sections": [
+        {
+          "type": "security",
+          "items": [
+            {"description": {"en": "An `app_members` editor (`CanWrite()` but not `CanManage()`) could disable an app's own email/password authentication via `orbit_update_app` or \"Edit with AI,\" despite being blocked from the equivalent change on `PUT /dashboard/api/apps/{id}`. Both surfaces now require `CanManage()`, matching REST.", "pt-BR": "Um editor de `app_members` (`CanWrite()` mas não `CanManage()`) conseguia desativar a autenticação por email/senha de um app via `orbit_update_app` ou \"Edit with AI\", apesar de essa mesma mudança ser bloqueada em `PUT /dashboard/api/apps/{id}`. As duas superfícies agora exigem `CanManage()`, igual ao REST."}},
+            {"description": {"en": "The AI chat endpoints (`ai/build-chat`, `ai/edit-chat`) had no per-user rate limit, unlike the dashboard's webhook, MCP, and login/bootstrap surfaces. All 8 routes are now rate limited per user.", "pt-BR": "Os endpoints do chat de IA (`ai/build-chat`, `ai/edit-chat`) não tinham rate limit por usuário, diferente das superfícies de webhook, MCP e login/bootstrap do dashboard. As 8 rotas agora têm rate limit por usuário."}},
+            {"description": {"en": "Saving the global AI provider config with a blank model succeeded silently, leaving every subsequent chat turn fail with a generic, undiagnosable error. A blank/whitespace-only model is now rejected with a 400 before it reaches the store.", "pt-BR": "Salvar a configuração global do provedor de IA com um model em branco funcionava silenciosamente, fazendo toda interação seguinte do chat falhar com um erro genérico e sem diagnóstico. Um model em branco ou só espaços agora é rejeitado com 400 antes de chegar no armazenamento."}},
+            {"description": {"en": "An unnamed foreign key added to `ai_build_sessions.target_app_id` lacked `ON DELETE CASCADE`, unlike every other FK to `apps(id)` in the schema — deleting an app that ever had an \"Edit with AI\" session made the app permanently undeletable. Fixed to cascade, matching the rest of the schema.", "pt-BR": "Uma chave estrangeira sem nome adicionada em `ai_build_sessions.target_app_id` não tinha `ON DELETE CASCADE`, diferente de toda outra FK pra `apps(id)` no schema — deletar um app que já teve uma sessão \"Edit with AI\" deixava o app permanentemente impossível de apagar. Corrigido para cascatear, igual ao resto do schema."}}
+          ]
+        },
+        {
+          "type": "fixes",
+          "items": [
+            {"description": {"en": "\"Edit with AI\" proposing a foreign-key change on an existing column rendered a \"Confirm and apply\" button with no description of what it would do. Both add and remove foreign-key operations now render their table/column/referenced-table detail before confirming.", "pt-BR": "O \"Edit with AI\" ao propor uma mudança de chave estrangeira numa coluna existente mostrava um botão \"Confirmar e aplicar\" sem nenhuma descrição do que seria feito. As operações de adicionar e remover chave estrangeira agora mostram o detalhe de tabela/coluna/tabela referenciada antes de confirmar."}}
+          ]
+        }
+      ]
+    },
+    {
       "version": "v1.5.0",
       "release_date": "2026-08-17",
       "title": {"en": "Schema-Evolution & Webhook MCP Tools + Credential Redaction Fix", "pt-BR": "Tools MCP de Evolução de Schema e Webhooks + Correção de Redação de Credenciais"},

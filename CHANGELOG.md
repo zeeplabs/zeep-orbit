@@ -9,6 +9,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.6.0] — 2026-08-24
+
 ### Fixed
 
 - **"Edit with AI" proposing a foreign-key change on an existing column rendered a "Confirm and apply" button with no description of what it would do.** `OperationSummary` had no case for `add_foreign_key`/`remove_foreign_key`, so confirming applied real `ALTER TABLE ... ADD/DROP FOREIGN KEY` DDL sight-unseen. Both operations now render their table/column/referenced-table detail, in both languages.
