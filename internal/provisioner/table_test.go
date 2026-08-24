@@ -2,6 +2,7 @@ package provisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -395,5 +396,152 @@ func TestCheckForeignKeyColumnTypesMatch_AuthUsersTarget(t *testing.T) {
 	p := New(pool)
 	if err := p.CheckForeignKeyColumnTypesMatch(ctx, schema, "posts", "author_id", "_auth_users", "id"); err != nil {
 		t.Fatalf("expected nil for matching types against _auth_users, got: %v", err)
+	}
+}
+
+// hasFKConstraint reports whether tableName.columnName has any FOREIGN KEY
+// constraint in schema, via information_schema (not naming-convention based).
+func hasFKConstraint(t *testing.T, pool *db.Pool, schema, tableName, columnName string) bool {
+	t.Helper()
+	var count int
+	err := pool.QueryRow(context.Background(),
+		`SELECT COUNT(*)
+		 FROM information_schema.table_constraints tc
+		 JOIN information_schema.key_column_usage kcu
+		   ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+		 WHERE tc.constraint_type = 'FOREIGN KEY'
+		   AND tc.table_schema = $1 AND tc.table_name = $2 AND kcu.column_name = $3`,
+		schema, tableName, columnName,
+	).Scan(&count)
+	if err != nil {
+		t.Fatalf("check FK constraint on %s.%s.%s: %v", schema, tableName, columnName, err)
+	}
+	return count > 0
+}
+
+// TestAddColumnForeignKey_Success covers T4 AC (CFK-01): a valid, non-
+// orphaned FK add succeeds and the constraint is visible in Postgres.
+func TestAddColumnForeignKey_Success(t *testing.T) {
+	pool := ensureRLSTestPool(t)
+	defer pool.Close()
+
+	schema := fmt.Sprintf("addfk_success_test_%d", time.Now().UnixNano())
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE SCHEMA %q`, schema)); err != nil {
+		t.Fatalf("create schema: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), fmt.Sprintf(`DROP SCHEMA IF EXISTS %q CASCADE`, schema))
+	})
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE TABLE %q.customers (id UUID PRIMARY KEY DEFAULT gen_random_uuid())`, schema)); err != nil {
+		t.Fatalf("create customers: %v", err)
+	}
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE TABLE %q.orders (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), customer_id UUID)`, schema)); err != nil {
+		t.Fatalf("create orders: %v", err)
+	}
+
+	p := New(pool)
+	if err := p.AddColumnForeignKey(ctx, schema, "orders", "customer_id", config.ReferenceConfig{Table: "customers", Column: "id"}); err != nil {
+		t.Fatalf("AddColumnForeignKey: %v", err)
+	}
+
+	if !hasFKConstraint(t, pool, schema, "orders", "customer_id") {
+		t.Fatal("expected a FOREIGN KEY constraint on orders.customer_id after AddColumnForeignKey")
+	}
+}
+
+// TestAddColumnForeignKey_OrphanedRowsRejected covers T4 AC (CFK-06): an
+// orphaned row (referencing a non-existent target key) makes the ADD
+// FOREIGN KEY DDL fail with a *ForeignKeyViolationError carrying Postgres's
+// Detail text.
+func TestAddColumnForeignKey_OrphanedRowsRejected(t *testing.T) {
+	pool := ensureRLSTestPool(t)
+	defer pool.Close()
+
+	schema := fmt.Sprintf("addfk_orphan_test_%d", time.Now().UnixNano())
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE SCHEMA %q`, schema)); err != nil {
+		t.Fatalf("create schema: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), fmt.Sprintf(`DROP SCHEMA IF EXISTS %q CASCADE`, schema))
+	})
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE TABLE %q.customers (id UUID PRIMARY KEY DEFAULT gen_random_uuid())`, schema)); err != nil {
+		t.Fatalf("create customers: %v", err)
+	}
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE TABLE %q.orders (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), customer_id UUID)`, schema)); err != nil {
+		t.Fatalf("create orders: %v", err)
+	}
+	orphanID := "11111111-1111-1111-1111-111111111111"
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`INSERT INTO %q.orders (customer_id) VALUES ($1)`, schema), orphanID); err != nil {
+		t.Fatalf("seed orphan row: %v", err)
+	}
+
+	p := New(pool)
+	err := p.AddColumnForeignKey(ctx, schema, "orders", "customer_id", config.ReferenceConfig{Table: "customers", Column: "id"})
+	if err == nil {
+		t.Fatal("expected error for orphaned row, got nil")
+	}
+	var fkErr *ForeignKeyViolationError
+	if !errors.As(err, &fkErr) {
+		t.Fatalf("expected *ForeignKeyViolationError, got: %T (%v)", err, err)
+	}
+	if fkErr.Column != "customer_id" {
+		t.Errorf("expected Column %q, got %q", "customer_id", fkErr.Column)
+	}
+	if fkErr.Detail == "" {
+		t.Error("expected Postgres Detail text to be preserved, got empty string")
+	}
+	if hasFKConstraint(t, pool, schema, "orders", "customer_id") {
+		t.Fatal("expected no FK constraint to have been created after a rejected add")
+	}
+}
+
+// TestAddColumnForeignKey_OnDeleteCascadeApplied covers T4's "on_delete
+// clause applied correctly" AC: an on_delete:cascade FK actually cascades a
+// delete of the target row to the referencing row.
+func TestAddColumnForeignKey_OnDeleteCascadeApplied(t *testing.T) {
+	pool := ensureRLSTestPool(t)
+	defer pool.Close()
+
+	schema := fmt.Sprintf("addfk_ondelete_test_%d", time.Now().UnixNano())
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE SCHEMA %q`, schema)); err != nil {
+		t.Fatalf("create schema: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), fmt.Sprintf(`DROP SCHEMA IF EXISTS %q CASCADE`, schema))
+	})
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE TABLE %q.customers (id UUID PRIMARY KEY DEFAULT gen_random_uuid())`, schema)); err != nil {
+		t.Fatalf("create customers: %v", err)
+	}
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE TABLE %q.orders (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), customer_id UUID)`, schema)); err != nil {
+		t.Fatalf("create orders: %v", err)
+	}
+
+	var customerID string
+	if err := pool.QueryRow(ctx, fmt.Sprintf(`INSERT INTO %q.customers DEFAULT VALUES RETURNING id`, schema)).Scan(&customerID); err != nil {
+		t.Fatalf("seed customer: %v", err)
+	}
+	var orderID string
+	if err := pool.QueryRow(ctx, fmt.Sprintf(`INSERT INTO %q.orders (customer_id) VALUES ($1) RETURNING id`, schema), customerID).Scan(&orderID); err != nil {
+		t.Fatalf("seed order: %v", err)
+	}
+
+	p := New(pool)
+	if err := p.AddColumnForeignKey(ctx, schema, "orders", "customer_id", config.ReferenceConfig{Table: "customers", Column: "id", OnDelete: "cascade"}); err != nil {
+		t.Fatalf("AddColumnForeignKey: %v", err)
+	}
+
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`DELETE FROM %q.customers WHERE id = $1`, schema), customerID); err != nil {
+		t.Fatalf("delete customer: %v", err)
+	}
+
+	var count int
+	if err := pool.QueryRow(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM %q.orders WHERE id = $1`, schema), orderID).Scan(&count); err != nil {
+		t.Fatalf("count orders: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected the order to be cascade-deleted, but %d row(s) remain", count)
 	}
 }

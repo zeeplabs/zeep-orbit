@@ -371,6 +371,28 @@ func (p *Provisioner) CheckForeignKeyColumnTypesMatch(ctx context.Context, schem
 	return nil
 }
 
+// AddColumnForeignKey runs ALTER TABLE ... ADD FOREIGN KEY on an existing
+// column. The constraint is left unnamed so Postgres applies its own
+// "<table>_<column>_fkey" convention — identical naming to a column created
+// with an inline REFERENCES clause (columnDDL), so a FK's origin (added at
+// creation vs. added later) is never distinguishable by name. A Postgres FK
+// violation (orphaned rows, code 23503) is translated into a typed, safe-
+// to-expose *ForeignKeyViolationError carrying Postgres's own Detail text.
+func (p *Provisioner) AddColumnForeignKey(ctx context.Context, schemaName, tableName, columnName string, ref config.ReferenceConfig) error {
+	sql := fmt.Sprintf(
+		`ALTER TABLE %q.%q ADD FOREIGN KEY (%q) REFERENCES %q.%q(%q) ON DELETE %s`,
+		schemaName, tableName, columnName, schemaName, ref.Table, ref.Column, onDeleteSQL(ref.OnDelete),
+	)
+	if _, err := p.pool.Exec(ctx, sql); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" { // foreign_key_violation
+			return &ForeignKeyViolationError{Column: columnName, Detail: pgErr.Detail, Cause: err}
+		}
+		return fmt.Errorf("table: add foreign key on %q.%q.%q: %w", schemaName, tableName, columnName, err)
+	}
+	return nil
+}
+
 // Returns a list of changes in "schema.table.column (description)" format.
 func (p *Provisioner) applyColumnChanges(ctx context.Context, schemaName, tableName string, cols []config.ColumnConfig, rls string) ([]string, error) {
 	if err := p.ensureMigrationTable(ctx, schemaName); err != nil {

@@ -182,11 +182,11 @@ T13 → T14
 - Skill: NONE
 
 **Done when**:
-- [ ] Successfully adds a working FK constraint on an existing column with valid, non-orphaned data
-- [ ] Orphaned-row insert followed by an add attempt returns `*ForeignKeyViolationError` with the Postgres `Detail` text preserved
-- [ ] Integration tests appended to `internal/provisioner/table_test.go`: success case, orphaned-row rejection case, `on_delete` clause applied correctly (verified via a cascading delete)
-- [ ] Gate check passes: `go build ./... && go vet ./... && gofmt -l internal/provisioner/table.go internal/provisioner/table_test.go && go test ./internal/provisioner/...`
-- [ ] Test count: 3+ new test cases pass (no silent deletions)
+- [x] Successfully adds a working FK constraint on an existing column with valid, non-orphaned data
+- [x] Orphaned-row insert followed by an add attempt returns `*ForeignKeyViolationError` with the Postgres `Detail` text preserved
+- [x] Integration tests appended to `internal/provisioner/table_test.go`: success case, orphaned-row rejection case, `on_delete` clause applied correctly (verified via a cascading delete)
+- [x] Gate check passes: `go build ./... && go vet ./... && gofmt -l internal/provisioner/table.go internal/provisioner/table_test.go && go test ./internal/provisioner/...`
+- [x] Test count: 3+ new test cases pass (no silent deletions)
 
 **Tests**: integration
 **Gate**: full
