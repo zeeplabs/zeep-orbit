@@ -393,6 +393,40 @@ func (p *Provisioner) AddColumnForeignKey(ctx context.Context, schemaName, table
 	return nil
 }
 
+// DropColumnForeignKey locates the real FK constraint on a column via the
+// Postgres catalog (never by assuming a naming convention — see
+// AddColumnForeignKey's comment on why a FK's origin is not name-derivable)
+// and drops it. found=false, err=nil means no FK constraint currently
+// exists on that column — the caller treats this as convergence (a stale
+// stored schema catching up to reality), not an error.
+func (p *Provisioner) DropColumnForeignKey(ctx context.Context, schemaName, tableName, columnName string) (found bool, err error) {
+	var constraintName string
+	err = p.pool.QueryRow(ctx,
+		`SELECT tc.constraint_name
+		 FROM information_schema.table_constraints tc
+		 JOIN information_schema.key_column_usage kcu
+		   ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+		 WHERE tc.constraint_type = 'FOREIGN KEY'
+		   AND tc.table_schema = $1
+		   AND tc.table_name = $2
+		   AND kcu.column_name = $3
+		 LIMIT 1`,
+		schemaName, tableName, columnName,
+	).Scan(&constraintName)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("table: find foreign key on %q.%q.%q: %w", schemaName, tableName, columnName, err)
+	}
+
+	sql := fmt.Sprintf(`ALTER TABLE %q.%q DROP CONSTRAINT %q`, schemaName, tableName, constraintName)
+	if _, err := p.pool.Exec(ctx, sql); err != nil {
+		return false, fmt.Errorf("table: drop foreign key %q on %q.%q: %w", constraintName, schemaName, tableName, err)
+	}
+	return true, nil
+}
+
 // Returns a list of changes in "schema.table.column (description)" format.
 func (p *Provisioner) applyColumnChanges(ctx context.Context, schemaName, tableName string, cols []config.ColumnConfig, rls string) ([]string, error) {
 	if err := p.ensureMigrationTable(ctx, schemaName); err != nil {
