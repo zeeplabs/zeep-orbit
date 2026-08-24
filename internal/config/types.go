@@ -72,6 +72,16 @@ type ReferenceConfig struct {
 	OnDelete string `json:"on_delete,omitempty" yaml:"on_delete,omitempty"`
 }
 
+// Equal reports whether two References values (either may be nil) describe
+// the same foreign key. Used only to detect a References *change* on an
+// already-existing column — never to validate a reference's correctness.
+func (r *ReferenceConfig) Equal(other *ReferenceConfig) bool {
+	if r == nil || other == nil {
+		return r == other // both nil is equal; exactly one nil is not
+	}
+	return r.Table == other.Table && r.Column == other.Column && r.OnDelete == other.OnDelete
+}
+
 type IndexConfig struct {
 	Name    string   `json:"name" yaml:"name"`
 	Columns []string `json:"columns" yaml:"columns"`
