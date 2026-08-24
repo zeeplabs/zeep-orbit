@@ -294,12 +294,12 @@ T13 → T14
 - Skill: NONE
 
 **Done when**:
-- [ ] A request changing `References` (add, remove, or retarget) on a column that existed before the request is rejected with HTTP 400, and nothing is persisted (stored schema and DDL both untouched)
-- [ ] A request that only sets `References` on a column that is brand-new in this same request still succeeds exactly as before
-- [ ] A request that changes non-`References` fields on an existing column, with `References` on shared columns left byte-identical, still succeeds exactly as before
-- [ ] Integration tests appended to `internal/dashboard/apps_handler_test.go` covering all 3 cases above
-- [ ] Gate check passes: `go build ./... && go vet ./... && gofmt -l internal/dashboard/handler.go internal/dashboard/apps_handler_test.go && go test ./internal/dashboard/...`
-- [ ] Test count: 3+ new test cases pass (no silent deletions)
+- [x] A request changing `References` (add, remove, or retarget) on a column that existed before the request is rejected with HTTP 400, and nothing is persisted (stored schema and DDL both untouched)
+- [x] A request that only sets `References` on a column that is brand-new in this same request still succeeds exactly as before
+- [x] A request that changes non-`References` fields on an existing column, with `References` on shared columns left byte-identical, still succeeds exactly as before
+- [x] Integration tests appended to `internal/dashboard/apps_handler_test.go` covering all 3 cases above
+- [x] Gate check passes: `go build ./... && go vet ./... && gofmt -l internal/dashboard/handler.go internal/dashboard/apps_handler_test.go && go test ./internal/dashboard/...`
+- [x] Test count: 3+ new test cases pass (no silent deletions)
 
 **Tests**: integration
 **Gate**: full

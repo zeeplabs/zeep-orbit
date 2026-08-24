@@ -3,6 +3,7 @@ package dashboard
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 
+	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 	"github.com/zeeplabs/zeep-orbit/internal/registry"
 )
@@ -360,4 +362,205 @@ func TestAppsRBACMatrix(t *testing.T) {
 // handler can read URL params via chi.URLParam.
 func withCtx(r *http.Request, rctx *chi.Context) context.Context {
 	return context.WithValue(r.Context(), chi.RouteCtxKey, rctx)
+}
+
+// callUpdateAppTable issues a PUT /apps/{appID}/tables/{tableID} request
+// directly against h.UpdateAppTable, mirroring TestAppsRBACMatrix's request
+// construction for this same route.
+func callUpdateAppTable(t *testing.T, h *Handler, actor *DashboardUser, appID, tableID string, reqBody TableRequestBody) *httptest.ResponseRecorder {
+	t.Helper()
+	payload, err := json.Marshal(reqBody)
+	if err != nil {
+		t.Fatalf("marshal TableRequestBody: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/dashboard/api/apps/%s/tables/%s", appID, tableID), bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req = withUser(req, actor)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", appID)
+	rctx.URLParams.Add("tableId", tableID)
+	req = req.WithContext(withCtx(req, rctx))
+
+	w := httptest.NewRecorder()
+	h.UpdateAppTable(w, req)
+	return w
+}
+
+// TestUpdateAppTable_RejectsReferencesChangeOnExistingColumn covers T8 /
+// spec CFK-19: a full-replace request that changes References on a column
+// that already existed before the request is rejected with 400, and
+// nothing is persisted.
+func TestUpdateAppTable_RejectsReferencesChangeOnExistingColumn(t *testing.T) {
+	pool, h, actors, _, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{Name: uniqueAppName(t, "put-fk-reject")}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppForUser: %v", err)
+	}
+	if _, err := h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
+		Name:    "categories",
+		Columns: []config.ColumnConfig{{Name: "name", Type: "text", Unique: true}},
+	}, "127.0.0.1"); err != nil {
+		t.Fatalf("CreateAppTableForUser categories: %v", err)
+	}
+	items, err := h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
+		Name:    "items",
+		Columns: []config.ColumnConfig{{Name: "category_id", Type: "uuid"}},
+	}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppTableForUser items: %v", err)
+	}
+
+	w := callUpdateAppTable(t, h, actors["loner"], app.ID, items.ID, TableRequestBody{
+		RLS: items.RLS,
+		Columns: []config.ColumnConfig{{
+			Name: "category_id", Type: "uuid",
+			References: &config.ReferenceConfig{Table: "categories", Column: "id"},
+		}},
+		Indexes: items.Indexes,
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for a References change on a pre-existing column, got %d (body: %s)", w.Code, w.Body.String())
+	}
+
+	refreshed, _, err := GetApp(ctx, pool, app.ID, actors["loner"])
+	if err != nil {
+		t.Fatalf("GetApp: %v", err)
+	}
+	refreshedTable := findAppTableByName(refreshed, "items")
+	if refreshedTable == nil {
+		t.Fatal("items table disappeared")
+	}
+	for _, c := range refreshedTable.Columns {
+		if c.Name == "category_id" && c.References != nil {
+			t.Fatalf("expected stored schema untouched (no References), got %+v", c.References)
+		}
+	}
+	if hasFKConstraintOnColumn(t, pool, schemaNameForDB(app.Name), "items", "category_id") {
+		t.Fatal("expected no FK constraint in Postgres — DDL must not have run for a rejected request")
+	}
+}
+
+// TestUpdateAppTable_AllowsReferencesOnBrandNewColumn covers T8 / spec
+// CFK-21: setting References on a column that is brand-new in this same
+// request still succeeds exactly as before.
+func TestUpdateAppTable_AllowsReferencesOnBrandNewColumn(t *testing.T) {
+	pool, h, actors, _, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{Name: uniqueAppName(t, "put-fk-newcol")}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppForUser: %v", err)
+	}
+	if _, err := h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
+		Name:    "categories",
+		Columns: []config.ColumnConfig{{Name: "name", Type: "text", Unique: true}},
+	}, "127.0.0.1"); err != nil {
+		t.Fatalf("CreateAppTableForUser categories: %v", err)
+	}
+	items, err := h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
+		Name:    "items",
+		Columns: []config.ColumnConfig{{Name: "title", Type: "text"}},
+	}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppTableForUser items: %v", err)
+	}
+
+	w := callUpdateAppTable(t, h, actors["loner"], app.ID, items.ID, TableRequestBody{
+		RLS: items.RLS,
+		Columns: []config.ColumnConfig{
+			{Name: "title", Type: "text"},
+			{Name: "category_id", Type: "uuid", References: &config.ReferenceConfig{Table: "categories", Column: "id"}},
+		},
+		Indexes: items.Indexes,
+	})
+	if w.Code < 200 || w.Code >= 300 {
+		t.Fatalf("expected 2xx for References on a brand-new column, got %d (body: %s)", w.Code, w.Body.String())
+	}
+
+	refreshed, _, err := GetApp(ctx, pool, app.ID, actors["loner"])
+	if err != nil {
+		t.Fatalf("GetApp: %v", err)
+	}
+	refreshedTable := findAppTableByName(refreshed, "items")
+	if refreshedTable == nil {
+		t.Fatal("items table disappeared")
+	}
+	found := false
+	for _, c := range refreshedTable.Columns {
+		if c.Name == "category_id" {
+			found = true
+			if c.References == nil || c.References.Table != "categories" {
+				t.Fatalf("expected persisted reference to categories, got %+v", c.References)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("category_id column not found in %+v", refreshedTable.Columns)
+	}
+}
+
+// TestUpdateAppTable_AllowsNonReferenceChangeWithReferencesUnchanged covers
+// T8 / spec CFK-19 (negative control): changing a non-References field on
+// an existing column, with References on shared columns left
+// byte-identical, still succeeds exactly as before.
+func TestUpdateAppTable_AllowsNonReferenceChangeWithReferencesUnchanged(t *testing.T) {
+	pool, h, actors, _, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{Name: uniqueAppName(t, "put-fk-unchanged")}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppForUser: %v", err)
+	}
+	if _, err := h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
+		Name:    "categories",
+		Columns: []config.ColumnConfig{{Name: "name", Type: "text", Unique: true}},
+	}, "127.0.0.1"); err != nil {
+		t.Fatalf("CreateAppTableForUser categories: %v", err)
+	}
+	items, err := h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
+		Name: "items",
+		Columns: []config.ColumnConfig{
+			{Name: "title", Type: "text"},
+			{Name: "category_id", Type: "uuid", References: &config.ReferenceConfig{Table: "categories", Column: "id"}},
+		},
+	}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppTableForUser items: %v", err)
+	}
+
+	// Change title's Unique flag (non-References field) while leaving
+	// category_id's References byte-identical.
+	w := callUpdateAppTable(t, h, actors["loner"], app.ID, items.ID, TableRequestBody{
+		RLS: items.RLS,
+		Columns: []config.ColumnConfig{
+			{Name: "title", Type: "text", Unique: true},
+			{Name: "category_id", Type: "uuid", References: &config.ReferenceConfig{Table: "categories", Column: "id"}},
+		},
+		Indexes: items.Indexes,
+	})
+	if w.Code < 200 || w.Code >= 300 {
+		t.Fatalf("expected 2xx for a non-References change with References unchanged, got %d (body: %s)", w.Code, w.Body.String())
+	}
+
+	refreshed, _, err := GetApp(ctx, pool, app.ID, actors["loner"])
+	if err != nil {
+		t.Fatalf("GetApp: %v", err)
+	}
+	refreshedTable := findAppTableByName(refreshed, "items")
+	if refreshedTable == nil {
+		t.Fatal("items table disappeared")
+	}
+	for _, c := range refreshedTable.Columns {
+		if c.Name == "title" && !c.Unique {
+			t.Fatalf("expected title.Unique to be persisted true, got %+v", c)
+		}
+		if c.Name == "category_id" && (c.References == nil || c.References.Table != "categories") {
+			t.Fatalf("expected category_id's reference to remain intact, got %+v", c.References)
+		}
+	}
 }
