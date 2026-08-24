@@ -1331,6 +1331,30 @@ func (h *Handler) UpdateAppTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Reject a References change on a column that already existed before
+	// this request — Apply's addMissingColumns (called below) is
+	// structurally add-only for columns and silently skips any column
+	// that already exists, so accepting this here would validate and
+	// persist a References change that never actually runs the DDL that
+	// would create/drop the real Postgres constraint. A brand-new column
+	// in this same request is unaffected: it has no "before" state to
+	// compare against, so createTable/addMissingColumns still apply its
+	// References inline exactly as before.
+	existingRefs := make(map[string]*config.ReferenceConfig, len(existingTable.Columns))
+	for _, c := range existingTable.Columns {
+		existingRefs[c.Name] = c.References
+	}
+	for _, c := range body.Columns {
+		oldRef, existed := existingRefs[c.Name]
+		if !existed {
+			continue
+		}
+		if !oldRef.Equal(c.References) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "foreign-key changes on an existing column must go through the dedicated add/remove-foreign-key endpoint"})
+			return
+		}
+	}
+
 	table := AppTableRow{Name: existingTable.Name, RLS: body.RLS, Columns: body.Columns, Indexes: body.Indexes}
 	if err := validateTableInput(table, app.AuthEmailEnabled, otherTables); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
