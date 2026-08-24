@@ -1625,6 +1625,93 @@ func (h *Handler) AddTableIndexForUser(ctx context.Context, user *DashboardUser,
 	return &row, nil
 }
 
+// ErrColumnAlreadyHasReference is returned by AddColumnForeignKeyForUser
+// when the target column already has a References value set — an explicit
+// two-step (remove, then add) is required rather than an implicit
+// drop-and-recreate bundled into one call.
+var ErrColumnAlreadyHasReference = errors.New("dashboard: column already has a foreign key")
+
+// AddColumnForeignKeyForUser is the shared operation behind
+// orbit_add_column_foreign_key and the chat's propose_add_foreign_key
+// confirm step — adds a foreign key to a column that already exists,
+// mirroring AddTableColumnForUser's fetch → mutate-one-field → validate →
+// apply(DDL) → persist → refresh registry → audit shape. Unlike
+// AddTableColumnForUser, the DDL step cannot go through h.prov.Apply: that
+// reconciliation path's addMissingColumns is structurally add-only for
+// columns and silently skips any column that already exists (see
+// design.md's Risks & Concerns) — so this calls the two narrow,
+// purpose-built provisioner functions directly instead.
+func (h *Handler) AddColumnForeignKeyForUser(ctx context.Context, user *DashboardUser, appID, tableName, columnName string, ref config.ReferenceConfig, ip string) (*AppTableRow, error) {
+	app, role, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, err
+	}
+	if !role.CanWrite() {
+		return nil, ErrForbidden
+	}
+
+	existingTable := findAppTableByName(app, tableName)
+	if existingTable == nil {
+		return nil, ErrNotFound
+	}
+
+	colIndex := -1
+	for i, c := range existingTable.Columns {
+		if c.Name == columnName {
+			colIndex = i
+			break
+		}
+	}
+	if colIndex == -1 {
+		return nil, ErrNotFound
+	}
+	if existingTable.Columns[colIndex].References != nil {
+		return nil, ErrColumnAlreadyHasReference
+	}
+
+	mergedColumns := make([]config.ColumnConfig, len(existingTable.Columns))
+	copy(mergedColumns, existingTable.Columns)
+	refCopy := ref
+	mergedColumns[colIndex].References = &refCopy
+
+	otherTables := make([]AppTableRow, 0, len(app.Tables))
+	for _, t := range app.Tables {
+		if t.ID != existingTable.ID {
+			otherTables = append(otherTables, t)
+		}
+	}
+
+	table := AppTableRow{Name: existingTable.Name, RLS: existingTable.RLS, Columns: mergedColumns, Indexes: existingTable.Indexes}
+	if err := validateTableInput(table, app.AuthEmailEnabled, otherTables); err != nil {
+		return nil, &ValidationError{msg: err.Error()}
+	}
+
+	schemaName := schemaNameForDB(app.Name)
+	if err := h.prov.CheckForeignKeyColumnTypesMatch(ctx, schemaName, tableName, columnName, ref.Table, ref.Column); err != nil {
+		return nil, &ValidationError{msg: err.Error()}
+	}
+	if err := h.prov.AddColumnForeignKey(ctx, schemaName, tableName, columnName, ref); err != nil {
+		return nil, err
+	}
+
+	row, err := UpdateAppTable(ctx, h.pool, appID, existingTable.ID, schemaName, existingTable.RLS, mergedColumns, existingTable.Indexes)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+	}
+
+	updated, _, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+	}
+	h.reg.Register(appRowToRegistryApp(updated))
+
+	h.audit(ctx, user.ID, user.Email, "app.table_column.add_foreign_key", "app_table", row.ID, app.Name+"/"+row.Name+"/"+columnName, nil, ip)
+	return &row, nil
+}
+
 // DeleteAppTable handles DELETE /dashboard/api/apps/{id}/tables/{tableId}.
 // Removes the metadata row and drops the physical table — unlike the old
 // bulk UpdateApp flow, a removed table is never left behind in the database.

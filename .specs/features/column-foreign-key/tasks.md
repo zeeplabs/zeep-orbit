@@ -235,16 +235,16 @@ T13 → T14
 - Skill: NONE
 
 **Done when**:
-- [ ] Successfully adds a FK to an existing column and persists `References` in the stored schema only after the DDL succeeds
-- [ ] Rejects with `ErrColumnAlreadyHasReference` when the column already has one
-- [ ] Rejects with a `*ValidationError` (invalid target table/column, bad `on_delete`, `_auth_users` non-uuid rule, reference cycle) — reusing `config.ValidateTables`'s existing behavior
-- [ ] Rejects with a `*ValidationError` on physical type mismatch (from T3)
-- [ ] Rejects with `*provisioner.ForeignKeyViolationError` propagated on orphaned rows (from T4)
-- [ ] Rejects with `ErrForbidden` for a caller without `CanWrite()`, making no schema change
-- [ ] Records an audit log entry (`app.table_column.add_foreign_key`) on success
-- [ ] Integration tests added in `internal/dashboard/apps_column_foreign_key_foruser_test.go` (new file) covering every path above
-- [ ] Gate check passes: `go build ./... && go vet ./... && gofmt -l internal/dashboard/handler.go internal/dashboard/apps_column_foreign_key_foruser_test.go && go test ./internal/dashboard/...`
-- [ ] Test count: 6+ new test cases pass (no silent deletions)
+- [x] Successfully adds a FK to an existing column and persists `References` in the stored schema only after the DDL succeeds
+- [x] Rejects with `ErrColumnAlreadyHasReference` when the column already has one
+- [x] Rejects with a `*ValidationError` (invalid target table/column, bad `on_delete`, `_auth_users` non-uuid rule, reference cycle) — reusing `config.ValidateTables`'s existing behavior
+- [x] Rejects with a `*ValidationError` on physical type mismatch (from T3)
+- [x] Rejects with `*provisioner.ForeignKeyViolationError` propagated on orphaned rows (from T4)
+- [x] Rejects with `ErrForbidden` for a caller without `CanWrite()`, making no schema change
+- [x] Records an audit log entry (`app.table_column.add_foreign_key`) on success
+- [x] Integration tests added in `internal/dashboard/apps_column_foreign_key_foruser_test.go` (new file) covering every path above
+- [x] Gate check passes: `go build ./... && go vet ./... && gofmt -l internal/dashboard/handler.go internal/dashboard/apps_column_foreign_key_foruser_test.go && go test ./internal/dashboard/...`
+- [x] Test count: 6+ new test cases pass (no silent deletions)
 
 **Tests**: integration
 **Gate**: full
