@@ -24,6 +24,7 @@ func appUsersTestPool(t *testing.T) (*db.Pool, string) {
 	if err != nil {
 		t.Fatalf("connect to test DB: %v", err)
 	}
+	t.Cleanup(pool.Close)
 
 	schema := "au_test"
 	cleanup := func() {
