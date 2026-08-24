@@ -1101,3 +1101,21 @@ func TestEditChatConfirm_NoPendingOperationRejected(t *testing.T) {
 		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
 	}
 }
+
+// TestEditChatSystemPromptFor_RoutesForeignKeyRequests covers
+// column-foreign-key spec CFK-16/T12: the rendered prompt names both new
+// tools and no longer instructs the model to decline a foreign-key request
+// on an existing column.
+func TestEditChatSystemPromptFor_RoutesForeignKeyRequests(t *testing.T) {
+	prompt := editChatSystemPromptFor("demo-app")
+
+	if !strings.Contains(prompt, "propose_add_foreign_key") {
+		t.Fatalf("expected the prompt to mention propose_add_foreign_key, got:\n%s", prompt)
+	}
+	if !strings.Contains(prompt, "propose_remove_foreign_key") {
+		t.Fatalf("expected the prompt to mention propose_remove_foreign_key, got:\n%s", prompt)
+	}
+	if strings.Contains(prompt, "decline and explain that this chat can't recreate an existing column") {
+		t.Fatalf("expected the old decline-a-foreign-key-request sentence to be gone, got:\n%s", prompt)
+	}
+}
