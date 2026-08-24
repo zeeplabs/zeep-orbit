@@ -130,11 +130,11 @@ T13 → T14
 - Skill: NONE
 
 **Done when**:
-- [ ] `Error()` includes `Column` and `Detail` in its message, never leaks internal Go error formatting
-- [ ] `Unwrap()` returns `Cause` without exposing it through `Error()` — mirrors `TestTypeChangeError_DoesNotLeakCause`
-- [ ] Unit tests appended to `internal/provisioner/errors_test.go`
-- [ ] Gate check passes: `go build ./... && go vet ./... && gofmt -l internal/provisioner/errors.go internal/provisioner/errors_test.go && go test ./internal/provisioner/...`
-- [ ] Test count: 2+ new test cases pass (no silent deletions)
+- [x] `Error()` includes `Column` and `Detail` in its message, never leaks internal Go error formatting
+- [x] `Unwrap()` returns `Cause` without exposing it through `Error()` — mirrors `TestTypeChangeError_DoesNotLeakCause`
+- [x] Unit tests appended to `internal/provisioner/errors_test.go`
+- [x] Gate check passes: `go build ./... && go vet ./... && gofmt -l internal/provisioner/errors.go internal/provisioner/errors_test.go && go test ./internal/provisioner/...`
+- [x] Test count: 2+ new test cases pass (no silent deletions)
 
 **Tests**: unit
 **Gate**: quick
