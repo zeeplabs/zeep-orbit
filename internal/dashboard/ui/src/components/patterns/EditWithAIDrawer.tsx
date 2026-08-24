@@ -294,6 +294,26 @@ function OperationSummary({ operation }: { operation: EditOperation }) {
           })}
         </div>
       )
+    case 'add_foreign_key':
+      return (
+        <div className="text-[13px]" style={{ color: 'var(--text-primary)' }}>
+          {t('editWithAI.opAddForeignKey', {
+            table: operation.add_foreign_key?.table,
+            column: operation.add_foreign_key?.column,
+            refTable: operation.add_foreign_key?.ref_table,
+            refColumn: operation.add_foreign_key?.ref_column,
+          })}
+        </div>
+      )
+    case 'remove_foreign_key':
+      return (
+        <div className="text-[13px]" style={{ color: 'var(--text-primary)' }}>
+          {t('editWithAI.opRemoveForeignKey', {
+            table: operation.remove_foreign_key?.table,
+            column: operation.remove_foreign_key?.column,
+          })}
+        </div>
+      )
     case 'set_rls_mode':
       return (
         <div className="text-[13px]" style={{ color: 'var(--text-primary)' }}>

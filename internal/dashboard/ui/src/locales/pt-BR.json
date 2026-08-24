@@ -591,6 +591,8 @@
   "editWithAI.opAddColumn": "Adicionar coluna \"{{column}}\" ({{type}}) em \"{{table}}\"",
   "editWithAI.opAddIndex": "Adicionar índice \"{{name}}\" em \"{{table}}\" ({{columns}})",
   "editWithAI.opAddReference": "Adicionar coluna \"{{column}}\" em \"{{table}}\" referenciando \"{{refTable}}.{{refColumn}}\"",
+  "editWithAI.opAddForeignKey": "Adicionar chave estrangeira em \"{{table}}.{{column}}\" referenciando \"{{refTable}}.{{refColumn}}\"",
+  "editWithAI.opRemoveForeignKey": "Remover a chave estrangeira de \"{{table}}.{{column}}\"",
   "editWithAI.opSetRlsMode": "Definir modo RLS de \"{{table}}\" para \"{{mode}}\"",
   "editWithAI.opEnableAuth": "Ativar autenticação por email e senha para este app",
   "editWithAI.opDisableAuth": "Desativar autenticação por email e senha para este app",
