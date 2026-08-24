@@ -403,11 +403,11 @@ T13 → T14
 - Skill: NONE
 
 **Done when**:
-- [ ] The prompt text no longer instructs the model to decline a FK request on an existing column
-- [ ] The prompt text names all three relevant tools and when to use each (new column / add-to-existing / remove-from-existing)
-- [ ] A test asserts the rendered prompt (`editChatSystemPromptFor(appName)`) contains `propose_add_foreign_key` and `propose_remove_foreign_key` and does not contain the old "decline" sentence — appended to `internal/dashboard/ai_edit_chat_handlers_test.go`
-- [ ] Gate check passes: `go build ./... && go vet ./... && gofmt -l internal/dashboard/ai_edit_chat_handlers.go internal/dashboard/ai_edit_chat_handlers_test.go && go test ./internal/dashboard/...`
-- [ ] Test count: 1+ new test case passes (no silent deletions)
+- [x] The prompt text no longer instructs the model to decline a FK request on an existing column
+- [x] The prompt text names all three relevant tools and when to use each (new column / add-to-existing / remove-from-existing)
+- [x] A test asserts the rendered prompt (`editChatSystemPromptFor(appName)`) contains `propose_add_foreign_key` and `propose_remove_foreign_key` and does not contain the old "decline" sentence — appended to `internal/dashboard/ai_edit_chat_handlers_test.go`
+- [x] Gate check passes: `go build ./... && go vet ./... && gofmt -l internal/dashboard/ai_edit_chat_handlers.go internal/dashboard/ai_edit_chat_handlers_test.go && go test ./internal/dashboard/...`
+- [x] Test count: 1+ new test case passes (no silent deletions)
 
 **Tests**: integration
 **Gate**: full
