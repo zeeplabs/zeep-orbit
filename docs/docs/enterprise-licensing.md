@@ -52,7 +52,7 @@ agreement.
 
 License term, pricing, billing, automatic renewal, and the grace period
 after a failed payment are governed by the
-[Zeep Orbit Enterprise Commercial Subscription Terms](../../COMMERCIAL_TERMS.md),
+[Zeep Orbit Enterprise Commercial Subscription Terms](https://github.com/zeeplabs/zeep-orbit/blob/main/COMMERCIAL_TERMS.md),
 not by the source license itself. The current model is an annual
 subscription via Stripe, with a seven-day grace period after expiration or a
 failed renewal before enterprise features are suspended. Suspension never
@@ -60,14 +60,15 @@ affects the MIT-licensed core, and never deletes your data.
 
 ## Full legal text
 
-- [`LICENSE`](../../LICENSE) — MIT License for the core, plus the dual-license
-pointer.
-- [`LICENSING.md`](../../LICENSING.md) — licensing model overview.
-- [`internal/enterprise/LICENSE`](../../internal/enterprise/LICENSE) —
-controlling (English) Enterprise Source License.
+- [`LICENSE`](https://github.com/zeeplabs/zeep-orbit/blob/main/LICENSE) — MIT
+License for the core, plus the dual-license pointer.
+- [`LICENSING.md`](https://github.com/zeeplabs/zeep-orbit/blob/main/LICENSING.md)
+— licensing model overview.
+- [`internal/enterprise/LICENSE`](https://github.com/zeeplabs/zeep-orbit/blob/main/internal/enterprise/LICENSE)
+— controlling (English) Enterprise Source License.
 - `internal/enterprise/LICENSE.pt-BR.md` — Portuguese translation, for
 convenience only.
-- [`COMMERCIAL_TERMS.md`](../../COMMERCIAL_TERMS.md) — controlling (English)
-subscription terms, with a Portuguese translation at
+- [`COMMERCIAL_TERMS.md`](https://github.com/zeeplabs/zeep-orbit/blob/main/COMMERCIAL_TERMS.md)
+— controlling (English) subscription terms, with a Portuguese translation at
 `COMMERCIAL_TERMS.pt-BR.md`.
 
