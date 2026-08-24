@@ -209,6 +209,8 @@ func mapWriteError(err error) error {
 		return dashboard.ErrFieldMappingsRequired
 	case errors.Is(err, dashboard.ErrColumnAlreadyHasReference):
 		return dashboard.ErrColumnAlreadyHasReference
+	case errors.Is(err, dashboard.ErrColumnHasNoReference):
+		return dashboard.ErrColumnHasNoReference
 	case errors.As(err, &valErr):
 		return valErr
 	case errors.As(err, &typeErr):
@@ -321,6 +323,14 @@ type orbitAddColumnForeignKeyInput struct {
 	References config.ReferenceConfig `json:"references" jsonschema:"the foreign key target: table, column, and optional on_delete"`
 }
 
+// orbitRemoveColumnForeignKeyInput is the input for
+// orbit_remove_column_foreign_key.
+type orbitRemoveColumnForeignKeyInput struct {
+	AppID      string `json:"app_id" jsonschema:"id of the app that owns the table"`
+	TableName  string `json:"table_name" jsonschema:"name of the table that owns the column"`
+	ColumnName string `json:"column_name" jsonschema:"name of the column to remove the foreign key from"`
+}
+
 // registerAppConfigWriteTools registers the additive table-schema mutation
 // tools (mcp-safe-mutation-tools spec: add one column, add one index, each
 // server-side-merged against the table's current stored definition so the
@@ -385,6 +395,21 @@ func registerAppConfigWriteTools(server *mcp.Server, deps ToolDeps) {
 			return nil, nil, errUnauthorized
 		}
 		row, err := deps.DashH.AddColumnForeignKeyForUser(ctx, user, in.AppID, in.TableName, in.ColumnName, in.References, "mcp")
+		if err != nil {
+			return nil, nil, mapWriteError(err)
+		}
+		return nil, row, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_remove_column_foreign_key",
+		Description: "Remove the foreign key from an already-existing column, without dropping the column itself. Fails if the column has no foreign key to remove.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitRemoveColumnForeignKeyInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		row, err := deps.DashH.RemoveColumnForeignKeyForUser(ctx, user, in.AppID, in.TableName, in.ColumnName, "mcp")
 		if err != nil {
 			return nil, nil, mapWriteError(err)
 		}
