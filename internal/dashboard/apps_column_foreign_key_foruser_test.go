@@ -165,7 +165,7 @@ func TestAddColumnForeignKeyForUser_AuthUsersTargetTypeMismatchRejected(t *testi
 	defer pool.Close()
 	ctx := context.Background()
 
-	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{Name: uniqueAppName(t, "addfk-au-typemis")}, "127.0.0.1")
+	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{Name: uniqueAppName(t, "addfk-au-typemis"), AuthEmailEnabled: true}, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("CreateAppForUser: %v", err)
 	}
