@@ -266,13 +266,13 @@ T13 → T14
 - Skill: NONE
 
 **Done when**:
-- [ ] Successfully removes a FK from an existing column and clears `References` in the stored schema only after the DDL succeeds (or after confirming no constraint exists — self-healing case)
-- [ ] Rejects with `ErrColumnHasNoReference` when the column's stored schema shows no `References`
-- [ ] Rejects with `ErrForbidden` for a caller without `CanWrite()`, making no schema change
-- [ ] Records an audit log entry (`app.table_column.remove_foreign_key`) on success
-- [ ] Integration tests appended to `internal/dashboard/apps_column_foreign_key_foruser_test.go` covering every path above, including the stale-schema convergence case
-- [ ] Gate check passes: `go build ./... && go vet ./... && gofmt -l internal/dashboard/handler.go internal/dashboard/apps_column_foreign_key_foruser_test.go && go test ./internal/dashboard/...`
-- [ ] Test count: 4+ new test cases pass (no silent deletions)
+- [x] Successfully removes a FK from an existing column and clears `References` in the stored schema only after the DDL succeeds (or after confirming no constraint exists — self-healing case)
+- [x] Rejects with `ErrColumnHasNoReference` when the column's stored schema shows no `References`
+- [x] Rejects with `ErrForbidden` for a caller without `CanWrite()`, making no schema change
+- [x] Records an audit log entry (`app.table_column.remove_foreign_key`) on success
+- [x] Integration tests appended to `internal/dashboard/apps_column_foreign_key_foruser_test.go` covering every path above, including the stale-schema convergence case
+- [x] Gate check passes: `go build ./... && go vet ./... && gofmt -l internal/dashboard/handler.go internal/dashboard/apps_column_foreign_key_foruser_test.go && go test ./internal/dashboard/...`
+- [x] Test count: 4+ new test cases pass (no silent deletions)
 
 **Tests**: integration
 **Gate**: full
