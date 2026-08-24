@@ -1119,3 +1119,273 @@ func TestEditChatSystemPromptFor_RoutesForeignKeyRequests(t *testing.T) {
 		t.Fatalf("expected the old decline-a-foreign-key-request sentence to be gone, got:\n%s", prompt)
 	}
 }
+
+// TestEditChatConfirm_AddForeignKey covers column-foreign-key spec CFK-17:
+// confirming a pending add_foreign_key op calls AddColumnForeignKeyForUser
+// on an existing column and audits with origin "ai_chat".
+func TestEditChatConfirm_AddForeignKey(t *testing.T) {
+	pool, h, user, appID := aiEditChatHandlerTestPool(t)
+	ctx := context.Background()
+	if _, err := h.CreateAppTableForUser(ctx, &DashboardUser{ID: user.ID, Role: "admin"}, appID, TableRequestBody{
+		Name:    "categories",
+		Columns: []config.ColumnConfig{{Name: "name", Type: "text", Unique: true}},
+	}, "test"); err != nil {
+		t.Fatalf("CreateAppTableForUser (categories): %v", err)
+	}
+	if _, err := h.CreateAppTableForUser(ctx, &DashboardUser{ID: user.ID, Role: "admin"}, appID, TableRequestBody{
+		Name:    "items",
+		Columns: []config.ColumnConfig{{Name: "category_id", Type: "uuid"}},
+	}, "test"); err != nil {
+		t.Fatalf("CreateAppTableForUser (items): %v", err)
+	}
+
+	session, _, err := GetOrCreateInProgressEditSession(ctx, pool, user.ID, appID)
+	if err != nil {
+		t.Fatalf("GetOrCreateInProgressEditSession: %v", err)
+	}
+	op := &ai.EditOperation{Kind: "add_foreign_key", AddForeignKey: &ai.PlanForeignKeyOp{
+		Table: "items", Column: "category_id", RefTable: "categories", RefColumn: "id",
+	}}
+	persistProposedEditOp(t, pool, session.ID, op)
+
+	req := confirmEditChatRequestFor(&DashboardUser{ID: user.ID, Role: "admin"}, session.ID)
+	w := httptest.NewRecorder()
+	h.EditChatConfirm(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var got editChatConfirmResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	var foundRef bool
+	for _, c := range got.Table.Columns {
+		if c.Name == "category_id" && c.References != nil && c.References.Table == "categories" {
+			foundRef = true
+		}
+	}
+	if !foundRef {
+		t.Fatalf("expected category_id with References.Table=categories, got %+v", got.Table.Columns)
+	}
+}
+
+// TestEditChatConfirm_RemoveForeignKey covers column-foreign-key spec
+// CFK-17: confirming a pending remove_foreign_key op calls
+// RemoveColumnForeignKeyForUser and audits with origin "ai_chat".
+func TestEditChatConfirm_RemoveForeignKey(t *testing.T) {
+	pool, h, user, appID := aiEditChatHandlerTestPool(t)
+	ctx := context.Background()
+	if _, err := h.CreateAppTableForUser(ctx, &DashboardUser{ID: user.ID, Role: "admin"}, appID, TableRequestBody{
+		Name:    "categories",
+		Columns: []config.ColumnConfig{{Name: "name", Type: "text", Unique: true}},
+	}, "test"); err != nil {
+		t.Fatalf("CreateAppTableForUser (categories): %v", err)
+	}
+	if _, err := h.CreateAppTableForUser(ctx, &DashboardUser{ID: user.ID, Role: "admin"}, appID, TableRequestBody{
+		Name: "items",
+		Columns: []config.ColumnConfig{{
+			Name: "category_id", Type: "uuid",
+			References: &config.ReferenceConfig{Table: "categories", Column: "id"},
+		}},
+	}, "test"); err != nil {
+		t.Fatalf("CreateAppTableForUser (items): %v", err)
+	}
+
+	session, _, err := GetOrCreateInProgressEditSession(ctx, pool, user.ID, appID)
+	if err != nil {
+		t.Fatalf("GetOrCreateInProgressEditSession: %v", err)
+	}
+	op := &ai.EditOperation{Kind: "remove_foreign_key", RemoveForeignKey: &ai.PlanRemoveForeignKeyOp{
+		Table: "items", Column: "category_id",
+	}}
+	persistProposedEditOp(t, pool, session.ID, op)
+
+	req := confirmEditChatRequestFor(&DashboardUser{ID: user.ID, Role: "admin"}, session.ID)
+	w := httptest.NewRecorder()
+	h.EditChatConfirm(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var got editChatConfirmResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	for _, c := range got.Table.Columns {
+		if c.Name == "category_id" && c.References != nil {
+			t.Fatalf("expected category_id's reference cleared, got %+v", c.References)
+		}
+	}
+}
+
+// TestEditChatConfirm_AddForeignKeyAlreadyHasReferenceSurfacesSpecificMessage
+// covers column-foreign-key spec CFK-18: the already-has-a-foreign-key
+// error path surfaces its own specific message, not a generic failure.
+func TestEditChatConfirm_AddForeignKeyAlreadyHasReferenceSurfacesSpecificMessage(t *testing.T) {
+	pool, h, user, appID := aiEditChatHandlerTestPool(t)
+	ctx := context.Background()
+	if _, err := h.CreateAppTableForUser(ctx, &DashboardUser{ID: user.ID, Role: "admin"}, appID, TableRequestBody{
+		Name:    "categories",
+		Columns: []config.ColumnConfig{{Name: "name", Type: "text", Unique: true}},
+	}, "test"); err != nil {
+		t.Fatalf("CreateAppTableForUser (categories): %v", err)
+	}
+	if _, err := h.CreateAppTableForUser(ctx, &DashboardUser{ID: user.ID, Role: "admin"}, appID, TableRequestBody{
+		Name: "items",
+		Columns: []config.ColumnConfig{{
+			Name: "category_id", Type: "uuid",
+			References: &config.ReferenceConfig{Table: "categories", Column: "id"},
+		}},
+	}, "test"); err != nil {
+		t.Fatalf("CreateAppTableForUser (items): %v", err)
+	}
+
+	session, _, err := GetOrCreateInProgressEditSession(ctx, pool, user.ID, appID)
+	if err != nil {
+		t.Fatalf("GetOrCreateInProgressEditSession: %v", err)
+	}
+	op := &ai.EditOperation{Kind: "add_foreign_key", AddForeignKey: &ai.PlanForeignKeyOp{
+		Table: "items", Column: "category_id", RefTable: "categories", RefColumn: "id",
+	}}
+	persistProposedEditOp(t, pool, session.ID, op)
+
+	req := confirmEditChatRequestFor(&DashboardUser{ID: user.ID, Role: "admin"}, session.ID)
+	w := httptest.NewRecorder()
+	h.EditChatConfirm(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "already has a foreign key") {
+		t.Fatalf("expected a specific already-has-a-foreign-key message, got: %s", w.Body.String())
+	}
+}
+
+// TestEditChatConfirm_RemoveForeignKeyNoReferenceSurfacesSpecificMessage
+// covers column-foreign-key spec CFK-18: the no-FK-to-remove error path
+// surfaces its own specific message, not a generic failure.
+func TestEditChatConfirm_RemoveForeignKeyNoReferenceSurfacesSpecificMessage(t *testing.T) {
+	pool, h, user, appID := aiEditChatHandlerTestPool(t)
+	ctx := context.Background()
+	if _, err := h.CreateAppTableForUser(ctx, &DashboardUser{ID: user.ID, Role: "admin"}, appID, TableRequestBody{
+		Name:    "items",
+		Columns: []config.ColumnConfig{{Name: "category_id", Type: "uuid"}},
+	}, "test"); err != nil {
+		t.Fatalf("CreateAppTableForUser (items): %v", err)
+	}
+
+	session, _, err := GetOrCreateInProgressEditSession(ctx, pool, user.ID, appID)
+	if err != nil {
+		t.Fatalf("GetOrCreateInProgressEditSession: %v", err)
+	}
+	op := &ai.EditOperation{Kind: "remove_foreign_key", RemoveForeignKey: &ai.PlanRemoveForeignKeyOp{
+		Table: "items", Column: "category_id",
+	}}
+	persistProposedEditOp(t, pool, session.ID, op)
+
+	req := confirmEditChatRequestFor(&DashboardUser{ID: user.ID, Role: "admin"}, session.ID)
+	w := httptest.NewRecorder()
+	h.EditChatConfirm(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "no foreign key to remove") {
+		t.Fatalf("expected a specific no-foreign-key-to-remove message, got: %s", w.Body.String())
+	}
+}
+
+// TestEditChatConfirm_AddForeignKeyInvalidTargetSurfacesSpecificMessage
+// covers column-foreign-key spec CFK-18: an invalid target table surfaces
+// config.ValidateTables' own specific *ValidationError message, not a
+// generic failure.
+func TestEditChatConfirm_AddForeignKeyInvalidTargetSurfacesSpecificMessage(t *testing.T) {
+	pool, h, user, appID := aiEditChatHandlerTestPool(t)
+	ctx := context.Background()
+	if _, err := h.CreateAppTableForUser(ctx, &DashboardUser{ID: user.ID, Role: "admin"}, appID, TableRequestBody{
+		Name:    "items",
+		Columns: []config.ColumnConfig{{Name: "category_id", Type: "uuid"}},
+	}, "test"); err != nil {
+		t.Fatalf("CreateAppTableForUser (items): %v", err)
+	}
+
+	session, _, err := GetOrCreateInProgressEditSession(ctx, pool, user.ID, appID)
+	if err != nil {
+		t.Fatalf("GetOrCreateInProgressEditSession: %v", err)
+	}
+	op := &ai.EditOperation{Kind: "add_foreign_key", AddForeignKey: &ai.PlanForeignKeyOp{
+		Table: "items", Column: "category_id", RefTable: "does_not_exist", RefColumn: "id",
+	}}
+	persistProposedEditOp(t, pool, session.ID, op)
+
+	req := confirmEditChatRequestFor(&DashboardUser{ID: user.ID, Role: "admin"}, session.ID)
+	w := httptest.NewRecorder()
+	h.EditChatConfirm(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	var got map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got["error"] == genericAIChatError || got["error"] == "" {
+		t.Fatalf("expected a specific validation message for an unknown target table, got %q", got["error"])
+	}
+}
+
+// TestEditChatConfirm_AddForeignKeyOrphanedRowsSurfacesSpecificMessage
+// covers column-foreign-key spec CFK-18: a *provisioner.ForeignKeyViolationError
+// from orphaned rows surfaces its own detail-carrying message, not a
+// generic failure.
+func TestEditChatConfirm_AddForeignKeyOrphanedRowsSurfacesSpecificMessage(t *testing.T) {
+	pool, h, user, appID := aiEditChatHandlerTestPool(t)
+	ctx := context.Background()
+	app, _, err := GetApp(ctx, pool, appID, &DashboardUser{ID: user.ID, Role: "admin"})
+	if err != nil {
+		t.Fatalf("GetApp: %v", err)
+	}
+	if _, err := h.CreateAppTableForUser(ctx, &DashboardUser{ID: user.ID, Role: "admin"}, appID, TableRequestBody{
+		Name:    "categories",
+		Columns: []config.ColumnConfig{{Name: "name", Type: "text", Unique: true}},
+	}, "test"); err != nil {
+		t.Fatalf("CreateAppTableForUser (categories): %v", err)
+	}
+	if _, err := h.CreateAppTableForUser(ctx, &DashboardUser{ID: user.ID, Role: "admin"}, appID, TableRequestBody{
+		Name:    "items",
+		Columns: []config.ColumnConfig{{Name: "category_id", Type: "uuid"}},
+	}, "test"); err != nil {
+		t.Fatalf("CreateAppTableForUser (items): %v", err)
+	}
+	orphanID := "11111111-1111-1111-1111-111111111111"
+	if _, err := pool.Exec(ctx,
+		"INSERT INTO "+schemaNameForDB(app.Name)+".items (category_id) VALUES ($1)", orphanID,
+	); err != nil {
+		t.Fatalf("seed orphan row: %v", err)
+	}
+
+	session, _, err := GetOrCreateInProgressEditSession(ctx, pool, user.ID, appID)
+	if err != nil {
+		t.Fatalf("GetOrCreateInProgressEditSession: %v", err)
+	}
+	op := &ai.EditOperation{Kind: "add_foreign_key", AddForeignKey: &ai.PlanForeignKeyOp{
+		Table: "items", Column: "category_id", RefTable: "categories", RefColumn: "id",
+	}}
+	persistProposedEditOp(t, pool, session.ID, op)
+
+	req := confirmEditChatRequestFor(&DashboardUser{ID: user.ID, Role: "admin"}, session.ID)
+	w := httptest.NewRecorder()
+	h.EditChatConfirm(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	var got map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got["error"] == genericAIChatError || got["error"] == "" {
+		t.Fatalf("expected the specific foreign-key-violation message, got %q", got["error"])
+	}
+}

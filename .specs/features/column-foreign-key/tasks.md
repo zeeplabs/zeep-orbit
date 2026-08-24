@@ -429,12 +429,12 @@ T13 → T14
 - Skill: NONE
 
 **Done when**:
-- [ ] Confirming a proposed `add_foreign_key` operation applies it through `AddColumnForeignKeyForUser` and returns the updated table
-- [ ] Confirming a proposed `remove_foreign_key` operation applies it through `RemoveColumnForeignKeyForUser` and returns the updated table
-- [ ] Each of the handler-layer error paths (already-has-FK, no-FK-to-remove, type mismatch, FK violation, invalid target) surfaces its own specific message through the chat, not a generic failure — mirrors AIEC-04's existing behavior
-- [ ] Integration tests appended to `internal/dashboard/ai_edit_chat_handlers_test.go`, mirroring `TestEditChatConfirm_AddReference`: one happy-path test per new kind, one test per new error path
-- [ ] Gate check passes: `go build ./... && go vet ./... && gofmt -l internal/dashboard/ai_edit_chat_handlers.go internal/dashboard/ai_edit_chat_handlers_test.go && go test ./internal/dashboard/...`
-- [ ] Test count: 6+ new test cases pass (no silent deletions)
+- [x] Confirming a proposed `add_foreign_key` operation applies it through `AddColumnForeignKeyForUser` and returns the updated table
+- [x] Confirming a proposed `remove_foreign_key` operation applies it through `RemoveColumnForeignKeyForUser` and returns the updated table
+- [x] Each of the handler-layer error paths (already-has-FK, no-FK-to-remove, type mismatch, FK violation, invalid target) surfaces its own specific message through the chat, not a generic failure — mirrors AIEC-04's existing behavior
+- [x] Integration tests appended to `internal/dashboard/ai_edit_chat_handlers_test.go`, mirroring `TestEditChatConfirm_AddReference`: one happy-path test per new kind, one test per new error path
+- [x] Gate check passes: `go build ./... && go vet ./... && gofmt -l internal/dashboard/ai_edit_chat_handlers.go internal/dashboard/ai_edit_chat_handlers_test.go && go test ./internal/dashboard/...`
+- [x] Test count: 6+ new test cases pass (no silent deletions)
 
 **Tests**: integration
 **Gate**: full
