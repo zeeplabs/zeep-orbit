@@ -339,6 +339,38 @@ func (p *Provisioner) fetchExistingColumns(ctx context.Context, schemaName, tabl
 	return cols, rows.Err()
 }
 
+// CheckForeignKeyColumnTypesMatch compares the real physical Postgres type
+// (udt_name) of an existing column against the real physical type of a
+// target table/column, before any ADD FOREIGN KEY DDL runs. It uses the
+// actual catalog type rather than the possibly-stale declared config type,
+// since the source column already exists physically. refTableName may be
+// "_auth_users" — that's a real physical table in the same schema, so
+// fetchExistingColumns handles it with no special-casing.
+func (p *Provisioner) CheckForeignKeyColumnTypesMatch(ctx context.Context, schemaName, tableName, columnName, refTableName, refColumnName string) error {
+	sourceCols, err := p.fetchExistingColumns(ctx, schemaName, tableName)
+	if err != nil {
+		return err
+	}
+	sourceType, ok := sourceCols[columnName]
+	if !ok {
+		return fmt.Errorf("column %q not found on table %q.%q", columnName, schemaName, tableName)
+	}
+
+	targetCols, err := p.fetchExistingColumns(ctx, schemaName, refTableName)
+	if err != nil {
+		return err
+	}
+	targetType, ok := targetCols[refColumnName]
+	if !ok {
+		return fmt.Errorf("column %q not found on table %q.%q", refColumnName, schemaName, refTableName)
+	}
+
+	if sourceType != targetType {
+		return fmt.Errorf("column %q has type %s but referenced column %q.%q has type %s", columnName, sourceType, refTableName, refColumnName, targetType)
+	}
+	return nil
+}
+
 // Returns a list of changes in "schema.table.column (description)" format.
 func (p *Provisioner) applyColumnChanges(ctx context.Context, schemaName, tableName string, cols []config.ColumnConfig, rls string) ([]string, error) {
 	if err := p.ensureMigrationTable(ctx, schemaName); err != nil {
