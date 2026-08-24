@@ -175,6 +175,7 @@ type orbitSetTableRLSModeInput struct {
 func mapWriteError(err error) error {
 	var valErr *dashboard.ValidationError
 	var typeErr *provisioner.TypeChangeError
+	var fkErr *provisioner.ForeignKeyViolationError
 	switch {
 	case err == nil:
 		return nil
@@ -206,10 +207,14 @@ func mapWriteError(err error) error {
 		return dashboard.ErrEventTypeValueRequired
 	case errors.Is(err, dashboard.ErrFieldMappingsRequired):
 		return dashboard.ErrFieldMappingsRequired
+	case errors.Is(err, dashboard.ErrColumnAlreadyHasReference):
+		return dashboard.ErrColumnAlreadyHasReference
 	case errors.As(err, &valErr):
 		return valErr
 	case errors.As(err, &typeErr):
 		return typeErr
+	case errors.As(err, &fkErr):
+		return fkErr
 	default:
 		return internalErr(err)
 	}
@@ -306,6 +311,16 @@ type orbitUpdateAppInput struct {
 	AuthEmailEnabled bool   `json:"auth_email_enabled" jsonschema:"whether email/password authentication is enabled for this app"`
 }
 
+// orbitAddColumnForeignKeyInput is the input for orbit_add_column_foreign_key.
+// config.ReferenceConfig is used directly (same precedent as
+// orbitAddTableColumnInput.Column) rather than a bespoke translation struct.
+type orbitAddColumnForeignKeyInput struct {
+	AppID      string                 `json:"app_id" jsonschema:"id of the app that owns the table"`
+	TableName  string                 `json:"table_name" jsonschema:"name of the table that owns the column"`
+	ColumnName string                 `json:"column_name" jsonschema:"name of the already-existing column to add a foreign key to"`
+	References config.ReferenceConfig `json:"references" jsonschema:"the foreign key target: table, column, and optional on_delete"`
+}
+
 // registerAppConfigWriteTools registers the additive table-schema mutation
 // tools (mcp-safe-mutation-tools spec: add one column, add one index, each
 // server-side-merged against the table's current stored definition so the
@@ -359,6 +374,21 @@ func registerAppConfigWriteTools(server *mcp.Server, deps ToolDeps) {
 			return nil, nil, mapWriteError(err)
 		}
 		return nil, app, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_add_column_foreign_key",
+		Description: "Add a foreign key to an already-existing column, without dropping or recreating the column. Fails if the column already has a foreign key (remove it first), if the target table/column is invalid, if the physical Postgres types don't match, or if existing rows would violate the new constraint.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitAddColumnForeignKeyInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		row, err := deps.DashH.AddColumnForeignKeyForUser(ctx, user, in.AppID, in.TableName, in.ColumnName, in.References, "mcp")
+		if err != nil {
+			return nil, nil, mapWriteError(err)
+		}
+		return nil, row, nil
 	})
 }
 

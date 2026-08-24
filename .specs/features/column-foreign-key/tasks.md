@@ -321,12 +321,12 @@ T13 → T14
 - Skill: NONE
 
 **Done when**:
-- [ ] Tool call succeeds end-to-end against a test app (matches T6's happy path through the MCP layer)
-- [ ] A caller without `CanWrite()` gets the same class of rejection the REST-equivalent handler returns
-- [ ] `ErrColumnAlreadyHasReference` and `*provisioner.ForeignKeyViolationError` map to their specific, safe-to-expose messages (not a generic internal error)
-- [ ] Integration tests added in `internal/mcpserver/tools_add_column_foreign_key_test.go` (new file, mirrors `tools_add_table_column_test.go`)
-- [ ] Gate check passes: `go build ./... && go vet ./... && gofmt -l internal/mcpserver/tools.go internal/mcpserver/tools_add_column_foreign_key_test.go && go test ./internal/mcpserver/...`
-- [ ] Test count: 3+ new test cases pass (no silent deletions)
+- [x] Tool call succeeds end-to-end against a test app (matches T6's happy path through the MCP layer)
+- [x] A caller without `CanWrite()` gets the same class of rejection the REST-equivalent handler returns
+- [x] `ErrColumnAlreadyHasReference` and `*provisioner.ForeignKeyViolationError` map to their specific, safe-to-expose messages (not a generic internal error)
+- [x] Integration tests added in `internal/mcpserver/tools_add_column_foreign_key_test.go` (new file, mirrors `tools_add_table_column_test.go`)
+- [x] Gate check passes: `go build ./... && go vet ./... && gofmt -l internal/mcpserver/tools.go internal/mcpserver/tools_add_column_foreign_key_test.go && go test ./internal/mcpserver/...`
+- [x] Test count: 3+ new test cases pass (no silent deletions)
 
 **Tests**: integration
 **Gate**: full
