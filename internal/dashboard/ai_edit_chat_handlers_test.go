@@ -46,6 +46,7 @@ func aiEditChatHandlerTestPool(t *testing.T) (*db.Pool, *Handler, *DashboardUser
 	if err != nil {
 		t.Fatalf("connect to test DB: %v", err)
 	}
+	t.Cleanup(pool.Close)
 	if err := ProvisionZeepSystem(ctx, pool); err != nil {
 		t.Fatalf("provision zeep_system: %v", err)
 	}

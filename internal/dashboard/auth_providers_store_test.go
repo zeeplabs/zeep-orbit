@@ -33,6 +33,7 @@ func authProvidersTestPool(t *testing.T) *db.Pool {
 	if err != nil {
 		t.Fatalf("connect to test DB: %v", err)
 	}
+	t.Cleanup(pool.Close)
 	if err := ProvisionZeepSystem(ctx, pool); err != nil {
 		t.Fatalf("provision zeep_system: %v", err)
 	}

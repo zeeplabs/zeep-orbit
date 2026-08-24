@@ -64,4 +64,11 @@ jobs:
         # zeep_system schema for isolation — running packages in parallel
         # races on that schema and flakes. Sequential package execution
         # avoids it; tests within a package still run concurrently.
-        run: go test -p 1 ./...
+        #
+        # -parallel 4: each real-DB test opens its own db.Pool (MaxConns=10).
+        # Unbounded intra-package parallelism can open enough pools at once
+        # to exceed this Postgres service's max_connections (100, vs. 300 on
+        # local dev DBs), which then fails every subsequent test in the run
+        # with "sorry, too many clients already" regardless of package.
+        # Capping concurrent subtests keeps peak connections well under 100.
+        run: go test -p 1 -parallel 4 ./...
