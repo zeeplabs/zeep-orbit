@@ -338,8 +338,12 @@ type orbitRemoveColumnForeignKeyInput struct {
 // design.md's Architecture Overview, this is exactly why UpdateAppTable's
 // full-replace endpoint isn't safe to expose directly) plus orbit_update_app
 // (ai-edit-chat spec, AIEC-13), which closes the REST/MCP parity gap
-// UpdateAppForUser (T3) would otherwise introduce. All three gate on
-// role.CanWrite(), matching CreateAppTableForUser/UpdateTableRLSModeForUser.
+// UpdateAppForUser (T3) would otherwise introduce. The first two gate on
+// role.CanWrite(), matching CreateAppTableForUser/UpdateTableRLSModeForUser;
+// orbit_update_app gates on role.CanManage() (raised from CanWrite() — see
+// UpdateAppForUser's own doc comment), matching UpdateApp's REST handler,
+// since toggling an app's auth is a management-tier change, not a routine
+// content edit.
 func registerAppConfigWriteTools(server *mcp.Server, deps ToolDeps) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "orbit_add_table_column",
