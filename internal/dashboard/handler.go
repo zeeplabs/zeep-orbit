@@ -1479,12 +1479,26 @@ func (h *Handler) UpdateTableRLSModeForUser(ctx context.Context, user *Dashboard
 // convention only this one function uses; the value passed still becomes
 // the audit log's `ip` column exactly as design.md intends.
 //
-// RBAC: CanWrite() (not CanManage(), which UpdateApp's REST handler
-// requires for auth_providers/storage/rate-limit changes) — matching every
-// other edit-chat mutation's authorization tier (AIEC-05). The store-level
-// UpdateApp already performs this exact check (via GetApp + role.CanWrite()),
-// so it is not duplicated here.
+// RBAC: CanManage() — matching UpdateApp's REST handler, which requires
+// CanManage() for this same auth_email_enabled field (see its comment:
+// "App config ... is management-level — only admin can change it. Editor
+// has CanWrite but not CanManage"). Toggling an app's own auth off/on is a
+// security-tier change (it can disable every end-user login on the app),
+// not a routine content edit like adding a column, so it does not follow
+// AIEC-05's usual CanWrite() tier for edit-chat mutations. Checked
+// explicitly here because the store-level UpdateApp only enforces
+// CanWrite(), which the REST handler compensates for with its own
+// pre-check — MCP/chat callers went through UpdateApp alone and were
+// missing that compensation, letting an editor bypass the REST tier.
 func (h *Handler) UpdateAppForUser(ctx context.Context, user *DashboardUser, appID string, authEmailEnabled bool, ip string) (*AppRow, error) {
+	_, role, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, err
+	}
+	if !role.CanManage() {
+		return nil, ErrForbidden
+	}
+
 	app, err := UpdateApp(ctx, h.pool, appID, user, authEmailEnabled)
 	if err != nil {
 		return nil, err
