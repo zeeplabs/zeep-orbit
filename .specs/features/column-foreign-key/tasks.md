@@ -455,9 +455,9 @@ T13 → T14
 - Skill: NONE
 
 **Done when**:
-- [ ] An `### Added` entry describes the new add/remove-FK capability across all three surfaces, following the existing entries' voice/detail level
-- [ ] A `### Fixed` entry describes the closed `PUT /tables/{id}` silent-no-op gap
-- [ ] Gate check passes: `go build ./... && go vet ./... && go test ./...` (full repo, confirming nothing broke across the whole feature)
+- [x] An `### Added` entry describes the new add/remove-FK capability across all three surfaces, following the existing entries' voice/detail level
+- [x] A `### Fixed` entry describes the closed `PUT /tables/{id}` silent-no-op gap
+- [x] Gate check passes: `go build ./... && go vet ./... && go test ./...` (full repo, confirming nothing broke across the whole feature)
 
 **Tests**: none
 **Gate**: build
