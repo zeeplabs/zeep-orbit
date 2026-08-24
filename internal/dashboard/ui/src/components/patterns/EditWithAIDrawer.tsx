@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { FormDrawer } from './FormDrawer'
+import { ChatMarkdown } from './ChatMarkdown'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Icon } from '@/components/ui/icon'
@@ -41,13 +42,21 @@ export function EditWithAIDrawer({ appId, open, onOpenChange }: EditWithAIDrawer
   const restartSession = useRestartEditChatSession(appId)
 
   // Resume: seed local state from the session's persisted history once it
-  // loads, including re-deriving the last proposed operation (if any) so
-  // the confirmation card survives a drawer close/reopen (AIEC-01).
+  // loads, including re-deriving a pending operation (if any) so the
+  // confirmation card survives a drawer close/reopen (AIEC-01). This must
+  // mirror EditChatConfirm's own rule exactly (ai_edit_chat_handlers.go:
+  // "last := messages[len(messages)-1]; if len(last.Plan) == 0 { ... error
+  // ... }") — only the very last message counts as pending. Scanning
+  // backward for *any* message with a plan (as this used to do) resurrects
+  // an already-applied operation from earlier in the conversation once a
+  // later plain-text turn follows it (e.g. the user asks a question after
+  // confirming), showing a stale "Confirmar e aplicar" card that the
+  // backend then rejects with "no proposed operation to confirm".
   useEffect(() => {
     if (!sessionQuery.data) return
     setMessages(sessionQuery.data.messages)
-    const lastOpMessage = [...sessionQuery.data.messages].reverse().find((m) => m.plan)
-    setPendingOp(lastOpMessage?.plan ?? null)
+    const lastMessage = sessionQuery.data.messages[sessionQuery.data.messages.length - 1]
+    setPendingOp(lastMessage?.plan ?? null)
   }, [sessionQuery.data])
 
   useEffect(() => {
@@ -198,11 +207,25 @@ export function EditWithAIDrawer({ appId, open, onOpenChange }: EditWithAIDrawer
   )
 }
 
+// EDIT_OP_APPLIED_MARKER mirrors the backend's editChatAppliedMarker
+// (ai_edit_chat_handlers.go) verbatim — the no-op sentinel EditChatConfirm
+// persists as the assistant's message content right after applying an
+// operation, so a repeat confirm on the same session recognizes "already
+// applied" instead of re-running the mutation (AIEC-16). On a fresh send
+// this raw marker never reaches the UI (handleConfirm appends its own
+// locally-translated "operationApplied" message instead), but reloading
+// history (session resume, AIEC-01) fetches the persisted row as-is — so
+// MessageBubble must recognize the same literal string here or it renders
+// as raw text (worse: markdown turns its double underscores into bold).
+const EDIT_OP_APPLIED_MARKER = '__edit_op_applied__'
+
 function MessageBubble({ message }: { message: EditChatMessage }) {
+  const { t } = useTranslation()
   // An operation-bearing message renders as the operation card below, not
   // a bubble — avoid double-rendering the same turn.
   if (message.plan) return null
   const isUser = message.role === 'user'
+  const content = message.content === EDIT_OP_APPLIED_MARKER ? t('editWithAI.operationApplied') : message.content
   return (
     <div className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
       <div
@@ -212,7 +235,7 @@ function MessageBubble({ message }: { message: EditChatMessage }) {
           color: isUser ? '#fff' : 'var(--text-primary)',
         }}
       >
-        {message.content}
+        <ChatMarkdown content={content} />
       </div>
     </div>
   )

@@ -50,25 +50,29 @@ type editChatTurnResponse struct {
 }
 
 // requireEditChatWriteAccess loads appID and checks CanWrite() for user,
-// writing the appropriate error response and returning ok=false if the
-// caller shouldn't proceed — every edit-chat endpoint scoped to an app
-// requires this same check before touching any session or handler
-// (spec AIEC-05: "for every edit-chat endpoint scoped to X").
-func (h *Handler) requireEditChatWriteAccess(w http.ResponseWriter, r *http.Request, user *DashboardUser, appID string) bool {
-	_, role, err := GetApp(r.Context(), h.pool, appID, user)
+// writing the appropriate error response and returning the loaded app
+// (ok=false if the caller shouldn't proceed) — every edit-chat endpoint
+// scoped to an app requires this same check before touching any session or
+// handler (spec AIEC-05: "for every edit-chat endpoint scoped to X"). The
+// returned app lets EditChatTurn tell the model which app it's already
+// looking at instead of leaving it to guess/ask (AIEC-01 follow-up: the
+// model shouldn't need to ask the user for a name the session already
+// knows).
+func (h *Handler) requireEditChatWriteAccess(w http.ResponseWriter, r *http.Request, user *DashboardUser, appID string) (*AppRow, bool) {
+	app, role, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
-			return false
+			return nil, false
 		}
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
-		return false
+		return nil, false
 	}
 	if !role.CanWrite() {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
-		return false
+		return nil, false
 	}
-	return true
+	return app, true
 }
 
 // EditChatTurn handles POST /dashboard/api/apps/{id}/ai/edit-chat. It
@@ -85,7 +89,8 @@ func (h *Handler) EditChatTurn(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appID := chi.URLParam(r, "id")
-	if !h.requireEditChatWriteAccess(w, r, user, appID) {
+	app, ok := h.requireEditChatWriteAccess(w, r, user, appID)
+	if !ok {
 		return
 	}
 
@@ -121,13 +126,13 @@ func (h *Handler) EditChatTurn(w http.ResponseWriter, r *http.Request) {
 	}
 
 	messages := make([]ai.Message, 0, len(history)+2)
-	messages = append(messages, ai.Message{Role: "system", Content: editChatSystemPrompt})
+	messages = append(messages, ai.Message{Role: "system", Content: editChatSystemPromptFor(app.Name)})
 	for _, m := range history {
 		messages = append(messages, ai.Message{Role: m.Role, Content: m.Content})
 	}
 	messages = append(messages, ai.Message{Role: "user", Content: body.Content})
 
-	result, err := editCallAIModel(r.Context(), model, apiKey, messages, h.buildChatReadToolInvoker(user))
+	result, err := editCallAIModel(r.Context(), model, apiKey, messages, h.editChatReadToolInvoker(user, appID, app.Name))
 	if err != nil {
 		// AIEC-18 (mirrors AIBC-16): generic chat-visible message, real
 		// error logged server-side only — never leaked to the caller.
@@ -156,6 +161,42 @@ func (h *Handler) EditChatTurn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, editChatTurnResponse{Type: "message", Content: result.Content})
+}
+
+// editChatReadToolInvoker mirrors buildChatReadToolInvoker's list_apps
+// resolution, but resolves get_app_schema against this edit session's own
+// bound appID instead of trusting a model-supplied app_name looked up
+// across every app the user can access. An edit-chat session is scoped to
+// exactly one already-open app (editChatSystemPromptFor's stated
+// invariant) — accepting an arbitrary app_name here would let a
+// misbehaving or confused model call get_app_schema against a different
+// app the user happens to have access to, which is a real app but out of
+// this session's stated scope. app_name in the tool call is accepted (the
+// shared tool schema requires it) but ignored.
+func (h *Handler) editChatReadToolInvoker(user *DashboardUser, appID string, appName string) ai.ReadToolInvoker {
+	return func(ctx context.Context, name string, _ json.RawMessage) (json.RawMessage, error) {
+		switch name {
+		case "list_apps":
+			apps, err := ListAppsForUser(ctx, h.pool, user)
+			if err != nil {
+				return nil, fmt.Errorf("dashboard: list_apps read tool: %w", err)
+			}
+			return json.Marshal(apps)
+
+		case "get_app_schema":
+			schema, err := GetAppSchemaForUser(ctx, h.pool, user, appID)
+			if err != nil {
+				if errors.Is(err, ErrNotFound) {
+					return json.Marshal(map[string]string{"error": "app not found: " + appName})
+				}
+				return nil, fmt.Errorf("dashboard: get_app_schema read tool: %w", err)
+			}
+			return json.Marshal(schema)
+
+		default:
+			return nil, fmt.Errorf("dashboard: unknown edit-chat read tool %q", name)
+		}
+	}
 }
 
 // editChatAppliedMarker is the fixed assistant-message content EditChatConfirm
@@ -385,9 +426,17 @@ func (h *Handler) respondEditChatConfirmError(w http.ResponseWriter, r *http.Req
 	case errors.Is(err, ErrForbidden):
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 	case errors.Is(err, ErrColumnAlreadyExists):
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": ErrColumnAlreadyExists.Error()})
+		// The model is instructed (editChatSystemPromptFor) to decline a
+		// propose_add_reference/propose_add_column targeting a column that
+		// already exists — the system doesn't support recreating one — but
+		// nothing stops it from proposing one anyway (e.g. after the user
+		// says "yes" to a question the model itself raised about a column
+		// it knows exists). ErrColumnAlreadyExists.Error() ("dashboard:
+		// column already exists") is a fine log-line but a confusing,
+		// unexplained message in a chat transcript — spell out why here.
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "that column already exists — this chat can't add a foreign key to (or otherwise recreate) an existing column, since that would require dropping and re-adding it, which isn't supported here. Restart the conversation and ask for a differently-named column instead."})
 	case errors.Is(err, ErrIndexAlreadyExists):
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": ErrIndexAlreadyExists.Error()})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "an index with that name already exists on this table — ask for a different index name."})
 	case errors.As(err, &valErr):
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": valErr.Error()})
 	case errors.As(err, &typeErr):
@@ -417,7 +466,7 @@ func (h *Handler) GetEditChatSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appID := chi.URLParam(r, "id")
-	if !h.requireEditChatWriteAccess(w, r, user, appID) {
+	if _, ok := h.requireEditChatWriteAccess(w, r, user, appID); !ok {
 		return
 	}
 
@@ -444,7 +493,7 @@ func (h *Handler) RestartEditChatSession(w http.ResponseWriter, r *http.Request)
 	}
 
 	appID := chi.URLParam(r, "id")
-	if !h.requireEditChatWriteAccess(w, r, user, appID) {
+	if _, ok := h.requireEditChatWriteAccess(w, r, user, appID); !ok {
 		return
 	}
 
@@ -457,22 +506,34 @@ func (h *Handler) RestartEditChatSession(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, editChatSessionResponse{Session: session, Messages: []AIBuildMessage{}})
 }
 
-// editChatSystemPrompt is the fixed system message prepended to every
-// OpenAI call for an "Edit with AI" session. Unlike buildChatSystemPrompt
-// (which describes a brand-new app from scratch), this prompt starts from
-// the premise that the app and its schema already exist: the model must
-// look up the real current schema via get_app_schema before proposing any
-// operation on it, never guess or invent table/column names, and propose
-// exactly one operation at a time via one of the propose_* tools — this
-// chat applies each confirmed operation immediately, it never batches a
-// multi-step plan (spec.md's Confirmation model assumption). The column-
-// type/naming rules and off-topic guard are copied verbatim from
-// buildChatSystemPrompt so both prompts stay in sync with the real
-// validation code (validateTableInput/config.ColumnConfig's allowed types)
-// — keep this in sync if either changes.
-const editChatSystemPrompt = `You are an assistant embedded in zeep-orbit's dashboard that helps a user make incremental changes to a BACKEND app (a schema + auto-generated REST API on Postgres) that already exists. This chat is scoped to exactly one app, already open — it never creates a new app and never touches any other app.
+// editChatSystemPromptFor renders the system message prepended to every
+// OpenAI call for an "Edit with AI" session, naming the one app this
+// session is scoped to. Unlike buildChatSystemPrompt (which describes a
+// brand-new app from scratch), this prompt starts from the premise that
+// the app and its schema already exist: the model must look up the real
+// current schema via get_app_schema before proposing any operation on it,
+// never guess or invent table/column names, and propose exactly one
+// operation at a time via one of the propose_* tools — this chat applies
+// each confirmed operation immediately, it never batches a multi-step plan
+// (spec.md's Confirmation model assumption). The column-type/naming rules
+// and off-topic guard are copied verbatim from buildChatSystemPrompt so
+// both prompts stay in sync with the real validation code
+// (validateTableInput/config.ColumnConfig's allowed types) — keep this in
+// sync if either changes.
+//
+// The app's name is baked into the prompt (rather than left for the model
+// to ask about or look up) because the session is already scoped to one
+// specific appID server-side — editChatReadToolInvoker ignores whatever
+// app_name the model passes to get_app_schema and always resolves this
+// same app, so there both is nothing to ask the user and no way for the
+// model to escape scope by guessing a different name.
+func editChatSystemPromptFor(appName string) string {
+	return fmt.Sprintf(editChatSystemPromptTemplate, appName, appName)
+}
 
-Before proposing any operation on an existing table or column, call get_app_schema to see the app's real current tables/columns/RLS modes. Never guess or invent a table or column name — if you're not sure it exists, look it up first. If the user references a table or column that isn't in the real schema, say so instead of proposing an operation against it.
+const editChatSystemPromptTemplate = `You are an assistant embedded in zeep-orbit's dashboard that helps a user make incremental changes to a BACKEND app named %q (a schema + auto-generated REST API on Postgres) that already exists. This chat is scoped to exactly this one app, already open — it never creates a new app and never touches any other app. You already know the app's name is %q — never ask the user which app they mean.
+
+Before proposing any operation on an existing table or column, call get_app_schema to see the app's real current tables/columns/RLS modes (you don't need to pass the app's name — it's already resolved server-side to this session's app). Never guess or invent a table or column name — if you're not sure it exists, look it up first. If the user references a table or column that isn't in the real schema, say so instead of proposing an operation against it.
 
 Propose exactly ONE operation at a time, using exactly one of these tools once you have enough information — ask clarifying questions first if you don't:
 - propose_add_table: a brand-new table (with its columns) inside this app.

@@ -1013,7 +1013,7 @@ func (h *Handler) GetApp(w http.ResponseWriter, r *http.Request) {
 
 	appID := chi.URLParam(r, "id")
 
-	app, _, err := GetApp(r.Context(), h.pool, appID, user)
+	app, role, err := GetApp(r.Context(), h.pool, appID, user)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -1023,6 +1023,7 @@ func (h *Handler) GetApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	app.CanWrite = role.CanWrite()
 	app.RedactSecrets()
 	writeJSON(w, http.StatusOK, app)
 }

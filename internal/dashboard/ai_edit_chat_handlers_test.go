@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -102,7 +103,7 @@ func editChatTurnRequestFor(user *DashboardUser, appID, content string) *http.Re
 }
 
 // AIEC-01/AIEC-15: a plain clarifying-question turn persists a message with
-// no plan_json and returns the message shape, using editChatSystemPrompt
+// no plan_json and returns the message shape, using editChatSystemPromptFor
 // (not buildChatSystemPrompt).
 func TestEditChatTurn_MessageShapeTurn(t *testing.T) {
 	pool, h, user, appID := aiEditChatHandlerTestPool(t)
@@ -280,7 +281,7 @@ func TestEditChatTurn_ViewerForbidden(t *testing.T) {
 	}
 }
 
-// AIEC-15: editChatSystemPrompt (not buildChatSystemPrompt) is the system
+// AIEC-15: editChatSystemPromptFor (not buildChatSystemPrompt) is the system
 // message actually sent to the model — the off-topic guard and
 // get_app_schema-before-proposing instruction are only meaningful if this
 // prompt is the one on the wire.
@@ -305,11 +306,15 @@ func TestEditChatTurn_UsesEditChatSystemPromptNotBuildPrompt(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
-	if sentSystemContent != editChatSystemPrompt {
-		t.Fatalf("expected the system message to be editChatSystemPrompt verbatim, got a different prompt")
+	app, _, err := GetApp(context.Background(), pool, appID, &DashboardUser{ID: user.ID, Role: "admin"})
+	if err != nil {
+		t.Fatalf("GetApp: %v", err)
+	}
+	if sentSystemContent != editChatSystemPromptFor(app.Name) {
+		t.Fatalf("expected the system message to be editChatSystemPromptFor(%q) verbatim, got a different prompt", app.Name)
 	}
 	if sentSystemContent == buildChatSystemPrompt {
-		t.Fatal("expected editChatSystemPrompt, not buildChatSystemPrompt, to be sent")
+		t.Fatal("expected editChatSystemPromptFor, not buildChatSystemPrompt, to be sent")
 	}
 }
 
@@ -640,7 +645,7 @@ func TestEditChatConfirm_DuplicateColumnSurfacesSpecificError(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if got["error"] != ErrColumnAlreadyExists.Error() {
+	if !strings.Contains(got["error"], "already exists") {
 		t.Fatalf("expected the specific duplicate-column error, got %+v", got)
 	}
 

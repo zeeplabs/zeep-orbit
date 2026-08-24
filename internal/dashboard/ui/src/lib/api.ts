@@ -49,6 +49,7 @@ export interface AppDef {
   owner_name?: string
   created_at: string
   tables: TableDef[]
+  can_write?: boolean
 }
 
 export interface CreateAppInput {

@@ -29,6 +29,13 @@ type AppRow struct {
 	OwnerName          string                  `json:"owner_name,omitempty"`
 	CreatedAt          time.Time               `json:"created_at"`
 	Tables             []AppTableRow           `json:"tables"`
+
+	// CanWrite reflects the requesting user's resolved AppRole for this app
+	// (GetApp handler only — never populated by ListApps/CreateApp/UpdateApp).
+	// It lets a non-owner editor/admin member know they can use write-gated
+	// UI (e.g. "Edit with AI") without needing /apps/{id}/members, which is
+	// CanManage()-gated and 403s for anyone but an app admin.
+	CanWrite bool `json:"can_write,omitempty"`
 }
 
 // RedactSecrets strips every credential AppRow can carry before it's ever
