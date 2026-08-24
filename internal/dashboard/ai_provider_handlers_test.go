@@ -101,6 +101,38 @@ func TestUpsertAIProviderConfig_NonSuperadminForbiddenNoMutation(t *testing.T) {
 	}
 }
 
+// An empty/blank model is rejected with 400 before the store is touched —
+// found by the pre-v1.6.0 Opus review (v1.5.0..HEAD, finding M4): the
+// frontend's model select can produce "" (picking "custom" without typing
+// one), and saving it used to succeed silently, leaving every chat turn
+// afterward failing with a generic, undiagnosable error.
+func TestUpsertAIProviderConfig_EmptyModelRejected(t *testing.T) {
+	pool, h := aiProviderHandlerTestPool(t)
+	super := mustCreateSuperadmin(t, pool)
+
+	for _, model := range []string{"", "   "} {
+		body, err := json.Marshal(map[string]any{"model": model, "api_key": "sk-real-key-abc", "enabled": true})
+		if err != nil {
+			t.Fatalf("marshal body: %v", err)
+		}
+		req := requestWithProvider(http.MethodPut, "/dashboard/api/ai-providers/openai", string(body), super, "openai")
+		w := httptest.NewRecorder()
+		h.UpsertAIProviderConfig(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("model=%q: expected 400, got %d: %s", model, w.Code, w.Body.String())
+		}
+	}
+
+	resp, err := GetAIProvider(context.Background(), pool, "openai")
+	if err != nil {
+		t.Fatalf("GetAIProvider: %v", err)
+	}
+	if resp.HasKey {
+		t.Fatal("expected no store mutation after a rejected empty-model PUT, but has_key is true")
+	}
+}
+
 // AIBC-01/AIBC-04: a superadmin PUT with key+model succeeds, and a
 // subsequent GET reflects has_key: true with no key material in the body.
 func TestUpsertAIProviderConfig_SuperadminSucceedsAndGetReflectsHasKey(t *testing.T) {

@@ -15,6 +15,7 @@ package dashboard
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -90,6 +91,15 @@ func (h *Handler) UpsertAIProviderConfig(w http.ResponseWriter, r *http.Request)
 	r.Body = http.MaxBytesReader(w, r.Body, 8192)
 	var body aiProviderUpsertInput
 	if !h.decodeJSONBody(w, r, &body) {
+		return
+	}
+	// An empty/blank model (e.g. the dashboard's model select left on
+	// "custom" with no text typed in) saved without error, since the store
+	// never validated it — every chat turn afterward then failed with a
+	// generic "couldn't generate a plan" error, with nothing in the config
+	// UI to explain why. Reject it here instead.
+	if strings.TrimSpace(body.Model) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "model is required"})
 		return
 	}
 
