@@ -545,3 +545,113 @@ func TestAddColumnForeignKey_OnDeleteCascadeApplied(t *testing.T) {
 		t.Fatalf("expected the order to be cascade-deleted, but %d row(s) remain", count)
 	}
 }
+
+// TestDropColumnForeignKey_DropsExistingConstraint covers T5 AC (CFK-09):
+// an existing FK constraint on a column is dropped and no longer appears
+// in the catalog.
+func TestDropColumnForeignKey_DropsExistingConstraint(t *testing.T) {
+	pool := ensureRLSTestPool(t)
+	defer pool.Close()
+
+	schema := fmt.Sprintf("dropfk_success_test_%d", time.Now().UnixNano())
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE SCHEMA %q`, schema)); err != nil {
+		t.Fatalf("create schema: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), fmt.Sprintf(`DROP SCHEMA IF EXISTS %q CASCADE`, schema))
+	})
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE TABLE %q.customers (id UUID PRIMARY KEY DEFAULT gen_random_uuid())`, schema)); err != nil {
+		t.Fatalf("create customers: %v", err)
+	}
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE TABLE %q.orders (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), customer_id UUID REFERENCES %q.customers(id))`, schema, schema)); err != nil {
+		t.Fatalf("create orders: %v", err)
+	}
+	if !hasFKConstraint(t, pool, schema, "orders", "customer_id") {
+		t.Fatal("test setup: expected orders.customer_id to have a FK constraint before drop")
+	}
+
+	p := New(pool)
+	found, err := p.DropColumnForeignKey(ctx, schema, "orders", "customer_id")
+	if err != nil {
+		t.Fatalf("DropColumnForeignKey: %v", err)
+	}
+	if !found {
+		t.Fatal("expected found=true when a constraint exists")
+	}
+	if hasFKConstraint(t, pool, schema, "orders", "customer_id") {
+		t.Fatal("expected no FK constraint on orders.customer_id after drop")
+	}
+}
+
+// TestDropColumnForeignKey_NoConstraintReturnsFoundFalse covers T5 AC
+// (CFK-09/CFK-10's underlying primitive): a column with no FK constraint
+// returns found=false, err=nil (not an error).
+func TestDropColumnForeignKey_NoConstraintReturnsFoundFalse(t *testing.T) {
+	pool := ensureRLSTestPool(t)
+	defer pool.Close()
+
+	schema := fmt.Sprintf("dropfk_none_test_%d", time.Now().UnixNano())
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE SCHEMA %q`, schema)); err != nil {
+		t.Fatalf("create schema: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), fmt.Sprintf(`DROP SCHEMA IF EXISTS %q CASCADE`, schema))
+	})
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE TABLE %q.orders (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), customer_id UUID)`, schema)); err != nil {
+		t.Fatalf("create orders: %v", err)
+	}
+
+	p := New(pool)
+	found, err := p.DropColumnForeignKey(ctx, schema, "orders", "customer_id")
+	if err != nil {
+		t.Fatalf("expected nil error when no constraint exists, got: %v", err)
+	}
+	if found {
+		t.Fatal("expected found=false when no constraint exists")
+	}
+}
+
+// TestDropColumnForeignKey_FindsNonConventionallyNamedConstraint covers
+// T5's "not named via the <table>_<column>_fkey convention" AC: the catalog
+// lookup finds and drops a constraint created with an explicit custom name
+// via raw SQL, proving DropColumnForeignKey never assumes a naming
+// convention.
+func TestDropColumnForeignKey_FindsNonConventionallyNamedConstraint(t *testing.T) {
+	pool := ensureRLSTestPool(t)
+	defer pool.Close()
+
+	schema := fmt.Sprintf("dropfk_customname_test_%d", time.Now().UnixNano())
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE SCHEMA %q`, schema)); err != nil {
+		t.Fatalf("create schema: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), fmt.Sprintf(`DROP SCHEMA IF EXISTS %q CASCADE`, schema))
+	})
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE TABLE %q.customers (id UUID PRIMARY KEY DEFAULT gen_random_uuid())`, schema)); err != nil {
+		t.Fatalf("create customers: %v", err)
+	}
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE TABLE %q.orders (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), customer_id UUID)`, schema)); err != nil {
+		t.Fatalf("create orders: %v", err)
+	}
+	if _, err := pool.Exec(ctx, fmt.Sprintf(
+		`ALTER TABLE %q.orders ADD CONSTRAINT my_totally_custom_fk_name FOREIGN KEY (customer_id) REFERENCES %q.customers(id)`,
+		schema, schema,
+	)); err != nil {
+		t.Fatalf("create custom-named FK: %v", err)
+	}
+
+	p := New(pool)
+	found, err := p.DropColumnForeignKey(ctx, schema, "orders", "customer_id")
+	if err != nil {
+		t.Fatalf("DropColumnForeignKey: %v", err)
+	}
+	if !found {
+		t.Fatal("expected found=true for a custom-named constraint (catalog lookup, not naming convention)")
+	}
+	if hasFKConstraint(t, pool, schema, "orders", "customer_id") {
+		t.Fatal("expected no FK constraint on orders.customer_id after drop")
+	}
+}

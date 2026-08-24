@@ -208,12 +208,12 @@ T13 → T14
 - Skill: NONE
 
 **Done when**:
-- [ ] Drops an existing FK constraint on a column and confirms it no longer appears in `information_schema`
-- [ ] Returns `found=false, err=nil` (no error) when the column has no FK constraint
-- [ ] Correctly finds and drops a constraint even when it was **not** named via the `<table>_<column>_fkey` convention (test creates one with an explicit custom name via raw SQL, confirms catalog lookup still finds it)
-- [ ] Integration tests appended to `internal/provisioner/table_test.go`
-- [ ] Gate check passes: `go build ./... && go vet ./... && gofmt -l internal/provisioner/table.go internal/provisioner/table_test.go && go test ./internal/provisioner/...`
-- [ ] Test count: 3+ new test cases pass (no silent deletions)
+- [x] Drops an existing FK constraint on a column and confirms it no longer appears in `information_schema`
+- [x] Returns `found=false, err=nil` (no error) when the column has no FK constraint
+- [x] Correctly finds and drops a constraint even when it was **not** named via the `<table>_<column>_fkey` convention (test creates one with an explicit custom name via raw SQL, confirms catalog lookup still finds it)
+- [x] Integration tests appended to `internal/provisioner/table_test.go`
+- [x] Gate check passes: `go build ./... && go vet ./... && gofmt -l internal/provisioner/table.go internal/provisioner/table_test.go && go test ./internal/provisioner/...`
+- [x] Test count: 3+ new test cases pass (no silent deletions)
 
 **Tests**: integration
 **Gate**: full
