@@ -614,6 +614,18 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 		// only — created_app_id above is untouched and stays create-mode-only.
 		`ALTER TABLE zeep_system.ai_build_sessions ADD COLUMN IF NOT EXISTS mode TEXT NOT NULL DEFAULT 'create'`,
 		`ALTER TABLE zeep_system.ai_build_sessions ADD COLUMN IF NOT EXISTS target_app_id UUID REFERENCES zeep_system.apps(id)`,
+		// The FK above was created without ON DELETE CASCADE, so deleting an
+		// app that ever had an "Edit with AI" session (even a message-less
+		// one, since GetOrCreateInProgressEditSession creates the row
+		// unconditionally) hit a 23503 and made the app permanently
+		// undeletable. Every other REFERENCES zeep_system.apps(id) in this
+		// file uses ON DELETE CASCADE; this swap brings target_app_id in
+		// line. Idempotent: safe to re-run on installs that already have
+		// the plain FK or the cascading one.
+		`ALTER TABLE zeep_system.ai_build_sessions DROP CONSTRAINT IF EXISTS ai_build_sessions_target_app_id_fkey`,
+		`ALTER TABLE zeep_system.ai_build_sessions
+		 ADD CONSTRAINT ai_build_sessions_target_app_id_fkey
+		 FOREIGN KEY (target_app_id) REFERENCES zeep_system.apps(id) ON DELETE CASCADE`,
 		// One in_progress edit session per (owner_user_id, target_app_id) —
 		// enforced at the database level, not just in application code, so a
 		// race between two concurrent "Edit with AI" opens for the same
