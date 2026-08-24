@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { FormDrawer } from './FormDrawer'
+import { ChatMarkdown } from './ChatMarkdown'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Icon } from '@/components/ui/icon'
@@ -202,7 +203,7 @@ function MessageBubble({ message }: { message: BuildChatMessage }) {
           color: isUser ? '#fff' : 'var(--text-primary)',
         }}
       >
-        {message.content}
+        <ChatMarkdown content={message.content} />
       </div>
     </div>
   )

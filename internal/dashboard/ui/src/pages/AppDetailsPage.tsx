@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Trans, useTranslation } from "react-i18next";
-import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   useApp,
@@ -70,28 +69,14 @@ export default function AppDetailsPage() {
   const { data: app, isLoading } = useApp(id!);
   const [showEditWithAI, setShowEditWithAI] = useState(false);
 
-  // "Edit with AI" write-permission gate (AIEC-05): mirrors the backend's
-  // CanWrite() semantics for the two cases the frontend can determine
-  // without an admin-only endpoint — the app's owner (auto-added to
-  // app_members as admin on creation, apps_store.go CreateApp) and a
-  // superadmin (RBAC bypass, rbac.go ResolveAppRole). An explicit
-  // admin/editor app_members grant on a non-owner is CanWrite()=true
-  // server-side too, but /members is admin-only (T-06 AC-6) so a non-admin
-  // caller can't read their own row to prove it client-side — this fails
-  // closed (button hidden) rather than guessing, never shows the button to
-  // someone who lacks write access.
-  const { data: me } = useQuery({
-    queryKey: ["me"],
-    queryFn: async () => {
-      const res = await fetch("/dashboard/api/me", { credentials: "include" });
-      if (!res.ok) return null;
-      return res.json() as Promise<{ id: string; email: string; name: string; role: string; language: string }>;
-    },
-    retry: false,
-  });
+  // "Edit with AI" write-permission gate (AIEC-05): backend's GetApp now
+  // returns can_write, the requester's resolved AppRole.CanWrite() for this
+  // app (handler.go GetApp) — covers owner, superadmin, and any explicit
+  // admin/editor app_members grant, without needing the admin-only
+  // /members endpoint.
   const { data: aiProviderStatus } = useAIProviderStatus();
   const aiProviderReady = Boolean(aiProviderStatus?.enabled && aiProviderStatus?.has_key);
-  const canEditWithAI = Boolean(app && me && (app.owner_id === me.id || me.role === "superadmin"));
+  const canEditWithAI = Boolean(app?.can_write);
 
   if (isLoading) {
     return <p className="text-sm text-[var(--text-secondary)]">{t("app.loading")}</p>;
