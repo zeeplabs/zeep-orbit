@@ -375,13 +375,13 @@ T13 → T14
 - Skill: NONE
 
 **Done when**:
-- [ ] `parseEditOperation` correctly parses both new tool calls into `EditOperation{Kind: "add_foreign_key", ...}` / `{Kind: "remove_foreign_key", ...}`
-- [ ] Malformed/incomplete arguments for either new tool return `ErrMalformedEditOp`
-- [ ] `editToolDefs()` now advertises 10 tools total (8 propose_* + 2 read-only); `editProposalToolNames` recognizes both new names
-- [ ] `propose_add_reference`'s tool description no longer implies it should ever be used for an existing column's FK (still says "never use this for a column that already exists" — but now that the model has a real alternative, mention `propose_add_foreign_key` by name)
-- [ ] Unit tests appended to `internal/dashboard/ai/client_edit_test.go`: one round-trip test per new tool call (mirrors `TestCallEditModel_AddReference`), one malformed-arguments test, `TestEditToolDefs_IncludesAllSixProposalsPlusReadTools` renamed/updated to assert all 8 propose_* tools
-- [ ] Gate check passes: `go build ./... && go vet ./... && gofmt -l internal/dashboard/ai/client.go internal/dashboard/ai/client_edit_test.go && go test ./internal/dashboard/ai/...`
-- [ ] Test count: 3+ new/updated test cases pass (no silent deletions)
+- [x] `parseEditOperation` correctly parses both new tool calls into `EditOperation{Kind: "add_foreign_key", ...}` / `{Kind: "remove_foreign_key", ...}`
+- [x] Malformed/incomplete arguments for either new tool return `ErrMalformedEditOp`
+- [x] `editToolDefs()` now advertises 10 tools total (8 propose_* + 2 read-only); `editProposalToolNames` recognizes both new names
+- [x] `propose_add_reference`'s tool description no longer implies it should ever be used for an existing column's FK (still says "never use this for a column that already exists" — but now that the model has a real alternative, mention `propose_add_foreign_key` by name)
+- [x] Unit tests appended to `internal/dashboard/ai/client_edit_test.go`: one round-trip test per new tool call (mirrors `TestCallEditModel_AddReference`), one malformed-arguments test, `TestEditToolDefs_IncludesAllSixProposalsPlusReadTools` renamed/updated to assert all 8 propose_* tools
+- [x] Gate check passes: `go build ./... && go vet ./... && gofmt -l internal/dashboard/ai/client.go internal/dashboard/ai/client_edit_test.go && go test ./internal/dashboard/ai/...`
+- [x] Test count: 3+ new/updated test cases pass (no silent deletions)
 
 **Tests**: unit
 **Gate**: quick
