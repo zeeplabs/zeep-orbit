@@ -40,3 +40,19 @@ func (e *TypeChangeError) publicReason() string {
 		return "conversion failed"
 	}
 }
+
+// ForeignKeyViolationError represents a rejected ADD FOREIGN KEY DDL because
+// existing rows violate the new constraint (Postgres error 23503).
+// Error() is safe to expose to end users; Cause carries the original
+// error (e.g. from pgx) for server-side logging only, reachable via Unwrap.
+type ForeignKeyViolationError struct {
+	Column string
+	Detail string
+	Cause  error
+}
+
+func (e *ForeignKeyViolationError) Error() string {
+	return fmt.Sprintf("cannot add foreign key on %q: existing data violates it (%s)", e.Column, e.Detail)
+}
+
+func (e *ForeignKeyViolationError) Unwrap() error { return e.Cause }

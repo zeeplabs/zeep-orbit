@@ -26,6 +26,39 @@ func TestTypeChangeError_DoesNotLeakCause(t *testing.T) {
 	}
 }
 
+func TestForeignKeyViolationError_DoesNotLeakCause(t *testing.T) {
+	cause := errors.New("ERROR: SQLSTATE 23503 insert or update on table \"orders\" violates foreign key constraint")
+	e := &ForeignKeyViolationError{
+		Column: "customer_id",
+		Detail: "Key (customer_id)=(deadbeef) is not present in table \"customers\".",
+		Cause:  cause,
+	}
+
+	msg := e.Error()
+	if strings.Contains(msg, "SQLSTATE") || strings.Contains(msg, cause.Error()) {
+		t.Fatalf("public error message leaks internal cause: %q", msg)
+	}
+
+	if !errors.Is(errors.Unwrap(e), cause) {
+		t.Fatalf("Unwrap() did not return the original cause")
+	}
+}
+
+func TestForeignKeyViolationError_MessageIncludesColumnAndDetail(t *testing.T) {
+	e := &ForeignKeyViolationError{
+		Column: "customer_id",
+		Detail: "Key (customer_id)=(deadbeef) is not present in table \"customers\".",
+	}
+
+	msg := e.Error()
+	if !strings.Contains(msg, "customer_id") {
+		t.Errorf("expected message to contain column name, got: %q", msg)
+	}
+	if !strings.Contains(msg, "Key (customer_id)=(deadbeef) is not present in table \"customers\".") {
+		t.Errorf("expected message to contain the detail text, got: %q", msg)
+	}
+}
+
 func TestTypeChangeError_ReasonsProduceDistinctMessages(t *testing.T) {
 	base := &TypeChangeError{Column: "c", CurrentType: "text", DesiredType: "int4"}
 
