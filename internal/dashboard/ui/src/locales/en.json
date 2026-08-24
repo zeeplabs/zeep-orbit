@@ -590,6 +590,8 @@
   "editWithAI.opAddColumn": "Add column \"{{column}}\" ({{type}}) to \"{{table}}\"",
   "editWithAI.opAddIndex": "Add index \"{{name}}\" on \"{{table}}\" ({{columns}})",
   "editWithAI.opAddReference": "Add column \"{{column}}\" on \"{{table}}\" referencing \"{{refTable}}.{{refColumn}}\"",
+  "editWithAI.opAddForeignKey": "Add a foreign key on \"{{table}}.{{column}}\" referencing \"{{refTable}}.{{refColumn}}\"",
+  "editWithAI.opRemoveForeignKey": "Remove the foreign key from \"{{table}}.{{column}}\"",
   "editWithAI.opSetRlsMode": "Set RLS mode of \"{{table}}\" to \"{{mode}}\"",
   "editWithAI.opEnableAuth": "Enable email & password authentication for this app",
   "editWithAI.opDisableAuth": "Disable email & password authentication for this app",

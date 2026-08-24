@@ -1589,15 +1589,38 @@ export interface EditChatAuthOp {
   email_enabled: boolean
 }
 
+export interface EditChatForeignKeyOp {
+  table: string
+  column: string
+  ref_table: string
+  ref_column: string
+  on_delete?: string
+}
+
+export interface EditChatRemoveForeignKeyOp {
+  table: string
+  column: string
+}
+
 // EditOperation mirrors internal/dashboard/ai/client.go's Go type of the
 // same name — exactly one of the optional fields is populated, matching
 // `kind`.
 export interface EditOperation {
-  kind: 'add_table' | 'add_column' | 'add_index' | 'add_reference' | 'set_rls_mode' | 'toggle_auth'
+  kind:
+    | 'add_table'
+    | 'add_column'
+    | 'add_index'
+    | 'add_reference'
+    | 'add_foreign_key'
+    | 'remove_foreign_key'
+    | 'set_rls_mode'
+    | 'toggle_auth'
   add_table?: EditChatPlanTable
   add_column?: EditChatColumnOp
   add_index?: EditChatIndexOp
   add_reference?: EditChatReferenceOp
+  add_foreign_key?: EditChatForeignKeyOp
+  remove_foreign_key?: EditChatRemoveForeignKeyOp
   set_rls_mode?: EditChatRLSOp
   toggle_auth?: EditChatAuthOp
 }
