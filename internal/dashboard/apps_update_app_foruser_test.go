@@ -3,9 +3,16 @@ package dashboard
 // apps_update_app_foruser_test.go — coverage for UpdateAppForUser (ai-edit-chat
 // spec T3, AIEC-12/AIEC-13). Derived from tasks.md's T3 Done-when list, not
 // from reading the implementation: success path updates auth_email_enabled
-// and audits; CanWrite() denial returns an authorization error before the
+// and audits; CanManage() denial returns an authorization error before the
 // store is touched; a store-level failure (unknown app) surfaces its own
 // error, not a generic one.
+//
+// CanManage(), not CanWrite(): toggling auth_email_enabled can disable every
+// end-user login on the app, so it follows UpdateApp's REST handler tier
+// (admin-only), not the CanWrite() tier most edit-chat mutations use. Found
+// by the pre-v1.6.0 Opus review (v1.5.0..HEAD, finding H2) — the MCP/chat
+// path had been left at CanWrite(), letting a non-admin editor bypass a
+// restriction the REST endpoint deliberately enforces.
 
 import (
 	"context"
@@ -45,9 +52,8 @@ func TestUpdateAppForUser_SuccessTogglesAuthEmailEnabled(t *testing.T) {
 }
 
 // TestUpdateAppForUser_ViewerForbidden covers T3's RBAC-denied path: a
-// viewer (CanWrite()==false) is rejected with ErrForbidden before any store
-// mutation runs — same authorization tier as every other edit-chat mutation
-// (AIEC-05).
+// viewer (CanManage()==false) is rejected with ErrForbidden before any store
+// mutation runs.
 func TestUpdateAppForUser_ViewerForbidden(t *testing.T) {
 	pool, h, actors, appID, _ := appsHandlerTestPool(t)
 	defer pool.Close()
@@ -60,6 +66,33 @@ func TestUpdateAppForUser_ViewerForbidden(t *testing.T) {
 
 	// The app's auth_email_enabled must be unchanged (still the seeded
 	// default, true) — a denied request must never reach the store.
+	app, _, err := GetApp(ctx, pool, appID, actors["loner"])
+	if err != nil {
+		t.Fatalf("GetApp: %v", err)
+	}
+	if !app.AuthEmailEnabled {
+		t.Fatalf("expected auth_email_enabled to remain true after a denied update, got false")
+	}
+}
+
+// TestUpdateAppForUser_EditorForbidden covers H2 specifically: an app_members
+// "editor" has real CanWrite()==true (they can edit tables) but not
+// CanManage() — the same actor UpdateApp's REST handler blocks from touching
+// auth_providers/storage/rate_limit. Before this fix, UpdateAppForUser only
+// checked CanWrite() and let this exact actor toggle auth_email_enabled via
+// MCP/chat despite being 403'd on the equivalent REST call.
+func TestUpdateAppForUser_EditorForbidden(t *testing.T) {
+	pool, h, actors, appID, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	// appsHandlerTestPool already seeds "appeditor" as an "editor" app_member
+	// on test-app (see apps_handler_test.go) — no extra setup needed.
+	_, err := h.UpdateAppForUser(ctx, actors["appeditor"], appID, false, "127.0.0.1")
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("expected ErrForbidden for an editor (CanWrite but not CanManage), got %v", err)
+	}
+
 	app, _, err := GetApp(ctx, pool, appID, actors["loner"])
 	if err != nil {
 		t.Fatalf("GetApp: %v", err)
