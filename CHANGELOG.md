@@ -9,6 +9,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **"Edit with AI" proposing a foreign-key change on an existing column rendered a "Confirm and apply" button with no description of what it would do.** `OperationSummary` had no case for `add_foreign_key`/`remove_foreign_key`, so confirming applied real `ALTER TABLE ... ADD/DROP FOREIGN KEY` DDL sight-unseen. Both operations now render their table/column/referenced-table detail, in both languages.
+
+### Security
+
+- **An `app_members` editor (`CanWrite()` but not `CanManage()`) could disable an app's own email/password authentication via `orbit_update_app` or "Edit with AI," despite being blocked from the equivalent change on `PUT /dashboard/api/apps/{id}`.** `UpdateAppForUser`, the shared operation behind both surfaces, only checked `CanWrite()`; the REST handler's stricter `CanManage()` requirement for this exact field was never carried over. Both surfaces now require `CanManage()`, matching REST.
+- **The AI chat endpoints (`ai/build-chat`, `ai/edit-chat`) had no per-user rate limit**, unlike the dashboard's webhook, MCP, and login/bootstrap surfaces. Each chat turn can cost multiple round-trips against a single org-wide OpenAI key, so an authenticated user looping requests could exhaust the shared budget for everyone else. All 8 routes are now rate limited per user.
+- **Saving the global AI provider config with a blank model succeeded silently**, leaving every subsequent chat turn fail with a generic, undiagnosable error — the dashboard's model select can produce an empty value when "custom" is chosen without typing one in. A blank/whitespace-only model is now rejected with a 400 before it reaches the store.
+
 ## [1.5.0] — 2026-08-17
 
 ### Added
