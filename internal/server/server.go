@@ -195,6 +195,21 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 	r.Get("/docs/{app}/openapi.json", dh.HandleSpec)
 
 	authLimiter := dashboard.NewRateLimiter(5, time.Minute)
+	// AI chat routes (build-chat and edit-chat) proxy to a single shared
+	// OpenAI key/budget for the whole org, and each turn can cost multiple
+	// model round-trips (tool calls). Unlike the dashboard's other
+	// authenticated routes, an unlimited loop here has a real, direct cost —
+	// so this one is rate limited per-user despite sitting behind
+	// RequireAuth, not left at "authenticated is enough." Keyed by user ID
+	// (not remoteIP): correct behind the non-sticky LB, and it means one
+	// noisy user can't burn another user's budget by sharing an IP.
+	aiChatLimiter := dashboard.NewRateLimiter(30, time.Minute)
+	aiChatLimiterMW := aiChatLimiter.MiddlewareKeyedBy(func(r *http.Request) string {
+		if user, ok := dashboard.UserFromContext(r.Context()); ok {
+			return user.ID
+		}
+		return remoteIP(r)
+	})
 	r.Route("/dashboard", func(r chi.Router) {
 		r.Use(dashboard.SecurityHeaders)
 		r.Get("/api/config", dashH.Config)
@@ -245,10 +260,10 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Put("/api/apps/{id}/users/{userId}", dashH.UpdateAppUser)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/apps/{id}/roles", dashH.UpdateAppEnduserRoles)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/apps/{id}/users/{userId}/reset-sessions", dashH.ResetAppUserSessions)
-		r.With(dashboard.RequireAuth(pool)).Get("/api/apps/{id}/ai/edit-chat", dashH.GetEditChatSession)
-		r.With(dashboard.RequireAuth(pool)).Post("/api/apps/{id}/ai/edit-chat", dashH.EditChatTurn)
-		r.With(dashboard.RequireAuth(pool)).Post("/api/apps/{id}/ai/edit-chat/{session_id}/confirm", dashH.EditChatConfirm)
-		r.With(dashboard.RequireAuth(pool)).Post("/api/apps/{id}/ai/edit-chat/restart", dashH.RestartEditChatSession)
+		r.With(dashboard.RequireAuth(pool), aiChatLimiterMW).Get("/api/apps/{id}/ai/edit-chat", dashH.GetEditChatSession)
+		r.With(dashboard.RequireAuth(pool), aiChatLimiterMW).Post("/api/apps/{id}/ai/edit-chat", dashH.EditChatTurn)
+		r.With(dashboard.RequireAuth(pool), aiChatLimiterMW).Post("/api/apps/{id}/ai/edit-chat/{session_id}/confirm", dashH.EditChatConfirm)
+		r.With(dashboard.RequireAuth(pool), aiChatLimiterMW).Post("/api/apps/{id}/ai/edit-chat/restart", dashH.RestartEditChatSession)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/users", dashH.ListUsers)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/users", dashH.CreateUser)
 		r.With(dashboard.RequireAuth(pool)).Patch("/api/users/{id}", dashH.UpdateUserRole)
@@ -262,10 +277,10 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Put("/api/config/auth/providers/{provider}", dashH.UpsertAuthProvider)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/ai-providers/{provider}", dashH.GetAIProviderConfig)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/ai-providers/{provider}", dashH.UpsertAIProviderConfig)
-		r.With(dashboard.RequireAuth(pool)).Get("/api/ai/build-chat/session", dashH.GetBuildChatSession)
-		r.With(dashboard.RequireAuth(pool)).Post("/api/ai/build-chat", dashH.BuildChatTurn)
-		r.With(dashboard.RequireAuth(pool)).Post("/api/ai/build-chat/{session_id}/confirm", dashH.BuildChatConfirm)
-		r.With(dashboard.RequireAuth(pool)).Post("/api/ai/build-chat/restart", dashH.RestartBuildChatSession)
+		r.With(dashboard.RequireAuth(pool), aiChatLimiterMW).Get("/api/ai/build-chat/session", dashH.GetBuildChatSession)
+		r.With(dashboard.RequireAuth(pool), aiChatLimiterMW).Post("/api/ai/build-chat", dashH.BuildChatTurn)
+		r.With(dashboard.RequireAuth(pool), aiChatLimiterMW).Post("/api/ai/build-chat/{session_id}/confirm", dashH.BuildChatConfirm)
+		r.With(dashboard.RequireAuth(pool), aiChatLimiterMW).Post("/api/ai/build-chat/restart", dashH.RestartBuildChatSession)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/config/system", dashH.GetSystemConfig)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/config/system", dashH.UpdateSystemConfig)
 		r.Get("/api/brand/config", dashH.GetPublicBrandConfig)
