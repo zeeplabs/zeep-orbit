@@ -383,6 +383,31 @@ func (h *Handler) applyEditOperation(ctx context.Context, user *DashboardUser, a
 		}
 		return editChatConfirmResponse{Applied: true, Kind: op.Kind, Table: row}, nil
 
+	case "add_foreign_key":
+		if op.AddForeignKey == nil {
+			return editChatConfirmResponse{}, fmt.Errorf("dashboard: add_foreign_key operation missing its target")
+		}
+		ref := config.ReferenceConfig{
+			Table:    op.AddForeignKey.RefTable,
+			Column:   op.AddForeignKey.RefColumn,
+			OnDelete: op.AddForeignKey.OnDelete,
+		}
+		row, err := h.AddColumnForeignKeyForUser(ctx, user, appID, op.AddForeignKey.Table, op.AddForeignKey.Column, ref, "ai_chat")
+		if err != nil {
+			return editChatConfirmResponse{}, err
+		}
+		return editChatConfirmResponse{Applied: true, Kind: op.Kind, Table: row}, nil
+
+	case "remove_foreign_key":
+		if op.RemoveForeignKey == nil {
+			return editChatConfirmResponse{}, fmt.Errorf("dashboard: remove_foreign_key operation missing its target")
+		}
+		row, err := h.RemoveColumnForeignKeyForUser(ctx, user, appID, op.RemoveForeignKey.Table, op.RemoveForeignKey.Column, "ai_chat")
+		if err != nil {
+			return editChatConfirmResponse{}, err
+		}
+		return editChatConfirmResponse{Applied: true, Kind: op.Kind, Table: row}, nil
+
 	case "set_rls_mode":
 		if op.SetRLSMode == nil {
 			return editChatConfirmResponse{}, fmt.Errorf("dashboard: set_rls_mode operation missing its target")
@@ -420,11 +445,16 @@ func (h *Handler) applyEditOperation(ctx context.Context, user *DashboardUser, a
 func (h *Handler) respondEditChatConfirmError(w http.ResponseWriter, r *http.Request, err error) {
 	var valErr *ValidationError
 	var typeErr *provisioner.TypeChangeError
+	var fkErr *provisioner.ForeignKeyViolationError
 	switch {
 	case errors.Is(err, ErrNotFound):
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 	case errors.Is(err, ErrForbidden):
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+	case errors.Is(err, ErrColumnAlreadyHasReference):
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "that column already has a foreign key — remove it first before adding a new one."})
+	case errors.Is(err, ErrColumnHasNoReference):
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "that column has no foreign key to remove."})
 	case errors.Is(err, ErrColumnAlreadyExists):
 		// The model is instructed (editChatSystemPromptFor) to decline a
 		// propose_add_reference/propose_add_column targeting a column that
@@ -441,6 +471,8 @@ func (h *Handler) respondEditChatConfirmError(w http.ResponseWriter, r *http.Req
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": valErr.Error()})
 	case errors.As(err, &typeErr):
 		h.writeError(w, r, http.StatusBadRequest, typeErr.Error(), err)
+	case errors.As(err, &fkErr):
+		h.writeError(w, r, http.StatusBadRequest, fkErr.Error(), err)
 	default:
 		h.writeError(w, r, http.StatusInternalServerError, genericAIChatError, err)
 	}
