@@ -153,6 +153,38 @@ func TestAddColumnForeignKeyForUser_TypeMismatchRejected(t *testing.T) {
 	}
 }
 
+// TestAddColumnForeignKeyForUser_AuthUsersTargetTypeMismatchRejected covers
+// spec P1 "Add FK" AC4 (CFK-04) literally: targeting "_auth_users" with an
+// existing column whose type isn't uuid must be rejected. This proves
+// CFK-04's exact wording independently of the generic (non-_auth_users)
+// type-mismatch test above — both currently share the same physical-type
+// check in the implementation, but this test pins the _auth_users-specific
+// case so a future divergence between the two code paths would be caught.
+func TestAddColumnForeignKeyForUser_AuthUsersTargetTypeMismatchRejected(t *testing.T) {
+	pool, h, actors, _, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{Name: uniqueAppName(t, "addfk-au-typemis")}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppForUser: %v", err)
+	}
+	items, err := h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
+		Name:    "items",
+		Columns: []config.ColumnConfig{{Name: "owner_ref", Type: "text", Unique: true}},
+	}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppTableForUser items: %v", err)
+	}
+
+	_, err = h.AddColumnForeignKeyForUser(ctx, actors["loner"], app.ID, items.Name, "owner_ref",
+		config.ReferenceConfig{Table: "_auth_users", Column: "id"}, "127.0.0.1")
+	var valErr *ValidationError
+	if !errors.As(err, &valErr) {
+		t.Fatalf("expected *ValidationError rejecting a non-uuid column referencing _auth_users, got %v (%T)", err, err)
+	}
+}
+
 // TestAddColumnForeignKeyForUser_OrphanedRowsRejected covers spec P1 "Add
 // FK" AC6 — a *provisioner.ForeignKeyViolationError propagates when
 // existing rows violate the new constraint.
