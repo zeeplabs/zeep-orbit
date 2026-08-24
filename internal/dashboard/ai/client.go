@@ -111,6 +111,26 @@ type PlanReferenceOp struct {
 	OnDelete  string     `json:"on_delete,omitempty"`
 }
 
+// PlanForeignKeyOp is the propose_add_foreign_key tool call's arguments —
+// add a foreign key to a column that already exists on an existing table
+// (column-foreign-key spec CFK-15), unlike PlanReferenceOp which only ever
+// creates a brand-new column.
+type PlanForeignKeyOp struct {
+	Table     string `json:"table"`
+	Column    string `json:"column"`
+	RefTable  string `json:"ref_table"`
+	RefColumn string `json:"ref_column"`
+	OnDelete  string `json:"on_delete,omitempty"`
+}
+
+// PlanRemoveForeignKeyOp is the propose_remove_foreign_key tool call's
+// arguments — remove the foreign key from an existing column without
+// dropping the column itself (column-foreign-key spec CFK-15).
+type PlanRemoveForeignKeyOp struct {
+	Table  string `json:"table"`
+	Column string `json:"column"`
+}
+
 // PlanRLSOp is the propose_set_rls_mode tool call's arguments (AIEC-11).
 type PlanRLSOp struct {
 	Table string `json:"table"`
@@ -128,13 +148,15 @@ type PlanAuthOp struct {
 // EditChatConfirm (ai-edit-chat spec T8) switches on to call exactly one
 // *ForUser handler.
 type EditOperation struct {
-	Kind         string           `json:"kind"` // "add_table" | "add_column" | "add_index" | "add_reference" | "set_rls_mode" | "toggle_auth"
-	AddTable     *PlanTable       `json:"add_table,omitempty"`
-	AddColumn    *PlanColumnOp    `json:"add_column,omitempty"`
-	AddIndex     *PlanIndexOp     `json:"add_index,omitempty"`
-	AddReference *PlanReferenceOp `json:"add_reference,omitempty"`
-	SetRLSMode   *PlanRLSOp       `json:"set_rls_mode,omitempty"`
-	ToggleAuth   *PlanAuthOp      `json:"toggle_auth,omitempty"`
+	Kind             string                  `json:"kind"` // "add_table" | "add_column" | "add_index" | "add_reference" | "add_foreign_key" | "remove_foreign_key" | "set_rls_mode" | "toggle_auth"
+	AddTable         *PlanTable              `json:"add_table,omitempty"`
+	AddColumn        *PlanColumnOp           `json:"add_column,omitempty"`
+	AddIndex         *PlanIndexOp            `json:"add_index,omitempty"`
+	AddReference     *PlanReferenceOp        `json:"add_reference,omitempty"`
+	AddForeignKey    *PlanForeignKeyOp       `json:"add_foreign_key,omitempty"`
+	RemoveForeignKey *PlanRemoveForeignKeyOp `json:"remove_foreign_key,omitempty"`
+	SetRLSMode       *PlanRLSOp              `json:"set_rls_mode,omitempty"`
+	ToggleAuth       *PlanAuthOp             `json:"toggle_auth,omitempty"`
 }
 
 // ErrMalformedEditOp mirrors ErrMalformedPlan for the edit-mode tool calls —
@@ -208,16 +230,18 @@ func CallModel(ctx context.Context, model, apiKey string, history []Message, rea
 // editToolDefs() advertises — anything in this set is an edit-mode
 // operation proposal, never a plain message or a read-tool call.
 var editProposalToolNames = map[string]bool{
-	"propose_add_table":     true,
-	"propose_add_column":    true,
-	"propose_add_index":     true,
-	"propose_add_reference": true,
-	"propose_set_rls_mode":  true,
-	"propose_toggle_auth":   true,
+	"propose_add_table":          true,
+	"propose_add_column":         true,
+	"propose_add_index":          true,
+	"propose_add_reference":      true,
+	"propose_add_foreign_key":    true,
+	"propose_remove_foreign_key": true,
+	"propose_set_rls_mode":       true,
+	"propose_toggle_auth":        true,
 }
 
 // firstEditProposalCall returns the first tool call whose name is one of
-// the 6 propose_* edit-mode tools, or nil if respMsg's tool calls contain
+// the 8 propose_* edit-mode tools, or nil if respMsg's tool calls contain
 // none.
 func firstEditProposalCall(calls []ToolCall) *ToolCall {
 	for i := range calls {
@@ -228,8 +252,8 @@ func firstEditProposalCall(calls []ToolCall) *ToolCall {
 	return nil
 }
 
-// CallEditModel sends history plus editToolDefs()'s 8 available tools (the
-// 6 propose_* edit-mode tools, plus the same list_apps/get_app_schema
+// CallEditModel sends history plus editToolDefs()'s 10 available tools (the
+// 8 propose_* edit-mode tools, plus the same list_apps/get_app_schema
 // read-only tools CallModel offers) to model, with tool_choice: "auto"
 // (ai-edit-chat spec T5/T7). Mirrors CallModel's read-tool round-trip loop
 // exactly, but returns ChatTurnResult.EditOp instead of .Plan when the
@@ -327,6 +351,26 @@ func parseEditOperation(toolName, rawArgs string) (*EditOperation, error) {
 			return nil, ErrMalformedEditOp
 		}
 		return &EditOperation{Kind: "add_reference", AddReference: &op}, nil
+
+	case "propose_add_foreign_key":
+		var op PlanForeignKeyOp
+		if err := json.Unmarshal([]byte(rawArgs), &op); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrMalformedEditOp, err)
+		}
+		if op.Table == "" || op.Column == "" || op.RefTable == "" || op.RefColumn == "" {
+			return nil, ErrMalformedEditOp
+		}
+		return &EditOperation{Kind: "add_foreign_key", AddForeignKey: &op}, nil
+
+	case "propose_remove_foreign_key":
+		var op PlanRemoveForeignKeyOp
+		if err := json.Unmarshal([]byte(rawArgs), &op); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrMalformedEditOp, err)
+		}
+		if op.Table == "" || op.Column == "" {
+			return nil, ErrMalformedEditOp
+		}
+		return &EditOperation{Kind: "remove_foreign_key", RemoveForeignKey: &op}, nil
 
 	case "propose_set_rls_mode":
 		var op PlanRLSOp
@@ -542,12 +586,14 @@ func readOnlyToolDefs() []toolDef {
 	}
 }
 
-// editToolDefs is the fixed 8-tool schema every CallEditModel request
-// advertises: the 6 propose_* operation-shaping tools (ai-edit-chat spec
-// T5), plus the same 2 read-only tools toolDefs() offers — the edit-chat
-// system prompt instructs the model to look up the app's real current
-// schema via get_app_schema before proposing any operation on it, rather
-// than guessing (design.md's editChatSystemPrompt note).
+// editToolDefs is the fixed 10-tool schema every CallEditModel request
+// advertises: the 8 propose_* operation-shaping tools (ai-edit-chat spec
+// T5, plus propose_add_foreign_key/propose_remove_foreign_key from the
+// column-foreign-key spec T11), plus the same 2 read-only tools toolDefs()
+// offers — the edit-chat system prompt instructs the model to look up the
+// app's real current schema via get_app_schema before proposing any
+// operation on it, rather than guessing (design.md's editChatSystemPrompt
+// note).
 func editToolDefs() []toolDef {
 	defs := []toolDef{
 		{
@@ -618,7 +664,7 @@ func editToolDefs() []toolDef {
 			Type: "function",
 			Function: functionDef{
 				Name:        "propose_add_reference",
-				Description: "Propose adding exactly one new column that is a foreign key to another table's column. Never use this for a column that already exists — decline that request instead.",
+				Description: "Propose adding exactly one new column that is a foreign key to another table's column. Never use this for a column that already exists — use propose_add_foreign_key instead.",
 				Parameters: map[string]any{
 					"type": "object",
 					"properties": map[string]any{
@@ -636,6 +682,39 @@ func editToolDefs() []toolDef {
 						"on_delete":  map[string]any{"type": "string"},
 					},
 					"required": []string{"table", "column", "ref_table", "ref_column"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: functionDef{
+				Name:        "propose_add_foreign_key",
+				Description: "Propose adding a foreign key to a column that already exists on an existing table, without dropping or recreating the column.",
+				Parameters: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"table":      map[string]any{"type": "string"},
+						"column":     map[string]any{"type": "string"},
+						"ref_table":  map[string]any{"type": "string"},
+						"ref_column": map[string]any{"type": "string"},
+						"on_delete":  map[string]any{"type": "string"},
+					},
+					"required": []string{"table", "column", "ref_table", "ref_column"},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: functionDef{
+				Name:        "propose_remove_foreign_key",
+				Description: "Propose removing the foreign key from an existing column, without dropping the column itself.",
+				Parameters: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"table":  map[string]any{"type": "string"},
+						"column": map[string]any{"type": "string"},
+					},
+					"required": []string{"table", "column"},
 				},
 			},
 		},

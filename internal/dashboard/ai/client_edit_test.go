@@ -187,6 +187,95 @@ func TestCallEditModel_AddReference(t *testing.T) {
 	}
 }
 
+// TestCallEditModel_AddForeignKey covers propose_add_foreign_key ->
+// EditOperation{Kind: "add_foreign_key", AddForeignKey: ...} (column-foreign-key
+// spec CFK-15) — unlike propose_add_reference, this targets a column that
+// already exists (no nested column object, just its name).
+func TestCallEditModel_AddForeignKey(t *testing.T) {
+	withMockServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, toolCallResponseBody("propose_add_foreign_key", map[string]any{
+			"table":      "tickets",
+			"column":     "assignee_id",
+			"ref_table":  "users",
+			"ref_column": "id",
+			"on_delete":  "cascade",
+		}))
+	})
+
+	result, err := CallEditModel(context.Background(), "gpt-4o", "sk-test", []Message{
+		{Role: "user", Content: "add a foreign key from tickets.assignee_id to users.id"},
+	}, nil)
+	if err != nil {
+		t.Fatalf("CallEditModel: %v", err)
+	}
+	if result.EditOp == nil || result.EditOp.Kind != "add_foreign_key" {
+		t.Fatalf("expected EditOp.Kind %q, got %+v", "add_foreign_key", result.EditOp)
+	}
+	fk := result.EditOp.AddForeignKey
+	if fk == nil || fk.Table != "tickets" || fk.Column != "assignee_id" ||
+		fk.RefTable != "users" || fk.RefColumn != "id" || fk.OnDelete != "cascade" {
+		t.Fatalf("expected a fully populated AddForeignKey, got %+v", fk)
+	}
+	if result.EditOp.RemoveForeignKey != nil || result.EditOp.AddReference != nil {
+		t.Fatalf("expected only AddForeignKey populated, got %+v", result.EditOp)
+	}
+}
+
+// TestCallEditModel_RemoveForeignKey covers propose_remove_foreign_key ->
+// EditOperation{Kind: "remove_foreign_key", RemoveForeignKey: ...}
+// (column-foreign-key spec CFK-15).
+func TestCallEditModel_RemoveForeignKey(t *testing.T) {
+	withMockServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, toolCallResponseBody("propose_remove_foreign_key", map[string]any{
+			"table":  "tickets",
+			"column": "assignee_id",
+		}))
+	})
+
+	result, err := CallEditModel(context.Background(), "gpt-4o", "sk-test", []Message{
+		{Role: "user", Content: "remove the foreign key on tickets.assignee_id"},
+	}, nil)
+	if err != nil {
+		t.Fatalf("CallEditModel: %v", err)
+	}
+	if result.EditOp == nil || result.EditOp.Kind != "remove_foreign_key" {
+		t.Fatalf("expected EditOp.Kind %q, got %+v", "remove_foreign_key", result.EditOp)
+	}
+	rm := result.EditOp.RemoveForeignKey
+	if rm == nil || rm.Table != "tickets" || rm.Column != "assignee_id" {
+		t.Fatalf("expected RemoveForeignKey{Table:tickets, Column:assignee_id}, got %+v", rm)
+	}
+	if result.EditOp.AddForeignKey != nil {
+		t.Fatalf("expected only RemoveForeignKey populated, got %+v", result.EditOp)
+	}
+}
+
+// TestCallEditModel_MalformedForeignKeyArgumentsReturnErrorNotPartialOp
+// covers the malformed-arguments case for both new tools — missing required
+// fields must return ErrMalformedEditOp, never a partially-populated
+// EditOperation.
+func TestCallEditModel_MalformedForeignKeyArgumentsReturnErrorNotPartialOp(t *testing.T) {
+	withMockServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, toolCallResponseBody("propose_add_foreign_key", map[string]any{
+			"table": "tickets",
+			// column/ref_table/ref_column omitted entirely — missing required fields.
+		}))
+	})
+
+	result, err := CallEditModel(context.Background(), "gpt-4o", "sk-test", []Message{
+		{Role: "user", Content: "add a foreign key"},
+	}, nil)
+	if err == nil {
+		t.Fatal("expected an error for malformed propose_add_foreign_key arguments")
+	}
+	if result.EditOp != nil {
+		t.Fatalf("expected no partial EditOp on a malformed tool call, got %+v", result.EditOp)
+	}
+}
+
 // TestCallEditModel_SetRLSMode covers propose_set_rls_mode -> EditOperation{
 // Kind: "set_rls_mode", SetRLSMode: ...} (AIEC-11).
 func TestCallEditModel_SetRLSMode(t *testing.T) {
@@ -299,7 +388,8 @@ func TestCallEditModel_RequestSendsEditToolDefsOverTheWire(t *testing.T) {
 
 	want := []string{
 		"propose_add_table", "propose_add_column", "propose_add_index",
-		"propose_add_reference", "propose_set_rls_mode", "propose_toggle_auth",
+		"propose_add_reference", "propose_add_foreign_key", "propose_remove_foreign_key",
+		"propose_set_rls_mode", "propose_toggle_auth",
 		"list_apps", "get_app_schema",
 	}
 	got := make(map[string]bool, len(capturedToolNames))
@@ -313,12 +403,13 @@ func TestCallEditModel_RequestSendsEditToolDefsOverTheWire(t *testing.T) {
 	}
 }
 
-// TestEditToolDefs_IncludesAllSixProposalsPlusReadTools closes lesson
-// L-026 from ai-build-chat (applied proactively here, per T7's Done-when):
-// asserts the actual tool set editToolDefs() advertises includes every one
-// of the 6 propose_* schemas plus the 2 shared read-only tools, not just
-// that CallEditModel happens to parse a mocked response correctly.
-func TestEditToolDefs_IncludesAllSixProposalsPlusReadTools(t *testing.T) {
+// TestEditToolDefs_IncludesAllEightProposalsPlusReadTools closes lesson
+// L-026 from ai-build-chat (applied proactively here, per T7's Done-when,
+// extended by column-foreign-key spec T11 for the two new propose_*
+// tools): asserts the actual tool set editToolDefs() advertises includes
+// every one of the 8 propose_* schemas plus the 2 shared read-only tools,
+// not just that CallEditModel happens to parse a mocked response correctly.
+func TestEditToolDefs_IncludesAllEightProposalsPlusReadTools(t *testing.T) {
 	defs := editToolDefs()
 	got := make(map[string]bool, len(defs))
 	for _, d := range defs {
@@ -327,7 +418,8 @@ func TestEditToolDefs_IncludesAllSixProposalsPlusReadTools(t *testing.T) {
 
 	want := []string{
 		"propose_add_table", "propose_add_column", "propose_add_index",
-		"propose_add_reference", "propose_set_rls_mode", "propose_toggle_auth",
+		"propose_add_reference", "propose_add_foreign_key", "propose_remove_foreign_key",
+		"propose_set_rls_mode", "propose_toggle_auth",
 		"list_apps", "get_app_schema",
 	}
 	for _, name := range want {
