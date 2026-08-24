@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 29,
+  "next_id": 32,
   "lessons": [
     {
       "id": "L-001",
@@ -508,6 +508,60 @@
       ],
       "created": "2026-08-23T20:12:07Z",
       "last_seen": "2026-08-23T20:12:07Z"
+    },
+    {
+      "id": "L-029",
+      "key": "surviving_mutant::when a lookup function returns found bool err error test the non not found error branch explicitly forced query failure or canceled context coverage of only the found and not found cases leaves the real error branch free to be silently swallowed undetected",
+      "text": "When a lookup function returns (found bool, err error), test the non-'not found' error branch explicitly (forced query failure or canceled context) - coverage of only the 'found' and 'not found' cases leaves the real-error branch free to be silently swallowed undetected.",
+      "signal": "surviving_mutant",
+      "scope": "internal/provisioner",
+      "status": "candidate",
+      "features": [
+        "column-foreign-key"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "internal/provisioner/table.go:420 (DropColumnForeignKey) (internal/provisioner)"
+      ],
+      "created": "2026-08-24T18:58:43Z",
+      "last_seen": "2026-08-24T18:58:43Z"
+    },
+    {
+      "id": "L-030",
+      "key": "spec_precision_gap::when a spec ac calls out a specific input combination e g a special case target like auth users even though a more general check is expected to subsume it add a test for that exact named combination too relying on the general case s test to imply the special case leaves the ac s literal wording unverified",
+      "text": "When a spec AC calls out a specific input combination (e.g. a special-case target like _auth_users) even though a more general check is expected to subsume it, add a test for that exact named combination too - relying on the general case's test to imply the special case leaves the AC's literal wording unverified.",
+      "signal": "spec_precision_gap",
+      "scope": "internal/dashboard",
+      "status": "candidate",
+      "features": [
+        "column-foreign-key"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "CFK-04 (internal/dashboard)"
+      ],
+      "created": "2026-08-24T18:58:51Z",
+      "last_seen": "2026-08-24T18:58:51Z"
+    },
+    {
+      "id": "L-031",
+      "key": "spec_precision_gap::a test asserting only an error type e g validationerror via errors as can pass through an unintended code path e g a target table resource not existing instead of the intended one verify the fault actually triggers the intended branch not just that some error of the right shape occurs especially when the target of a reference is conditionally provisioned e g auth users only exists when a feature flag config like authemailenabled is set",
+      "text": "A test asserting only an error TYPE (e.g. *ValidationError via errors.As) can pass through an unintended code path (e.g. a target table/resource not existing) instead of the intended one - verify the fault actually triggers the intended branch, not just that some error of the right shape occurs, especially when the target of a reference is conditionally provisioned (e.g. _auth_users only exists when a feature flag/config like AuthEmailEnabled is set).",
+      "signal": "spec_precision_gap",
+      "scope": "internal/dashboard,internal/provisioner",
+      "status": "candidate",
+      "features": [
+        "column-foreign-key"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "CFK-04 (internal/dashboard,internal/provisioner)"
+      ],
+      "created": "2026-08-24T19:25:28Z",
+      "last_seen": "2026-08-24T19:25:28Z"
     }
   ]
 }

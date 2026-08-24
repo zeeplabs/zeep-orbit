@@ -182,6 +182,24 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: mutation-4:internal/dashboard/ai_edit_chat_handlers.go EditChatConfirm session-status guard (backend/ai-chat)
 - last seen: 2026-08-23T20:12:07Z
 
+### L-029 - When a lookup function returns (found bool, err error), test the non-'not found' error branch explicitly (forced query failure or canceled context) - coverage of only the 'found' and 'not found' cases leaves the real-error branch free to be silently swallowed undetected.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `internal/provisioner` · harmful: 0
+- features: column-foreign-key
+- evidence: internal/provisioner/table.go:420 (DropColumnForeignKey) (internal/provisioner)
+- last seen: 2026-08-24T18:58:43Z
+
+### L-030 - When a spec AC calls out a specific input combination (e.g. a special-case target like _auth_users) even though a more general check is expected to subsume it, add a test for that exact named combination too - relying on the general case's test to imply the special case leaves the AC's literal wording unverified.
+- signal: `spec_precision_gap` · recurrence: 1 feature(s) · scope: `internal/dashboard` · harmful: 0
+- features: column-foreign-key
+- evidence: CFK-04 (internal/dashboard)
+- last seen: 2026-08-24T18:58:51Z
+
+### L-031 - A test asserting only an error TYPE (e.g. *ValidationError via errors.As) can pass through an unintended code path (e.g. a target table/resource not existing) instead of the intended one - verify the fault actually triggers the intended branch, not just that some error of the right shape occurs, especially when the target of a reference is conditionally provisioned (e.g. _auth_users only exists when a feature flag/config like AuthEmailEnabled is set).
+- signal: `spec_precision_gap` · recurrence: 1 feature(s) · scope: `internal/dashboard,internal/provisioner` · harmful: 0
+- features: column-foreign-key
+- evidence: CFK-04 (internal/dashboard,internal/provisioner)
+- last seen: 2026-08-24T19:25:28Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.
