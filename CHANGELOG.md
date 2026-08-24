@@ -9,6 +9,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-08-17
+
 ### Added
 
 - **"Edit with AI" extends the dashboard's AI chat to existing apps.** A new "Edit with AI" entry point on an app's details page opens a chat scoped to that app; the assistant proposes one concrete change at a time (add a table, add a column, add an index, add a column with a foreign-key reference, toggle a table's RLS mode, or toggle the app's email/password auth) and applies it immediately on confirmation — no batched multi-step plan. Every mutation runs through the same `*ForUser` handlers (`AddTableColumnForUser`, `AddTableIndexForUser`, `CreateAppTableForUser`, `UpdateTableRLSModeForUser`, and a new `UpdateAppForUser`) the REST API and MCP tools already use, so RBAC and audit logging (origin `ai_chat`) match a manual edit exactly; `UpdateAppForUser` also ships as a new MCP tool, `orbit_update_app`. Renaming/dropping a column and dropping an index are explicitly out of scope — no safe handler exists for either of those yet (adding/removing a foreign key on an existing column is now supported — see below). See `.specs/features/ai-edit-chat/`.

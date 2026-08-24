@@ -1,6 +1,34 @@
 {
   "entries": [
     {
+      "version": "v1.5.0",
+      "release_date": "2026-08-17",
+      "title": {"en": "Schema-Evolution & Webhook MCP Tools + Credential Redaction Fix", "pt-BR": "Tools MCP de Evolução de Schema e Webhooks + Correção de Redação de Credenciais"},
+      "summary": {"en": "An AI coding agent can now add a table column or index, and create/configure webhooks, without ever using the full-replace table endpoint — plus a security fix that stops app credentials from leaking in plaintext through the dashboard API.", "pt-BR": "Um agente de IA agora pode adicionar uma coluna ou índice numa tabela, e criar/configurar webhooks, sem nunca usar o endpoint de substituição completa da tabela — além de uma correção de segurança que impede o vazamento de credenciais do app em texto puro pela API do dashboard."},
+      "sections": [
+        {
+          "type": "features",
+          "items": [
+            {"description": {"en": "10 new read-only MCP tools let an AI agent inspect an app's configuration and operational surface directly — members, tokens, auth providers, webhooks, delivery logs, and operational metrics — without asking a human to check the Dashboard UI.", "pt-BR": "10 novas tools MCP de leitura deixam um agente de IA inspecionar a configuração e a superfície operacional de um app diretamente — membros, tokens, provedores de autenticação, webhooks, logs de entrega e métricas operacionais — sem precisar pedir para um humano checar o Dashboard."}},
+            {"description": {"en": "4 new safe mutation MCP tools: `orbit_add_table_column` and `orbit_add_table_index` add exactly one new column or index to an existing table, merged server-side against its current definition — unlike the full-replace table endpoint, the request can never omit or corrupt an existing column or index. `orbit_create_webhook` and `orbit_save_webhook_event_mapping` create and configure webhooks end-to-end from an AI agent.", "pt-BR": "4 novas tools MCP de mutação segura: `orbit_add_table_column` e `orbit_add_table_index` adicionam exatamente uma coluna ou índice numa tabela existente, mesclado no servidor contra a definição atual — diferente do endpoint de substituição completa, a requisição nunca pode omitir ou corromper uma coluna ou índice já existente. `orbit_create_webhook` e `orbit_save_webhook_event_mapping` criam e configuram webhooks de ponta a ponta a partir de um agente de IA."}}
+          ]
+        },
+        {
+          "type": "security",
+          "items": [
+            {"description": {"en": "The dashboard API and `orbit_list_apps` no longer return an app's real credentials in plaintext — AWS storage keys, OAuth client secrets, and JWT secret were all serializable to any app member, confirmed as a live incident on a production app before this fix. If you have apps with a configured storage bucket or OAuth login provider, treat those credentials as exposed and rotate them.", "pt-BR": "A API do dashboard e a `orbit_list_apps` não retornam mais as credenciais reais de um app em texto puro — chaves de storage AWS, client secrets OAuth e o JWT secret eram serializados para qualquer membro do app, confirmado como um incidente real num app de produção antes desta correção. Se você tem apps com bucket de storage ou provedor de login OAuth configurados, trate essas credenciais como expostas e rotacione-as."}},
+            {"description": {"en": "Saving an app's Login settings without retyping its Google OAuth client secret no longer silently deletes that secret and breaks the app's Google login; turning the Google login toggle off now actually disables it.", "pt-BR": "Salvar as configurações de Login de um app sem redigitar o client secret do Google OAuth não apaga mais esse secret nem quebra o login Google do app; desligar o toggle de login Google agora realmente desativa."}}
+          ]
+        },
+        {
+          "type": "fixes",
+          "items": [
+            {"description": {"en": "`GET /docs/{app}/openapi.json` could serve a stale spec missing recently added tables due to a missing cache header — fixed with `Cache-Control: no-store`.", "pt-BR": "`GET /docs/{app}/openapi.json` podia servir uma spec desatualizada, sem tabelas adicionadas recentemente, por falta de um header de cache — corrigido com `Cache-Control: no-store`."}}
+          ]
+        }
+      ]
+    },
+    {
       "version": "v1.4.0",
       "release_date": "2026-08-16",
       "title": {"en": "MCP Server (PAT + OAuth 2.1)", "pt-BR": "Servidor MCP (PAT + OAuth 2.1)"},
