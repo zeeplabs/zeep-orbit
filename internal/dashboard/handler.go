@@ -1712,6 +1712,74 @@ func (h *Handler) AddColumnForeignKeyForUser(ctx context.Context, user *Dashboar
 	return &row, nil
 }
 
+// ErrColumnHasNoReference is returned by RemoveColumnForeignKeyForUser when
+// the target column has no References value set.
+var ErrColumnHasNoReference = errors.New("dashboard: column has no foreign key")
+
+// RemoveColumnForeignKeyForUser is the shared operation behind
+// orbit_remove_column_foreign_key and the chat's propose_remove_foreign_key
+// confirm step — removes a foreign key from a column without touching the
+// column itself, mirroring AddColumnForeignKeyForUser's skeleton minus the
+// pre-DDL validation step (nothing to validate when removing). Handles the
+// stale-schema self-healing edge case: if DropColumnForeignKey reports
+// found=false (no constraint currently exists in Postgres), the stored
+// References is still cleared, converging the stored schema with reality
+// instead of erroring.
+func (h *Handler) RemoveColumnForeignKeyForUser(ctx context.Context, user *DashboardUser, appID, tableName, columnName, ip string) (*AppTableRow, error) {
+	app, role, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, err
+	}
+	if !role.CanWrite() {
+		return nil, ErrForbidden
+	}
+
+	existingTable := findAppTableByName(app, tableName)
+	if existingTable == nil {
+		return nil, ErrNotFound
+	}
+
+	colIndex := -1
+	for i, c := range existingTable.Columns {
+		if c.Name == columnName {
+			colIndex = i
+			break
+		}
+	}
+	if colIndex == -1 {
+		return nil, ErrNotFound
+	}
+	if existingTable.Columns[colIndex].References == nil {
+		return nil, ErrColumnHasNoReference
+	}
+
+	schemaName := schemaNameForDB(app.Name)
+	if _, err := h.prov.DropColumnForeignKey(ctx, schemaName, tableName, columnName); err != nil {
+		return nil, err
+	}
+
+	mergedColumns := make([]config.ColumnConfig, len(existingTable.Columns))
+	copy(mergedColumns, existingTable.Columns)
+	mergedColumns[colIndex].References = nil
+
+	row, err := UpdateAppTable(ctx, h.pool, appID, existingTable.ID, schemaName, existingTable.RLS, mergedColumns, existingTable.Indexes)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+	}
+
+	updated, _, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+	}
+	h.reg.Register(appRowToRegistryApp(updated))
+
+	h.audit(ctx, user.ID, user.Email, "app.table_column.remove_foreign_key", "app_table", row.ID, app.Name+"/"+row.Name+"/"+columnName, nil, ip)
+	return &row, nil
+}
+
 // DeleteAppTable handles DELETE /dashboard/api/apps/{id}/tables/{tableId}.
 // Removes the metadata row and drops the physical table — unlike the old
 // bulk UpdateApp flow, a removed table is never left behind in the database.
