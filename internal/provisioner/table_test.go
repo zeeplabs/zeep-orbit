@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
@@ -653,5 +654,45 @@ func TestDropColumnForeignKey_FindsNonConventionallyNamedConstraint(t *testing.T
 	}
 	if hasFKConstraint(t, pool, schema, "orders", "customer_id") {
 		t.Fatal("expected no FK constraint on orders.customer_id after drop")
+	}
+}
+
+// TestDropColumnForeignKey_GenuineQueryErrorPropagates covers the branch at
+// table.go's constraint-lookup query that must distinguish "no rows" (a
+// legitimate not-found, found=false/err=nil) from a genuine query failure,
+// which must propagate as a non-nil error rather than being swallowed as a
+// silent found=false/err=nil. A canceled context forces pgx to fail the
+// QueryRow with context.Canceled (never pgx.ErrNoRows), so this asserts the
+// error path independently of the "no constraint" path already covered by
+// TestDropColumnForeignKey_NoConstraintReturnsFoundFalse.
+func TestDropColumnForeignKey_GenuineQueryErrorPropagates(t *testing.T) {
+	pool := ensureRLSTestPool(t)
+	defer pool.Close()
+
+	schema := fmt.Sprintf("dropfk_queryerr_test_%d", time.Now().UnixNano())
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE SCHEMA %q`, schema)); err != nil {
+		t.Fatalf("create schema: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), fmt.Sprintf(`DROP SCHEMA IF EXISTS %q CASCADE`, schema))
+	})
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE TABLE %q.orders (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), customer_id UUID)`, schema)); err != nil {
+		t.Fatalf("create orders: %v", err)
+	}
+
+	p := New(pool)
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel before use so the lookup query fails immediately with context.Canceled, not ErrNoRows
+
+	found, err := p.DropColumnForeignKey(canceledCtx, schema, "orders", "customer_id")
+	if err == nil {
+		t.Fatal("expected a non-nil error for a genuine query failure (canceled context), got nil")
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("expected a genuine query error, not pgx.ErrNoRows: %v", err)
+	}
+	if found {
+		t.Fatal("expected found=false when the lookup query itself fails")
 	}
 }
