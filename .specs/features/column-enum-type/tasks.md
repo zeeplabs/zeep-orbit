@@ -525,6 +525,8 @@ T16
 
 ### T16: `CHANGELOG.md` entry
 
+**Status**: ✅ Complete
+
 **What**: Add an entry under `## [Unreleased]` describing the new `enum` column type (CHECK-constraint-backed, creation-only, with widen/narrow via a dedicated endpoint).
 **Where**: `CHANGELOG.md`
 **Depends on**: T15

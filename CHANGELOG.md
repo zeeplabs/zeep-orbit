@@ -11,6 +11,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **New `enum` column type**, backed by a Postgres `CHECK` constraint instead of client-side-only validation. Declarable at column creation (table create or add-column) with a fixed `allowed_values` list; an existing enum column's values can be widened or narrowed afterward through a dedicated endpoint (Dashboard action, `PATCH .../columns/{column}/enum-values`, or the `orbit_update_column_enum_values` MCP tool) — narrowing is rejected with the offending value(s) and row count if any existing row still holds a value being removed. Also available from AI build/edit chat, which can now propose an `enum` column for a status-like field. See `.specs/features/column-enum-type/`.
 - **`orbit_create_policy_advanced` MCP tool**: creates a row policy from an explicit structured clause set (chained `AND`/`OR` conditions, any allowed operator/claim combination), for policy shapes outside `orbit_create_policy_from_template`'s 6 fixed templates. No raw SQL — same `column`/`operator`/`value_source`/`value`/`logic` structure the Dashboard's advanced policy form and REST API already use.
 
 ### Fixed
