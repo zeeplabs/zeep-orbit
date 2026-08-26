@@ -16,6 +16,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - **MCP tools calling `CreateTablePolicyForUser` collapsed every structural policy-validation failure (unknown column, disallowed operator, bad claim name, invalid clause logic) into a generic "internal error"**, giving an LLM caller no way to tell a bad-input mistake from a platform failure. `mapWriteError` now surfaces `provisioner.ValidationError` verbatim, same as it already does for `TypeChangeError`/`ForeignKeyViolationError`.
+- **Saving any Login/Storage/API-tab field on an app (`PUT /dashboard/api/apps/{id}`) could fail with an error naming a completely unrelated table.** The handler unconditionally reconciled the app's entire table schema on every save, even though this endpoint never touches tables — so a pre-existing schema drift on any one table (a stale column type, a legacy `rls` value) blocked saving auth/storage/rate-limit settings on the whole app. The reconciliation call is removed; table schema is only ever changed through the dedicated per-table endpoints, as already documented.
 
 ## [1.6.0] — 2026-08-24
 

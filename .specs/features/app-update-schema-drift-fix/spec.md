@@ -8,8 +8,8 @@ This is not hypothetical: production app `internal-portal-rh` has exactly this d
 
 ## Goals
 
-- [ ] `PUT /dashboard/api/apps/{id}` no longer reconciles table schema for requests that cannot and do not touch tables — bringing REST in line with the MCP path (`UpdateAppForUser`, `handler.go:1493`), which already skips this reconciliation.
-- [ ] A reviewed, manually-run SQL runbook exists to repair `internal-portal-rh`'s known drift (7 column types, 8 `rls` values), so the app becomes saveable again without any live code executing the repair automatically.
+- [x] `PUT /dashboard/api/apps/{id}` no longer reconciles table schema for requests that cannot and do not touch tables — bringing REST in line with the MCP path (`UpdateAppForUser`, `handler.go:1493`), which already skips this reconciliation.
+- [x] A reviewed, manually-run SQL runbook exists to repair `internal-portal-rh`'s known drift (7 column types, 8 `rls` values), so the app becomes saveable again without any live code executing the repair automatically.
 
 ## Out of Scope
 
@@ -87,28 +87,28 @@ This is not hypothetical: production app `internal-portal-rh` has exactly this d
 
 | Requirement ID | Story | Phase | Status |
 |---|---|---|---|
-| AUSD-01 | P1: Dashboard save no longer fails on unrelated schema drift | Execute | Pending |
-| AUSD-02 | P1: Dashboard save no longer fails on unrelated schema drift | Execute | Pending |
-| AUSD-03 | P1: Dashboard save no longer fails on unrelated schema drift | Execute | Pending |
-| AUSD-04 | P1: Dashboard save no longer fails on unrelated schema drift | Execute | Pending |
-| AUSD-05 | P2: internal-portal-rh's known drift is repaired via a reviewed runbook | Execute | Pending |
-| AUSD-06 | P2: internal-portal-rh's known drift is repaired via a reviewed runbook | Execute | Pending |
-| AUSD-07 | P2: internal-portal-rh's known drift is repaired via a reviewed runbook | Execute | Pending |
-| AUSD-08 | P2: internal-portal-rh's known drift is repaired via a reviewed runbook | Execute | Pending |
-| AUSD-09 | P2: internal-portal-rh's known drift is repaired via a reviewed runbook | Execute | Pending |
-| AUSD-10 | P2: internal-portal-rh's known drift is repaired via a reviewed runbook | Execute | Pending |
+| AUSD-01 | P1: Dashboard save no longer fails on unrelated schema drift | Execute | Verified |
+| AUSD-02 | P1: Dashboard save no longer fails on unrelated schema drift | Execute | Verified |
+| AUSD-03 | P1: Dashboard save no longer fails on unrelated schema drift | Execute | Verified |
+| AUSD-04 | P1: Dashboard save no longer fails on unrelated schema drift | Execute | Verified |
+| AUSD-05 | P2: internal-portal-rh's known drift is repaired via a reviewed runbook | Execute | Verified |
+| AUSD-06 | P2: internal-portal-rh's known drift is repaired via a reviewed runbook | Execute | Verified |
+| AUSD-07 | P2: internal-portal-rh's known drift is repaired via a reviewed runbook | Execute | Verified |
+| AUSD-08 | P2: internal-portal-rh's known drift is repaired via a reviewed runbook | Execute | Verified |
+| AUSD-09 | P2: internal-portal-rh's known drift is repaired via a reviewed runbook | Execute | Verified |
+| AUSD-10 | P2: internal-portal-rh's known drift is repaired via a reviewed runbook | Execute | Verified |
 
 **ID format:** `AUSD-[NUMBER]` (app-update-schema-drift-fix)
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 10 total, 10 mapped across 2 P1/P2 stories, 0 unmapped
+**Coverage:** 10 total, 10 mapped across 2 P1/P2 stories, 0 unmapped, 10 verified
 
 ---
 
 ## Success Criteria
 
-- [ ] Toggling any Login/Storage/API-tab field on `internal-portal-rh` (or any app) succeeds regardless of that app's table schema state.
-- [ ] `internal-portal-rh`'s 7 columns are physically `numeric` and its 8 tables' `rls` is `''`, verified by direct read-only SQL after the runbook runs.
-- [ ] Zero rows outside the named 4 tables / 8 tables are touched by the repair script.
-- [ ] No application code path can trigger the repair script — it exists only as a file for manual execution.
+- [x] Toggling any Login/Storage/API-tab field on `internal-portal-rh` (or any app) succeeds regardless of that app's table schema state.
+- [ ] `internal-portal-rh`'s 7 columns are physically `numeric` and its 8 tables' `rls` is `''`, verified by direct read-only SQL after the runbook runs. **Not yet done** — the runbook is delivered and verified against a throwaway fixture DB, but running it against real production is an explicit separate go-ahead (AGENTS.md §8), not part of this Execute pass.
+- [x] Zero rows outside the named 4 tables / 8 tables are touched by the repair script (verified via scoped WHERE clauses + fixture-DB test run).
+- [x] No application code path can trigger the repair script — it exists only as a file for manual execution.
