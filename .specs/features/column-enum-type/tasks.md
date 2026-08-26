@@ -295,6 +295,8 @@ T16
 
 ### T8: `UpdateColumnEnumValuesForUser` + `PATCH .../enum-values` route
 
+**Status**: ✅ Complete (route registration lives in `internal/server/server.go`, where every other dashboard route is mounted — tasks.md's "Where" said `handler.go`; the handler method and its HTTP wrapper are in `handler.go` as specified, only the one-line `r.Patch(...)` registration is in `server.go`.)
+
 **What**: New `Handler.UpdateColumnEnumValuesForUser(ctx, user, appID, tableName, columnName string, newValues []string, ip string) (*AppTableRow, error)`: auth/role check → find table/column, `404`/`400` on missing/non-enum → `config.ValidateEnumValues(newValues)` → if the column has a non-empty stored `Default`, re-check it's still in `newValues` → `p.prov.ReplaceColumnEnumValues(...)`, mapping `*provisioner.EnumValueInUseError` to `400` → persist `newValues` to the stored column config → audit `app.table.column.enum_values.update` → return refreshed `*AppTableRow`. Wire a new `PATCH /dashboard/api/apps/{id}/tables/{tableId}/columns/{columnName}/enum-values` route to it.
 **Where**: `internal/dashboard/handler.go` (new method + route registration, same file/pattern as `AddColumnForeignKeyForUser`/`DropColumnForeignKeyForUser`)
 **Depends on**: T5, T7

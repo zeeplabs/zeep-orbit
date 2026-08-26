@@ -234,6 +234,7 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Post("/api/apps/{id}/tables", dashH.CreateAppTable)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/apps/{id}/tables/{tableId}", dashH.UpdateAppTable)
 		r.With(dashboard.RequireAuth(pool)).Delete("/api/apps/{id}/tables/{tableId}", dashH.DeleteAppTable)
+		r.With(dashboard.RequireAuth(pool)).Patch("/api/apps/{id}/tables/{tableId}/columns/{columnName}/enum-values", dashH.UpdateColumnEnumValues)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/apps/{id}/webhooks", dashH.ListWebhooks)
 		r.With(dashboard.RequireAuth(pool)).Post("/api/apps/{id}/webhooks", dashH.CreateWebhook)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/apps/{id}/webhooks/{webhookId}", dashH.GetWebhook)

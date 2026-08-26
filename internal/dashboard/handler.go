@@ -12,6 +12,7 @@ import (
 	"net/mail"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -1849,6 +1850,161 @@ func (h *Handler) RemoveColumnForeignKeyForUser(ctx context.Context, user *Dashb
 
 	h.audit(ctx, user.ID, user.Email, "app.table_column.remove_foreign_key", "app_table", row.ID, app.Name+"/"+row.Name+"/"+columnName, nil, ip)
 	return &row, nil
+}
+
+// ErrColumnIsNotEnum is returned by UpdateColumnEnumValuesForUser when the
+// target column exists but is not an enum column — allowed values are only
+// meaningful for type "enum", and this feature deliberately does not convert
+// a column to or from enum.
+var ErrColumnIsNotEnum = errors.New("dashboard: column is not an enum column")
+
+// UpdateColumnEnumValuesForUser is the shared operation behind
+// orbit_update_column_enum_values and PATCH
+// /dashboard/api/apps/{id}/tables/{tableId}/columns/{columnName}/enum-values
+// — widens or narrows an existing enum column's allowed values. It exists as
+// its own operation for the same structural reason the foreign-key add/remove
+// pair does: h.prov.Apply's addMissingColumns is add-only for columns and
+// silently skips any column that already exists, so an existing column's
+// CHECK constraint is never re-emitted through that path.
+//
+// A narrowing that would orphan rows is rejected by the provisioner with a
+// *provisioner.EnumValueInUseError before any DDL runs, and nothing is
+// persisted.
+func (h *Handler) UpdateColumnEnumValuesForUser(ctx context.Context, user *DashboardUser, appID, tableName, columnName string, newValues []string, ip string) (*AppTableRow, error) {
+	app, role, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, err
+	}
+	if !role.CanWrite() {
+		return nil, ErrForbidden
+	}
+
+	existingTable := findAppTableByName(app, tableName)
+	if existingTable == nil {
+		return nil, ErrNotFound
+	}
+
+	colIndex := -1
+	for i, c := range existingTable.Columns {
+		if c.Name == columnName {
+			colIndex = i
+			break
+		}
+	}
+	if colIndex == -1 {
+		return nil, ErrNotFound
+	}
+
+	column := existingTable.Columns[colIndex]
+	if column.Type != "enum" {
+		return nil, ErrColumnIsNotEnum
+	}
+
+	if err := config.ValidateEnumValues(newValues); err != nil {
+		return nil, &ValidationError{msg: err.Error()}
+	}
+	// A narrowing that drops the column's own default is as broken as
+	// declaring one outside the set at creation time (config.validateDefault's
+	// enum case) — just discovered later.
+	if column.Default != "" && !slices.Contains(newValues, column.Default) {
+		return nil, &ValidationError{msg: fmt.Sprintf("column %q has default %q, which is not one of the new allowed values", columnName, column.Default)}
+	}
+
+	schemaName := schemaNameForDB(app.Name)
+	if err := h.prov.ReplaceColumnEnumValues(ctx, schemaName, tableName, columnName, column.AllowedValues, newValues); err != nil {
+		return nil, err
+	}
+
+	mergedColumns := make([]config.ColumnConfig, len(existingTable.Columns))
+	copy(mergedColumns, existingTable.Columns)
+	mergedColumns[colIndex].AllowedValues = newValues
+
+	row, err := UpdateAppTable(ctx, h.pool, appID, existingTable.ID, schemaName, existingTable.RLS, mergedColumns, existingTable.Indexes)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+	}
+
+	updated, _, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+	}
+	h.reg.Register(appRowToRegistryApp(updated))
+
+	h.audit(ctx, user.ID, user.Email, "app.table.column.enum_values.update", "app_table", row.ID, app.Name+"/"+row.Name+"/"+columnName, nil, ip)
+	return &row, nil
+}
+
+// UpdateColumnEnumValues handles PATCH
+// /dashboard/api/apps/{id}/tables/{tableId}/columns/{columnName}/enum-values.
+// The table is addressed by id (consistent with the other /tables/{tableId}
+// routes) and resolved to its name before delegating.
+func (h *Handler) UpdateColumnEnumValues(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appID := chi.URLParam(r, "id")
+	tableID := chi.URLParam(r, "tableId")
+	columnName := chi.URLParam(r, "columnName")
+
+	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
+	var body struct {
+		AllowedValues []string `json:"allowed_values"`
+	}
+	if !h.decodeJSONBody(w, r, &body) {
+		return
+	}
+
+	app, _, err := GetApp(r.Context(), h.pool, appID, user)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+	var tableName string
+	for _, t := range app.Tables {
+		if t.ID == tableID {
+			tableName = t.Name
+			break
+		}
+	}
+	if tableName == "" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
+		return
+	}
+
+	row, err := h.UpdateColumnEnumValuesForUser(r.Context(), user, appID, tableName, columnName, body.AllowedValues, r.RemoteAddr)
+	if err != nil {
+		var valErr *ValidationError
+		var inUseErr *provisioner.EnumValueInUseError
+		switch {
+		case errors.Is(err, ErrNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		case errors.Is(err, ErrForbidden):
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		case errors.Is(err, ErrColumnIsNotEnum):
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "column is not an enum column"})
+		case errors.As(err, &valErr):
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": valErr.Error()})
+		case errors.As(err, &inUseErr):
+			h.writeError(w, r, http.StatusBadRequest, inUseErr.Error(), err)
+		case errors.Is(err, errAppTableInternalFailed):
+			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		default:
+			h.writeError(w, r, http.StatusInternalServerError, "provisioning failed — check server logs for details", err)
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, row)
 }
 
 // DeleteAppTable handles DELETE /dashboard/api/apps/{id}/tables/{tableId}.
