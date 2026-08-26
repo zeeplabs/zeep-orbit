@@ -497,6 +497,8 @@ T16
 
 ### T15: `ai_edit_chat_handlers.go` — allow proposing `enum`
 
+**Status**: ✅ Complete (same SPEC_DEVIATION category as T14, marked in `internal/dashboard/ai/client.go`: `propose_add_column`'s tool schema lives in `editToolDefs()` in `client.go`, not `ai_edit_chat_handlers.go` — touched alongside the handler/prompt file for the same structural reason as T14. `PlanColumn.AllowedValues` itself was already added in T14's commit, reused here unchanged.)
+
 **What**: Same prompt change as T14, applied to the edit-chat system prompt (`ai_edit_chat_handlers.go:587`); wire `allowed_values` through `propose_add_column`'s schema.
 **Where**: `internal/dashboard/ai_edit_chat_handlers.go:587` (prompt text) + `propose_add_column` tool schema in the same file
 **Depends on**: T14

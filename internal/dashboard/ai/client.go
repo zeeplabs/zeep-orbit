@@ -650,6 +650,11 @@ func editToolDefs() []toolDef {
 							"properties": map[string]any{
 								"name": map[string]any{"type": "string"},
 								"type": map[string]any{"type": "string"},
+								"allowed_values": map[string]any{
+									"type":        "array",
+									"items":       map[string]any{"type": "string"},
+									"description": "Required when type is \"enum\": the fixed set of values this column accepts.",
+								},
 							},
 							"required": []string{"name", "type"},
 						},
