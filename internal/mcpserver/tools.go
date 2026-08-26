@@ -176,6 +176,7 @@ func mapWriteError(err error) error {
 	var valErr *dashboard.ValidationError
 	var typeErr *provisioner.TypeChangeError
 	var fkErr *provisioner.ForeignKeyViolationError
+	var policyValErr *provisioner.ValidationError
 	switch {
 	case err == nil:
 		return nil
@@ -217,6 +218,8 @@ func mapWriteError(err error) error {
 		return typeErr
 	case errors.As(err, &fkErr):
 		return fkErr
+	case errors.As(err, &policyValErr):
+		return policyValErr
 	default:
 		return internalErr(err)
 	}
