@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 34,
+  "next_id": 36,
   "lessons": [
     {
       "id": "L-001",
@@ -598,6 +598,42 @@
       ],
       "created": "2026-08-26T00:41:12Z",
       "last_seen": "2026-08-26T00:41:12Z"
+    },
+    {
+      "id": "L-034",
+      "key": "surviving_mutant::when an ac says an existing side effect audit log registry refresh must stay unchanged assert it explicitly in the test an unasserted side effect can be deleted with the whole suite still green",
+      "text": "When an AC says an existing side effect (audit log, registry refresh) must stay unchanged, assert it explicitly in the test — an unasserted side effect can be deleted with the whole suite still green.",
+      "signal": "surviving_mutant",
+      "scope": "internal/dashboard",
+      "status": "candidate",
+      "features": [
+        "app-update-schema-drift-fix"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "internal/dashboard/handler.go:1134 (internal/dashboard)"
+      ],
+      "created": "2026-08-26T01:40:49Z",
+      "last_seen": "2026-08-26T01:40:49Z"
+    },
+    {
+      "id": "L-035",
+      "key": "ac_gap::an idempotent repair script must be re run end to end against a fixture already in the post repair state guard clauses on the mutating statement do not make the preceding validation query re runnable a text regex probe breaks once the column is numeric",
+      "text": "An idempotent repair script must be re-run end to end against a fixture already in the post-repair state — guard clauses on the mutating statement do not make the preceding validation query re-runnable (a text regex probe breaks once the column is numeric).",
+      "signal": "ac_gap",
+      "scope": "ops-sql",
+      "status": "candidate",
+      "features": [
+        "app-update-schema-drift-fix"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        ".specs/features/app-update-schema-drift-fix/repair.sql:91 (ops-sql)"
+      ],
+      "created": "2026-08-26T01:40:49Z",
+      "last_seen": "2026-08-26T01:40:49Z"
     }
   ]
 }

@@ -212,6 +212,18 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: MAPT-01 / internal/mcpserver/tools_advanced_policy_test.go:51 (internal/mcpserver)
 - last seen: 2026-08-26T00:41:12Z
 
+### L-034 - When an AC says an existing side effect (audit log, registry refresh) must stay unchanged, assert it explicitly in the test — an unasserted side effect can be deleted with the whole suite still green.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `internal/dashboard` · harmful: 0
+- features: app-update-schema-drift-fix
+- evidence: internal/dashboard/handler.go:1134 (internal/dashboard)
+- last seen: 2026-08-26T01:40:49Z
+
+### L-035 - An idempotent repair script must be re-run end to end against a fixture already in the post-repair state — guard clauses on the mutating statement do not make the preceding validation query re-runnable (a text regex probe breaks once the column is numeric).
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `ops-sql` · harmful: 0
+- features: app-update-schema-drift-fix
+- evidence: .specs/features/app-update-schema-drift-fix/repair.sql:91 (ops-sql)
+- last seen: 2026-08-26T01:40:49Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.
