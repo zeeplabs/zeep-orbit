@@ -1116,17 +1116,17 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 		app.RateLimit = body.RateLimit
 	}
 
-	cfg := buildAppConfig(app)
-	if _, err := h.prov.Apply(r.Context(), &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
-		var typeErr *provisioner.TypeChangeError
-		if errors.As(err, &typeErr) {
-			h.writeError(w, r, http.StatusBadRequest, typeErr.Error(), err)
-		} else {
-			h.writeError(w, r, http.StatusInternalServerError, "provisioning failed — check server logs for details", err)
-		}
-		return
-	}
-
+	// No h.prov.Apply call here: this endpoint's AppRequestBody carries no
+	// Tables field and never intends to touch table schema ("Tables are
+	// managed one at a time via the /apps/{id}/tables endpoints, not here" —
+	// see AppRequestBody's own doc comment). Reconciling every table/column
+	// on every auth/storage/rate-limit save was pure unrelated blast radius:
+	// any pre-existing schema drift on an untouched table (bad column type,
+	// legacy rls value) failed this save with an error naming a table this
+	// request never referenced. UpdateAppForUser (the MCP/AI-chat path,
+	// handler.go's UpdateAppForUser) never called Apply either — this aligns
+	// REST with that already-correct behavior instead of the other way
+	// around (app-update-schema-drift-fix spec AUSD-01..03).
 	h.reg.Register(appRowToRegistryApp(app))
 
 	app.RedactSecrets()
