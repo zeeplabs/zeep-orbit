@@ -178,6 +178,7 @@ func mapWriteError(err error) error {
 	var typeErr *provisioner.TypeChangeError
 	var fkErr *provisioner.ForeignKeyViolationError
 	var policyValErr *provisioner.ValidationError
+	var enumInUseErr *provisioner.EnumValueInUseError
 	switch {
 	case err == nil:
 		return nil
@@ -187,6 +188,8 @@ func mapWriteError(err error) error {
 		return errors.New("forbidden")
 	case errors.Is(err, dashboard.ErrTableNotFound):
 		return errors.New("table not found")
+	case errors.Is(err, dashboard.ErrColumnIsNotEnum):
+		return dashboard.ErrColumnIsNotEnum
 	case errors.Is(err, dashboard.ErrPolicyAlreadyExists):
 		return dashboard.ErrPolicyAlreadyExists
 	case errors.Is(err, dashboard.ErrColumnAlreadyExists):
@@ -219,6 +222,8 @@ func mapWriteError(err error) error {
 		return typeErr
 	case errors.As(err, &fkErr):
 		return fkErr
+	case errors.As(err, &enumInUseErr):
+		return enumInUseErr
 	case errors.As(err, &policyValErr):
 		return policyValErr
 	default:
@@ -335,6 +340,15 @@ type orbitRemoveColumnForeignKeyInput struct {
 	ColumnName string `json:"column_name" jsonschema:"name of the column to remove the foreign key from"`
 }
 
+// orbitUpdateColumnEnumValuesInput is the input for
+// orbit_update_column_enum_values.
+type orbitUpdateColumnEnumValuesInput struct {
+	AppID         string   `json:"app_id" jsonschema:"id of the app that owns the table"`
+	TableName     string   `json:"table_name" jsonschema:"name of the table that owns the column"`
+	ColumnName    string   `json:"column_name" jsonschema:"name of the already-existing enum column to widen or narrow"`
+	AllowedValues []string `json:"allowed_values" jsonschema:"the new, complete set of allowed values for the column (not a delta — replaces the current set entirely)"`
+}
+
 // registerAppConfigWriteTools registers the additive table-schema mutation
 // tools (mcp-safe-mutation-tools spec: add one column, add one index, each
 // server-side-merged against the table's current stored definition so the
@@ -418,6 +432,21 @@ func registerAppConfigWriteTools(server *mcp.Server, deps ToolDeps) {
 			return nil, nil, errUnauthorized
 		}
 		row, err := deps.DashH.RemoveColumnForeignKeyForUser(ctx, user, in.AppID, in.TableName, in.ColumnName, "mcp")
+		if err != nil {
+			return nil, nil, mapWriteError(err)
+		}
+		return nil, row, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_update_column_enum_values",
+		Description: "Widen or narrow an existing enum column's allowed values (replaces the full set). Narrowing (removing a value) fails if any existing row still holds that value, naming the value(s) and row count(s). Fails if the column is not an enum column.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitUpdateColumnEnumValuesInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		row, err := deps.DashH.UpdateColumnEnumValuesForUser(ctx, user, in.AppID, in.TableName, in.ColumnName, in.AllowedValues, "mcp")
 		if err != nil {
 			return nil, nil, mapWriteError(err)
 		}

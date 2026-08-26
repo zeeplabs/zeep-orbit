@@ -384,6 +384,8 @@ T16
 
 ### T11: New MCP tool `orbit_update_column_enum_values`
 
+**Status**: ✅ Complete
+
 **What**: New tool registration `{app_id, table_name, column_name, allowed_values []string}` calling `deps.DashH.UpdateColumnEnumValuesForUser`.
 **Where**: `internal/mcpserver/tools.go` (new registration, near the FK tools)
 **Depends on**: T8, T10
