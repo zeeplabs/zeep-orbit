@@ -448,6 +448,143 @@ func (p *Provisioner) DropColumnForeignKey(ctx context.Context, schemaName, tabl
 	return true, nil
 }
 
+// findColumnCheckConstraint locates the real name of the single-column CHECK
+// constraint on a column via the Postgres catalog, never by assuming a
+// naming convention (a column name may reach 63 bytes, and Postgres
+// identifiers are capped at 63 too, so any "<column>_enum_check" style guess
+// can silently truncate or collide) — the same reasoning
+// AddColumnForeignKey/DropColumnForeignKey already document for FKs.
+// found=false, err=nil means the column currently has no CHECK constraint.
+//
+// SPEC_DEVIATION: design.md specifies information_schema.table_constraints
+// joined to key_column_usage (DropColumnForeignKey's query shape).
+// Reason: key_column_usage only holds key columns (PK/UNIQUE/FK), so that
+// join returns zero rows for a CHECK constraint — verified against Postgres
+// 16. table_constraints alone is also unusable: it additionally lists the
+// implicit "<oid>_<oid>_<n>_not_null" constraint of any NOT NULL column.
+// pg_constraint filtered to contype='c' and conkey = the column's attnum
+// returns exactly the real CHECK constraint. Same intent as the design
+// (catalog lookup, no assumed name), correct catalog.
+func (p *Provisioner) findColumnCheckConstraint(ctx context.Context, schemaName, tableName, columnName string) (name string, found bool, err error) {
+	err = p.pool.QueryRow(ctx,
+		`SELECT c.conname
+		 FROM pg_constraint c
+		 JOIN pg_class r ON r.oid = c.conrelid
+		 JOIN pg_namespace n ON n.oid = r.relnamespace
+		 JOIN pg_attribute a ON a.attrelid = r.oid AND a.attname = $3
+		 WHERE c.contype = 'c'
+		   AND n.nspname = $1
+		   AND r.relname = $2
+		   AND c.conkey = ARRAY[a.attnum]
+		 LIMIT 1`,
+		schemaName, tableName, columnName,
+	).Scan(&name)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("table: find check constraint on %q.%q.%q: %w", schemaName, tableName, columnName, err)
+	}
+	return name, true, nil
+}
+
+// removedValues returns the values present in old but not in new, in old's
+// declaration order.
+func removedValues(oldValues, newValues []string) []string {
+	kept := make(map[string]struct{}, len(newValues))
+	for _, v := range newValues {
+		kept[v] = struct{}{}
+	}
+
+	var removed []string
+	for _, v := range oldValues {
+		if _, ok := kept[v]; !ok {
+			removed = append(removed, v)
+		}
+	}
+	return removed
+}
+
+// countRowsUsingValues counts existing rows per value, scoped to the given
+// values only (never a full-table comparison in application code). Values
+// with no rows are absent from the result.
+func (p *Provisioner) countRowsUsingValues(ctx context.Context, schemaName, tableName, columnName string, values []string) (map[string]int, error) {
+	sql := fmt.Sprintf(
+		`SELECT %q, COUNT(*) FROM %q.%q WHERE %q = ANY($1) GROUP BY %q`,
+		columnName, schemaName, tableName, columnName, columnName,
+	)
+	rows, err := p.pool.Query(ctx, sql, values)
+	if err != nil {
+		return nil, fmt.Errorf("table: count rows using values on %q.%q.%q: %w", schemaName, tableName, columnName, err)
+	}
+	defer rows.Close()
+
+	counts := make(map[string]int)
+	for rows.Next() {
+		var value string
+		var count int
+		if err := rows.Scan(&value, &count); err != nil {
+			return nil, fmt.Errorf("table: scan value count: %w", err)
+		}
+		if count > 0 {
+			counts[value] = count
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("table: iterate value counts: %w", err)
+	}
+	return counts, nil
+}
+
+// ReplaceColumnEnumValues replaces the CHECK constraint restricting an enum
+// column to oldValues with one restricting it to newValues.
+//
+// A narrowing (any value in oldValues missing from newValues) is pre-checked:
+// if existing rows still hold a value being removed, the call fails with a
+// typed *EnumValueInUseError naming every offending value and its exact row
+// count, before any DDL runs — so a rejected narrow leaves the current
+// constraint completely untouched. A pure widening skips the pre-check, since
+// every existing value is still a member of the larger set.
+//
+// The swap is a single ALTER TABLE statement carrying both the DROP and the
+// ADD, so Postgres applies both or neither: the table is never left without a
+// constraint. The new constraint is deliberately left unnamed so Postgres
+// applies its own "<table>_<column>_check" convention — identical to a column
+// created with an inline CHECK (columnDDL), so a constraint's origin (created
+// with the column vs. replaced later) is never distinguishable by name.
+func (p *Provisioner) ReplaceColumnEnumValues(ctx context.Context, schemaName, tableName, columnName string, oldValues, newValues []string) error {
+	if removed := removedValues(oldValues, newValues); len(removed) > 0 {
+		counts, err := p.countRowsUsingValues(ctx, schemaName, tableName, columnName, removed)
+		if err != nil {
+			return err
+		}
+		if len(counts) > 0 {
+			return &EnumValueInUseError{Column: columnName, Counts: counts}
+		}
+	}
+
+	constraintName, found, err := p.findColumnCheckConstraint(ctx, schemaName, tableName, columnName)
+	if err != nil {
+		return err
+	}
+
+	addClause := fmt.Sprintf(`ADD CHECK (%q IN (%s))`, columnName, quotedValueList(newValues))
+	var sql string
+	if found {
+		sql = fmt.Sprintf(`ALTER TABLE %q.%q DROP CONSTRAINT %q, %s`, schemaName, tableName, constraintName, addClause)
+	} else {
+		// No constraint to replace — converge by adding the missing one
+		// rather than failing, the same way DropColumnForeignKey treats a
+		// missing FK as a stale stored schema catching up to reality.
+		sql = fmt.Sprintf(`ALTER TABLE %q.%q %s`, schemaName, tableName, addClause)
+	}
+
+	if _, err := p.pool.Exec(ctx, sql); err != nil {
+		return fmt.Errorf("table: replace enum values on %q.%q.%q: %w", schemaName, tableName, columnName, err)
+	}
+	return nil
+}
+
 // Returns a list of changes in "schema.table.column (description)" format.
 func (p *Provisioner) applyColumnChanges(ctx context.Context, schemaName, tableName string, cols []config.ColumnConfig, rls string) ([]string, error) {
 	if err := p.ensureMigrationTable(ctx, schemaName); err != nil {

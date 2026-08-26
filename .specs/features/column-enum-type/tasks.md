@@ -207,6 +207,8 @@ T16
 
 ### T5: Catalog lookup + `ReplaceColumnEnumValues`
 
+**Status**: ✅ Complete (with one SPEC_DEVIATION, marked in `internal/provisioner/table.go`: the catalog lookup uses `pg_constraint` filtered to `contype='c'` + `conkey`, not `information_schema.table_constraints`/`key_column_usage` as design.md specified — `key_column_usage` holds only key columns, so that join returns zero rows for a CHECK constraint, verified against Postgres 16. Same intent as the design, correct catalog.)
+
 **What**: New unexported helper to locate the current CHECK constraint on a column via `information_schema.table_constraints`/`key_column_usage` (mirrors `DropColumnForeignKey`'s query shape, filtered to `constraint_type = 'CHECK'`); new exported `ReplaceColumnEnumValues(ctx, schemaName, tableName, columnName string, oldValues, newValues []string) error` that: computes `removed := oldValues - newValues`; if non-empty, runs the scoped `COUNT(*) ... WHERE col = ANY($1) GROUP BY col` pre-check and returns `*EnumValueInUseError` on any non-zero count; otherwise looks up the current constraint name and runs a single atomic `ALTER TABLE ... DROP CONSTRAINT ..., ADD CONSTRAINT CHECK (...)` statement.
 **Where**: `internal/provisioner/table.go`
 **Depends on**: T3, T4
