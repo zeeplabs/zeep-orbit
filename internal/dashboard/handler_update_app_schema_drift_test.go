@@ -83,4 +83,17 @@ func TestUpdateApp_DoesNotReconcileTableSchema(t *testing.T) {
 	if physicalType != "text" {
 		t.Fatalf("expected the drifted column to remain physically text (untouched), got %q", physicalType)
 	}
+
+	// AUSD-04: this endpoint must keep recording the same "app.update"
+	// audit_log entry it did before this fix, for this exact appID.
+	var auditCount int
+	if err := pool.QueryRow(context.Background(),
+		`SELECT COUNT(*) FROM zeep_system.audit_log WHERE action = 'app.update' AND resource_id = $1`,
+		appID,
+	).Scan(&auditCount); err != nil {
+		t.Fatalf("query audit_log: %v", err)
+	}
+	if auditCount != 1 {
+		t.Fatalf("expected exactly 1 app.update audit_log row for this app, got %d", auditCount)
+	}
 }

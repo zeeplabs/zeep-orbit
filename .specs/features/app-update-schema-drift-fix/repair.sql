@@ -82,13 +82,17 @@ WHERE a.name = 'internal-portal-rh'
 --
 -- Idempotency: ALTER COLUMN ... TYPE numeric on a column already numeric is
 -- a no-op in Postgres (succeeds trivially) — safe to re-run this whole
--- section after a partial success on other columns.
+-- section after a partial success on other columns. The validation probes
+-- above cast to ::text explicitly (rather than relying on the column's
+-- current type) precisely so they stay re-runnable once a column has
+-- already been converted: `numeric !~ '...'` errors ("operator does not
+-- exist"), `numeric::text !~ '...'` does not.
 
 -- --- engagement_entries.percentage ---
 SELECT id, percentage
 FROM internal_portal_rh.engagement_entries
 WHERE percentage IS NOT NULL
-  AND percentage !~ '^\s*-?[0-9]+(\.[0-9]+)?\s*$';
+  AND percentage::text !~ '^\s*-?[0-9]+(\.[0-9]+)?\s*$';
 -- If 0 rows above, run:
 -- ALTER TABLE internal_portal_rh.engagement_entries
 --   ALTER COLUMN percentage TYPE numeric USING percentage::numeric;
@@ -97,7 +101,7 @@ WHERE percentage IS NOT NULL
 SELECT id, participation
 FROM internal_portal_rh.engagement_entries
 WHERE participation IS NOT NULL
-  AND participation !~ '^\s*-?[0-9]+(\.[0-9]+)?\s*$';
+  AND participation::text !~ '^\s*-?[0-9]+(\.[0-9]+)?\s*$';
 -- If 0 rows above, run:
 -- ALTER TABLE internal_portal_rh.engagement_entries
 --   ALTER COLUMN participation TYPE numeric USING participation::numeric;
@@ -106,7 +110,7 @@ WHERE participation IS NOT NULL
 SELECT id, people_note
 FROM internal_portal_rh.nps_entries
 WHERE people_note IS NOT NULL
-  AND people_note !~ '^\s*-?[0-9]+(\.[0-9]+)?\s*$';
+  AND people_note::text !~ '^\s*-?[0-9]+(\.[0-9]+)?\s*$';
 -- If 0 rows above, run:
 -- ALTER TABLE internal_portal_rh.nps_entries
 --   ALTER COLUMN people_note TYPE numeric USING people_note::numeric;
@@ -115,7 +119,7 @@ WHERE people_note IS NOT NULL
 SELECT id, glassdoor_rating
 FROM internal_portal_rh.dp_indicators
 WHERE glassdoor_rating IS NOT NULL
-  AND glassdoor_rating !~ '^\s*-?[0-9]+(\.[0-9]+)?\s*$';
+  AND glassdoor_rating::text !~ '^\s*-?[0-9]+(\.[0-9]+)?\s*$';
 -- If 0 rows above, run:
 -- ALTER TABLE internal_portal_rh.dp_indicators
 --   ALTER COLUMN glassdoor_rating TYPE numeric USING glassdoor_rating::numeric;
@@ -124,7 +128,7 @@ WHERE glassdoor_rating IS NOT NULL
 SELECT id, turnover_total_2025
 FROM internal_portal_rh.dp_indicators
 WHERE turnover_total_2025 IS NOT NULL
-  AND turnover_total_2025 !~ '^\s*-?[0-9]+(\.[0-9]+)?\s*$';
+  AND turnover_total_2025::text !~ '^\s*-?[0-9]+(\.[0-9]+)?\s*$';
 -- If 0 rows above, run:
 -- ALTER TABLE internal_portal_rh.dp_indicators
 --   ALTER COLUMN turnover_total_2025 TYPE numeric USING turnover_total_2025::numeric;
@@ -133,7 +137,7 @@ WHERE turnover_total_2025 IS NOT NULL
 SELECT id, time_to_start
 FROM internal_portal_rh.vacancies
 WHERE time_to_start IS NOT NULL
-  AND time_to_start !~ '^\s*-?[0-9]+(\.[0-9]+)?\s*$';
+  AND time_to_start::text !~ '^\s*-?[0-9]+(\.[0-9]+)?\s*$';
 -- If 0 rows above, run:
 -- ALTER TABLE internal_portal_rh.vacancies
 --   ALTER COLUMN time_to_start TYPE numeric USING time_to_start::numeric;
@@ -142,7 +146,7 @@ WHERE time_to_start IS NOT NULL
 SELECT id, offer_decline_count
 FROM internal_portal_rh.vacancies
 WHERE offer_decline_count IS NOT NULL
-  AND offer_decline_count !~ '^\s*-?[0-9]+(\.[0-9]+)?\s*$';
+  AND offer_decline_count::text !~ '^\s*-?[0-9]+(\.[0-9]+)?\s*$';
 -- If 0 rows above, run:
 -- ALTER TABLE internal_portal_rh.vacancies
 --   ALTER COLUMN offer_decline_count TYPE numeric USING offer_decline_count::numeric;
@@ -152,7 +156,10 @@ WHERE offer_decline_count IS NOT NULL
 -- ============================================================================
 
 -- Should return 0 rows: every configured "numeric" column now matches its
--- physical type.
+-- physical type. Uses IS DISTINCT FROM (not NOT IN) so a column that went
+-- missing entirely (LEFT JOIN finds no information_schema row, c.data_type
+-- IS NULL) is correctly flagged too — `NULL NOT IN (...)` is NULL/unknown
+-- in SQL and would silently hide that case instead of reporting it.
 SELECT
   a.name AS app_name,
   t.name AS table_name,
@@ -168,11 +175,18 @@ LEFT JOIN information_schema.columns c
   AND c.column_name = col->>'name'
 WHERE a.name = 'internal-portal-rh'
   AND col->>'type' = 'numeric'
-  AND c.data_type NOT IN ('numeric');
+  AND c.data_type IS DISTINCT FROM 'numeric';
 
--- Should return 0 rows: no table left with an invalid rls value.
+-- Should return 0 rows: none of the 8 tables this runbook scoped in Part 1
+-- has an invalid rls value. Scoped to the same 8 names (not every table on
+-- the app) to match AUSD-08 exactly — a 9th, unrelated table with its own
+-- legacy rls value is a different incident, not a failure of this repair.
 SELECT t.name, t.rls
 FROM zeep_system.app_tables t
 JOIN zeep_system.apps a ON a.id = t.app_id
 WHERE a.name = 'internal-portal-rh'
+  AND t.name IN (
+    'collaborators', 'layoffs', 'engagement_entries', 'pdi_entries',
+    'nps_entries', 'dp_indicators', 'vacancies', 'user_roles'
+  )
   AND t.rls NOT IN ('', 'owner', 'enabled', 'policy');
