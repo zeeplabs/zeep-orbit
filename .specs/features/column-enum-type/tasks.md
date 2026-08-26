@@ -238,6 +238,8 @@ T16
 
 ### T6: `allowedTypes["enum"]` + end-to-end enum table/column creation
 
+**Status**: ✅ Complete
+
 **What**: Add `"enum": true` to the Dashboard's `allowedTypes` map; verify (with new handler-level tests) that `CreateAppTable`/`CreateAppTableForUser` and the add-column path accept and provision an `enum` column end-to-end (request validation → `Apply` → real Postgres CHECK constraint).
 **Where**: `internal/dashboard/handler.go` (the `allowedTypes` map, `~line 96-98`); tests in `internal/dashboard/apps_handler_test.go`
 **Depends on**: T2, T3

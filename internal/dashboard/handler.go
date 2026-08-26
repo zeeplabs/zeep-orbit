@@ -96,6 +96,7 @@ var (
 	allowedTypes = map[string]bool{
 		"text": true, "integer": true, "bigint": true, "boolean": true,
 		"uuid": true, "timestamptz": true, "numeric": true, "jsonb": true,
+		"enum": true,
 	}
 )
 

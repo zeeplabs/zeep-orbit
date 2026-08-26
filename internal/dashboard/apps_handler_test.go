@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -562,5 +563,233 @@ func TestUpdateAppTable_AllowsNonReferenceChangeWithReferencesUnchanged(t *testi
 		if c.Name == "category_id" && (c.References == nil || c.References.Table != "categories") {
 			t.Fatalf("expected category_id's reference to remain intact, got %+v", c.References)
 		}
+	}
+}
+
+// --- enum column type end-to-end (CENUM-01, CENUM-02, CENUM-04, CENUM-05, CENUM-06) ---
+
+// checkConstraintDefForColumn returns the CHECK constraint definition on a
+// column, or "" when there is none. Read from the catalog rather than
+// assuming a constraint name.
+func checkConstraintDefForColumn(t *testing.T, pool *db.Pool, schema, tableName, columnName string) string {
+	t.Helper()
+	var def string
+	err := pool.QueryRow(context.Background(),
+		`SELECT pg_get_constraintdef(c.oid)
+		 FROM pg_constraint c
+		 JOIN pg_class r ON r.oid = c.conrelid
+		 JOIN pg_namespace n ON n.oid = r.relnamespace
+		 JOIN pg_attribute a ON a.attrelid = r.oid AND a.attname = $3
+		 WHERE c.contype = 'c' AND n.nspname = $1 AND r.relname = $2 AND c.conkey = ARRAY[a.attnum]`,
+		schema, tableName, columnName,
+	).Scan(&def)
+	if err != nil {
+		if strings.Contains(err.Error(), "no rows") {
+			return ""
+		}
+		t.Fatalf("read check constraint on %s.%s.%s: %v", schema, tableName, columnName, err)
+	}
+	return def
+}
+
+// physicalColumnType returns a column's physical Postgres type.
+func physicalColumnType(t *testing.T, pool *db.Pool, schema, tableName, columnName string) string {
+	t.Helper()
+	var udt string
+	if err := pool.QueryRow(context.Background(),
+		`SELECT udt_name FROM information_schema.columns
+		 WHERE table_schema = $1 AND table_name = $2 AND column_name = $3`,
+		schema, tableName, columnName,
+	).Scan(&udt); err != nil {
+		t.Fatalf("read column type on %s.%s.%s: %v", schema, tableName, columnName, err)
+	}
+	return udt
+}
+
+// CENUM-01: creating a table with an enum column provisions it as text with
+// a CHECK constraint restricting it to exactly the declared values, and the
+// database itself rejects an out-of-set write.
+func TestCreateAppTableForUser_EnumColumnProvisionsCheckConstraint(t *testing.T) {
+	pool, h, actors, _, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{Name: uniqueAppName(t, "enum-create-app")}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppForUser: %v", err)
+	}
+	table, err := h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
+		Name: "assets",
+		Columns: []config.ColumnConfig{
+			{Name: "status", Type: "enum", AllowedValues: []string{"pending", "active", "Em andamento"}},
+		},
+	}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppTableForUser: %v", err)
+	}
+
+	// The declared config round-trips.
+	if got := table.Columns[0].AllowedValues; len(got) != 3 || got[0] != "pending" || got[2] != "Em andamento" {
+		t.Errorf("persisted AllowedValues = %v, want [pending active \"Em andamento\"]", got)
+	}
+
+	schema := schemaNameForDB(app.Name)
+	if got := physicalColumnType(t, pool, schema, "assets", "status"); got != "text" {
+		t.Errorf("physical column type = %q, want %q", got, "text")
+	}
+	if def := checkConstraintDefForColumn(t, pool, schema, "assets", "status"); def == "" {
+		t.Fatal("expected a CHECK constraint on assets.status")
+	} else if !strings.Contains(def, "pending") || !strings.Contains(def, "Em andamento") {
+		t.Errorf("constraint def = %q, want it to restrict to the declared values", def)
+	}
+
+	// The real enforcement: in-set write accepted, out-of-set rejected.
+	if _, err := pool.Exec(ctx, "INSERT INTO "+schema+".assets (status) VALUES ('pending')"); err != nil {
+		t.Errorf("expected an in-set write to succeed, got: %v", err)
+	}
+	if _, err := pool.Exec(ctx, "INSERT INTO "+schema+".assets (status) VALUES ('qualquer coisa')"); err == nil {
+		t.Error("expected the database to reject an out-of-set write")
+	}
+}
+
+// CENUM-04: an enum column with an empty allowed-value list is rejected at
+// request-validation time, before any table is created.
+func TestCreateAppTableForUser_EnumWithoutAllowedValuesRejected(t *testing.T) {
+	pool, h, actors, _, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{Name: uniqueAppName(t, "enum-empty-app")}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppForUser: %v", err)
+	}
+
+	_, err = h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
+		Name:    "assets",
+		Columns: []config.ColumnConfig{{Name: "status", Type: "enum"}},
+	}, "127.0.0.1")
+	var valErr *ValidationError
+	if !errors.As(err, &valErr) {
+		t.Fatalf("expected *ValidationError for an enum column without allowed_values, got %v (%T)", err, err)
+	}
+
+	// Nothing was provisioned: the table does not exist in Postgres.
+	var exists bool
+	if err := pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = 'assets')`,
+		schemaNameForDB(app.Name),
+	).Scan(&exists); err != nil {
+		t.Fatalf("check table existence: %v", err)
+	}
+	if exists {
+		t.Error("expected no physical table after a rejected enum column definition")
+	}
+}
+
+// CENUM-05: a default that is not a member of allowed_values is rejected at
+// request-validation time.
+func TestCreateAppTableForUser_EnumDefaultOutsideAllowedValuesRejected(t *testing.T) {
+	pool, h, actors, _, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{Name: uniqueAppName(t, "enum-baddef-app")}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppForUser: %v", err)
+	}
+
+	_, err = h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
+		Name: "assets",
+		Columns: []config.ColumnConfig{{
+			Name: "status", Type: "enum",
+			AllowedValues: []string{"pending", "active"},
+			Default:       "closed",
+		}},
+	}, "127.0.0.1")
+	var valErr *ValidationError
+	if !errors.As(err, &valErr) {
+		t.Fatalf("expected *ValidationError for a default outside allowed_values, got %v (%T)", err, err)
+	}
+}
+
+// CENUM-02: adding a new enum column to an existing table attaches the same
+// CHECK constraint the creation path emits.
+func TestAddTableColumnForUser_EnumColumnProvisionsCheckConstraint(t *testing.T) {
+	pool, h, actors, _, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{Name: uniqueAppName(t, "enum-addcol-app")}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppForUser: %v", err)
+	}
+	table, err := h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
+		Name:    "assets",
+		Columns: []config.ColumnConfig{{Name: "name", Type: "text"}},
+	}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppTableForUser: %v", err)
+	}
+
+	updated, err := h.AddTableColumnForUser(ctx, actors["loner"], app.ID, table.Name, config.ColumnConfig{
+		Name: "status", Type: "enum", AllowedValues: []string{"pending", "active"},
+	}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("AddTableColumnForUser: %v", err)
+	}
+	if got := updated.Columns[1].AllowedValues; len(got) != 2 || got[0] != "pending" {
+		t.Errorf("persisted AllowedValues = %v, want [pending active]", got)
+	}
+
+	schema := schemaNameForDB(app.Name)
+	if def := checkConstraintDefForColumn(t, pool, schema, "assets", "status"); def == "" {
+		t.Fatal("expected a CHECK constraint on the added assets.status column")
+	}
+	if _, err := pool.Exec(ctx, "INSERT INTO "+schema+".assets (status) VALUES ('active')"); err != nil {
+		t.Errorf("expected an in-set write to succeed, got: %v", err)
+	}
+	if _, err := pool.Exec(ctx, "INSERT INTO "+schema+".assets (status) VALUES ('qualquer coisa')"); err == nil {
+		t.Error("expected the database to reject an out-of-set write on the added column")
+	}
+}
+
+// CENUM-04: an invalid enum column is rejected on the add-column path too,
+// not just at table creation.
+func TestAddTableColumnForUser_EnumWithoutAllowedValuesRejected(t *testing.T) {
+	pool, h, actors, _, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{Name: uniqueAppName(t, "enum-addcol-bad-app")}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppForUser: %v", err)
+	}
+	table, err := h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
+		Name:    "assets",
+		Columns: []config.ColumnConfig{{Name: "name", Type: "text"}},
+	}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppTableForUser: %v", err)
+	}
+
+	_, err = h.AddTableColumnForUser(ctx, actors["loner"], app.ID, table.Name, config.ColumnConfig{
+		Name: "status", Type: "enum", AllowedValues: []string{},
+	}, "127.0.0.1")
+	var valErr *ValidationError
+	if !errors.As(err, &valErr) {
+		t.Fatalf("expected *ValidationError for an enum column without allowed_values, got %v (%T)", err, err)
+	}
+
+	// The column was not added physically.
+	var exists bool
+	if err := pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM information_schema.columns
+		  WHERE table_schema = $1 AND table_name = 'assets' AND column_name = 'status')`,
+		schemaNameForDB(app.Name),
+	).Scan(&exists); err != nil {
+		t.Fatalf("check column existence: %v", err)
+	}
+	if exists {
+		t.Error("expected no physical column after a rejected enum column definition")
 	}
 }
