@@ -70,6 +70,7 @@ func RegisterTools(server *mcp.Server, deps ToolDeps) {
 	registerReadTools(server, deps)
 	registerWriteTools(server, deps)
 	registerTemplateTools(server, deps)
+	registerAdvancedPolicyTool(server, deps)
 	registerAppConfigReadTools(server, deps)
 	registerAccessReadTools(server, deps)
 	registerOperationalReadTools(server, deps)
@@ -624,6 +625,81 @@ func registerTemplateTools(server *mcp.Server, deps ToolDeps) {
 			created = append(created, row)
 		}
 		return nil, orbitCreatePolicyFromTemplateResult{Created: created}, nil
+	})
+}
+
+// orbitCreatePolicyAdvancedClauseInput mirrors dashboard.PolicyClause
+// field-for-field — the wire shape an LLM sends for one structured
+// condition (mcp-advanced-policy-tool spec MAPT-01).
+type orbitCreatePolicyAdvancedClauseInput struct {
+	Column      string `json:"column" jsonschema:"table column this clause checks"`
+	Operator    string `json:"operator" jsonschema:"comparison operator: = != IN NOT IN > < >= <= IS NULL IS NOT NULL"`
+	ValueSource string `json:"value_source,omitempty" jsonschema:"claim or literal; omit for IS NULL / IS NOT NULL"`
+	Value       string `json:"value,omitempty" jsonschema:"literal value, or claim name (role/sub/email) when value_source is claim"`
+	Logic       string `json:"logic,omitempty" jsonschema:"AND or OR joining this clause to the previous one; omit on the first clause"`
+}
+
+// orbitCreatePolicyAdvancedInput is the input for orbit_create_policy_advanced
+// — a full, structured policy definition (mcp-advanced-policy-tool spec:
+// escape hatch for any clause shape outside orbit_create_policy_from_template's
+// 6 fixed templates). No SQL field exists here by design — every condition
+// stays column/operator/value_source/value/logic, same as the Dashboard's
+// advanced policy form and the REST endpoint it mirrors.
+type orbitCreatePolicyAdvancedInput struct {
+	AppID     string                                 `json:"app_id" jsonschema:"id of the app that owns the table"`
+	TableName string                                 `json:"table_name" jsonschema:"name of the table to create the policy on"`
+	Name      string                                 `json:"name" jsonschema:"unique policy name for this table and action"`
+	Action    string                                 `json:"action" jsonschema:"select, insert, update, or delete"`
+	Roles     []string                               `json:"roles" jsonschema:"the end-user roles this policy applies to"`
+	Clauses   []orbitCreatePolicyAdvancedClauseInput `json:"clauses" jsonschema:"one or more structured conditions, applied left to right per each clause's logic"`
+}
+
+// toDashboardPolicyDefAdvanced is a plain field-for-field copy from the MCP
+// wire shape to dashboard.PolicyDef — no defaulting, no validation. Every
+// input constraint (column exists, operator allowlist, value_source/claim
+// allowlist, logic placement, action enum, non-empty roles/clauses) is
+// enforced exactly once, downstream, by provisioner.BuildPolicySQL via
+// CreateTablePolicyForUser — duplicating any of it here would risk drifting
+// from that single source of truth (design.md Tech Decisions).
+func toDashboardPolicyDefAdvanced(in orbitCreatePolicyAdvancedInput) dashboard.PolicyDef {
+	clauses := make([]dashboard.PolicyClause, 0, len(in.Clauses))
+	for _, c := range in.Clauses {
+		clauses = append(clauses, dashboard.PolicyClause{
+			Column:      c.Column,
+			Operator:    c.Operator,
+			ValueSource: c.ValueSource,
+			Value:       c.Value,
+			Logic:       c.Logic,
+		})
+	}
+	return dashboard.PolicyDef{
+		Name:    in.Name,
+		Action:  in.Action,
+		Roles:   in.Roles,
+		Clauses: clauses,
+	}
+}
+
+// registerAdvancedPolicyTool registers orbit_create_policy_advanced
+// (mcp-advanced-policy-tool spec MAPT-01..06) — a thin transport onto
+// CreateTablePolicyForUser, the exact same call orbit_create_policy_from_template
+// makes once it has built a PolicyDef. Unlike the template tool, this one
+// creates exactly one policy per call (REST's CreateTablePolicy shape),
+// so there is no partial-success/pending bookkeeping to do.
+func registerAdvancedPolicyTool(server *mcp.Server, deps ToolDeps) {
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "orbit_create_policy_advanced",
+		Description: "Create a row policy from an explicit structured clause set — the escape hatch for any policy shape outside orbit_create_policy_from_template's fixed templates. No raw SQL: every clause stays column/operator/value_source/value/logic.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, in orbitCreatePolicyAdvancedInput) (*mcp.CallToolResult, any, error) {
+		user, ok := dashboard.UserFromContext(ctx)
+		if !ok {
+			return nil, nil, errUnauthorized
+		}
+		row, err := deps.DashH.CreateTablePolicyForUser(ctx, user, in.AppID, in.TableName, toDashboardPolicyDefAdvanced(in), "mcp")
+		if err != nil {
+			return nil, nil, mapWriteError(err)
+		}
+		return nil, row, nil
 	})
 }
 
