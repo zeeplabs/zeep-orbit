@@ -151,6 +151,8 @@ T16
 
 ### T3: `pgType` enum mapping + `columnDDL` CHECK clause
 
+**Status**: ✅ Complete
+
 **What**: Add `case "enum": return "TEXT"` to `pgType`; add a branch in `columnDDL` that appends `CHECK ("col" IN ('v1', 'v2', ...))` for `enum` columns, escaping each value the same way `Default` is escaped (single quotes doubled).
 **Where**: `internal/provisioner/table.go`
 **Depends on**: T1

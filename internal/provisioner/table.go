@@ -41,9 +41,27 @@ func pgType(t string) string {
 		return "TIMESTAMPTZ"
 	case "jsonb":
 		return "JSONB"
+	case "enum":
+		// enum is not a native Postgres type here: the column is TEXT with a
+		// CHECK (col IN (...)) constraint (see columnDDL). Spelled out rather
+		// than left to the default branch so the intent is explicit.
+		return "TEXT"
 	default:
 		return "TEXT"
 	}
+}
+
+// quotedValueList renders an enum column's allowed values as a
+// comma-separated list of SQL string literals for a CHECK (col IN (...))
+// clause. Values are arbitrary free text (accents, spaces, quotes are all
+// valid — see config.ValidateEnumValues), so each single quote is doubled,
+// the same escaping columnDDL already applies to a literal DEFAULT.
+func quotedValueList(values []string) string {
+	quoted := make([]string, len(values))
+	for i, v := range values {
+		quoted[i] = fmt.Sprintf("'%s'", strings.ReplaceAll(v, "'", "''"))
+	}
+	return strings.Join(quoted, ", ")
 }
 
 // onDeleteSQL translates a ReferenceConfig.OnDelete value to its SQL clause.
@@ -86,6 +104,9 @@ func columnDDL(schemaName string, col config.ColumnConfig) string {
 	}
 	if col.Unique {
 		sb.WriteString(" UNIQUE")
+	}
+	if col.Type == "enum" {
+		sb.WriteString(fmt.Sprintf(" CHECK (%q IN (%s))", col.Name, quotedValueList(col.AllowedValues)))
 	}
 	if col.References != nil {
 		sb.WriteString(fmt.Sprintf(" REFERENCES %q.%q(%q) ON DELETE %s", schemaName, col.References.Table, col.References.Column, onDeleteSQL(col.References.OnDelete)))
