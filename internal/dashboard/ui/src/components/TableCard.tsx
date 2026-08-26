@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { TableDef, ColumnDef, IndexDef, ReferenceDef } from "../lib/api";
 import { hasOwnerColumn } from "../lib/rls";
@@ -366,6 +367,7 @@ export default function TableCard({
       {isDraft ? (
         <SchemaEditor
           t={t}
+          appId={appId}
           rls={rls}
           columns={columns}
           indexes={indexes}
@@ -411,6 +413,7 @@ export default function TableCard({
           <TabsContent value="schema" className="mt-0">
             <SchemaEditor
               t={t}
+              appId={appId}
               rls={rls}
               columns={columns}
               indexes={indexes}
@@ -472,6 +475,7 @@ export default function TableCard({
 
 function SchemaEditor({
   t,
+  appId,
   rls,
   columns,
   indexes,
@@ -499,6 +503,7 @@ function SchemaEditor({
   save,
 }: {
   t: (key: string, opts?: Record<string, unknown>) => string;
+  appId: string;
   rls: string;
   columns: ColumnDef[];
   indexes: IndexDef[];
@@ -581,7 +586,18 @@ function SchemaEditor({
         </div>
 
         <div className="flex flex-col gap-2.5 mb-3">
-          {columns.map((col, ci) => (
+          {columns.map((col, ci) => {
+            // An enum column already saved on the backend (table.columns, the
+            // pre-edit prop) cannot have its allowed_values changed via this
+            // generic form — UpdateAppTable's PUT path rejects that (T7's
+            // guard: an existing column's CHECK constraint is never
+            // re-emitted by addMissingColumns). A brand-new column added
+            // this session has no "before" state, so it's still freely
+            // editable here.
+            const existingEnumColumn = !isDraft
+              ? table.columns.find((c) => c.name === col.name && c.type === "enum")
+              : undefined;
+            return (
             <div key={ci} className="max-md:p-3 max-md:bg-[var(--sunken)] max-md:rounded-[10px] max-md:border max-md:border-[var(--border)]">
               <div
                 className="grid gap-3 items-center max-md:flex max-md:flex-col max-md:gap-2"
@@ -803,7 +819,20 @@ function SchemaEditor({
                 </div>
               )}
 
-              {col.type === "enum" && (
+              {col.type === "enum" && existingEnumColumn && table.id && (
+                <div className="flex flex-wrap items-center gap-2 mt-2 pl-1">
+                  <EnumAllowedValuesEditor t={t} values={col.allowed_values ?? []} onChange={() => {}} readOnly />
+                  <EditEnumValuesAction
+                    t={t}
+                    appId={appId}
+                    tableId={table.id}
+                    columnName={col.name}
+                    values={col.allowed_values ?? []}
+                    onSaved={(values) => updateColumn(ci, { allowed_values: values })}
+                  />
+                </div>
+              )}
+              {col.type === "enum" && !existingEnumColumn && (
                 <EnumAllowedValuesEditor
                   t={t}
                   values={col.allowed_values ?? []}
@@ -811,7 +840,8 @@ function SchemaEditor({
                 />
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
 
         <button
@@ -964,10 +994,12 @@ function EnumAllowedValuesEditor({
   t,
   values,
   onChange,
+  readOnly,
 }: {
   t: (key: string, opts?: Record<string, unknown>) => string;
   values: string[];
   onChange: (values: string[]) => void;
+  readOnly?: boolean;
 }) {
   const [draft, setDraft] = useState("");
   const [err, setErr] = useState<string | null>(null);
@@ -1002,20 +1034,23 @@ function EnumAllowedValuesEditor({
             className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--text-secondary)]"
           >
             {v}
-            <button
-              type="button"
-              onClick={() => onChange(values.filter((x) => x !== v))}
-              title={t("tableCard.removeAllowedValue")}
-              className="bg-transparent border-none cursor-pointer p-0 flex items-center text-[var(--text-tertiary)] hover:text-[var(--danger)]"
-            >
-              <Icon name="close" size={10} />
-            </button>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={() => onChange(values.filter((x) => x !== v))}
+                title={t("tableCard.removeAllowedValue")}
+                className="bg-transparent border-none cursor-pointer p-0 flex items-center text-[var(--text-tertiary)] hover:text-[var(--danger)]"
+              >
+                <Icon name="close" size={10} />
+              </button>
+            )}
           </span>
         ))}
         {values.length === 0 && (
           <span className="text-[11px] text-[var(--text-tertiary)]">{t("tableCard.allowedValuesEmpty")}</span>
         )}
       </div>
+      {readOnly ? null : (
       <Input
         value={draft}
         onChange={(e) => {
@@ -1031,15 +1066,147 @@ function EnumAllowedValuesEditor({
         placeholder={t("tableCard.allowedValuesPlaceholder")}
         className="h-7 w-[160px] px-2 text-[12px] bg-[var(--sunken)] border-[var(--border)] rounded-md text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] brand-focus"
       />
-      <button
-        type="button"
-        onClick={addValue}
-        title={t("tableCard.addAllowedValue")}
-        className="w-6 h-6 flex items-center justify-center rounded-md border border-[var(--border)] bg-transparent text-[var(--text-secondary)] cursor-pointer hover:bg-[var(--hover-surface)]"
-      >
-        <Icon name="add" size={10} />
-      </button>
+      )}
+      {!readOnly && (
+        <button
+          type="button"
+          onClick={addValue}
+          title={t("tableCard.addAllowedValue")}
+          className="w-6 h-6 flex items-center justify-center rounded-md border border-[var(--border)] bg-transparent text-[var(--text-secondary)] cursor-pointer hover:bg-[var(--hover-surface)]"
+        >
+          <Icon name="add" size={10} />
+        </button>
+      )}
       {err && <span className="w-full text-[11px] text-[var(--danger)]">{err}</span>}
     </div>
+  );
+}
+
+// updateColumnEnumValues calls the dedicated PATCH endpoint (T8/Batch 1)
+// directly — bypassing the generic PUT /tables/{id} path, which T7 already
+// made reject an AllowedValues change on an existing enum column. Mirrors
+// apiFetch's error-body-to-message shape (lib/api.ts) without importing it,
+// since this file's scope for this task is TableCard.tsx itself.
+async function updateColumnEnumValues(
+  appId: string,
+  tableId: string,
+  columnName: string,
+  values: string[],
+): Promise<void> {
+  const res = await fetch(
+    `/dashboard/api/apps/${appId}/tables/${tableId}/columns/${encodeURIComponent(columnName)}/enum-values`,
+    {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ allowed_values: values }),
+    },
+  );
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try {
+      const body = await res.json();
+      message = body.error ?? message;
+    } catch {
+      // no JSON body — keep the generic HTTP-status message.
+    }
+    throw new Error(message);
+  }
+}
+
+// EditEnumValuesAction is the dedicated "edit allowed values" action for an
+// EXISTING enum column (column-enum-type T13) — separate from the generic
+// save-all-columns form, since that form's PUT path can't apply the change
+// (T7's guard). Opens a focused drawer, widens/narrows via the real
+// endpoint, and surfaces a narrowing rejection (EnumValueInUseError, from
+// T8/Batch 1) as a plain error message.
+function EditEnumValuesAction({
+  t,
+  appId,
+  tableId,
+  columnName,
+  values,
+  onSaved,
+}: {
+  t: (key: string, opts?: Record<string, unknown>) => string;
+  appId: string;
+  tableId: string;
+  columnName: string;
+  values: string[];
+  onSaved: (values: string[]) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [draftValues, setDraftValues] = useState<string[]>(values);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const openDrawer = () => {
+    setDraftValues(values);
+    setError(null);
+    setOpen(true);
+  };
+
+  const saveValues = async () => {
+    if (draftValues.length === 0) {
+      setError(t("tableCard.allowedValuesRequired"));
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await updateColumnEnumValues(appId, tableId, columnName, draftValues);
+      onSaved(draftValues);
+      queryClient.invalidateQueries({ queryKey: ["apps"] });
+      setOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("tableCard.saveError"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={openDrawer}
+        className="flex items-center gap-1 text-[11px] font-semibold bg-transparent border border-[var(--border)] rounded-full px-2 py-0.5 cursor-pointer hover:bg-[var(--hover-surface)] transition-colors"
+        style={{ color: "var(--primary)" }}
+      >
+        <Icon name="edit" size={10} />
+        {t("tableCard.editAllowedValues")}
+      </button>
+      <FormDrawer
+        open={open}
+        onOpenChange={setOpen}
+        title={t("tableCard.editAllowedValuesTitle", { column: columnName })}
+      >
+        <div className="flex flex-col gap-3 p-1">
+          <p className="text-[12px] text-[var(--text-secondary)]">{t("tableCard.editAllowedValuesExplainer")}</p>
+          <EnumAllowedValuesEditor t={t} values={draftValues} onChange={setDraftValues} />
+          {error && <p className="text-xs text-[var(--danger)]">{error}</p>}
+          <div className="flex justify-end gap-2 mt-2">
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              disabled={saving}
+              className="text-[12px] font-medium px-4 py-1.5 rounded-full border border-[var(--border)] bg-transparent text-[var(--text-secondary)] cursor-pointer hover:bg-[var(--hover-surface)]"
+            >
+              {t("tableCard.cancel")}
+            </button>
+            <button
+              type="button"
+              onClick={saveValues}
+              disabled={saving}
+              className="text-[12px] font-semibold px-4 py-1.5 rounded-full text-white cursor-pointer disabled:opacity-50"
+              style={{ background: "var(--primary)" }}
+            >
+              {saving ? t("tableCard.savingTable") : t("tableCard.saveTable")}
+            </button>
+          </div>
+        </div>
+      </FormDrawer>
+    </>
   );
 }
