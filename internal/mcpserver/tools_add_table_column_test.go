@@ -2,6 +2,7 @@ package mcpserver
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -200,5 +201,112 @@ func TestOrbitAddTableColumn_UnknownAppReturnsNotFound(t *testing.T) {
 	}
 	if text.Text != "not found" {
 		t.Fatalf("expected \"not found\", got %q", text.Text)
+	}
+}
+
+// TestOrbitAddTableColumn_EnumColumnProvisions covers column-enum-type
+// T10/CENUM-14: orbit_add_table_column with a column of type "enum" and a
+// non-empty allowed_values list provisions identically to the Dashboard
+// path.
+func TestOrbitAddTableColumn_EnumColumnProvisions(t *testing.T) {
+	pool := authTestPool(t)
+	h := newTestDashboardHandler(pool)
+	owner := authTestUser(t, pool, "tools-addcol-enum-owner@example.com")
+	token, _, err := dashboard.CreatePAT(context.Background(), pool, owner.ID, "cli", dashboard.PATKindManual, nil)
+	if err != nil {
+		t.Fatalf("CreatePAT: %v", err)
+	}
+	appID, tableName := seedAppWithTableForColumnTests(t, h, owner.ID)
+
+	sess := startMCPSessionWithHandler(t, pool, h, token)
+
+	res, err := sess.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "orbit_add_table_column",
+		Arguments: map[string]any{
+			"app_id":     appID,
+			"table_name": tableName,
+			"column":     map[string]any{"name": "status", "type": "enum", "required": false, "default": "", "unique": false, "allowed_values": []string{"pending", "active", "closed"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool orbit_add_table_column: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("expected success for a valid enum column, got error: %+v", res.Content)
+	}
+	var out struct {
+		Columns []struct {
+			Name          string   `json:"name"`
+			Type          string   `json:"type"`
+			AllowedValues []string `json:"allowed_values"`
+		} `json:"columns"`
+	}
+	decodeToolResult(t, res, &out)
+	var got *[]string
+	for _, c := range out.Columns {
+		if c.Name == "status" {
+			if c.Type != "enum" {
+				t.Fatalf("expected column %q to have type enum, got %q", c.Name, c.Type)
+			}
+			got = &c.AllowedValues
+		}
+	}
+	if got == nil {
+		t.Fatalf("expected a %q column in the response, got %+v", "status", out.Columns)
+	}
+	want := []string{"pending", "active", "closed"}
+	if !reflect.DeepEqual(*got, want) {
+		t.Fatalf("expected allowed_values %v, got %v", want, *got)
+	}
+}
+
+// TestOrbitAddTableColumn_InvalidEnumColumnReturnsStructuredError covers
+// column-enum-type T10/CENUM-14: an invalid enum definition (empty
+// allowed_values) is rejected via orbit_add_table_column the same way the
+// Dashboard path rejects it — a structured tool error, no column added.
+func TestOrbitAddTableColumn_InvalidEnumColumnReturnsStructuredError(t *testing.T) {
+	pool := authTestPool(t)
+	h := newTestDashboardHandler(pool)
+	owner := authTestUser(t, pool, "tools-addcol-badenum-owner@example.com")
+	token, _, err := dashboard.CreatePAT(context.Background(), pool, owner.ID, "cli", dashboard.PATKindManual, nil)
+	if err != nil {
+		t.Fatalf("CreatePAT: %v", err)
+	}
+	appID, tableName := seedAppWithTableForColumnTests(t, h, owner.ID)
+
+	sess := startMCPSessionWithHandler(t, pool, h, token)
+
+	res, err := sess.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "orbit_add_table_column",
+		Arguments: map[string]any{
+			"app_id":     appID,
+			"table_name": tableName,
+			"column":     map[string]any{"name": "status", "type": "enum", "required": false, "default": "", "unique": false, "allowed_values": []string{}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool orbit_add_table_column (protocol-level): %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected a structured tool error for an empty allowed_values list")
+	}
+	text, ok := res.Content[0].(*mcp.TextContent)
+	if !ok || text.Text == "" {
+		t.Fatalf("expected a non-empty structured error message, got %+v", res.Content)
+	}
+
+	schema, err := dashboard.GetAppSchemaForUser(context.Background(), pool, owner, appID)
+	if err != nil {
+		t.Fatalf("GetAppSchemaForUser: %v", err)
+	}
+	for _, tbl := range schema.Tables {
+		if tbl.Name != tableName {
+			continue
+		}
+		for _, c := range tbl.Columns {
+			if c.Name == "status" {
+				t.Fatalf("expected no %q column to have been added after the validation failure, got %+v", "status", tbl.Columns)
+			}
+		}
 	}
 }

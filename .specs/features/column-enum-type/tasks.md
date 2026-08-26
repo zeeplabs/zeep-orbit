@@ -356,6 +356,8 @@ T16
 
 ### T10: MCP enum coverage for `orbit_create_table`/`orbit_add_table_column`
 
+**Status**: ✅ Complete (cases added to `tools_write_test.go`/`tools_add_table_column_test.go` — the existing files already covering each tool respectively — rather than a new shared `tools_test.go`, per the task's own "otherwise the file already covering..." fallback.)
+
 **What**: No production code change (both tools already pass `config.ColumnConfig` through unchanged, per design — `AllowedValues` arrives "for free"). Add test coverage confirming an `enum` column with `AllowedValues` provisions correctly through both tools, and that an invalid enum definition is rejected the same way the Dashboard path rejects it.
 **Where**: `internal/mcpserver/tools_test.go` (add cases; create if no single shared file exists — otherwise the file already covering `orbit_create_table`/`orbit_add_table_column`)
 **Depends on**: T6
