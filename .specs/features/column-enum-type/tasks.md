@@ -327,6 +327,8 @@ T16
 
 ### T9: `HandleCreate`/`HandleUpdate` — map `23514` to a safe `400`
 
+**Status**: ✅ Complete
+
 **What**: Add `errors.As(err, &pgErr) && pgErr.Code == "23514"` branching to both `HandleCreate` and `HandleUpdate`, returning `400` with a message built from `pgErr.ColumnName`/constraint name (never raw `pgErr.Message`/`pgErr.Detail`), instead of falling through to the current generic `500`.
 **Where**: `internal/server/handler.go:145-198` (`HandleCreate`), `:250-303` (`HandleUpdate`)
 **Depends on**: T6 (needs an enum column to exist to test against)

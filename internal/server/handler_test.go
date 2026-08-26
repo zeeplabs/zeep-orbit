@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -63,6 +64,10 @@ func TestMain(m *testing.M) {
 			id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			name        TEXT NOT NULL,
 			value       TEXT,
+			-- status is an enum column (column-enum-type T9): exists only so
+			-- TestHandlerCreate/UpdateEnumViolation can exercise the 23514
+			-- check_violation -> 400 mapping against a real CHECK constraint.
+			status      TEXT CHECK (status IN ('pending', 'active', 'closed')),
 			-- executed_as has no application meaning: it exists only so
 			-- TestHandlerRunsAsEnduserRole (end-user-row-policies T6) can
 			-- prove, from outside the process, which Postgres role actually
@@ -123,6 +128,7 @@ func TestMain(m *testing.M) {
 						Columns: []config.ColumnConfig{
 							{Name: "name", Type: "text", Required: true},
 							{Name: "value", Type: "text", Required: false},
+							{Name: "status", Type: "enum", Required: false, AllowedValues: []string{"pending", "active", "closed"}},
 						},
 					},
 				},
@@ -715,5 +721,138 @@ func TestPolicyMode_CreatePopulatesOwnerID(t *testing.T) {
 	ownerID, _ := row["owner_id"].(string)
 	if ownerID != creatingUserID {
 		t.Fatalf("owner_id = %q, want %q (o sub do usuário autenticado)", ownerID, creatingUserID)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// column-enum-type T9: map Postgres 23514 (check_violation) on the app-table
+// write path to a safe 400, instead of the previous generic 500.
+
+func TestHandlerCreateEnumViolation(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{"name": "enum-create-reject", "status": "qualquer coisa"}
+	req := httptest.NewRequest(http.MethodPost, "/"+testTable, jsonBody(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("esperado 400 para valor fora do enum, obtido %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode falhou: %v", err)
+	}
+	msg, _ := resp["error"].(string)
+	if msg == "" {
+		t.Fatal("esperada mensagem de erro não vazia")
+	}
+	if strings.Contains(msg, "qualquer coisa") {
+		t.Fatalf("mensagem de erro não deve ecoar o valor tentado (raw Postgres detail leak): %q", msg)
+	}
+}
+
+func TestHandlerCreateEnumValid(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{"name": "enum-create-happy", "status": "pending"}
+	req := httptest.NewRequest(http.MethodPost, "/"+testTable, jsonBody(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("esperado 201 para valor válido do enum, obtido %d: %s", rec.Code, rec.Body.String())
+	}
+	var row map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&row); err != nil {
+		t.Fatalf("decode falhou: %v", err)
+	}
+	if row["status"] != "pending" {
+		t.Fatalf("esperado status=pending, obtido %v", row["status"])
+	}
+}
+
+func TestHandlerUpdateEnumViolation(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	// Create a valid row first.
+	createBody := map[string]any{"name": "enum-update-reject", "status": "pending"}
+	createReq := httptest.NewRequest(http.MethodPost, "/"+testTable, jsonBody(createBody))
+	createReq.Header.Set("Content-Type", "application/json")
+	createRec := httptest.NewRecorder()
+	router.ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("setup: esperado 201, obtido %d: %s", createRec.Code, createRec.Body.String())
+	}
+	var created map[string]any
+	if err := json.NewDecoder(createRec.Body).Decode(&created); err != nil {
+		t.Fatalf("decode falhou: %v", err)
+	}
+	id, _ := created["id"].(string)
+
+	updateBody := map[string]any{"status": "qualquer coisa"}
+	updateReq := httptest.NewRequest(http.MethodPatch, "/"+testTable+"/"+id, jsonBody(updateBody))
+	updateReq.Header.Set("Content-Type", "application/json")
+	updateRec := httptest.NewRecorder()
+	router.ServeHTTP(updateRec, updateReq)
+
+	if updateRec.Code != http.StatusBadRequest {
+		t.Fatalf("esperado 400 para valor fora do enum, obtido %d: %s", updateRec.Code, updateRec.Body.String())
+	}
+	var resp map[string]any
+	if err := json.NewDecoder(updateRec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode falhou: %v", err)
+	}
+	msg, _ := resp["error"].(string)
+	if msg == "" {
+		t.Fatal("esperada mensagem de erro não vazia")
+	}
+	if strings.Contains(msg, "qualquer coisa") {
+		t.Fatalf("mensagem de erro não deve ecoar o valor tentado (raw Postgres detail leak): %q", msg)
+	}
+}
+
+// TestHandlerCreateOtherErrorStillGeneric500 proves the 23514 branch is
+// narrowly scoped: a different Postgres-level write failure reaching the
+// same code path — here a NUL byte embedded in a text value, which
+// Postgres rejects with SQLSTATE 22021 (invalid_byte_sequence), not 23514
+// — must NOT be caught by the new check_violation branch and must still
+// fall through to the existing generic 500 path.
+func TestHandlerCreateOtherErrorStillGeneric500(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{"name": "enum-other-error", "value": "a\x00b"}
+	req := httptest.NewRequest(http.MethodPost, "/"+testTable, jsonBody(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("esperado 500 para erro não relacionado a enum (22021), obtido %d: %s", rec.Code, rec.Body.String())
 	}
 }
