@@ -122,6 +122,8 @@ T16
 
 ### T2: `config.ValidateEnumValues` + wiring into `ValidateTables`/`validateDefault`
 
+**Status**: ✅ Complete
+
 **What**: New exported `ValidateEnumValues(values []string) error` (caps: 1-50 values, each 1-100 chars, no exact-match duplicates); call it from `ValidateTables`'s per-column loop when `col.Type == "enum"`; add `case "enum":` to `validateDefault` checking `col.Default` is a member of `col.AllowedValues`.
 **Where**: `internal/config/validate.go`
 **Depends on**: T1
