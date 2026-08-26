@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 36,
+  "next_id": 39,
   "lessons": [
     {
       "id": "L-001",
@@ -634,6 +634,60 @@
       ],
       "created": "2026-08-26T01:40:49Z",
       "last_seen": "2026-08-26T01:40:49Z"
+    },
+    {
+      "id": "L-036",
+      "key": "spec_deviation::verify a design md catalog schema query against the real postgres catalog before implementing it information schema views often cannot express the object being looked up",
+      "text": "Verify a design.md catalog/schema query against the real Postgres catalog before implementing it; information_schema views often cannot express the object being looked up.",
+      "signal": "spec_deviation",
+      "scope": "provisioner",
+      "status": "candidate",
+      "features": [
+        "column-enum-type"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "internal/provisioner/table.go:459 (SPEC_DEVIATION) (provisioner)"
+      ],
+      "created": "2026-08-26T23:14:56Z",
+      "last_seen": "2026-08-26T23:14:56Z"
+    },
+    {
+      "id": "L-037",
+      "key": "spec_deviation::confirm a design md claim that an existing ui pattern already exists by reading the component in full before planning to mirror it",
+      "text": "Confirm a design.md claim that an existing UI pattern already exists by reading the component in full before planning to mirror it.",
+      "signal": "spec_deviation",
+      "scope": "dashboard-ui",
+      "status": "candidate",
+      "features": [
+        "column-enum-type"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        ".specs/features/column-enum-type/tasks.md:443 (T13 SPEC_DEVIATION) (dashboard-ui)"
+      ],
+      "created": "2026-08-26T23:15:04Z",
+      "last_seen": "2026-08-26T23:15:04Z"
+    },
+    {
+      "id": "L-038",
+      "key": "spec_deviation::a task s where field must include the file that owns the tool api schema not only the handler that consumes it verify where the struct actually lives before scoping the task",
+      "text": "A task's Where field must include the file that owns the tool/API schema, not only the handler that consumes it; verify where the struct actually lives before scoping the task.",
+      "signal": "spec_deviation",
+      "scope": "dashboard-ai",
+      "status": "candidate",
+      "features": [
+        "column-enum-type"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "internal/dashboard/ai/client.go:55 (SPEC_DEVIATION) (dashboard-ai)"
+      ],
+      "created": "2026-08-26T23:15:04Z",
+      "last_seen": "2026-08-26T23:15:04Z"
     }
   ]
 }

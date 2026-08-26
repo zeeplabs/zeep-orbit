@@ -224,6 +224,24 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: .specs/features/app-update-schema-drift-fix/repair.sql:91 (ops-sql)
 - last seen: 2026-08-26T01:40:49Z
 
+### L-036 - Verify a design.md catalog/schema query against the real Postgres catalog before implementing it; information_schema views often cannot express the object being looked up.
+- signal: `spec_deviation` · recurrence: 1 feature(s) · scope: `provisioner` · harmful: 0
+- features: column-enum-type
+- evidence: internal/provisioner/table.go:459 (SPEC_DEVIATION) (provisioner)
+- last seen: 2026-08-26T23:14:56Z
+
+### L-037 - Confirm a design.md claim that an existing UI pattern already exists by reading the component in full before planning to mirror it.
+- signal: `spec_deviation` · recurrence: 1 feature(s) · scope: `dashboard-ui` · harmful: 0
+- features: column-enum-type
+- evidence: .specs/features/column-enum-type/tasks.md:443 (T13 SPEC_DEVIATION) (dashboard-ui)
+- last seen: 2026-08-26T23:15:04Z
+
+### L-038 - A task's Where field must include the file that owns the tool/API schema, not only the handler that consumes it; verify where the struct actually lives before scoping the task.
+- signal: `spec_deviation` · recurrence: 1 feature(s) · scope: `dashboard-ai` · harmful: 0
+- features: column-enum-type
+- evidence: internal/dashboard/ai/client.go:55 (SPEC_DEVIATION) (dashboard-ai)
+- last seen: 2026-08-26T23:15:04Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.
