@@ -793,3 +793,148 @@ func TestAddTableColumnForUser_EnumWithoutAllowedValuesRejected(t *testing.T) {
 		t.Error("expected no physical column after a rejected enum column definition")
 	}
 }
+
+// --- PUT guard against an AllowedValues change on an existing enum column ---
+
+// createAppWithEnumTable is shared setup for the PUT-guard tests: an app with
+// an assets table whose status column is an enum over pending/active.
+func createAppWithEnumTable(t *testing.T, ctx context.Context, h *Handler, actors map[string]*DashboardUser, appName string) (*AppRow, *AppTableRow) {
+	t.Helper()
+	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{Name: appName}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppForUser: %v", err)
+	}
+	table, err := h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
+		Name: "assets",
+		Columns: []config.ColumnConfig{
+			{Name: "name", Type: "text"},
+			{Name: "status", Type: "enum", AllowedValues: []string{"pending", "active"}},
+		},
+	}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppTableForUser: %v", err)
+	}
+	return app, table
+}
+
+// A full-replace PUT that changes an existing enum column's AllowedValues is
+// rejected with 400 pointing at the dedicated endpoint, and nothing is
+// persisted or migrated — the same silent-no-op class the References guard
+// above closes (addMissingColumns never re-emits an existing column's DDL).
+func TestUpdateAppTable_RejectsAllowedValuesChangeOnExistingColumn(t *testing.T) {
+	pool, h, actors, _, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	app, table := createAppWithEnumTable(t, ctx, h, actors, uniqueAppName(t, "put-enum-reject"))
+	schema := schemaNameForDB(app.Name)
+	constraintBefore := checkConstraintDefForColumn(t, pool, schema, "assets", "status")
+
+	w := callUpdateAppTable(t, h, actors["loner"], app.ID, table.ID, TableRequestBody{
+		RLS: table.RLS,
+		Columns: []config.ColumnConfig{
+			{Name: "name", Type: "text"},
+			{Name: "status", Type: "enum", AllowedValues: []string{"pending", "active", "closed"}},
+		},
+		Indexes: table.Indexes,
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for an AllowedValues change on a pre-existing column, got %d (body: %s)", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "enum-values endpoint") {
+		t.Errorf("expected the error to point at the dedicated endpoint, got: %s", w.Body.String())
+	}
+
+	// Stored schema untouched.
+	refreshed, _, err := GetApp(ctx, pool, app.ID, actors["loner"])
+	if err != nil {
+		t.Fatalf("GetApp: %v", err)
+	}
+	refreshedTable := findAppTableByName(refreshed, "assets")
+	if refreshedTable == nil {
+		t.Fatal("assets table disappeared")
+	}
+	for _, c := range refreshedTable.Columns {
+		if c.Name == "status" && len(c.AllowedValues) != 2 {
+			t.Errorf("expected stored AllowedValues untouched (2 values), got %v", c.AllowedValues)
+		}
+	}
+	// Physical constraint untouched: no DDL ran for a rejected request.
+	if after := checkConstraintDefForColumn(t, pool, schema, "assets", "status"); after != constraintBefore {
+		t.Errorf("constraint changed on a rejected request:\n before = %q\n after  = %q", constraintBefore, after)
+	}
+}
+
+// Negative control: a PUT that leaves an existing enum column's
+// AllowedValues unchanged (order may differ — the comparison is set-based)
+// still succeeds, so the guard produces no false positives.
+func TestUpdateAppTable_AllowsUnchangedAllowedValuesOnExistingColumn(t *testing.T) {
+	pool, h, actors, _, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	app, table := createAppWithEnumTable(t, ctx, h, actors, uniqueAppName(t, "put-enum-same"))
+
+	w := callUpdateAppTable(t, h, actors["loner"], app.ID, table.ID, TableRequestBody{
+		RLS: table.RLS,
+		Columns: []config.ColumnConfig{
+			{Name: "name", Type: "text"},
+			// Same set, reversed order.
+			{Name: "status", Type: "enum", AllowedValues: []string{"active", "pending"}},
+			// A genuine, permitted change in the same request.
+			{Name: "note", Type: "text"},
+		},
+		Indexes: table.Indexes,
+	})
+	if w.Code < 200 || w.Code >= 300 {
+		t.Fatalf("expected 2xx when AllowedValues is unchanged, got %d (body: %s)", w.Code, w.Body.String())
+	}
+
+	refreshed, _, err := GetApp(ctx, pool, app.ID, actors["loner"])
+	if err != nil {
+		t.Fatalf("GetApp: %v", err)
+	}
+	refreshedTable := findAppTableByName(refreshed, "assets")
+	if refreshedTable == nil {
+		t.Fatal("assets table disappeared")
+	}
+	if len(refreshedTable.Columns) != 3 {
+		t.Errorf("expected the permitted change to be applied (3 columns), got %d: %+v", len(refreshedTable.Columns), refreshedTable.Columns)
+	}
+}
+
+// A brand-new enum column in the same PUT request has no "before" state, so
+// the guard must not fire — it is provisioned inline exactly as before.
+func TestUpdateAppTable_AllowsAllowedValuesOnBrandNewColumn(t *testing.T) {
+	pool, h, actors, _, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{Name: uniqueAppName(t, "put-enum-newcol")}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppForUser: %v", err)
+	}
+	table, err := h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
+		Name:    "assets",
+		Columns: []config.ColumnConfig{{Name: "name", Type: "text"}},
+	}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppTableForUser: %v", err)
+	}
+
+	w := callUpdateAppTable(t, h, actors["loner"], app.ID, table.ID, TableRequestBody{
+		RLS: table.RLS,
+		Columns: []config.ColumnConfig{
+			{Name: "name", Type: "text"},
+			{Name: "status", Type: "enum", AllowedValues: []string{"pending", "active"}},
+		},
+		Indexes: table.Indexes,
+	})
+	if w.Code < 200 || w.Code >= 300 {
+		t.Fatalf("expected 2xx for an enum column that is brand-new in this request, got %d (body: %s)", w.Code, w.Body.String())
+	}
+
+	if def := checkConstraintDefForColumn(t, pool, schemaNameForDB(app.Name), "assets", "status"); def == "" {
+		t.Error("expected a CHECK constraint on the newly added assets.status column")
+	}
+}

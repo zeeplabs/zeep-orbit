@@ -267,6 +267,8 @@ T16
 
 ### T7: `UpdateAppTable` guard against `AllowedValues` change via `PUT`
 
+**Status**: ✅ Complete
+
 **What**: Extend the existing `existingRefs`-style rejection block in `UpdateAppTable` with the same shape for `AllowedValues`: if an existing enum column's `AllowedValues` in the request body differs (set comparison) from what's currently stored, reject with `400` pointing at the dedicated endpoint (added in T8) — mirrors the `References`-change rejection immediately above it.
 **Where**: `internal/dashboard/handler.go:1343-1356` (extend, same function)
 **Depends on**: T6

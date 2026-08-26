@@ -100,6 +100,27 @@ var (
 	}
 )
 
+// sameStringSet reports whether two string slices hold the same values,
+// ignoring order. Used only to detect an AllowedValues *change* on an
+// already-existing column — never to validate the values themselves
+// (config.ValidateEnumValues owns that, and already rejects duplicates, so
+// membership plus length is a complete comparison here).
+func sameStringSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	inA := make(map[string]struct{}, len(a))
+	for _, v := range a {
+		inA[v] = struct{}{}
+	}
+	for _, v := range b {
+		if _, ok := inA[v]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
 // validateAppInput checks the app name is a safe SQL schema identifier.
 func validateAppInput(name string) error {
 	if !appNameRe.MatchString(name) {
@@ -1342,8 +1363,10 @@ func (h *Handler) UpdateAppTable(w http.ResponseWriter, r *http.Request) {
 	// compare against, so createTable/addMissingColumns still apply its
 	// References inline exactly as before.
 	existingRefs := make(map[string]*config.ReferenceConfig, len(existingTable.Columns))
+	existingEnumValues := make(map[string][]string, len(existingTable.Columns))
 	for _, c := range existingTable.Columns {
 		existingRefs[c.Name] = c.References
+		existingEnumValues[c.Name] = c.AllowedValues
 	}
 	for _, c := range body.Columns {
 		oldRef, existed := existingRefs[c.Name]
@@ -1352,6 +1375,15 @@ func (h *Handler) UpdateAppTable(w http.ResponseWriter, r *http.Request) {
 		}
 		if !oldRef.Equal(c.References) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "foreign-key changes on an existing column must go through the dedicated add/remove-foreign-key endpoint"})
+			return
+		}
+		// Same reasoning as References above: an existing column's CHECK
+		// constraint is never re-emitted by addMissingColumns, so accepting an
+		// AllowedValues change here would persist a set the database is not
+		// actually enforcing. Widening/narrowing has its own endpoint, which
+		// runs the real constraint swap and the in-use pre-check.
+		if !sameStringSet(existingEnumValues[c.Name], c.AllowedValues) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "allowed-value changes on an existing enum column must go through the dedicated enum-values endpoint"})
 			return
 		}
 	}
