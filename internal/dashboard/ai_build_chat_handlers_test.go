@@ -962,3 +962,107 @@ func TestBuildChatConfirm_AnotherUsersSessionReturnsNotFoundNoMutation(t *testin
 		t.Fatalf("expected the owner's session to remain in_progress after another user's confirm attempt, got %q", ownerSession.Status)
 	}
 }
+
+// --- column-enum-type T14/CENUM-15: AI build chat can propose an enum column ---
+
+// TestBuildChatTurn_PlanShapeTurn_EnumColumnPreservesAllowedValues covers
+// tasks.md T14's first Done-when bullet: the model is allowed to propose an
+// "enum" column with allowed_values for a status-like ask, and the plan
+// returned to the caller carries that column's type and allowed_values
+// through unchanged from the model's tool call.
+func TestBuildChatTurn_PlanShapeTurn_EnumColumnPreservesAllowedValues(t *testing.T) {
+	pool, h, user := aiBuildChatHandlerTestPool(t)
+	setOpenAIProvider(t, pool, true)
+	plan := &ai.AppPlan{
+		Name: "orders",
+		Tables: []ai.PlanTable{{
+			Name: "orders",
+			Columns: []ai.PlanColumn{
+				{Name: "status", Type: "enum", AllowedValues: []string{"pending", "shipped", "delivered"}},
+			},
+		}},
+	}
+	withFakeAIModel(t, func(ctx context.Context, model, apiKey string, history []ai.Message, readTools ai.ReadToolInvoker) (ai.ChatTurnResult, error) {
+		return ai.ChatTurnResult{Kind: "plan", Plan: plan}, nil
+	})
+
+	req := buildChatTurnRequestFor(user, "an orders app with a status field: pending, shipped, or delivered")
+	w := httptest.NewRecorder()
+	h.BuildChatTurn(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var got buildChatTurnResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Type != "plan" || got.Plan == nil || len(got.Plan.Tables) != 1 || len(got.Plan.Tables[0].Columns) != 1 {
+		t.Fatalf("expected a plan-shape response with one table and one column, got %+v", got)
+	}
+	col := got.Plan.Tables[0].Columns[0]
+	if col.Type != "enum" {
+		t.Fatalf("expected the proposed column type to be %q, got %q", "enum", col.Type)
+	}
+	if len(col.AllowedValues) != 3 || col.AllowedValues[0] != "pending" || col.AllowedValues[2] != "delivered" {
+		t.Fatalf("expected AllowedValues [pending shipped delivered], got %v", col.AllowedValues)
+	}
+}
+
+// TestBuildChatConfirm_EnumColumnCreatesCheckConstraint covers tasks.md T14's
+// second Done-when bullet: confirming a plan that proposes an enum column
+// goes through the exact same CreateAppTableForUser path T6 (column-enum-type
+// batch 1) already covers — the created table's column has the CHECK
+// constraint the provisioner emits for an "enum" column, not a plain "text"
+// column with no enforcement.
+func TestBuildChatConfirm_EnumColumnCreatesCheckConstraint(t *testing.T) {
+	pool, h, user := aiBuildChatHandlerTestPool(t)
+	ctx := context.Background()
+
+	session, _, err := GetOrCreateInProgressSession(ctx, pool, user.ID)
+	if err != nil {
+		t.Fatalf("GetOrCreateInProgressSession: %v", err)
+	}
+	plan := &ai.AppPlan{
+		Name: "orders",
+		Tables: []ai.PlanTable{{
+			Name: "orders",
+			Columns: []ai.PlanColumn{
+				{Name: "status", Type: "enum", AllowedValues: []string{"pending", "shipped", "delivered"}},
+			},
+		}},
+	}
+	persistProposedPlan(t, pool, session.ID, plan)
+
+	req := confirmRequestFor(user, session.ID, "")
+	w := httptest.NewRecorder()
+	h.BuildChatConfirm(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var got buildChatConfirmResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.App == nil || len(got.App.Tables) != 1 {
+		t.Fatalf("expected the created app with one table, got %+v", got.App)
+	}
+	table := got.App.Tables[0]
+	if len(table.Columns) != 1 || table.Columns[0].Type != "enum" {
+		t.Fatalf("expected a single enum column, got %+v", table.Columns)
+	}
+	if got := table.Columns[0].AllowedValues; len(got) != 3 || got[0] != "pending" || got[2] != "delivered" {
+		t.Fatalf("expected persisted AllowedValues [pending shipped delivered], got %v", got)
+	}
+
+	def := checkConstraintDefForColumn(t, pool, schemaNameForDB(got.App.Name), "orders", "status")
+	if def == "" {
+		t.Fatal("expected a CHECK constraint on orders.status")
+	}
+	for _, v := range []string{"pending", "shipped", "delivered"} {
+		if !bytes.Contains([]byte(def), []byte(v)) {
+			t.Errorf("expected CHECK definition to mention %q, got %q", v, def)
+		}
+	}
+}

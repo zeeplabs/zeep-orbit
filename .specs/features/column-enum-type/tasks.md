@@ -469,6 +469,8 @@ T16
 
 ### T14: `ai_build_chat_handlers.go` — allow proposing `enum`
 
+**Status**: ✅ Complete (with one SPEC_DEVIATION, marked in `internal/dashboard/ai/client.go`: `propose_app_plan`'s tool schema — and the `PlanColumn` struct it's built from — live in `internal/dashboard/ai/client.go`, not `ai_build_chat_handlers.go`; the task's own "Where" field only lists the handler file. Touched `client.go` as well since the schema literally has nowhere else to live; also found no existing "References already passes through" precedent for `propose_app_plan`/`PlanColumn` — `PlanColumn` only ever carried `Name`/`Type` before this task, and the FK-reference precedent that does exist (`PlanReferenceOp` in the edit-chat schema) is a separate op struct, not a field on `PlanColumn` — so `AllowedValues` was added directly to `PlanColumn` instead, matching how `config.ColumnConfig.AllowedValues` is a plain field, not a substruct.)
+
 **What**: Update the system prompt's "Column types — use ONLY these..." sentence to include `enum` (removing it from the "never propose" parenthetical) plus one sentence of guidance on when to use it; wire `allowed_values` through `propose_app_plan`'s column schema the same way other column fields already pass through.
 **Where**: `internal/dashboard/ai_build_chat_handlers.go:48` (prompt text) + `propose_app_plan` tool schema in the same file
 **Depends on**: T6

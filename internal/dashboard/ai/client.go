@@ -51,9 +51,19 @@ type ToolCallFunc struct {
 }
 
 // PlanColumn is one column in a propose_app_plan table.
+//
+// SPEC_DEVIATION (column-enum-type T14): AllowedValues added here so an
+// "enum"-typed column proposed via propose_app_plan (build chat) or
+// propose_add_column (edit chat) carries its fixed value set through
+// unchanged, the same way config.ColumnConfig.AllowedValues already works
+// for the manual dashboard form. tasks.md's T14 "Where" field only lists
+// ai_build_chat_handlers.go, but the tool schema this struct backs lives in
+// this file, not that one — the field has to be added here for
+// propose_app_plan's schema (below) to have anywhere to put the value.
 type PlanColumn struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
+	Name          string   `json:"name"`
+	Type          string   `json:"type"`
+	AllowedValues []string `json:"allowed_values,omitempty"`
 }
 
 // PlanTable is one table in a propose_app_plan plan.
@@ -535,6 +545,11 @@ func toolDefs() []toolDef {
 											"properties": map[string]any{
 												"name": map[string]any{"type": "string"},
 												"type": map[string]any{"type": "string"},
+												"allowed_values": map[string]any{
+													"type":        "array",
+													"items":       map[string]any{"type": "string"},
+													"description": "Required when type is \"enum\": the fixed set of values this column accepts.",
+												},
 											},
 										},
 									},

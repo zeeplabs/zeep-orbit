@@ -45,7 +45,7 @@ Ask clarifying questions (e.g. whether login/auth is needed, what data it stores
 The plan you propose must respect these real constraints, because confirming it runs the exact same validation the manual dashboard form does:
 
 - App and table names: lowercase letters, digits, or underscores only, must start with a letter, max 63 characters (e.g. "support_tickets", not "Support-Tickets" or "2fa").
-- Column types — use ONLY these, exactly as spelled: text, integer, bigint, numeric, boolean, uuid, timestamptz, jsonb. Never propose a type outside this list (no "string", "varchar", "date", "float", "enum", etc. — map the user's intent onto the closest type in this list, e.g. a date-like field is timestamptz).
+- Column types — use ONLY these, exactly as spelled: text, integer, bigint, numeric, boolean, uuid, timestamptz, jsonb, enum. Never propose a type outside this list (no "string", "varchar", "date", "float", etc. — map the user's intent onto the closest type in this list, e.g. a date-like field is timestamptz). Use "enum" for a status-like field with a small fixed set of values (e.g. order status: pending/shipped/delivered), and always include an "allowed_values" list of those exact strings on the column.
 - "auth" in the plan means email/password login only (the dashboard's "Email & password authentication" toggle) — there is no OAuth/social login option in this chat. If the user asks for Google/GitHub login or anything beyond email+password, tell them that's configured separately in the app's Login settings after creation, not something this chat can set up.
 - Don't propose an "owner_id" or "user_id" column yourself — when auth is enabled, zeep-orbit automatically adds an owner_id column (a UUID foreign key to the app's own users) to every table for row-level ownership; it is not part of the columns you list.
 - Row-level security mode is decided automatically by the app's own settings, not by this plan — don't ask the user about RLS or propose an "rls" field.
@@ -476,14 +476,18 @@ func appTableRowExists(tables []AppTableRow, name string) bool {
 	return false
 }
 
-// planColumnsToConfig maps the AI-proposed plan's simplified {name, type}
-// columns onto config.ColumnConfig — only Name/Type are populated; the plan
-// has no notion of Required/Default/Unique/References (spec's
-// propose_app_plan tool schema), so those stay at their zero values.
+// planColumnsToConfig maps the AI-proposed plan's simplified {name, type,
+// allowed_values} columns onto config.ColumnConfig — Name/Type/AllowedValues
+// are populated; the plan has no notion of Required/Default/Unique/
+// References (spec's propose_app_plan tool schema), so those stay at their
+// zero values. AllowedValues (column-enum-type T14/CENUM-15) only ever
+// carries a value when Type == "enum" — config.ValidateEnumValues rejects an
+// "enum" column with no AllowedValues at CreateAppTable(ForUser) validation
+// time, same as the manual dashboard path.
 func planColumnsToConfig(cols []ai.PlanColumn) []config.ColumnConfig {
 	out := make([]config.ColumnConfig, 0, len(cols))
 	for _, c := range cols {
-		out = append(out, config.ColumnConfig{Name: c.Name, Type: c.Type})
+		out = append(out, config.ColumnConfig{Name: c.Name, Type: c.Type, AllowedValues: c.AllowedValues})
 	}
 	return out
 }
