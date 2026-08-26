@@ -60,6 +60,10 @@ type ColumnConfig struct {
 	Unique              bool             `json:"unique" yaml:"unique"`
 	RenameFrom          string           `json:"rename_from,omitempty" yaml:"rename_from,omitempty"`
 	References          *ReferenceConfig `json:"references,omitempty" yaml:"references,omitempty"`
+	// AllowedValues is the fixed set of values an "enum" column accepts. It is
+	// only meaningful when Type == "enum", where it must be non-empty — the
+	// provisioner turns it into a CHECK (col IN (...)) constraint.
+	AllowedValues []string `json:"allowed_values,omitempty" yaml:"allowed_values,omitempty"`
 }
 
 // ReferenceConfig declares a foreign key from this column to another table
