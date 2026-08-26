@@ -9,6 +9,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **`orbit_create_policy_advanced` MCP tool**: creates a row policy from an explicit structured clause set (chained `AND`/`OR` conditions, any allowed operator/claim combination), for policy shapes outside `orbit_create_policy_from_template`'s 6 fixed templates. No raw SQL — same `column`/`operator`/`value_source`/`value`/`logic` structure the Dashboard's advanced policy form and REST API already use.
+
+### Fixed
+
+- **MCP tools calling `CreateTablePolicyForUser` collapsed every structural policy-validation failure (unknown column, disallowed operator, bad claim name, invalid clause logic) into a generic "internal error"**, giving an LLM caller no way to tell a bad-input mistake from a platform failure. `mapWriteError` now surfaces `provisioner.ValidationError` verbatim, same as it already does for `TypeChangeError`/`ForeignKeyViolationError`.
+
 ## [1.6.0] — 2026-08-24
 
 ### Fixed
