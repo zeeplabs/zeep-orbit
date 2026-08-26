@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 32,
+  "next_id": 34,
   "lessons": [
     {
       "id": "L-001",
@@ -562,6 +562,42 @@
       ],
       "created": "2026-08-24T19:25:28Z",
       "last_seen": "2026-08-24T19:25:28Z"
+    },
+    {
+      "id": "L-032",
+      "key": "spec_precision_gap::when an ac says return the mapped error name the exact expected message string in the spec otherwise the test can only assert not the generic error",
+      "text": "When an AC says 'return the mapped error', name the exact expected message string in the spec; otherwise the test can only assert 'not the generic error'.",
+      "signal": "spec_precision_gap",
+      "scope": ".specs/features",
+      "status": "candidate",
+      "features": [
+        "mcp-advanced-policy-tool"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "MAPT-04 / internal/mcpserver/tools_advanced_policy_test.go:162 (.specs/features)"
+      ],
+      "created": "2026-08-26T00:41:12Z",
+      "last_seen": "2026-08-26T00:41:12Z"
+    },
+    {
+      "id": "L-033",
+      "key": "ac_gap::when an ac names specific returned fields e g generated id decode and assert every one of them a partial decode struct silently drops the rest",
+      "text": "When an AC names specific returned fields (e.g. generated id), decode and assert every one of them - a partial decode struct silently drops the rest.",
+      "signal": "ac_gap",
+      "scope": "internal/mcpserver",
+      "status": "candidate",
+      "features": [
+        "mcp-advanced-policy-tool"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "MAPT-01 / internal/mcpserver/tools_advanced_policy_test.go:51 (internal/mcpserver)"
+      ],
+      "created": "2026-08-26T00:41:12Z",
+      "last_seen": "2026-08-26T00:41:12Z"
     }
   ]
 }

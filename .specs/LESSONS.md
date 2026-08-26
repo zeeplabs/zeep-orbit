@@ -200,6 +200,18 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: CFK-04 (internal/dashboard,internal/provisioner)
 - last seen: 2026-08-24T19:25:28Z
 
+### L-032 - When an AC says 'return the mapped error', name the exact expected message string in the spec; otherwise the test can only assert 'not the generic error'.
+- signal: `spec_precision_gap` · recurrence: 1 feature(s) · scope: `.specs/features` · harmful: 0
+- features: mcp-advanced-policy-tool
+- evidence: MAPT-04 / internal/mcpserver/tools_advanced_policy_test.go:162 (.specs/features)
+- last seen: 2026-08-26T00:41:12Z
+
+### L-033 - When an AC names specific returned fields (e.g. generated id), decode and assert every one of them - a partial decode struct silently drops the rest.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `internal/mcpserver` · harmful: 0
+- features: mcp-advanced-policy-tool
+- evidence: MAPT-01 / internal/mcpserver/tools_advanced_policy_test.go:51 (internal/mcpserver)
+- last seen: 2026-08-26T00:41:12Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.
