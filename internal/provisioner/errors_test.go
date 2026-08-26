@@ -59,6 +59,51 @@ func TestForeignKeyViolationError_MessageIncludesColumnAndDetail(t *testing.T) {
 	}
 }
 
+// CENUM-10: the rejection error names the offending value and its exact
+// row count.
+func TestEnumValueInUseError_MessageNamesSingleValueAndCount(t *testing.T) {
+	e := &EnumValueInUseError{Column: "status", Counts: map[string]int{"closed": 1}}
+
+	want := `cannot remove value(s) from "status": "closed" is used by 1 row(s)`
+	if got := e.Error(); got != want {
+		t.Errorf("Error() = %q, want %q", got, want)
+	}
+}
+
+// CENUM-10: every offending value is named with its own count, not just the
+// first one found. The message is deterministic despite Counts being a map.
+func TestEnumValueInUseError_MessageNamesEveryOffendingValue(t *testing.T) {
+	e := &EnumValueInUseError{
+		Column: "status",
+		Counts: map[string]int{"closed": 3, "archived": 12},
+	}
+
+	want := `cannot remove value(s) from "status": "archived" is used by 12 row(s), "closed" is used by 3 row(s)`
+	for i := 0; i < 5; i++ {
+		if got := e.Error(); got != want {
+			t.Fatalf("Error() = %q, want %q", got, want)
+		}
+	}
+}
+
+func TestEnumValueInUseError_DoesNotLeakCause(t *testing.T) {
+	cause := errors.New(`ERROR: SQLSTATE 23514 new row for relation "assets" violates check constraint "assets_status_check"`)
+	e := &EnumValueInUseError{
+		Column: "status",
+		Counts: map[string]int{"closed": 1},
+		Cause:  cause,
+	}
+
+	msg := e.Error()
+	if strings.Contains(msg, "SQLSTATE") || strings.Contains(msg, cause.Error()) {
+		t.Fatalf("public error message leaks internal cause: %q", msg)
+	}
+
+	if !errors.Is(errors.Unwrap(e), cause) {
+		t.Fatalf("Unwrap() did not return the original cause")
+	}
+}
+
 func TestTypeChangeError_ReasonsProduceDistinctMessages(t *testing.T) {
 	base := &TypeChangeError{Column: "c", CurrentType: "text", DesiredType: "int4"}
 

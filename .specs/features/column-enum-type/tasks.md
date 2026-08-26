@@ -180,6 +180,8 @@ T16
 
 ### T4: `EnumValueInUseError`
 
+**Status**: ✅ Complete
+
 **What**: New typed error `EnumValueInUseError{Column string, Counts map[string]int, Cause error}` with a safe `Error()` (names every offending value + its row count) and `Unwrap()`.
 **Where**: `internal/provisioner/errors.go`
 **Depends on**: T3 (sequenced after it within Phase 2; no actual code dependency, but kept in-order per the phase's task sequence)
