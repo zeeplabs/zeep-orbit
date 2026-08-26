@@ -26,7 +26,14 @@ const COLUMN_TYPES = [
   "timestamptz",
   "numeric",
   "jsonb",
+  "enum",
 ];
+
+// Mirrors config.ValidateEnumValues (internal/config/validate.go): 1-50
+// values, each 1-100 chars, no exact-match duplicates. Client-side mirror
+// for immediate feedback only — the backend re-validates on submit.
+const ENUM_MAX_VALUES = 50;
+const ENUM_MAX_VALUE_LENGTH = 100;
 
 // Mirrors the allowlist in internal/config/validate.go (defaultExpressions)
 // — the only SQL expressions the backend accepts for a column default. Keep
@@ -232,6 +239,10 @@ export default function TableCard({
     }
     if (columns.some((c) => !c.name.trim())) {
       setError(t("tableCard.columnsNameRequired"));
+      return;
+    }
+    if (columns.some((c) => c.type === "enum" && (c.allowed_values ?? []).length === 0)) {
+      setError(t("tableCard.allowedValuesRequired"));
       return;
     }
     if (indexes.some((idx) => !idx.name.trim() || idx.columns.length === 0)) {
@@ -593,8 +604,16 @@ function SchemaEditor({
                       // valid uuid, an expression picked for uuid isn't
                       // valid for integer, etc.) — changing type always
                       // clears it rather than risk sending a mismatched
-                      // default the backend will reject.
-                      updateColumn(ci, { type: val, default: "", default_is_expression: false })
+                      // default the backend will reject. Same reasoning for
+                      // allowed_values: only meaningful for "enum", so it's
+                      // reset to an empty draft list when switching in, and
+                      // dropped entirely when switching away.
+                      updateColumn(ci, {
+                        type: val,
+                        default: "",
+                        default_is_expression: false,
+                        allowed_values: val === "enum" ? (col.allowed_values ?? []) : undefined,
+                      })
                     }
                   >
                     <SelectTrigger className="h-8 w-[130px] max-md:flex-1 text-[12px] bg-[var(--sunken)] border-[var(--border)] text-[var(--text-primary)] rounded-md px-2 brand-focus">
@@ -783,6 +802,14 @@ function SchemaEditor({
                   </Select>
                 </div>
               )}
+
+              {col.type === "enum" && (
+                <EnumAllowedValuesEditor
+                  t={t}
+                  values={col.allowed_values ?? []}
+                  onChange={(values) => updateColumn(ci, { allowed_values: values })}
+                />
+              )}
             </div>
           ))}
         </div>
@@ -925,5 +952,94 @@ function SchemaEditor({
         <MarkdownContent content={t("tableCard.indexExplainer")} />
       </FormDrawer>
     </>
+  );
+}
+
+// EnumAllowedValuesEditor is a small chip-list input for an "enum" column's
+// allowed_values — add one value at a time (Enter or the + button), remove
+// with the chip's own close button. Caps mirror config.ValidateEnumValues
+// (ENUM_MAX_VALUES/ENUM_MAX_VALUE_LENGTH) for immediate feedback only; the
+// backend re-validates on submit regardless.
+function EnumAllowedValuesEditor({
+  t,
+  values,
+  onChange,
+}: {
+  t: (key: string, opts?: Record<string, unknown>) => string;
+  values: string[];
+  onChange: (values: string[]) => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+
+  const addValue = () => {
+    const v = draft.trim();
+    if (!v) return;
+    if (v.length > ENUM_MAX_VALUE_LENGTH) {
+      setErr(t("tableCard.allowedValuesTooLong"));
+      return;
+    }
+    if (values.includes(v)) {
+      setErr(t("tableCard.allowedValuesDuplicate"));
+      return;
+    }
+    if (values.length >= ENUM_MAX_VALUES) {
+      setErr(t("tableCard.allowedValuesTooMany"));
+      return;
+    }
+    setErr(null);
+    setDraft("");
+    onChange([...values, v]);
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 mt-2 pl-1">
+      <span className="text-[11px] text-[var(--text-secondary)]">{t("tableCard.allowedValuesLabel")}</span>
+      <div className="flex flex-wrap gap-1">
+        {values.map((v) => (
+          <span
+            key={v}
+            className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--text-secondary)]"
+          >
+            {v}
+            <button
+              type="button"
+              onClick={() => onChange(values.filter((x) => x !== v))}
+              title={t("tableCard.removeAllowedValue")}
+              className="bg-transparent border-none cursor-pointer p-0 flex items-center text-[var(--text-tertiary)] hover:text-[var(--danger)]"
+            >
+              <Icon name="close" size={10} />
+            </button>
+          </span>
+        ))}
+        {values.length === 0 && (
+          <span className="text-[11px] text-[var(--text-tertiary)]">{t("tableCard.allowedValuesEmpty")}</span>
+        )}
+      </div>
+      <Input
+        value={draft}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          setErr(null);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            addValue();
+          }
+        }}
+        placeholder={t("tableCard.allowedValuesPlaceholder")}
+        className="h-7 w-[160px] px-2 text-[12px] bg-[var(--sunken)] border-[var(--border)] rounded-md text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] brand-focus"
+      />
+      <button
+        type="button"
+        onClick={addValue}
+        title={t("tableCard.addAllowedValue")}
+        className="w-6 h-6 flex items-center justify-center rounded-md border border-[var(--border)] bg-transparent text-[var(--text-secondary)] cursor-pointer hover:bg-[var(--hover-surface)]"
+      >
+        <Icon name="add" size={10} />
+      </button>
+      {err && <span className="w-full text-[11px] text-[var(--danger)]">{err}</span>}
+    </div>
   );
 }

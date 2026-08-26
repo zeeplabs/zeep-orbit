@@ -412,6 +412,8 @@ T16
 
 ### T12: `TableCard.tsx` — enum type option + new-column allowed-values input
 
+**Status**: ✅ Complete (with one SPEC_DEVIATION: `internal/dashboard/ui/src/lib/api.ts`'s `ColumnDef` interface also needed a new optional `allowed_values?: string[]` field — the task's own "Where" field didn't list this file, but `TableCard.tsx` imports `ColumnDef` from it and cannot compile a reference to `col.allowed_values` without the type declaring it; `npx tsc -b` would fail otherwise. Same category of addition as T1's Go struct field, no logic.)
+
 **What**: Add `"enum"` to `COLUMN_TYPES`; when `type === "enum"` in the new-column form, render a values-list input (add/remove entries) bound to the column draft's `allowed_values`, with client-side caps mirroring T2 (1-50 values, 1-100 chars, no dup) for immediate feedback. Add the new i18n keys to both `en.json` and `pt-BR.json` in the same change.
 **Where**: `internal/dashboard/ui/src/components/TableCard.tsx`, `internal/dashboard/ui/src/locales/en.json`, `internal/dashboard/ui/src/locales/pt-BR.json`
 **Depends on**: T6

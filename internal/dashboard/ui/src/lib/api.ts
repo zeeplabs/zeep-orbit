@@ -22,6 +22,10 @@ export interface ColumnDef {
   default_is_expression?: boolean
   unique: boolean
   references?: ReferenceDef | null
+  // allowed_values is the fixed set of values a "enum"-type column accepts
+  // (column-enum-type T1's Go counterpart: config.ColumnConfig.AllowedValues).
+  // Only meaningful when type === "enum".
+  allowed_values?: string[]
 }
 
 export interface IndexDef {
