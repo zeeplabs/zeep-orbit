@@ -23,7 +23,7 @@ Rules for any AI agent (Claude Code, Codex, Cursor, etc.) working in this reposi
 
 Run and confirm clean:
 
-- Backend: `go build ./...`, `go test ./...`, `go vet ./...`, `gofmt -l <changed files>`
+- Backend: `go build ./...`, `go test -p 1 -parallel 4 ./...`, `go vet ./...`, `gofmt -l <changed files>`. The `-p 1 -parallel 4` matters: `internal/dashboard` and `internal/mcpserver` both run integration tests against the same `TEST_DATABASE_URL` and step on each other's `zeep_system` rows under Go's default cross-package parallelism (deadlocks / spurious FK violations, not a real bug) — this is what CI runs (`.github/workflows/reusable-ci.yml`), so match it locally.
 - Frontend (`internal/dashboard/ui`): `npx tsc -b`, `npm run build`
 - If you touched i18n JSON: validate with `python3 -c "import json; json.load(open('src/locales/en.json'))"` (and `pt-BR.json`)
 

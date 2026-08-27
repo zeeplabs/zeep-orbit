@@ -266,11 +266,20 @@ function OperationSummary({ operation }: { operation: EditOperation }) {
     case 'add_column':
       return (
         <div className="text-[13px]" style={{ color: 'var(--text-primary)' }}>
-          {t('editWithAI.opAddColumn', {
-            table: operation.add_column?.table,
-            column: operation.add_column?.column.name,
-            type: operation.add_column?.column.type,
-          })}
+          <div>
+            {t('editWithAI.opAddColumn', {
+              table: operation.add_column?.table,
+              column: operation.add_column?.column.name,
+              type: operation.add_column?.column.type,
+            })}
+          </div>
+          {operation.add_column?.column.type === 'enum' && (operation.add_column?.column.allowed_values?.length ?? 0) > 0 && (
+            <div className="opacity-70">
+              {t('editWithAI.opAddColumnEnumValues', {
+                values: operation.add_column!.column.allowed_values!.join(', '),
+              })}
+            </div>
+          )}
         </div>
       )
     case 'add_index':

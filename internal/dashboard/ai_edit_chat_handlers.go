@@ -346,7 +346,12 @@ func (h *Handler) applyEditOperation(ctx context.Context, user *DashboardUser, a
 		if op.AddColumn == nil {
 			return editChatConfirmResponse{}, fmt.Errorf("dashboard: add_column operation missing its column")
 		}
-		col := config.ColumnConfig{Name: op.AddColumn.Column.Name, Type: op.AddColumn.Column.Type}
+		// AllowedValues (column-enum-type T15/CENUM-15) only ever carries a
+		// value when Column.Type == "enum" — AddTableColumnForUser runs the
+		// same config.ValidateEnumValues check the manual dashboard
+		// add-column form does, rejecting an "enum" column with no
+		// AllowedValues before anything is provisioned.
+		col := config.ColumnConfig{Name: op.AddColumn.Column.Name, Type: op.AddColumn.Column.Type, AllowedValues: op.AddColumn.Column.AllowedValues}
 		row, err := h.AddTableColumnForUser(ctx, user, appID, op.AddColumn.Table, col, "ai_chat")
 		if err != nil {
 			return editChatConfirmResponse{}, err
@@ -584,7 +589,7 @@ Never propose more than one operation in a single tool call, and never ask the u
 Every operation you propose must respect these real constraints, because confirming it runs the exact same validation the manual dashboard form does:
 
 - Table and column names: lowercase letters, digits, or underscores only, must start with a letter, max 63 characters (e.g. "support_tickets", not "Support-Tickets" or "2fa").
-- Column types — use ONLY these, exactly as spelled: text, integer, bigint, numeric, boolean, uuid, timestamptz, jsonb. Never propose a type outside this list (no "string", "varchar", "date", "float", "enum", etc. — map the user's intent onto the closest type in this list, e.g. a date-like field is timestamptz).
+- Column types — use ONLY these, exactly as spelled: text, integer, bigint, numeric, boolean, uuid, timestamptz, jsonb, enum. Never propose a type outside this list (no "string", "varchar", "date", "float", etc. — map the user's intent onto the closest type in this list, e.g. a date-like field is timestamptz). Use "enum" for a status-like field with a small fixed set of values (e.g. order status: pending/shipped/delivered), and always include an "allowed_values" list of those exact strings on the column.
 - "auth" here means email/password login only (the dashboard's "Email & password authentication" toggle) — there is no OAuth/social login option in this chat. If the user asks for Google/GitHub login or anything beyond email+password, tell them that's configured separately in the app's Login settings, not something this chat can set up.
 - Don't propose an "owner_id" or "user_id" column yourself — when auth is enabled, zeep-orbit automatically manages ownership columns; they are not something you add via propose_add_column.
 - Don't propose a table or column literally named "_auth_users" or anything starting with an underscore — those are reserved for the system.

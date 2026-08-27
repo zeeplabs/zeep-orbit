@@ -9,6 +9,19 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.7.0] — 2026-08-26
+
+### Added
+
+- **New `enum` column type**, backed by a Postgres `CHECK` constraint instead of client-side-only validation. Declarable at column creation (table create or add-column) with a fixed `allowed_values` list; an existing enum column's values can be widened or narrowed afterward through a dedicated endpoint (Dashboard action, `PATCH .../columns/{column}/enum-values`, or the `orbit_update_column_enum_values` MCP tool) — narrowing is rejected with the offending value(s) and row count if any existing row still holds a value being removed. Also available from AI build/edit chat, which can now propose an `enum` column for a status-like field. See `.specs/features/column-enum-type/`.
+- **`orbit_create_policy_advanced` MCP tool**: creates a row policy from an explicit structured clause set (chained `AND`/`OR` conditions, any allowed operator/claim combination), for policy shapes outside `orbit_create_policy_from_template`'s 6 fixed templates. No raw SQL — same `column`/`operator`/`value_source`/`value`/`logic` structure the Dashboard's advanced policy form and REST API already use.
+
+### Fixed
+
+- **MCP tools calling `CreateTablePolicyForUser` collapsed every structural policy-validation failure (unknown column, disallowed operator, bad claim name, invalid clause logic) into a generic "internal error"**, giving an LLM caller no way to tell a bad-input mistake from a platform failure. `mapWriteError` now surfaces `provisioner.ValidationError` verbatim, same as it already does for `TypeChangeError`/`ForeignKeyViolationError`.
+- **Saving any Login/Storage/API-tab field on an app (`PUT /dashboard/api/apps/{id}`) could fail with an error naming a completely unrelated table.** The handler unconditionally reconciled the app's entire table schema on every save, even though this endpoint never touches tables — so a pre-existing schema drift on any one table (a stale column type, a legacy `rls` value) blocked saving auth/storage/rate-limit settings on the whole app. The reconciliation call is removed; table schema is only ever changed through the dedicated per-table endpoints, as already documented.
+- **Enabling email/password auth or setting a storage bucket on an existing app (via the Login/Storage tab, `orbit_update_app`, or "Edit with AI") silently skipped provisioning `_auth_users`/`_auth_sessions`/`_files`** — a side effect of the fix above: removing the full schema reconciliation also removed the only path that created these system tables outside of app creation. Login/signup or file upload would then fail with a Postgres relation-does-not-exist error the first time they were used, intermittently masked whenever any app table happened to be created afterward. Both save paths now provision just the auth/storage tables that toggle actually needs, scoped to that app's schema only.
+
 ## [1.6.0] — 2026-08-24
 
 ### Fixed

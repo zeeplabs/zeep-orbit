@@ -73,3 +73,52 @@ func TestBuildResponseSchema_NoRLSDoesNotExposeOwnerID(t *testing.T) {
 		t.Fatal("expected owner_id property to be absent for rls: \"\"")
 	}
 }
+
+// TestBuildResponseSchema_EnumColumnExposesAllowedValues covers a gap found
+// by the v1.6.0..HEAD release-readiness audit: an enum column's CHECK
+// constraint exists in Postgres, the Dashboard UI, and the MCP tools, but
+// the generated OpenAPI spec dropped it entirely — openAPIType had no
+// "enum" case, so it fell to the default ("string", no enum list),
+// indistinguishable from a plain text column. Both the response and input
+// schema must carry the allowed-values list.
+func TestBuildResponseSchema_EnumColumnExposesAllowedValues(t *testing.T) {
+	table := &registry.Table{Name: "assets", Columns: []registry.Column{
+		{Name: "status", Type: "enum", AllowedValues: []string{"pending", "active", "closed"}},
+	}}
+
+	respSchema := buildResponseSchema(table)
+	prop, ok := respSchema.Properties["status"]
+	if !ok {
+		t.Fatal("expected status property to be present")
+	}
+	if prop.Type != "string" {
+		t.Fatalf("expected enum column to be OpenAPI type string, got %q", prop.Type)
+	}
+	if len(prop.Enum) != 3 || prop.Enum[0] != "pending" || prop.Enum[1] != "active" || prop.Enum[2] != "closed" {
+		t.Fatalf("expected enum list [pending active closed], got %v", prop.Enum)
+	}
+
+	inputSchema := buildInputSchema(table)
+	inputProp, ok := inputSchema.Properties["status"]
+	if !ok {
+		t.Fatal("expected status property to be present in the input schema")
+	}
+	if len(inputProp.Enum) != 3 {
+		t.Fatalf("expected input schema to also carry the enum list, got %v", inputProp.Enum)
+	}
+}
+
+// TestBuildResponseSchema_NonEnumColumnHasNoEnumList is the negative
+// control: a plain text column must not get an empty-but-present "enum"
+// key in the marshaled JSON (schemaOrRef.Enum's omitempty depends on it
+// being nil, not an empty non-nil slice, for a text column).
+func TestBuildResponseSchema_NonEnumColumnHasNoEnumList(t *testing.T) {
+	table := &registry.Table{Name: "posts", Columns: []registry.Column{
+		{Name: "title", Type: "text"},
+	}}
+
+	schema := buildResponseSchema(table)
+	if schema.Properties["title"].Enum != nil {
+		t.Fatalf("expected no Enum list for a text column, got %v", schema.Properties["title"].Enum)
+	}
+}

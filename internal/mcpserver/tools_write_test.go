@@ -2,6 +2,7 @@ package mcpserver
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -213,6 +214,106 @@ func TestOrbitCreateTable_DuplicateColumnNameReturnsStructuredError(t *testing.T
 	text, ok := res.Content[0].(*mcp.TextContent)
 	if !ok || text.Text == "" {
 		t.Fatalf("expected a non-empty structured error message naming the duplicate column, got %+v", res.Content)
+	}
+
+	schema, err := dashboard.GetAppSchemaForUser(context.Background(), pool, owner, app.ID)
+	if err != nil {
+		t.Fatalf("GetAppSchemaForUser: %v", err)
+	}
+	if len(schema.Tables) != 0 {
+		t.Fatalf("expected no table to have been created after the validation failure, got %+v", schema.Tables)
+	}
+}
+
+// TestOrbitCreateTable_EnumColumnProvisions covers column-enum-type T10/
+// CENUM-14: orbit_create_table with a column of type "enum" and a
+// non-empty allowed_values list provisions identically to the Dashboard
+// path — the tool passes config.ColumnConfig straight through, so the
+// AllowedValues field arrives "for free".
+func TestOrbitCreateTable_EnumColumnProvisions(t *testing.T) {
+	pool := authTestPool(t)
+	owner := authTestUser(t, pool, "tools-create-table-enum@example.com")
+	token, _, err := dashboard.CreatePAT(context.Background(), pool, owner.ID, "cli", dashboard.PATKindManual, nil)
+	if err != nil {
+		t.Fatalf("CreatePAT: %v", err)
+	}
+	app, err := dashboard.CreateApp(context.Background(), pool, "tools-create-table-enum-app", owner.ID, true)
+	if err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+
+	sess := startMCPSession(t, pool, token)
+
+	res, err := sess.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "orbit_create_table",
+		Arguments: map[string]any{
+			"app_id": app.ID,
+			"name":   "statuses",
+			"columns": []map[string]any{
+				{"name": "status", "type": "enum", "required": false, "default": "", "unique": false, "allowed_values": []string{"pending", "active", "closed"}},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool orbit_create_table: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("expected success for a valid enum column, got error: %+v", res.Content)
+	}
+	var out struct {
+		Columns []struct {
+			Name          string   `json:"name"`
+			Type          string   `json:"type"`
+			AllowedValues []string `json:"allowed_values"`
+		} `json:"columns"`
+	}
+	decodeToolResult(t, res, &out)
+	if len(out.Columns) != 1 || out.Columns[0].Type != "enum" {
+		t.Fatalf("expected one enum column, got %+v", out.Columns)
+	}
+	want := []string{"pending", "active", "closed"}
+	if !reflect.DeepEqual(out.Columns[0].AllowedValues, want) {
+		t.Fatalf("expected allowed_values %v, got %v", want, out.Columns[0].AllowedValues)
+	}
+}
+
+// TestOrbitCreateTable_InvalidEnumColumnReturnsStructuredError covers
+// column-enum-type T10/CENUM-14: an invalid enum definition (empty
+// allowed_values) is rejected the same way the Dashboard path rejects it —
+// a structured tool error, no table created.
+func TestOrbitCreateTable_InvalidEnumColumnReturnsStructuredError(t *testing.T) {
+	pool := authTestPool(t)
+	owner := authTestUser(t, pool, "tools-create-table-badenum@example.com")
+	token, _, err := dashboard.CreatePAT(context.Background(), pool, owner.ID, "cli", dashboard.PATKindManual, nil)
+	if err != nil {
+		t.Fatalf("CreatePAT: %v", err)
+	}
+	app, err := dashboard.CreateApp(context.Background(), pool, "tools-create-table-badenum-app", owner.ID, true)
+	if err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+
+	sess := startMCPSession(t, pool, token)
+
+	res, err := sess.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "orbit_create_table",
+		Arguments: map[string]any{
+			"app_id": app.ID,
+			"name":   "bad_statuses",
+			"columns": []map[string]any{
+				{"name": "status", "type": "enum", "required": false, "default": "", "unique": false, "allowed_values": []string{}},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool orbit_create_table (protocol-level): %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected a structured tool error for an empty allowed_values list")
+	}
+	text, ok := res.Content[0].(*mcp.TextContent)
+	if !ok || text.Text == "" {
+		t.Fatalf("expected a non-empty structured error message, got %+v", res.Content)
 	}
 
 	schema, err := dashboard.GetAppSchemaForUser(context.Background(), pool, owner, app.ID)

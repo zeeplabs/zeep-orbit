@@ -696,3 +696,328 @@ func TestDropColumnForeignKey_GenuineQueryErrorPropagates(t *testing.T) {
 		t.Fatal("expected found=false when the lookup query itself fails")
 	}
 }
+
+// --- enum column widen/narrow (CENUM-07 .. CENUM-12) ---
+
+// enumTestTable creates a schema with a single table carrying an enum column
+// provisioned through the real createTable path, so these tests exercise the
+// same CHECK constraint the creation path emits (columnDDL).
+func enumTestTable(t *testing.T, prefix string, allowed []string) (*db.Pool, string) {
+	t.Helper()
+	pool := ensureRLSTestPool(t)
+	t.Cleanup(pool.Close)
+
+	schema := fmt.Sprintf("%s_%d", prefix, time.Now().UnixNano())
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE SCHEMA %q`, schema)); err != nil {
+		t.Fatalf("create schema: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), fmt.Sprintf(`DROP SCHEMA IF EXISTS %q CASCADE`, schema))
+	})
+
+	if _, err := New(pool).createTable(ctx, schema, "assets", []config.ColumnConfig{
+		{Name: "name", Type: "text"},
+		{Name: "status", Type: "enum", AllowedValues: allowed},
+	}, "disabled"); err != nil {
+		t.Fatalf("createTable: %v", err)
+	}
+	return pool, schema
+}
+
+// checkConstraintDef returns the current CHECK constraint definition on
+// assets.status, or "" when there is none.
+func checkConstraintDef(t *testing.T, pool *db.Pool, schema, table, column string) string {
+	t.Helper()
+	var def string
+	err := pool.QueryRow(context.Background(),
+		`SELECT pg_get_constraintdef(c.oid)
+		 FROM pg_constraint c
+		 JOIN pg_class r ON r.oid = c.conrelid
+		 JOIN pg_namespace n ON n.oid = r.relnamespace
+		 JOIN pg_attribute a ON a.attrelid = r.oid AND a.attname = $3
+		 WHERE c.contype = 'c' AND n.nspname = $1 AND r.relname = $2 AND c.conkey = ARRAY[a.attnum]`,
+		schema, table, column,
+	).Scan(&def)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ""
+	}
+	if err != nil {
+		t.Fatalf("read check constraint def: %v", err)
+	}
+	return def
+}
+
+// insertStatus attempts to write a status value, reporting whether Postgres
+// accepted it. This is the real enforcement assertion: the constraint is
+// only meaningful if out-of-set writes are rejected by the database.
+func insertStatus(t *testing.T, pool *db.Pool, schema, status string) error {
+	t.Helper()
+	_, err := pool.Exec(context.Background(),
+		fmt.Sprintf(`INSERT INTO %q.assets (name, status) VALUES ('x', $1)`, schema), status)
+	return err
+}
+
+// CENUM-07 / CENUM-08: widening to a superset replaces the constraint with
+// the larger set, needs no data migration, and leaves existing rows
+// untouched and valid.
+func TestReplaceColumnEnumValues_WidenAddsValue(t *testing.T) {
+	pool, schema := enumTestTable(t, "enum_widen_test", []string{"pending", "active"})
+	ctx := context.Background()
+	p := New(pool)
+
+	if err := insertStatus(t, pool, schema, "active"); err != nil {
+		t.Fatalf("seed existing row: %v", err)
+	}
+	if err := insertStatus(t, pool, schema, "closed"); err == nil {
+		t.Fatal("expected 'closed' to be rejected before widening")
+	}
+
+	if err := p.ReplaceColumnEnumValues(ctx, schema, "assets", "status", []string{"pending", "active"}, []string{"pending", "active", "closed"}); err != nil {
+		t.Fatalf("ReplaceColumnEnumValues (widen): %v", err)
+	}
+
+	// The previously rejected value is now accepted.
+	if err := insertStatus(t, pool, schema, "closed"); err != nil {
+		t.Fatalf("expected 'closed' to be accepted after widening, got: %v", err)
+	}
+	// An out-of-set value is still rejected: the constraint was replaced, not dropped.
+	if err := insertStatus(t, pool, schema, "qualquer coisa"); err == nil {
+		t.Fatal("expected an out-of-set value to still be rejected after widening")
+	}
+	// CENUM-08: the pre-existing row is unaffected and still valid.
+	var count int
+	if err := pool.QueryRow(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM %q.assets WHERE status = 'active'`, schema)).Scan(&count); err != nil {
+		t.Fatalf("count existing rows: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("existing row count = %d, want 1 (widening must not touch data)", count)
+	}
+}
+
+// CENUM-09 / CENUM-11: narrowing when no row holds a removed value replaces
+// the constraint with the narrowed set.
+func TestReplaceColumnEnumValues_NarrowWithNoRowsUsingRemovedValue(t *testing.T) {
+	pool, schema := enumTestTable(t, "enum_narrow_ok_test", []string{"pending", "active", "closed"})
+	ctx := context.Background()
+	p := New(pool)
+
+	if err := insertStatus(t, pool, schema, "active"); err != nil {
+		t.Fatalf("seed row: %v", err)
+	}
+
+	if err := p.ReplaceColumnEnumValues(ctx, schema, "assets", "status", []string{"pending", "active", "closed"}, []string{"pending", "active"}); err != nil {
+		t.Fatalf("ReplaceColumnEnumValues (narrow): %v", err)
+	}
+
+	if err := insertStatus(t, pool, schema, "closed"); err == nil {
+		t.Fatal("expected the removed value 'closed' to be rejected after narrowing")
+	}
+	if err := insertStatus(t, pool, schema, "pending"); err != nil {
+		t.Fatalf("expected a remaining value to still be accepted, got: %v", err)
+	}
+}
+
+// CENUM-09 / CENUM-10: narrowing away a value still held by rows is rejected
+// with a typed *EnumValueInUseError naming the value and its exact count.
+// Rows holding values that are NOT being removed must not be reported (the
+// pre-check is scoped to the removed values only).
+func TestReplaceColumnEnumValues_NarrowRejectedForInUseValue(t *testing.T) {
+	pool, schema := enumTestTable(t, "enum_narrow_inuse_test", []string{"pending", "active", "closed"})
+	ctx := context.Background()
+	p := New(pool)
+
+	if err := insertStatus(t, pool, schema, "closed"); err != nil {
+		t.Fatalf("seed row: %v", err)
+	}
+	// Two rows on a value that stays: must not appear in the error.
+	for i := 0; i < 2; i++ {
+		if err := insertStatus(t, pool, schema, "active"); err != nil {
+			t.Fatalf("seed kept-value row: %v", err)
+		}
+	}
+
+	err := p.ReplaceColumnEnumValues(ctx, schema, "assets", "status", []string{"pending", "active", "closed"}, []string{"pending", "active"})
+	if err == nil {
+		t.Fatal("expected an error when narrowing away an in-use value, got nil")
+	}
+	var inUse *EnumValueInUseError
+	if !errors.As(err, &inUse) {
+		t.Fatalf("expected *EnumValueInUseError, got %T (%v)", err, err)
+	}
+	if inUse.Column != "status" {
+		t.Errorf("Column = %q, want %q", inUse.Column, "status")
+	}
+	if got, want := inUse.Counts["closed"], 1; got != want {
+		t.Errorf(`Counts["closed"] = %d, want %d`, got, want)
+	}
+	if _, reported := inUse.Counts["active"]; reported {
+		t.Errorf("Counts must only cover removed values, got %v", inUse.Counts)
+	}
+	if !strings.Contains(err.Error(), `"closed" is used by 1 row(s)`) {
+		t.Errorf("error message must name the value and count, got: %q", err.Error())
+	}
+}
+
+// CENUM-10: every offending value is reported with its own count, not just
+// the first one found.
+func TestReplaceColumnEnumValues_NarrowRejectionNamesEveryInUseValue(t *testing.T) {
+	pool, schema := enumTestTable(t, "enum_narrow_multi_test", []string{"pending", "active", "closed", "archived"})
+	ctx := context.Background()
+	p := New(pool)
+
+	if err := insertStatus(t, pool, schema, "closed"); err != nil {
+		t.Fatalf("seed row: %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		if err := insertStatus(t, pool, schema, "archived"); err != nil {
+			t.Fatalf("seed row: %v", err)
+		}
+	}
+
+	err := p.ReplaceColumnEnumValues(ctx, schema, "assets", "status",
+		[]string{"pending", "active", "closed", "archived"}, []string{"pending", "active"})
+	var inUse *EnumValueInUseError
+	if !errors.As(err, &inUse) {
+		t.Fatalf("expected *EnumValueInUseError, got %T (%v)", err, err)
+	}
+	if got, want := inUse.Counts["closed"], 1; got != want {
+		t.Errorf(`Counts["closed"] = %d, want %d`, got, want)
+	}
+	if got, want := inUse.Counts["archived"], 3; got != want {
+		t.Errorf(`Counts["archived"] = %d, want %d`, got, want)
+	}
+	if len(inUse.Counts) != 2 {
+		t.Errorf("Counts = %v, want exactly the two in-use removed values", inUse.Counts)
+	}
+}
+
+// CENUM-12: a rejected narrow never leaves the table partially migrated —
+// the existing CHECK constraint is byte-for-byte unchanged and still
+// enforcing the original set.
+func TestReplaceColumnEnumValues_RejectedNarrowLeavesConstraintIntact(t *testing.T) {
+	pool, schema := enumTestTable(t, "enum_narrow_intact_test", []string{"pending", "active", "closed"})
+	ctx := context.Background()
+	p := New(pool)
+
+	if err := insertStatus(t, pool, schema, "closed"); err != nil {
+		t.Fatalf("seed row: %v", err)
+	}
+	before := checkConstraintDef(t, pool, schema, "assets", "status")
+	if before == "" {
+		t.Fatal("expected a CHECK constraint on assets.status after createTable")
+	}
+
+	err := p.ReplaceColumnEnumValues(ctx, schema, "assets", "status", []string{"pending", "active", "closed"}, []string{"pending", "active"})
+	var inUse *EnumValueInUseError
+	if !errors.As(err, &inUse) {
+		t.Fatalf("expected *EnumValueInUseError, got %T (%v)", err, err)
+	}
+
+	if after := checkConstraintDef(t, pool, schema, "assets", "status"); after != before {
+		t.Errorf("constraint changed after a rejected narrow:\n before = %q\n after  = %q", before, after)
+	}
+	// Still enforcing the original set: the value we tried to remove is
+	// writable, an out-of-set value is not.
+	if err := insertStatus(t, pool, schema, "closed"); err != nil {
+		t.Errorf("expected 'closed' to still be writable after a rejected narrow, got: %v", err)
+	}
+	if err := insertStatus(t, pool, schema, "qualquer coisa"); err == nil {
+		t.Error("expected an out-of-set value to still be rejected after a rejected narrow")
+	}
+}
+
+// CENUM-07: the replaced constraint is itself re-locatable via catalog
+// lookup, so a second widen/narrow works on the constraint the first one
+// created (the reason the design mandates catalog lookup over an assumed
+// name). Also covers a free-text value with a single quote surviving the
+// replace path's escaping.
+func TestReplaceColumnEnumValues_SecondReplaceFindsTheNewConstraint(t *testing.T) {
+	pool, schema := enumTestTable(t, "enum_replace_twice_test", []string{"pending"})
+	ctx := context.Background()
+	p := New(pool)
+
+	if err := p.ReplaceColumnEnumValues(ctx, schema, "assets", "status", []string{"pending"}, []string{"pending", "Em andamento"}); err != nil {
+		t.Fatalf("first replace: %v", err)
+	}
+	if err := p.ReplaceColumnEnumValues(ctx, schema, "assets", "status", []string{"pending", "Em andamento"}, []string{"pending", "Em andamento", "O'Brien"}); err != nil {
+		t.Fatalf("second replace: %v", err)
+	}
+
+	// Exactly one CHECK constraint on the column — the second replace must
+	// have dropped the first one, not stacked a new one on top.
+	var n int
+	if err := pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM pg_constraint c
+		 JOIN pg_class r ON r.oid = c.conrelid
+		 JOIN pg_namespace nsp ON nsp.oid = r.relnamespace
+		 JOIN pg_attribute a ON a.attrelid = r.oid AND a.attname = 'status'
+		 WHERE c.contype = 'c' AND nsp.nspname = $1 AND r.relname = 'assets' AND c.conkey = ARRAY[a.attnum]`,
+		schema,
+	).Scan(&n); err != nil {
+		t.Fatalf("count check constraints: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("check constraint count = %d, want 1", n)
+	}
+
+	for _, v := range []string{"pending", "Em andamento", "O'Brien"} {
+		if err := insertStatus(t, pool, schema, v); err != nil {
+			t.Errorf("expected %q to be accepted after two replaces, got: %v", v, err)
+		}
+	}
+	if err := insertStatus(t, pool, schema, "qualquer coisa"); err == nil {
+		t.Error("expected an out-of-set value to be rejected after two replaces")
+	}
+}
+
+// TestReplaceColumnEnumValues_AmbiguousConstraintFailsClosed covers a gap
+// found by the v1.6.0..HEAD release-readiness audit: findColumnCheckConstraint
+// used to pick an arbitrary single-column CHECK via LIMIT 1 with no ORDER BY
+// when a column had more than one (e.g. a hand-added constraint alongside
+// the enum one), risking a DROP CONSTRAINT on the wrong one. It must now
+// fail closed instead of guessing, and leave both constraints untouched.
+func TestReplaceColumnEnumValues_AmbiguousConstraintFailsClosed(t *testing.T) {
+	pool, schema := enumTestTable(t, "enum_ambiguous_test", []string{"pending", "active"})
+	ctx := context.Background()
+	p := New(pool)
+
+	// A second, unrelated single-column CHECK on the same column — plausible
+	// if an app owner (schema-per-app, so they have DDL access) added their
+	// own length constraint alongside the enum one.
+	if _, err := pool.Exec(ctx,
+		fmt.Sprintf(`ALTER TABLE %q.%q ADD CONSTRAINT status_length_check CHECK (length("status") < 100)`, schema, "assets"),
+	); err != nil {
+		t.Fatalf("add second check constraint: %v", err)
+	}
+
+	before := checkConstraintDef(t, pool, schema, "assets", "status")
+
+	err := p.ReplaceColumnEnumValues(ctx, schema, "assets", "status", []string{"pending", "active"}, []string{"pending", "active", "closed"})
+	if err == nil {
+		t.Fatal("expected ReplaceColumnEnumValues to fail closed when the column has 2 single-column CHECK constraints")
+	}
+	if !strings.Contains(err.Error(), "cannot determine which one") {
+		t.Errorf("expected an ambiguity error, got: %v", err)
+	}
+
+	// Neither constraint was touched by the failed attempt.
+	after := checkConstraintDef(t, pool, schema, "assets", "status")
+	if before != after {
+		t.Errorf("enum constraint changed on an ambiguous/failed request:\n before = %q\n after  = %q", before, after)
+	}
+	var n int
+	if err := pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM pg_constraint c
+		 JOIN pg_class r ON r.oid = c.conrelid
+		 JOIN pg_namespace nsp ON nsp.oid = r.relnamespace
+		 JOIN pg_attribute a ON a.attrelid = r.oid AND a.attname = 'status'
+		 WHERE c.contype = 'c' AND nsp.nspname = $1 AND r.relname = 'assets' AND c.conkey = ARRAY[a.attnum]`,
+		schema,
+	).Scan(&n); err != nil {
+		t.Fatalf("count check constraints: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("expected both check constraints to still exist, got %d", n)
+	}
+}

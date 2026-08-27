@@ -1,6 +1,10 @@
 package provisioner
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+	"strings"
+)
 
 // Reason categorizes why a column type change was rejected.
 type Reason string
@@ -56,3 +60,32 @@ func (e *ForeignKeyViolationError) Error() string {
 }
 
 func (e *ForeignKeyViolationError) Unwrap() error { return e.Cause }
+
+// EnumValueInUseError represents a rejected narrowing of an enum column's
+// allowed values: at least one value being removed is still held by existing
+// rows. Counts maps each offending value to its exact row count.
+// Error() is safe to expose to end users; Cause carries the original
+// error (e.g. from pgx) for server-side logging only, reachable via Unwrap.
+type EnumValueInUseError struct {
+	Column string
+	Counts map[string]int
+	Cause  error
+}
+
+func (e *EnumValueInUseError) Error() string {
+	values := make([]string, 0, len(e.Counts))
+	for v := range e.Counts {
+		values = append(values, v)
+	}
+	// Map iteration order is random; sort so the message is deterministic.
+	sort.Strings(values)
+
+	parts := make([]string, len(values))
+	for i, v := range values {
+		parts[i] = fmt.Sprintf("%q is used by %d row(s)", v, e.Counts[v])
+	}
+
+	return fmt.Sprintf("cannot remove value(s) from %q: %s", e.Column, strings.Join(parts, ", "))
+}
+
+func (e *EnumValueInUseError) Unwrap() error { return e.Cause }

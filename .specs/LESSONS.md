@@ -200,6 +200,48 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: CFK-04 (internal/dashboard,internal/provisioner)
 - last seen: 2026-08-24T19:25:28Z
 
+### L-032 - When an AC says 'return the mapped error', name the exact expected message string in the spec; otherwise the test can only assert 'not the generic error'.
+- signal: `spec_precision_gap` · recurrence: 1 feature(s) · scope: `.specs/features` · harmful: 0
+- features: mcp-advanced-policy-tool
+- evidence: MAPT-04 / internal/mcpserver/tools_advanced_policy_test.go:162 (.specs/features)
+- last seen: 2026-08-26T00:41:12Z
+
+### L-033 - When an AC names specific returned fields (e.g. generated id), decode and assert every one of them - a partial decode struct silently drops the rest.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `internal/mcpserver` · harmful: 0
+- features: mcp-advanced-policy-tool
+- evidence: MAPT-01 / internal/mcpserver/tools_advanced_policy_test.go:51 (internal/mcpserver)
+- last seen: 2026-08-26T00:41:12Z
+
+### L-034 - When an AC says an existing side effect (audit log, registry refresh) must stay unchanged, assert it explicitly in the test — an unasserted side effect can be deleted with the whole suite still green.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `internal/dashboard` · harmful: 0
+- features: app-update-schema-drift-fix
+- evidence: internal/dashboard/handler.go:1134 (internal/dashboard)
+- last seen: 2026-08-26T01:40:49Z
+
+### L-035 - An idempotent repair script must be re-run end to end against a fixture already in the post-repair state — guard clauses on the mutating statement do not make the preceding validation query re-runnable (a text regex probe breaks once the column is numeric).
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `ops-sql` · harmful: 0
+- features: app-update-schema-drift-fix
+- evidence: .specs/features/app-update-schema-drift-fix/repair.sql:91 (ops-sql)
+- last seen: 2026-08-26T01:40:49Z
+
+### L-036 - Verify a design.md catalog/schema query against the real Postgres catalog before implementing it; information_schema views often cannot express the object being looked up.
+- signal: `spec_deviation` · recurrence: 1 feature(s) · scope: `provisioner` · harmful: 0
+- features: column-enum-type
+- evidence: internal/provisioner/table.go:459 (SPEC_DEVIATION) (provisioner)
+- last seen: 2026-08-26T23:14:56Z
+
+### L-037 - Confirm a design.md claim that an existing UI pattern already exists by reading the component in full before planning to mirror it.
+- signal: `spec_deviation` · recurrence: 1 feature(s) · scope: `dashboard-ui` · harmful: 0
+- features: column-enum-type
+- evidence: .specs/features/column-enum-type/tasks.md:443 (T13 SPEC_DEVIATION) (dashboard-ui)
+- last seen: 2026-08-26T23:15:04Z
+
+### L-038 - A task's Where field must include the file that owns the tool/API schema, not only the handler that consumes it; verify where the struct actually lives before scoping the task.
+- signal: `spec_deviation` · recurrence: 1 feature(s) · scope: `dashboard-ai` · harmful: 0
+- features: column-enum-type
+- evidence: internal/dashboard/ai/client.go:55 (SPEC_DEVIATION) (dashboard-ai)
+- last seen: 2026-08-26T23:15:04Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

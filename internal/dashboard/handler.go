@@ -12,6 +12,7 @@ import (
 	"net/mail"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -96,8 +97,30 @@ var (
 	allowedTypes = map[string]bool{
 		"text": true, "integer": true, "bigint": true, "boolean": true,
 		"uuid": true, "timestamptz": true, "numeric": true, "jsonb": true,
+		"enum": true,
 	}
 )
+
+// sameStringSet reports whether two string slices hold the same values,
+// ignoring order. Used only to detect an AllowedValues *change* on an
+// already-existing column — never to validate the values themselves
+// (config.ValidateEnumValues owns that, and already rejects duplicates, so
+// membership plus length is a complete comparison here).
+func sameStringSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	inA := make(map[string]struct{}, len(a))
+	for _, v := range a {
+		inA[v] = struct{}{}
+	}
+	for _, v := range b {
+		if _, ok := inA[v]; !ok {
+			return false
+		}
+	}
+	return true
+}
 
 // validateAppInput checks the app name is a safe SQL schema identifier.
 func validateAppInput(name string) error {
@@ -1106,6 +1129,16 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		app.StorageConfig = sc
+
+		// Bucket set for the first time (or re-saved): the app's schema may
+		// never have gotten its "_files" table, since CreateApp only
+		// provisions storage when the bucket is present at creation time.
+		// Scoped to this app/table only — not a full Apply — so pre-existing
+		// drift on unrelated tables can't fail this save.
+		if err := h.prov.EnsureStorageTables(r.Context(), schemaNameForDB(app.Name)); err != nil {
+			h.writeError(w, r, http.StatusInternalServerError, "failed to provision storage tables", err)
+			return
+		}
 	}
 
 	if body.RateLimit != nil {
@@ -1116,15 +1149,22 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 		app.RateLimit = body.RateLimit
 	}
 
-	cfg := buildAppConfig(app)
-	if _, err := h.prov.Apply(r.Context(), &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
-		var typeErr *provisioner.TypeChangeError
-		if errors.As(err, &typeErr) {
-			h.writeError(w, r, http.StatusBadRequest, typeErr.Error(), err)
-		} else {
-			h.writeError(w, r, http.StatusInternalServerError, "provisioning failed — check server logs for details", err)
+	// No h.prov.Apply call here: this endpoint's AppRequestBody carries no
+	// Tables field and never intends to touch table schema ("Tables are
+	// managed one at a time via the /apps/{id}/tables endpoints, not here" —
+	// see AppRequestBody's own doc comment). Reconciling every table/column
+	// on every auth/storage/rate-limit save was pure unrelated blast radius:
+	// any pre-existing schema drift on an untouched table (bad column type,
+	// legacy rls value) failed this save with an error naming a table this
+	// request never referenced (app-update-schema-drift-fix spec AUSD-01..03).
+	// Auth/storage system tables still need provisioning though — that's
+	// EnsureAuthTables/EnsureStorageTables above and below, scoped to just
+	// those two tables instead of the whole app.
+	if app.AuthEmailEnabled {
+		if err := h.prov.EnsureAuthTables(r.Context(), schemaNameForDB(app.Name)); err != nil {
+			h.writeError(w, r, http.StatusInternalServerError, "failed to provision auth tables", err)
+			return
 		}
-		return
 	}
 
 	h.reg.Register(appRowToRegistryApp(app))
@@ -1340,17 +1380,38 @@ func (h *Handler) UpdateAppTable(w http.ResponseWriter, r *http.Request) {
 	// in this same request is unaffected: it has no "before" state to
 	// compare against, so createTable/addMissingColumns still apply its
 	// References inline exactly as before.
-	existingRefs := make(map[string]*config.ReferenceConfig, len(existingTable.Columns))
+	existingCols := make(map[string]config.ColumnConfig, len(existingTable.Columns))
 	for _, c := range existingTable.Columns {
-		existingRefs[c.Name] = c.References
+		existingCols[c.Name] = c
 	}
 	for _, c := range body.Columns {
-		oldRef, existed := existingRefs[c.Name]
+		old, existed := existingCols[c.Name]
 		if !existed {
 			continue
 		}
-		if !oldRef.Equal(c.References) {
+		if !old.References.Equal(c.References) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "foreign-key changes on an existing column must go through the dedicated add/remove-foreign-key endpoint"})
+			return
+		}
+		// Changing a column into or out of "enum" is a different mistake
+		// than widening/narrowing one that is already enum on both sides:
+		// there is no endpoint for it at all (config.ValidateTables treats
+		// AllowedValues as declarable only at column creation — spec
+		// column-enum-type CENUM-01), unlike widen/narrow which does have a
+		// dedicated endpoint. Report each distinctly instead of pointing a
+		// type-change request at an endpoint that will also reject it.
+		if old.Type != c.Type && (old.Type == "enum" || c.Type == "enum") {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "changing a column to or from the enum type is not supported; the type can only be set to enum when the column is created"})
+			return
+		}
+		// Same reasoning as References above: an existing enum column's
+		// CHECK constraint is never re-emitted by addMissingColumns, so
+		// accepting an AllowedValues change here would persist a set the
+		// database is not actually enforcing. Widening/narrowing has its own
+		// endpoint, which runs the real constraint swap and the in-use
+		// pre-check.
+		if old.Type == "enum" && c.Type == "enum" && !sameStringSet(old.AllowedValues, c.AllowedValues) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "allowed-value changes on an existing enum column must go through the dedicated enum-values endpoint"})
 			return
 		}
 	}
@@ -1502,6 +1563,12 @@ func (h *Handler) UpdateAppForUser(ctx context.Context, user *DashboardUser, app
 	app, err := UpdateApp(ctx, h.pool, appID, user, authEmailEnabled)
 	if err != nil {
 		return nil, err
+	}
+
+	if app.AuthEmailEnabled {
+		if err := h.prov.EnsureAuthTables(ctx, schemaNameForDB(app.Name)); err != nil {
+			return nil, err
+		}
 	}
 
 	h.reg.Register(appRowToRegistryApp(app))
@@ -1816,6 +1883,155 @@ func (h *Handler) RemoveColumnForeignKeyForUser(ctx context.Context, user *Dashb
 
 	h.audit(ctx, user.ID, user.Email, "app.table_column.remove_foreign_key", "app_table", row.ID, app.Name+"/"+row.Name+"/"+columnName, nil, ip)
 	return &row, nil
+}
+
+// ErrColumnIsNotEnum is returned by UpdateColumnEnumValuesForUser when the
+// target column exists but is not an enum column — allowed values are only
+// meaningful for type "enum", and this feature deliberately does not convert
+// a column to or from enum.
+var ErrColumnIsNotEnum = errors.New("dashboard: column is not an enum column")
+
+// UpdateColumnEnumValuesForUser is the shared operation behind
+// orbit_update_column_enum_values and PATCH
+// /dashboard/api/apps/{id}/tables/{tableId}/columns/{columnName}/enum-values
+// — widens or narrows an existing enum column's allowed values. It exists as
+// its own operation for the same structural reason the foreign-key add/remove
+// pair does: h.prov.Apply's addMissingColumns is add-only for columns and
+// silently skips any column that already exists, so an existing column's
+// CHECK constraint is never re-emitted through that path.
+//
+// A narrowing that would orphan rows is rejected by the provisioner with a
+// *provisioner.EnumValueInUseError before any DDL runs, and nothing is
+// persisted.
+func (h *Handler) UpdateColumnEnumValuesForUser(ctx context.Context, user *DashboardUser, appID, tableName, columnName string, newValues []string, ip string) (*AppTableRow, error) {
+	app, role, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, err
+	}
+	if !role.CanWrite() {
+		return nil, ErrForbidden
+	}
+
+	existingTable := findAppTableByName(app, tableName)
+	if existingTable == nil {
+		return nil, ErrNotFound
+	}
+
+	colIndex := -1
+	for i, c := range existingTable.Columns {
+		if c.Name == columnName {
+			colIndex = i
+			break
+		}
+	}
+	if colIndex == -1 {
+		return nil, ErrNotFound
+	}
+
+	column := existingTable.Columns[colIndex]
+	if column.Type != "enum" {
+		return nil, ErrColumnIsNotEnum
+	}
+
+	if err := config.ValidateEnumValues(newValues); err != nil {
+		return nil, &ValidationError{msg: err.Error()}
+	}
+	// A narrowing that drops the column's own default is as broken as
+	// declaring one outside the set at creation time (config.validateDefault's
+	// enum case) — just discovered later.
+	if column.Default != "" && !slices.Contains(newValues, column.Default) {
+		return nil, &ValidationError{msg: fmt.Sprintf("column %q has default %q, which is not one of the new allowed values", columnName, column.Default)}
+	}
+
+	schemaName := schemaNameForDB(app.Name)
+	if err := h.prov.ReplaceColumnEnumValues(ctx, schemaName, tableName, columnName, column.AllowedValues, newValues); err != nil {
+		return nil, err
+	}
+
+	mergedColumns := make([]config.ColumnConfig, len(existingTable.Columns))
+	copy(mergedColumns, existingTable.Columns)
+	mergedColumns[colIndex].AllowedValues = newValues
+
+	row, err := UpdateAppTable(ctx, h.pool, appID, existingTable.ID, schemaName, existingTable.RLS, mergedColumns, existingTable.Indexes)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+	}
+
+	updated, _, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+	}
+	h.reg.Register(appRowToRegistryApp(updated))
+
+	h.audit(ctx, user.ID, user.Email, "app.table.column.enum_values.update", "app_table", row.ID, app.Name+"/"+row.Name+"/"+columnName, nil, ip)
+	return &row, nil
+}
+
+// UpdateColumnEnumValues handles PATCH
+// /dashboard/api/apps/{id}/tables/{tableId}/columns/{columnName}/enum-values.
+// The table is addressed by id (consistent with the other /tables/{tableId}
+// routes) and resolved to its name before delegating.
+func (h *Handler) UpdateColumnEnumValues(w http.ResponseWriter, r *http.Request) {
+	user, ok := UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	appID := chi.URLParam(r, "id")
+	tableID := chi.URLParam(r, "tableId")
+	columnName := chi.URLParam(r, "columnName")
+
+	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
+	var body struct {
+		AllowedValues []string `json:"allowed_values"`
+	}
+	if !h.decodeJSONBody(w, r, &body) {
+		return
+	}
+
+	// A lightweight name lookup, not a full GetApp: the real authorization
+	// check (role.CanWrite()) already happens inside
+	// UpdateColumnEnumValuesForUser's own GetApp call right below — this one
+	// only needs to translate the URL's tableId into the name that shared
+	// function (also called from MCP, which already has the name) takes.
+	tableName, err := GetAppTableName(r.Context(), h.pool, appID, tableID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
+			return
+		}
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	}
+
+	row, err := h.UpdateColumnEnumValuesForUser(r.Context(), user, appID, tableName, columnName, body.AllowedValues, r.RemoteAddr)
+	if err != nil {
+		var valErr *ValidationError
+		var inUseErr *provisioner.EnumValueInUseError
+		switch {
+		case errors.Is(err, ErrNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		case errors.Is(err, ErrForbidden):
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		case errors.Is(err, ErrColumnIsNotEnum):
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "column is not an enum column"})
+		case errors.As(err, &valErr):
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": valErr.Error()})
+		case errors.As(err, &inUseErr):
+			h.writeError(w, r, http.StatusBadRequest, inUseErr.Error(), err)
+		case errors.Is(err, errAppTableInternalFailed):
+			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		default:
+			h.writeError(w, r, http.StatusInternalServerError, "provisioning failed — check server logs for details", err)
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, row)
 }
 
 // DeleteAppTable handles DELETE /dashboard/api/apps/{id}/tables/{tableId}.
@@ -2141,11 +2357,12 @@ func appRowToRegistryApp(app *AppRow) *registry.App {
 		cols := make([]registry.Column, 0, len(t.Columns))
 		for _, c := range t.Columns {
 			cols = append(cols, registry.Column{
-				Name:     c.Name,
-				Type:     c.Type,
-				Required: c.Required,
-				Default:  c.Default,
-				Unique:   c.Unique,
+				Name:          c.Name,
+				Type:          c.Type,
+				Required:      c.Required,
+				Default:       c.Default,
+				Unique:        c.Unique,
+				AllowedValues: c.AllowedValues,
 			})
 		}
 		tables[t.Name] = &registry.Table{
@@ -2422,8 +2639,9 @@ func (h *Handler) LogsMetrics(w http.ResponseWriter, r *http.Request) {
 
 // DataBrowserTableColumn represents a column in the data browser tree.
 type DataBrowserTableColumn struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
+	Name          string   `json:"name"`
+	Type          string   `json:"type"`
+	AllowedValues []string `json:"allowed_values,omitempty"`
 }
 
 // DataBrowserTable represents a table in the data browser tree.
@@ -2464,7 +2682,7 @@ func (h *Handler) ListDataBrowserApps(w http.ResponseWriter, r *http.Request) {
 			cols := make([]DataBrowserTableColumn, 0, len(t.Columns)+4)
 			cols = append(cols, DataBrowserTableColumn{Name: "id", Type: "uuid"})
 			for _, c := range t.Columns {
-				cols = append(cols, DataBrowserTableColumn{Name: c.Name, Type: c.Type})
+				cols = append(cols, DataBrowserTableColumn{Name: c.Name, Type: c.Type, AllowedValues: c.AllowedValues})
 			}
 			cols = append(cols, DataBrowserTableColumn{Name: "created_at", Type: "timestamptz"})
 			cols = append(cols, DataBrowserTableColumn{Name: "updated_at", Type: "timestamptz"})

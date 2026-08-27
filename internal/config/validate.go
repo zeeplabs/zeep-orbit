@@ -7,6 +7,15 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
+)
+
+// Caps on an enum column's allowed-value set. Generous enough for any
+// realistic status set while keeping the generated CHECK (col IN (...))
+// clause bounded.
+const (
+	MaxEnumValues   = 50
+	MaxEnumValueLen = 100
 )
 
 var validOnDelete = map[string]bool{
@@ -44,6 +53,11 @@ func ValidateTables(tables []TableConfig) error {
 	for _, table := range tables {
 		for k, col := range table.Columns {
 			cPrefix := fmt.Sprintf("table %q, column[%d] (%s)", table.Name, k, col.Name)
+			if col.Type == "enum" {
+				if err := ValidateEnumValues(col.AllowedValues); err != nil {
+					return fmt.Errorf("%s: %w", cPrefix, err)
+				}
+			}
 			if err := validateDefault(cPrefix, col); err != nil {
 				return err
 			}
@@ -115,8 +129,48 @@ func validateDefault(cPrefix string, col ColumnConfig) error {
 		if !json.Valid([]byte(col.Default)) {
 			return fmt.Errorf("%s: default %q is not valid JSON", cPrefix, col.Default)
 		}
+	case "enum":
+		for _, v := range col.AllowedValues {
+			if col.Default == v {
+				return nil
+			}
+		}
+		return fmt.Errorf("%s: default %q is not one of the column's allowed values", cPrefix, col.Default)
 	case "text":
 		// Any string is a valid text default.
+	}
+
+	return nil
+}
+
+// ValidateEnumValues checks an enum column's fixed value set: 1-MaxEnumValues
+// entries, each 1-MaxEnumValueLen characters, no exact-match duplicates.
+// Values are free text (spaces, accents, quotes are all fine) — escaping is
+// the provisioner's job at DDL time, not a validation concern here.
+//
+// Exported on purpose: both the creation path (ValidateTables) and the
+// widen/narrow path (the dashboard's dedicated enum-values endpoint) must
+// apply the identical caps, and two independently written checks would drift.
+func ValidateEnumValues(values []string) error {
+	if len(values) == 0 {
+		return fmt.Errorf("allowed_values is required for an enum column (at least one value)")
+	}
+	if len(values) > MaxEnumValues {
+		return fmt.Errorf("allowed_values has %d values, which exceeds the limit of %d", len(values), MaxEnumValues)
+	}
+
+	seen := make(map[string]bool, len(values))
+	for i, v := range values {
+		if v == "" {
+			return fmt.Errorf("allowed_values[%d] is empty; every allowed value must be 1-%d characters", i, MaxEnumValueLen)
+		}
+		if n := utf8.RuneCountInString(v); n > MaxEnumValueLen {
+			return fmt.Errorf("allowed_values[%d] is %d characters, which exceeds the limit of %d", i, n, MaxEnumValueLen)
+		}
+		if seen[v] {
+			return fmt.Errorf("allowed_values contains duplicate value %q", v)
+		}
+		seen[v] = true
 	}
 
 	return nil

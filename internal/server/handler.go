@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/zeeplabs/zeep-orbit/internal/auth"
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
@@ -66,6 +68,20 @@ func rlsClaimsFromContext(ctx context.Context) db.RLSClaims {
 		return db.RLSClaims{}
 	}
 	return db.RLSClaims{Role: user.Role, Sub: user.ID, Email: user.Email}
+}
+
+// checkViolationMessage builds a safe, non-leaking message for a Postgres
+// check_violation (23514) error — e.g. an out-of-set write to an enum
+// column's CHECK constraint. Never includes pgErr.Message/Detail, since
+// those can echo back the attempted value.
+func checkViolationMessage(pgErr *pgconn.PgError) string {
+	if pgErr.ColumnName != "" {
+		return fmt.Sprintf("value not allowed for column %q", pgErr.ColumnName)
+	}
+	if pgErr.ConstraintName != "" {
+		return fmt.Sprintf("value violates constraint %q", pgErr.ConstraintName)
+	}
+	return "value violates a check constraint"
 }
 
 // Response: {"data": [...], "count": N, "limit": L, "offset": O}
@@ -185,6 +201,11 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		return err
 	})
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23514" {
+			writeError(w, http.StatusBadRequest, checkViolationMessage(pgErr))
+			return
+		}
 		if db.IsStatementTimeout(err) {
 			writeError(w, http.StatusServiceUnavailable, "query exceeded statement timeout")
 			return
@@ -293,6 +314,11 @@ func (h *Handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "not found")
+			return
+		}
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23514" {
+			writeError(w, http.StatusBadRequest, checkViolationMessage(pgErr))
 			return
 		}
 		if db.IsStatementTimeout(err) {

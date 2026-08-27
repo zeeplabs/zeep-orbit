@@ -244,7 +244,7 @@ Parámetros de query para listar: `?limit=`, `?offset=`, `?field=eq.value`, `?or
 
 ### Tipos de columna
 
-`text`, `integer`, `bigint`, `decimal`, `boolean`, `uuid`, `timestamptz`, `jsonb`
+`text`, `integer`, `bigint`, `numeric`, `boolean`, `uuid`, `timestamptz`, `jsonb`, `enum`
 
 Opciones: `required` (NOT NULL), `unique`, `default` (expresión SQL).
 
@@ -381,7 +381,7 @@ Zeep Orbit incluye un servidor [Model Context Protocol](https://modelcontextprot
 - **Autenticación:** dos métodos, ambos resueltos contra el mismo store de Personal Access Token:
   - **Personal Access Token (PAT)** — genera uno en **Dashboard → MCP**, luego envíalo como bearer token. Esto es lo que usan Claude Code, Codex, Cursor y OpenCode.
   - **OAuth 2.1 + PKCE** — registro dinámico de cliente, flujo authorization code, rotación de refresh token, discovery en `/.well-known/oauth-authorization-server`. Esto es lo que usa Claude Desktop en su flujo interactivo de conexión.
-- **Tools expuestas:** `orbit_list_apps`, `orbit_get_app_schema`, `orbit_create_app`, `orbit_create_table`, `orbit_set_table_rls_mode`, `orbit_list_policy_templates`, `orbit_create_policy_from_template` — mismo camino de validación, aprovisionamiento y auditoría que la REST API y el dashboard, sin atajos.
+- **Tools expuestas:** 26 tools que cubren gestión de apps/tablas/columnas, claves foráneas, columnas enum, políticas de fila (plantillas y cláusulas avanzadas), modo RLS, webhooks, miembros, tokens e inspección de solo lectura — p. ej. `orbit_create_app`, `orbit_create_table`, `orbit_add_table_column`, `orbit_create_policy_from_template`, `orbit_set_table_rls_mode`, `orbit_create_webhook`. Mismo camino de validación, aprovisionamiento y auditoría que la REST API y el dashboard, sin atajos — lista completa y schemas vía descubrimiento de tools del MCP (`tools/list`).
 
 ### Configuración del cliente
 

@@ -22,6 +22,10 @@ export interface ColumnDef {
   default_is_expression?: boolean
   unique: boolean
   references?: ReferenceDef | null
+  // allowed_values is the fixed set of values a "enum"-type column accepts
+  // (column-enum-type T1's Go counterpart: config.ColumnConfig.AllowedValues).
+  // Only meaningful when type === "enum".
+  allowed_values?: string[]
 }
 
 export interface IndexDef {
@@ -188,6 +192,35 @@ export function useUpdateAppTable(
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['apps'] })
+    },
+  })
+}
+
+// useUpdateColumnEnumValues calls the dedicated PATCH endpoint for
+// widening/narrowing an existing enum column's allowed values — the generic
+// useUpdateAppTable's PUT path can't apply this change (the REST handler
+// rejects an AllowedValues change on an existing column, see AGENTS.md's
+// column-enum-type notes).
+export function useUpdateColumnEnumValues(
+  appId: string,
+  tableId: string,
+): UseMutationResult<void, Error, { columnName: string; values: string[] }> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ columnName, values }) =>
+      apiFetch<void>(
+        `/dashboard/api/apps/${appId}/tables/${tableId}/columns/${encodeURIComponent(columnName)}/enum-values`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ allowed_values: values }),
+        },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['apps'] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
     },
   })
 }
@@ -565,6 +598,7 @@ export function useBrandConfig(): UseQueryResult<BrandConfig> {
 export interface DataBrowserColumn {
   name: string
   type: string
+  allowed_values?: string[]
 }
 
 export interface DataBrowserTable {
@@ -1437,6 +1471,7 @@ export function useAIProviderStatus(provider = 'openai'): UseQueryResult<AIProvi
 export interface BuildChatPlanColumn {
   name: string
   type: string
+  allowed_values?: string[]
 }
 
 export interface BuildChatPlanTable {

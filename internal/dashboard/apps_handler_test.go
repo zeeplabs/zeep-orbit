@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -562,5 +563,430 @@ func TestUpdateAppTable_AllowsNonReferenceChangeWithReferencesUnchanged(t *testi
 		if c.Name == "category_id" && (c.References == nil || c.References.Table != "categories") {
 			t.Fatalf("expected category_id's reference to remain intact, got %+v", c.References)
 		}
+	}
+}
+
+// --- enum column type end-to-end (CENUM-01, CENUM-02, CENUM-04, CENUM-05, CENUM-06) ---
+
+// checkConstraintDefForColumn returns the CHECK constraint definition on a
+// column, or "" when there is none. Read from the catalog rather than
+// assuming a constraint name.
+func checkConstraintDefForColumn(t *testing.T, pool *db.Pool, schema, tableName, columnName string) string {
+	t.Helper()
+	var def string
+	err := pool.QueryRow(context.Background(),
+		`SELECT pg_get_constraintdef(c.oid)
+		 FROM pg_constraint c
+		 JOIN pg_class r ON r.oid = c.conrelid
+		 JOIN pg_namespace n ON n.oid = r.relnamespace
+		 JOIN pg_attribute a ON a.attrelid = r.oid AND a.attname = $3
+		 WHERE c.contype = 'c' AND n.nspname = $1 AND r.relname = $2 AND c.conkey = ARRAY[a.attnum]`,
+		schema, tableName, columnName,
+	).Scan(&def)
+	if err != nil {
+		if strings.Contains(err.Error(), "no rows") {
+			return ""
+		}
+		t.Fatalf("read check constraint on %s.%s.%s: %v", schema, tableName, columnName, err)
+	}
+	return def
+}
+
+// physicalColumnType returns a column's physical Postgres type.
+func physicalColumnType(t *testing.T, pool *db.Pool, schema, tableName, columnName string) string {
+	t.Helper()
+	var udt string
+	if err := pool.QueryRow(context.Background(),
+		`SELECT udt_name FROM information_schema.columns
+		 WHERE table_schema = $1 AND table_name = $2 AND column_name = $3`,
+		schema, tableName, columnName,
+	).Scan(&udt); err != nil {
+		t.Fatalf("read column type on %s.%s.%s: %v", schema, tableName, columnName, err)
+	}
+	return udt
+}
+
+// CENUM-01: creating a table with an enum column provisions it as text with
+// a CHECK constraint restricting it to exactly the declared values, and the
+// database itself rejects an out-of-set write.
+func TestCreateAppTableForUser_EnumColumnProvisionsCheckConstraint(t *testing.T) {
+	pool, h, actors, _, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{Name: uniqueAppName(t, "enum-create-app")}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppForUser: %v", err)
+	}
+	table, err := h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
+		Name: "assets",
+		Columns: []config.ColumnConfig{
+			{Name: "status", Type: "enum", AllowedValues: []string{"pending", "active", "Em andamento"}},
+		},
+	}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppTableForUser: %v", err)
+	}
+
+	// The declared config round-trips.
+	if got := table.Columns[0].AllowedValues; len(got) != 3 || got[0] != "pending" || got[2] != "Em andamento" {
+		t.Errorf("persisted AllowedValues = %v, want [pending active \"Em andamento\"]", got)
+	}
+
+	schema := schemaNameForDB(app.Name)
+	if got := physicalColumnType(t, pool, schema, "assets", "status"); got != "text" {
+		t.Errorf("physical column type = %q, want %q", got, "text")
+	}
+	if def := checkConstraintDefForColumn(t, pool, schema, "assets", "status"); def == "" {
+		t.Fatal("expected a CHECK constraint on assets.status")
+	} else if !strings.Contains(def, "pending") || !strings.Contains(def, "Em andamento") {
+		t.Errorf("constraint def = %q, want it to restrict to the declared values", def)
+	}
+
+	// The real enforcement: in-set write accepted, out-of-set rejected.
+	if _, err := pool.Exec(ctx, "INSERT INTO "+schema+".assets (status) VALUES ('pending')"); err != nil {
+		t.Errorf("expected an in-set write to succeed, got: %v", err)
+	}
+	if _, err := pool.Exec(ctx, "INSERT INTO "+schema+".assets (status) VALUES ('qualquer coisa')"); err == nil {
+		t.Error("expected the database to reject an out-of-set write")
+	}
+}
+
+// CENUM-04: an enum column with an empty allowed-value list is rejected at
+// request-validation time, before any table is created.
+func TestCreateAppTableForUser_EnumWithoutAllowedValuesRejected(t *testing.T) {
+	pool, h, actors, _, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{Name: uniqueAppName(t, "enum-empty-app")}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppForUser: %v", err)
+	}
+
+	_, err = h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
+		Name:    "assets",
+		Columns: []config.ColumnConfig{{Name: "status", Type: "enum"}},
+	}, "127.0.0.1")
+	var valErr *ValidationError
+	if !errors.As(err, &valErr) {
+		t.Fatalf("expected *ValidationError for an enum column without allowed_values, got %v (%T)", err, err)
+	}
+
+	// Nothing was provisioned: the table does not exist in Postgres.
+	var exists bool
+	if err := pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = 'assets')`,
+		schemaNameForDB(app.Name),
+	).Scan(&exists); err != nil {
+		t.Fatalf("check table existence: %v", err)
+	}
+	if exists {
+		t.Error("expected no physical table after a rejected enum column definition")
+	}
+}
+
+// CENUM-05: a default that is not a member of allowed_values is rejected at
+// request-validation time.
+func TestCreateAppTableForUser_EnumDefaultOutsideAllowedValuesRejected(t *testing.T) {
+	pool, h, actors, _, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{Name: uniqueAppName(t, "enum-baddef-app")}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppForUser: %v", err)
+	}
+
+	_, err = h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
+		Name: "assets",
+		Columns: []config.ColumnConfig{{
+			Name: "status", Type: "enum",
+			AllowedValues: []string{"pending", "active"},
+			Default:       "closed",
+		}},
+	}, "127.0.0.1")
+	var valErr *ValidationError
+	if !errors.As(err, &valErr) {
+		t.Fatalf("expected *ValidationError for a default outside allowed_values, got %v (%T)", err, err)
+	}
+}
+
+// CENUM-02: adding a new enum column to an existing table attaches the same
+// CHECK constraint the creation path emits.
+func TestAddTableColumnForUser_EnumColumnProvisionsCheckConstraint(t *testing.T) {
+	pool, h, actors, _, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{Name: uniqueAppName(t, "enum-addcol-app")}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppForUser: %v", err)
+	}
+	table, err := h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
+		Name:    "assets",
+		Columns: []config.ColumnConfig{{Name: "name", Type: "text"}},
+	}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppTableForUser: %v", err)
+	}
+
+	updated, err := h.AddTableColumnForUser(ctx, actors["loner"], app.ID, table.Name, config.ColumnConfig{
+		Name: "status", Type: "enum", AllowedValues: []string{"pending", "active"},
+	}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("AddTableColumnForUser: %v", err)
+	}
+	if got := updated.Columns[1].AllowedValues; len(got) != 2 || got[0] != "pending" {
+		t.Errorf("persisted AllowedValues = %v, want [pending active]", got)
+	}
+
+	schema := schemaNameForDB(app.Name)
+	if def := checkConstraintDefForColumn(t, pool, schema, "assets", "status"); def == "" {
+		t.Fatal("expected a CHECK constraint on the added assets.status column")
+	}
+	if _, err := pool.Exec(ctx, "INSERT INTO "+schema+".assets (status) VALUES ('active')"); err != nil {
+		t.Errorf("expected an in-set write to succeed, got: %v", err)
+	}
+	if _, err := pool.Exec(ctx, "INSERT INTO "+schema+".assets (status) VALUES ('qualquer coisa')"); err == nil {
+		t.Error("expected the database to reject an out-of-set write on the added column")
+	}
+}
+
+// CENUM-04: an invalid enum column is rejected on the add-column path too,
+// not just at table creation.
+func TestAddTableColumnForUser_EnumWithoutAllowedValuesRejected(t *testing.T) {
+	pool, h, actors, _, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{Name: uniqueAppName(t, "enum-addcol-bad-app")}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppForUser: %v", err)
+	}
+	table, err := h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
+		Name:    "assets",
+		Columns: []config.ColumnConfig{{Name: "name", Type: "text"}},
+	}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppTableForUser: %v", err)
+	}
+
+	_, err = h.AddTableColumnForUser(ctx, actors["loner"], app.ID, table.Name, config.ColumnConfig{
+		Name: "status", Type: "enum", AllowedValues: []string{},
+	}, "127.0.0.1")
+	var valErr *ValidationError
+	if !errors.As(err, &valErr) {
+		t.Fatalf("expected *ValidationError for an enum column without allowed_values, got %v (%T)", err, err)
+	}
+
+	// The column was not added physically.
+	var exists bool
+	if err := pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM information_schema.columns
+		  WHERE table_schema = $1 AND table_name = 'assets' AND column_name = 'status')`,
+		schemaNameForDB(app.Name),
+	).Scan(&exists); err != nil {
+		t.Fatalf("check column existence: %v", err)
+	}
+	if exists {
+		t.Error("expected no physical column after a rejected enum column definition")
+	}
+}
+
+// --- PUT guard against an AllowedValues change on an existing enum column ---
+
+// createAppWithEnumTable is shared setup for the PUT-guard tests: an app with
+// an assets table whose status column is an enum over pending/active.
+func createAppWithEnumTable(t *testing.T, ctx context.Context, h *Handler, actors map[string]*DashboardUser, appName string) (*AppRow, *AppTableRow) {
+	t.Helper()
+	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{Name: appName}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppForUser: %v", err)
+	}
+	table, err := h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
+		Name: "assets",
+		Columns: []config.ColumnConfig{
+			{Name: "name", Type: "text"},
+			{Name: "status", Type: "enum", AllowedValues: []string{"pending", "active"}},
+		},
+	}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppTableForUser: %v", err)
+	}
+	return app, table
+}
+
+// A full-replace PUT that changes an existing enum column's AllowedValues is
+// rejected with 400 pointing at the dedicated endpoint, and nothing is
+// persisted or migrated — the same silent-no-op class the References guard
+// above closes (addMissingColumns never re-emits an existing column's DDL).
+func TestUpdateAppTable_RejectsAllowedValuesChangeOnExistingColumn(t *testing.T) {
+	pool, h, actors, _, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	app, table := createAppWithEnumTable(t, ctx, h, actors, uniqueAppName(t, "put-enum-reject"))
+	schema := schemaNameForDB(app.Name)
+	constraintBefore := checkConstraintDefForColumn(t, pool, schema, "assets", "status")
+
+	w := callUpdateAppTable(t, h, actors["loner"], app.ID, table.ID, TableRequestBody{
+		RLS: table.RLS,
+		Columns: []config.ColumnConfig{
+			{Name: "name", Type: "text"},
+			{Name: "status", Type: "enum", AllowedValues: []string{"pending", "active", "closed"}},
+		},
+		Indexes: table.Indexes,
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for an AllowedValues change on a pre-existing column, got %d (body: %s)", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "enum-values endpoint") {
+		t.Errorf("expected the error to point at the dedicated endpoint, got: %s", w.Body.String())
+	}
+
+	// Stored schema untouched.
+	refreshed, _, err := GetApp(ctx, pool, app.ID, actors["loner"])
+	if err != nil {
+		t.Fatalf("GetApp: %v", err)
+	}
+	refreshedTable := findAppTableByName(refreshed, "assets")
+	if refreshedTable == nil {
+		t.Fatal("assets table disappeared")
+	}
+	for _, c := range refreshedTable.Columns {
+		if c.Name == "status" && len(c.AllowedValues) != 2 {
+			t.Errorf("expected stored AllowedValues untouched (2 values), got %v", c.AllowedValues)
+		}
+	}
+	// Physical constraint untouched: no DDL ran for a rejected request.
+	if after := checkConstraintDefForColumn(t, pool, schema, "assets", "status"); after != constraintBefore {
+		t.Errorf("constraint changed on a rejected request:\n before = %q\n after  = %q", constraintBefore, after)
+	}
+}
+
+// A full-replace PUT that changes an existing enum column's Type away from
+// "enum" (or a text column's Type to "enum") is rejected with a distinct
+// message naming the real constraint — there is no endpoint for this at all,
+// unlike widen/narrow, so pointing the caller at the enum-values endpoint
+// (which itself requires the column to already be enum) would be a dead end.
+func TestUpdateAppTable_RejectsTypeChangeIntoOrOutOfEnum(t *testing.T) {
+	pool, h, actors, _, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	app, table := createAppWithEnumTable(t, ctx, h, actors, uniqueAppName(t, "put-enum-typechange"))
+	schema := schemaNameForDB(app.Name)
+	constraintBefore := checkConstraintDefForColumn(t, pool, schema, "assets", "status")
+
+	// enum -> text
+	w := callUpdateAppTable(t, h, actors["loner"], app.ID, table.ID, TableRequestBody{
+		RLS: table.RLS,
+		Columns: []config.ColumnConfig{
+			{Name: "name", Type: "text"},
+			{Name: "status", Type: "text"},
+		},
+		Indexes: table.Indexes,
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for enum -> text on a pre-existing column, got %d (body: %s)", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "to or from the enum type is not supported") {
+		t.Errorf("expected the error to name the real constraint (no such endpoint), got: %s", w.Body.String())
+	}
+
+	// text -> enum, on the pre-existing "name" column.
+	w = callUpdateAppTable(t, h, actors["loner"], app.ID, table.ID, TableRequestBody{
+		RLS: table.RLS,
+		Columns: []config.ColumnConfig{
+			{Name: "name", Type: "enum", AllowedValues: []string{"a", "b"}},
+			{Name: "status", Type: "enum", AllowedValues: []string{"pending", "active"}},
+		},
+		Indexes: table.Indexes,
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for text -> enum on a pre-existing column, got %d (body: %s)", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "to or from the enum type is not supported") {
+		t.Errorf("expected the error to name the real constraint (no such endpoint), got: %s", w.Body.String())
+	}
+
+	// Physical constraint untouched: no DDL ran for either rejected request.
+	if after := checkConstraintDefForColumn(t, pool, schema, "assets", "status"); after != constraintBefore {
+		t.Errorf("constraint changed on a rejected request:\n before = %q\n after  = %q", constraintBefore, after)
+	}
+}
+
+// Negative control: a PUT that leaves an existing enum column's
+// AllowedValues unchanged (order may differ — the comparison is set-based)
+// still succeeds, so the guard produces no false positives.
+func TestUpdateAppTable_AllowsUnchangedAllowedValuesOnExistingColumn(t *testing.T) {
+	pool, h, actors, _, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	app, table := createAppWithEnumTable(t, ctx, h, actors, uniqueAppName(t, "put-enum-same"))
+
+	w := callUpdateAppTable(t, h, actors["loner"], app.ID, table.ID, TableRequestBody{
+		RLS: table.RLS,
+		Columns: []config.ColumnConfig{
+			{Name: "name", Type: "text"},
+			// Same set, reversed order.
+			{Name: "status", Type: "enum", AllowedValues: []string{"active", "pending"}},
+			// A genuine, permitted change in the same request.
+			{Name: "note", Type: "text"},
+		},
+		Indexes: table.Indexes,
+	})
+	if w.Code < 200 || w.Code >= 300 {
+		t.Fatalf("expected 2xx when AllowedValues is unchanged, got %d (body: %s)", w.Code, w.Body.String())
+	}
+
+	refreshed, _, err := GetApp(ctx, pool, app.ID, actors["loner"])
+	if err != nil {
+		t.Fatalf("GetApp: %v", err)
+	}
+	refreshedTable := findAppTableByName(refreshed, "assets")
+	if refreshedTable == nil {
+		t.Fatal("assets table disappeared")
+	}
+	if len(refreshedTable.Columns) != 3 {
+		t.Errorf("expected the permitted change to be applied (3 columns), got %d: %+v", len(refreshedTable.Columns), refreshedTable.Columns)
+	}
+}
+
+// A brand-new enum column in the same PUT request has no "before" state, so
+// the guard must not fire — it is provisioned inline exactly as before.
+func TestUpdateAppTable_AllowsAllowedValuesOnBrandNewColumn(t *testing.T) {
+	pool, h, actors, _, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{Name: uniqueAppName(t, "put-enum-newcol")}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppForUser: %v", err)
+	}
+	table, err := h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
+		Name:    "assets",
+		Columns: []config.ColumnConfig{{Name: "name", Type: "text"}},
+	}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppTableForUser: %v", err)
+	}
+
+	w := callUpdateAppTable(t, h, actors["loner"], app.ID, table.ID, TableRequestBody{
+		RLS: table.RLS,
+		Columns: []config.ColumnConfig{
+			{Name: "name", Type: "text"},
+			{Name: "status", Type: "enum", AllowedValues: []string{"pending", "active"}},
+		},
+		Indexes: table.Indexes,
+	})
+	if w.Code < 200 || w.Code >= 300 {
+		t.Fatalf("expected 2xx for an enum column that is brand-new in this request, got %d (body: %s)", w.Code, w.Body.String())
+	}
+
+	if def := checkConstraintDefForColumn(t, pool, schemaNameForDB(app.Name), "assets", "status"); def == "" {
+		t.Error("expected a CHECK constraint on the newly added assets.status column")
 	}
 }

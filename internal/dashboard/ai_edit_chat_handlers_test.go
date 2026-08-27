@@ -1390,3 +1390,108 @@ func TestEditChatConfirm_AddForeignKeyOrphanedRowsSurfacesSpecificMessage(t *tes
 		t.Fatalf("expected the specific foreign-key-violation message, got %q", got["error"])
 	}
 }
+
+// --- column-enum-type T15/CENUM-15: AI edit chat can propose an enum column ---
+
+// TestEditChatTurn_EditOpShapeTurn_EnumColumnPreservesAllowedValues covers
+// tasks.md T15's first Done-when bullet: the model is allowed to propose an
+// add_column operation with an "enum" column and allowed_values, and the
+// edit_op returned to the caller carries the column's type and
+// allowed_values through unchanged from the model's tool call.
+func TestEditChatTurn_EditOpShapeTurn_EnumColumnPreservesAllowedValues(t *testing.T) {
+	pool, h, user, appID := aiEditChatHandlerTestPool(t)
+	setOpenAIProvider(t, pool, true)
+	op := &ai.EditOperation{Kind: "add_column", AddColumn: &ai.PlanColumnOp{
+		Table:  "orders",
+		Column: ai.PlanColumn{Name: "status", Type: "enum", AllowedValues: []string{"open", "closed"}},
+	}}
+	withFakeEditAIModel(t, func(ctx context.Context, model, apiKey string, history []ai.Message, readTools ai.ReadToolInvoker) (ai.ChatTurnResult, error) {
+		return ai.ChatTurnResult{Kind: "edit_op", EditOp: op}, nil
+	})
+
+	req := editChatTurnRequestFor(&DashboardUser{ID: user.ID, Role: "admin"}, appID, "add a status field with values open/closed")
+	w := httptest.NewRecorder()
+	h.EditChatTurn(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var got editChatTurnResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.EditOp == nil || got.EditOp.Kind != "add_column" || got.EditOp.AddColumn == nil {
+		t.Fatalf("expected an add_column edit_op response, got %+v", got)
+	}
+	col := got.EditOp.AddColumn.Column
+	if col.Type != "enum" {
+		t.Fatalf("expected the proposed column type to be %q, got %q", "enum", col.Type)
+	}
+	if len(col.AllowedValues) != 2 || col.AllowedValues[0] != "open" || col.AllowedValues[1] != "closed" {
+		t.Fatalf("expected AllowedValues [open closed], got %v", col.AllowedValues)
+	}
+}
+
+// TestEditChatConfirm_AddColumn_EnumCreatesCheckConstraint covers tasks.md
+// T15's second Done-when bullet: confirming an add_column edit_op that
+// proposes an enum column goes through the exact same AddTableColumnForUser
+// path T6 (column-enum-type batch 1) already covers — the added column has
+// the CHECK constraint the provisioner emits for an "enum" column.
+func TestEditChatConfirm_AddColumn_EnumCreatesCheckConstraint(t *testing.T) {
+	pool, h, user, appID := aiEditChatHandlerTestPool(t)
+	ctx := context.Background()
+	app, _, err := GetApp(ctx, pool, appID, &DashboardUser{ID: user.ID, Role: "admin"})
+	if err != nil {
+		t.Fatalf("GetApp: %v", err)
+	}
+	if _, err := h.CreateAppTableForUser(ctx, &DashboardUser{ID: user.ID, Role: "admin"}, appID, TableRequestBody{
+		Name:    "orders",
+		Columns: []config.ColumnConfig{{Name: "reference", Type: "text"}},
+	}, "test"); err != nil {
+		t.Fatalf("CreateAppTableForUser: %v", err)
+	}
+
+	session, _, err := GetOrCreateInProgressEditSession(ctx, pool, user.ID, appID)
+	if err != nil {
+		t.Fatalf("GetOrCreateInProgressEditSession: %v", err)
+	}
+	op := &ai.EditOperation{Kind: "add_column", AddColumn: &ai.PlanColumnOp{
+		Table:  "orders",
+		Column: ai.PlanColumn{Name: "status", Type: "enum", AllowedValues: []string{"open", "closed"}},
+	}}
+	persistProposedEditOp(t, pool, session.ID, op)
+
+	req := confirmEditChatRequestFor(&DashboardUser{ID: user.ID, Role: "admin"}, session.ID)
+	w := httptest.NewRecorder()
+	h.EditChatConfirm(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var got editChatConfirmResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	var statusCol *config.ColumnConfig
+	for i, c := range got.Table.Columns {
+		if c.Name == "status" {
+			statusCol = &got.Table.Columns[i]
+		}
+	}
+	if statusCol == nil || statusCol.Type != "enum" {
+		t.Fatalf("expected an added enum status column, got %+v", got.Table.Columns)
+	}
+	if len(statusCol.AllowedValues) != 2 || statusCol.AllowedValues[0] != "open" || statusCol.AllowedValues[1] != "closed" {
+		t.Fatalf("expected persisted AllowedValues [open closed], got %v", statusCol.AllowedValues)
+	}
+
+	def := checkConstraintDefForColumn(t, pool, schemaNameForDB(app.Name), "orders", "status")
+	if def == "" {
+		t.Fatal("expected a CHECK constraint on orders.status")
+	}
+	for _, v := range []string{"open", "closed"} {
+		if !strings.Contains(def, v) {
+			t.Errorf("expected CHECK definition to mention %q, got %q", v, def)
+		}
+	}
+}
