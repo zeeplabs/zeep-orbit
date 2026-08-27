@@ -1129,6 +1129,16 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		app.StorageConfig = sc
+
+		// Bucket set for the first time (or re-saved): the app's schema may
+		// never have gotten its "_files" table, since CreateApp only
+		// provisions storage when the bucket is present at creation time.
+		// Scoped to this app/table only — not a full Apply — so pre-existing
+		// drift on unrelated tables can't fail this save.
+		if err := h.prov.EnsureStorageTables(r.Context(), schemaNameForDB(app.Name)); err != nil {
+			h.writeError(w, r, http.StatusInternalServerError, "failed to provision storage tables", err)
+			return
+		}
 	}
 
 	if body.RateLimit != nil {
@@ -1146,10 +1156,17 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 	// on every auth/storage/rate-limit save was pure unrelated blast radius:
 	// any pre-existing schema drift on an untouched table (bad column type,
 	// legacy rls value) failed this save with an error naming a table this
-	// request never referenced. UpdateAppForUser (the MCP/AI-chat path,
-	// handler.go's UpdateAppForUser) never called Apply either — this aligns
-	// REST with that already-correct behavior instead of the other way
-	// around (app-update-schema-drift-fix spec AUSD-01..03).
+	// request never referenced (app-update-schema-drift-fix spec AUSD-01..03).
+	// Auth/storage system tables still need provisioning though — that's
+	// EnsureAuthTables/EnsureStorageTables above and below, scoped to just
+	// those two tables instead of the whole app.
+	if app.AuthEmailEnabled {
+		if err := h.prov.EnsureAuthTables(r.Context(), schemaNameForDB(app.Name)); err != nil {
+			h.writeError(w, r, http.StatusInternalServerError, "failed to provision auth tables", err)
+			return
+		}
+	}
+
 	h.reg.Register(appRowToRegistryApp(app))
 
 	app.RedactSecrets()
@@ -1536,6 +1553,12 @@ func (h *Handler) UpdateAppForUser(ctx context.Context, user *DashboardUser, app
 	app, err := UpdateApp(ctx, h.pool, appID, user, authEmailEnabled)
 	if err != nil {
 		return nil, err
+	}
+
+	if app.AuthEmailEnabled {
+		if err := h.prov.EnsureAuthTables(ctx, schemaNameForDB(app.Name)); err != nil {
+			return nil, err
+		}
 	}
 
 	h.reg.Register(appRowToRegistryApp(app))

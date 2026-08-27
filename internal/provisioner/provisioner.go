@@ -95,3 +95,33 @@ func (p *Provisioner) Apply(ctx context.Context, cfg *config.Config) (*Report, e
 
 	return report, nil
 }
+
+// EnsureAuthTables provisions the "_auth_users"/"_auth_sessions" tables for
+// one app's schema, without touching any other app or table. Idempotent —
+// safe to call every time an app's auth_email_enabled flips to true,
+// including when it was already true. Use this instead of Apply when only
+// auth needs provisioning: Apply reconciles every table in the app's config,
+// which is the wrong blast radius for a request that only toggles auth.
+func (p *Provisioner) EnsureAuthTables(ctx context.Context, schemaName string) error {
+	if _, err := p.createSchema(ctx, schemaName); err != nil {
+		return fmt.Errorf("provisioner: schema %q: %w", schemaName, err)
+	}
+	if _, err := p.provisionAuthTables(ctx, schemaName); err != nil {
+		return fmt.Errorf("provisioner: schema %q auth tables: %w", schemaName, err)
+	}
+	return nil
+}
+
+// EnsureStorageTables provisions the "_files" table for one app's schema,
+// without touching any other app or table. Idempotent — safe to call every
+// time an app's storage bucket is set, including when it was already set.
+// Use this instead of Apply for the same reason as EnsureAuthTables.
+func (p *Provisioner) EnsureStorageTables(ctx context.Context, schemaName string) error {
+	if _, err := p.createSchema(ctx, schemaName); err != nil {
+		return fmt.Errorf("provisioner: schema %q: %w", schemaName, err)
+	}
+	if _, err := p.provisionStorageTables(ctx, schemaName); err != nil {
+		return fmt.Errorf("provisioner: schema %q storage tables: %w", schemaName, err)
+	}
+	return nil
+}
