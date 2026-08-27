@@ -865,6 +865,58 @@ func TestUpdateAppTable_RejectsAllowedValuesChangeOnExistingColumn(t *testing.T)
 	}
 }
 
+// A full-replace PUT that changes an existing enum column's Type away from
+// "enum" (or a text column's Type to "enum") is rejected with a distinct
+// message naming the real constraint — there is no endpoint for this at all,
+// unlike widen/narrow, so pointing the caller at the enum-values endpoint
+// (which itself requires the column to already be enum) would be a dead end.
+func TestUpdateAppTable_RejectsTypeChangeIntoOrOutOfEnum(t *testing.T) {
+	pool, h, actors, _, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	app, table := createAppWithEnumTable(t, ctx, h, actors, uniqueAppName(t, "put-enum-typechange"))
+	schema := schemaNameForDB(app.Name)
+	constraintBefore := checkConstraintDefForColumn(t, pool, schema, "assets", "status")
+
+	// enum -> text
+	w := callUpdateAppTable(t, h, actors["loner"], app.ID, table.ID, TableRequestBody{
+		RLS: table.RLS,
+		Columns: []config.ColumnConfig{
+			{Name: "name", Type: "text"},
+			{Name: "status", Type: "text"},
+		},
+		Indexes: table.Indexes,
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for enum -> text on a pre-existing column, got %d (body: %s)", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "to or from the enum type is not supported") {
+		t.Errorf("expected the error to name the real constraint (no such endpoint), got: %s", w.Body.String())
+	}
+
+	// text -> enum, on the pre-existing "name" column.
+	w = callUpdateAppTable(t, h, actors["loner"], app.ID, table.ID, TableRequestBody{
+		RLS: table.RLS,
+		Columns: []config.ColumnConfig{
+			{Name: "name", Type: "enum", AllowedValues: []string{"a", "b"}},
+			{Name: "status", Type: "enum", AllowedValues: []string{"pending", "active"}},
+		},
+		Indexes: table.Indexes,
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for text -> enum on a pre-existing column, got %d (body: %s)", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "to or from the enum type is not supported") {
+		t.Errorf("expected the error to name the real constraint (no such endpoint), got: %s", w.Body.String())
+	}
+
+	// Physical constraint untouched: no DDL ran for either rejected request.
+	if after := checkConstraintDefForColumn(t, pool, schema, "assets", "status"); after != constraintBefore {
+		t.Errorf("constraint changed on a rejected request:\n before = %q\n after  = %q", constraintBefore, after)
+	}
+}
+
 // Negative control: a PUT that leaves an existing enum column's
 // AllowedValues unchanged (order may differ — the comparison is set-based)
 // still succeeds, so the guard produces no false positives.

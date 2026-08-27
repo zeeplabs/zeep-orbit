@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { TableDef, ColumnDef, IndexDef, ReferenceDef } from "../lib/api";
+import { TableDef, ColumnDef, IndexDef, ReferenceDef, useUpdateColumnEnumValues } from "../lib/api";
 import { hasOwnerColumn } from "../lib/rls";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon";
@@ -1082,38 +1081,6 @@ function EnumAllowedValuesEditor({
   );
 }
 
-// updateColumnEnumValues calls the dedicated PATCH endpoint (T8/Batch 1)
-// directly — bypassing the generic PUT /tables/{id} path, which T7 already
-// made reject an AllowedValues change on an existing enum column. Mirrors
-// apiFetch's error-body-to-message shape (lib/api.ts) without importing it,
-// since this file's scope for this task is TableCard.tsx itself.
-async function updateColumnEnumValues(
-  appId: string,
-  tableId: string,
-  columnName: string,
-  values: string[],
-): Promise<void> {
-  const res = await fetch(
-    `/dashboard/api/apps/${appId}/tables/${tableId}/columns/${encodeURIComponent(columnName)}/enum-values`,
-    {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ allowed_values: values }),
-    },
-  );
-  if (!res.ok) {
-    let message = `HTTP ${res.status}`;
-    try {
-      const body = await res.json();
-      message = body.error ?? message;
-    } catch {
-      // no JSON body — keep the generic HTTP-status message.
-    }
-    throw new Error(message);
-  }
-}
-
 // EditEnumValuesAction is the dedicated "edit allowed values" action for an
 // EXISTING enum column (column-enum-type T13) — separate from the generic
 // save-all-columns form, since that form's PUT path can't apply the change
@@ -1135,10 +1102,9 @@ function EditEnumValuesAction({
   values: string[];
   onSaved: (values: string[]) => void;
 }) {
-  const queryClient = useQueryClient();
+  const updateEnumValues = useUpdateColumnEnumValues(appId, tableId);
   const [open, setOpen] = useState(false);
   const [draftValues, setDraftValues] = useState<string[]>(values);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const openDrawer = () => {
@@ -1152,17 +1118,16 @@ function EditEnumValuesAction({
       setError(t("tableCard.allowedValuesRequired"));
       return;
     }
-    setSaving(true);
     setError(null);
     try {
-      await updateColumnEnumValues(appId, tableId, columnName, draftValues);
+      await updateEnumValues.mutateAsync({ columnName, values: draftValues });
       onSaved(draftValues);
-      queryClient.invalidateQueries({ queryKey: ["apps"] });
       setOpen(false);
     } catch (err) {
+      // Toasted globally by useUpdateColumnEnumValues' onError too — this
+      // inline message stays for the exact-cause detail (e.g. the specific
+      // values still in use), which a toast alone would truncate.
       setError(err instanceof Error ? err.message : t("tableCard.saveError"));
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -1190,7 +1155,7 @@ function EditEnumValuesAction({
             <button
               type="button"
               onClick={() => setOpen(false)}
-              disabled={saving}
+              disabled={updateEnumValues.isPending}
               className="text-[12px] font-medium px-4 py-1.5 rounded-full border border-[var(--border)] bg-transparent text-[var(--text-secondary)] cursor-pointer hover:bg-[var(--hover-surface)]"
             >
               {t("tableCard.cancel")}
@@ -1198,11 +1163,11 @@ function EditEnumValuesAction({
             <button
               type="button"
               onClick={saveValues}
-              disabled={saving}
+              disabled={updateEnumValues.isPending}
               className="text-[12px] font-semibold px-4 py-1.5 rounded-full text-white cursor-pointer disabled:opacity-50"
               style={{ background: "var(--primary)" }}
             >
-              {saving ? t("tableCard.savingTable") : t("tableCard.saveTable")}
+              {updateEnumValues.isPending ? t("tableCard.savingTable") : t("tableCard.saveTable")}
             </button>
           </div>
         </div>

@@ -189,7 +189,10 @@ func mapWriteError(err error) error {
 	case errors.Is(err, dashboard.ErrTableNotFound):
 		return errors.New("table not found")
 	case errors.Is(err, dashboard.ErrColumnIsNotEnum):
-		return dashboard.ErrColumnIsNotEnum
+		// Not returned verbatim like the sibling cases below (matches REST's
+		// UpdateColumnEnumValuesForUser handler, which strips the same
+		// "dashboard: " prefix — see handler.go's ErrColumnIsNotEnum case).
+		return errors.New("column is not an enum column")
 	case errors.Is(err, dashboard.ErrPolicyAlreadyExists):
 		return dashboard.ErrPolicyAlreadyExists
 	case errors.Is(err, dashboard.ErrColumnAlreadyExists):

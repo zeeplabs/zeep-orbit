@@ -526,6 +526,17 @@ export default function DataBrowserPage() {
                       <option value="true">true</option>
                       <option value="false">false</option>
                     </select>
+                  ) : col.type === "enum" ? (
+                    <select
+                      value={formValues[col.name] ?? ""}
+                      onChange={(e) => handleFormChange(col.name, e.target.value)}
+                      className={nativeInputCls}
+                    >
+                      <option value="">—</option>
+                      {(col.allowed_values ?? []).map((v) => (
+                        <option key={v} value={v}>{v}</option>
+                      ))}
+                    </select>
                   ) : col.type === "jsonb" ? (
                     <textarea
                       value={formValues[col.name] ?? ""}

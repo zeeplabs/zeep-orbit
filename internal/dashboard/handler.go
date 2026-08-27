@@ -1380,27 +1380,37 @@ func (h *Handler) UpdateAppTable(w http.ResponseWriter, r *http.Request) {
 	// in this same request is unaffected: it has no "before" state to
 	// compare against, so createTable/addMissingColumns still apply its
 	// References inline exactly as before.
-	existingRefs := make(map[string]*config.ReferenceConfig, len(existingTable.Columns))
-	existingEnumValues := make(map[string][]string, len(existingTable.Columns))
+	existingCols := make(map[string]config.ColumnConfig, len(existingTable.Columns))
 	for _, c := range existingTable.Columns {
-		existingRefs[c.Name] = c.References
-		existingEnumValues[c.Name] = c.AllowedValues
+		existingCols[c.Name] = c
 	}
 	for _, c := range body.Columns {
-		oldRef, existed := existingRefs[c.Name]
+		old, existed := existingCols[c.Name]
 		if !existed {
 			continue
 		}
-		if !oldRef.Equal(c.References) {
+		if !old.References.Equal(c.References) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "foreign-key changes on an existing column must go through the dedicated add/remove-foreign-key endpoint"})
 			return
 		}
-		// Same reasoning as References above: an existing column's CHECK
-		// constraint is never re-emitted by addMissingColumns, so accepting an
-		// AllowedValues change here would persist a set the database is not
-		// actually enforcing. Widening/narrowing has its own endpoint, which
-		// runs the real constraint swap and the in-use pre-check.
-		if !sameStringSet(existingEnumValues[c.Name], c.AllowedValues) {
+		// Changing a column into or out of "enum" is a different mistake
+		// than widening/narrowing one that is already enum on both sides:
+		// there is no endpoint for it at all (config.ValidateTables treats
+		// AllowedValues as declarable only at column creation — spec
+		// column-enum-type CENUM-01), unlike widen/narrow which does have a
+		// dedicated endpoint. Report each distinctly instead of pointing a
+		// type-change request at an endpoint that will also reject it.
+		if old.Type != c.Type && (old.Type == "enum" || c.Type == "enum") {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "changing a column to or from the enum type is not supported; the type can only be set to enum when the column is created"})
+			return
+		}
+		// Same reasoning as References above: an existing enum column's
+		// CHECK constraint is never re-emitted by addMissingColumns, so
+		// accepting an AllowedValues change here would persist a set the
+		// database is not actually enforcing. Widening/narrowing has its own
+		// endpoint, which runs the real constraint swap and the in-use
+		// pre-check.
+		if old.Type == "enum" && c.Type == "enum" && !sameStringSet(old.AllowedValues, c.AllowedValues) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "allowed-value changes on an existing enum column must go through the dedicated enum-values endpoint"})
 			return
 		}
@@ -1983,24 +1993,18 @@ func (h *Handler) UpdateColumnEnumValues(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	app, _, err := GetApp(r.Context(), h.pool, appID, user)
+	// A lightweight name lookup, not a full GetApp: the real authorization
+	// check (role.CanWrite()) already happens inside
+	// UpdateColumnEnumValuesForUser's own GetApp call right below — this one
+	// only needs to translate the URL's tableId into the name that shared
+	// function (also called from MCP, which already has the name) takes.
+	tableName, err := GetAppTableName(r.Context(), h.pool, appID, tableID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
 			return
 		}
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
-		return
-	}
-	var tableName string
-	for _, t := range app.Tables {
-		if t.ID == tableID {
-			tableName = t.Name
-			break
-		}
-	}
-	if tableName == "" {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
 		return
 	}
 
@@ -2353,11 +2357,12 @@ func appRowToRegistryApp(app *AppRow) *registry.App {
 		cols := make([]registry.Column, 0, len(t.Columns))
 		for _, c := range t.Columns {
 			cols = append(cols, registry.Column{
-				Name:     c.Name,
-				Type:     c.Type,
-				Required: c.Required,
-				Default:  c.Default,
-				Unique:   c.Unique,
+				Name:          c.Name,
+				Type:          c.Type,
+				Required:      c.Required,
+				Default:       c.Default,
+				Unique:        c.Unique,
+				AllowedValues: c.AllowedValues,
 			})
 		}
 		tables[t.Name] = &registry.Table{
@@ -2634,8 +2639,9 @@ func (h *Handler) LogsMetrics(w http.ResponseWriter, r *http.Request) {
 
 // DataBrowserTableColumn represents a column in the data browser tree.
 type DataBrowserTableColumn struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
+	Name          string   `json:"name"`
+	Type          string   `json:"type"`
+	AllowedValues []string `json:"allowed_values,omitempty"`
 }
 
 // DataBrowserTable represents a table in the data browser tree.
@@ -2676,7 +2682,7 @@ func (h *Handler) ListDataBrowserApps(w http.ResponseWriter, r *http.Request) {
 			cols := make([]DataBrowserTableColumn, 0, len(t.Columns)+4)
 			cols = append(cols, DataBrowserTableColumn{Name: "id", Type: "uuid"})
 			for _, c := range t.Columns {
-				cols = append(cols, DataBrowserTableColumn{Name: c.Name, Type: c.Type})
+				cols = append(cols, DataBrowserTableColumn{Name: c.Name, Type: c.Type, AllowedValues: c.AllowedValues})
 			}
 			cols = append(cols, DataBrowserTableColumn{Name: "created_at", Type: "timestamptz"})
 			cols = append(cols, DataBrowserTableColumn{Name: "updated_at", Type: "timestamptz"})

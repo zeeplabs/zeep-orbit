@@ -970,3 +970,54 @@ func TestReplaceColumnEnumValues_SecondReplaceFindsTheNewConstraint(t *testing.T
 		t.Error("expected an out-of-set value to be rejected after two replaces")
 	}
 }
+
+// TestReplaceColumnEnumValues_AmbiguousConstraintFailsClosed covers a gap
+// found by the v1.6.0..HEAD release-readiness audit: findColumnCheckConstraint
+// used to pick an arbitrary single-column CHECK via LIMIT 1 with no ORDER BY
+// when a column had more than one (e.g. a hand-added constraint alongside
+// the enum one), risking a DROP CONSTRAINT on the wrong one. It must now
+// fail closed instead of guessing, and leave both constraints untouched.
+func TestReplaceColumnEnumValues_AmbiguousConstraintFailsClosed(t *testing.T) {
+	pool, schema := enumTestTable(t, "enum_ambiguous_test", []string{"pending", "active"})
+	ctx := context.Background()
+	p := New(pool)
+
+	// A second, unrelated single-column CHECK on the same column — plausible
+	// if an app owner (schema-per-app, so they have DDL access) added their
+	// own length constraint alongside the enum one.
+	if _, err := pool.Exec(ctx,
+		fmt.Sprintf(`ALTER TABLE %q.%q ADD CONSTRAINT status_length_check CHECK (length("status") < 100)`, schema, "assets"),
+	); err != nil {
+		t.Fatalf("add second check constraint: %v", err)
+	}
+
+	before := checkConstraintDef(t, pool, schema, "assets", "status")
+
+	err := p.ReplaceColumnEnumValues(ctx, schema, "assets", "status", []string{"pending", "active"}, []string{"pending", "active", "closed"})
+	if err == nil {
+		t.Fatal("expected ReplaceColumnEnumValues to fail closed when the column has 2 single-column CHECK constraints")
+	}
+	if !strings.Contains(err.Error(), "cannot determine which one") {
+		t.Errorf("expected an ambiguity error, got: %v", err)
+	}
+
+	// Neither constraint was touched by the failed attempt.
+	after := checkConstraintDef(t, pool, schema, "assets", "status")
+	if before != after {
+		t.Errorf("enum constraint changed on an ambiguous/failed request:\n before = %q\n after  = %q", before, after)
+	}
+	var n int
+	if err := pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM pg_constraint c
+		 JOIN pg_class r ON r.oid = c.conrelid
+		 JOIN pg_namespace nsp ON nsp.oid = r.relnamespace
+		 JOIN pg_attribute a ON a.attrelid = r.oid AND a.attname = 'status'
+		 WHERE c.contype = 'c' AND nsp.nspname = $1 AND r.relname = 'assets' AND c.conkey = ARRAY[a.attnum]`,
+		schema,
+	).Scan(&n); err != nil {
+		t.Fatalf("count check constraints: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("expected both check constraints to still exist, got %d", n)
+	}
+}

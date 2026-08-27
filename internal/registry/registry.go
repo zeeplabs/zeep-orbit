@@ -36,12 +36,13 @@ type Table struct {
 }
 
 type Column struct {
-	Name       string
-	Type       string
-	Required   bool
-	Default    string
-	Unique     bool
-	RenameFrom string
+	Name          string
+	Type          string
+	Required      bool
+	Default       string
+	Unique        bool
+	RenameFrom    string
+	AllowedValues []string
 }
 
 // SystemConfig holds global platform settings.

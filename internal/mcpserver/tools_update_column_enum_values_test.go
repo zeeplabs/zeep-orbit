@@ -187,7 +187,11 @@ func TestOrbitUpdateColumnEnumValues_NonEnumColumnRejected(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected TextContent error, got %T", res.Content[0])
 	}
-	if text.Text != dashboard.ErrColumnIsNotEnum.Error() {
-		t.Fatalf("expected %q, got %q", dashboard.ErrColumnIsNotEnum.Error(), text.Text)
+	// mapWriteError strips the "dashboard: " prefix for this sentinel (same
+	// clean string the REST handler already returns) instead of leaking the
+	// internal sentinel verbatim like some of its siblings still do.
+	const wantText = "column is not an enum column"
+	if text.Text != wantText {
+		t.Fatalf("expected %q, got %q", wantText, text.Text)
 	}
 }

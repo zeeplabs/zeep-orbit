@@ -466,7 +466,13 @@ func (p *Provisioner) DropColumnForeignKey(ctx context.Context, schemaName, tabl
 // returns exactly the real CHECK constraint. Same intent as the design
 // (catalog lookup, no assumed name), correct catalog.
 func (p *Provisioner) findColumnCheckConstraint(ctx context.Context, schemaName, tableName, columnName string) (name string, found bool, err error) {
-	err = p.pool.QueryRow(ctx,
+	// No LIMIT 1 / ORDER BY: a column can only be widened/narrowed once its
+	// own enum CHECK is uniquely identified. If it ever has more than one
+	// single-column CHECK (e.g. a hand-added constraint alongside the enum
+	// one), picking an arbitrary one to DROP would silently remove a
+	// constraint this call was never asked to touch — fail closed instead
+	// of guessing.
+	rows, err := p.pool.Query(ctx,
 		`SELECT c.conname
 		 FROM pg_constraint c
 		 JOIN pg_class r ON r.oid = c.conrelid
@@ -475,17 +481,34 @@ func (p *Provisioner) findColumnCheckConstraint(ctx context.Context, schemaName,
 		 WHERE c.contype = 'c'
 		   AND n.nspname = $1
 		   AND r.relname = $2
-		   AND c.conkey = ARRAY[a.attnum]
-		 LIMIT 1`,
+		   AND c.conkey = ARRAY[a.attnum]`,
 		schemaName, tableName, columnName,
-	).Scan(&name)
+	)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return "", false, nil
-		}
 		return "", false, fmt.Errorf("table: find check constraint on %q.%q.%q: %w", schemaName, tableName, columnName, err)
 	}
-	return name, true, nil
+	defer rows.Close()
+
+	var names []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			return "", false, fmt.Errorf("table: find check constraint on %q.%q.%q: %w", schemaName, tableName, columnName, err)
+		}
+		names = append(names, n)
+	}
+	if err := rows.Err(); err != nil {
+		return "", false, fmt.Errorf("table: find check constraint on %q.%q.%q: %w", schemaName, tableName, columnName, err)
+	}
+
+	switch len(names) {
+	case 0:
+		return "", false, nil
+	case 1:
+		return names[0], true, nil
+	default:
+		return "", false, fmt.Errorf("table: %q.%q.%q has %d single-column CHECK constraints (%v) — cannot determine which one backs the enum values", schemaName, tableName, columnName, len(names), names)
+	}
 }
 
 // removedValues returns the values present in old but not in new, in old's

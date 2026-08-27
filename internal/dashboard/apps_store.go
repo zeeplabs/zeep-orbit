@@ -646,6 +646,28 @@ func InsertAppTable(ctx context.Context, pool *db.Pool, appID string, t AppTable
 // not conditioned on the old one — EnsureRowLevelSecurity is idempotent, and
 // switching "policy" → "enabled"/"owner" intentionally never disables RLS
 // (RLSP-08: RLS enabled is a one-way ratchet here, never turned back off).
+// GetAppTableName resolves a table's name from its id, scoped to appID — a
+// single indexed-row lookup, unlike GetApp's full app+tables+columns fetch.
+// Used by REST handlers whose URL addresses a table by id but whose shared
+// *ForUser business logic (also called from MCP, which naturally has the
+// name already) takes a table name, so the REST caller doesn't need to pay
+// for a full GetApp just to resolve one string before that function does
+// its own (necessary) GetApp internally.
+func GetAppTableName(ctx context.Context, pool *db.Pool, appID, tableID string) (string, error) {
+	var name string
+	err := pool.QueryRow(ctx,
+		`SELECT name FROM zeep_system.app_tables WHERE id = $1 AND app_id = $2`,
+		tableID, appID,
+	).Scan(&name)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", ErrNotFound
+		}
+		return "", fmt.Errorf("dashboard: get table name for %s/%s: %w", appID, tableID, err)
+	}
+	return name, nil
+}
+
 func UpdateAppTable(ctx context.Context, pool *db.Pool, appID, tableID, schemaName, rls string, columns []config.ColumnConfig, indexes []config.IndexConfig) (AppTableRow, error) {
 	if indexes == nil {
 		indexes = []config.IndexConfig{}

@@ -589,6 +589,7 @@
   "editWithAI.confirming": "Aplicando…",
   "editWithAI.operationApplied": "Alteração aplicada.",
   "editWithAI.opAddColumn": "Adicionar coluna \"{{column}}\" ({{type}}) em \"{{table}}\"",
+  "editWithAI.opAddColumnEnumValues": "Valores permitidos: {{values}}",
   "editWithAI.opAddIndex": "Adicionar índice \"{{name}}\" em \"{{table}}\" ({{columns}})",
   "editWithAI.opAddReference": "Adicionar coluna \"{{column}}\" em \"{{table}}\" referenciando \"{{refTable}}.{{refColumn}}\"",
   "editWithAI.opAddForeignKey": "Adicionar chave estrangeira em \"{{table}}.{{column}}\" referenciando \"{{refTable}}.{{refColumn}}\"",

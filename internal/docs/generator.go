@@ -68,6 +68,7 @@ type schemaOrRef struct {
 	Ref        string                 `json:"$ref,omitempty"`
 	Type       string                 `json:"type,omitempty"`
 	Format     string                 `json:"format,omitempty"`
+	Enum       []string               `json:"enum,omitempty"`
 	Properties map[string]schemaOrRef `json:"properties,omitempty"`
 	Items      *schemaOrRef           `json:"items,omitempty"`
 	Required   []string               `json:"required,omitempty"`
@@ -269,7 +270,7 @@ func buildResponseSchema(table *registry.Table) schemaOrRef {
 
 	for _, col := range table.Columns {
 		t, f := openAPIType(col.Type)
-		props[col.Name] = schemaOrRef{Type: t, Format: f}
+		props[col.Name] = schemaOrRef{Type: t, Format: f, Enum: col.AllowedValues}
 		if col.Required {
 			required = append(required, col.Name)
 		}
@@ -284,7 +285,7 @@ func buildInputSchema(table *registry.Table) schemaOrRef {
 
 	for _, col := range table.Columns {
 		t, f := openAPIType(col.Type)
-		props[col.Name] = schemaOrRef{Type: t, Format: f}
+		props[col.Name] = schemaOrRef{Type: t, Format: f, Enum: col.AllowedValues}
 		if col.Required {
 			required = append(required, col.Name)
 		}
@@ -309,6 +310,11 @@ func openAPIType(zeepType string) (typ, format string) {
 		return "string", "date-time"
 	case "jsonb":
 		return "object", ""
+	case "enum":
+		// enum is TEXT + CHECK at the DB layer (see provisioner.pgType) — the
+		// allowed-values list is carried separately via schemaOrRef.Enum,
+		// set by the caller from col.AllowedValues.
+		return "string", ""
 	default:
 		return "string", ""
 	}
