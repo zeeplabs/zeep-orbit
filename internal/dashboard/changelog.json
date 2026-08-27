@@ -1,6 +1,29 @@
 {
   "entries": [
     {
+      "version": "v1.7.0",
+      "release_date": "2026-08-26",
+      "title": {"en": "Enum Columns, Advanced Policy Clauses & App-Update Provisioning Fix", "pt-BR": "Colunas Enum, Cláusulas de Policy Avançadas e Correção de Provisionamento no Update de App"},
+      "summary": {"en": "Columns can now declare a fixed set of allowed values enforced by Postgres, MCP gained a tool for row policies with arbitrary structured clauses, and a fix to an app's Login/Storage save path closes a gap where enabling auth or storage after app creation silently skipped provisioning the tables they need.", "pt-BR": "Colunas agora podem declarar um conjunto fixo de valores permitidos, enforçado pelo Postgres, o MCP ganhou uma tool para policies de linha com cláusulas estruturadas arbitrárias, e uma correção no caminho de salvar Login/Storage de um app fecha uma lacuna onde ativar auth ou storage depois da criação do app deixava de provisionar as tabelas necessárias."},
+      "sections": [
+        {
+          "type": "features",
+          "items": [
+            {"description": {"en": "New `enum` column type, backed by a Postgres `CHECK` constraint instead of client-side-only validation. Declarable at column creation with a fixed list of allowed values; an existing enum column's values can be widened or narrowed afterward through a dedicated action (Dashboard, REST, or the `orbit_update_column_enum_values` MCP tool) — narrowing is rejected if any existing row still holds a value being removed. Also available from AI build/edit chat.", "pt-BR": "Novo tipo de coluna `enum`, enforçado por uma constraint `CHECK` do Postgres em vez de validação só no cliente. Declarável na criação da coluna com uma lista fixa de valores permitidos; os valores de uma coluna enum existente podem ser alargados ou estreitados depois via uma ação dedicada (Dashboard, REST, ou a tool MCP `orbit_update_column_enum_values`) — estreitar é rejeitado se alguma linha existente ainda tiver um valor sendo removido. Também disponível pelo chat de IA (build/edit)."}},
+            {"description": {"en": "New `orbit_create_policy_advanced` MCP tool: creates a row policy from an explicit structured clause set (chained AND/OR conditions), for policy shapes outside the 6 fixed templates `orbit_create_policy_from_template` offers.", "pt-BR": "Nova tool MCP `orbit_create_policy_advanced`: cria uma policy de linha a partir de um conjunto explícito de cláusulas estruturadas (condições AND/OR encadeadas), para formatos de policy fora dos 6 templates fixos que `orbit_create_policy_from_template` oferece."}}
+          ]
+        },
+        {
+          "type": "fixes",
+          "items": [
+            {"description": {"en": "MCP tools calling the row-policy creation path collapsed every structural validation failure (unknown column, disallowed operator, bad claim name) into a generic \"internal error,\" giving an AI caller no way to tell a bad-input mistake from a platform failure. The specific validation message now surfaces instead.", "pt-BR": "Tools MCP que criam policy de linha reduziam toda falha de validação estrutural (coluna inexistente, operador não permitido, nome de claim inválido) a um genérico \"erro interno\", sem dar a um agente de IA como distinguir um erro de entrada de uma falha da plataforma. A mensagem de validação específica agora aparece no lugar."}},
+            {"description": {"en": "Saving any Login/Storage/API-tab field on an app could fail with an error naming a completely unrelated table, because the save path reconciled the app's entire table schema even though it never touches tables. Reconciliation of unrelated tables is removed from this path.", "pt-BR": "Salvar qualquer campo da aba Login/Storage/API de um app podia falhar com um erro citando uma tabela completamente sem relação, porque o caminho de salvar reconciliava o schema inteiro das tabelas do app mesmo sem nunca tocar em tabelas. A reconciliação de tabelas não relacionadas foi removida desse caminho."}},
+            {"description": {"en": "Enabling email/password auth or setting a storage bucket on an existing app could silently skip provisioning the tables that feature needs (`_auth_users`/`_auth_sessions`/`_files`) — a side effect of the fix above. Login/signup or file upload would then fail the first time they were used. Both save paths now provision exactly the tables each toggle needs.", "pt-BR": "Ativar autenticação por email/senha ou definir um bucket de storage num app existente podia deixar de provisionar as tabelas que a funcionalidade precisa (`_auth_users`/`_auth_sessions`/`_files`) — um efeito colateral da correção acima. Login/cadastro ou upload de arquivo então falhavam na primeira vez que fossem usados. Os dois caminhos de salvar agora provisionam exatamente as tabelas que cada ativação precisa."}}
+          ]
+        }
+      ]
+    },
+    {
       "version": "v1.6.0",
       "release_date": "2026-08-24",
       "title": {"en": "AI Chat Hardening: Foreign-Key Confirmation, Rate Limiting & Authorization Fix", "pt-BR": "Reforço do Chat de IA: Confirmação de Chave Estrangeira, Rate Limiting e Correção de Autorização"},

@@ -9,6 +9,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.7.0] — 2026-08-26
+
 ### Added
 
 - **New `enum` column type**, backed by a Postgres `CHECK` constraint instead of client-side-only validation. Declarable at column creation (table create or add-column) with a fixed `allowed_values` list; an existing enum column's values can be widened or narrowed afterward through a dedicated endpoint (Dashboard action, `PATCH .../columns/{column}/enum-values`, or the `orbit_update_column_enum_values` MCP tool) — narrowing is rejected with the offending value(s) and row count if any existing row still holds a value being removed. Also available from AI build/edit chat, which can now propose an `enum` column for a status-like field. See `.specs/features/column-enum-type/`.
