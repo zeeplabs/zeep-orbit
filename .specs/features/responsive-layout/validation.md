@@ -5,6 +5,8 @@
 **Diff range**: `d7e2d53^..HEAD` (branch `develop`, 11 commits, HEAD = `096adc7`)
 **Verifier**: independent sub-agent (author ≠ verifier) — **round 2 re-verification**, findings re-derived from scratch, not inherited from round 1
 
+**Line citations below are pinned to `096adc7`** (this file's diff range HEAD). A later pre-release fix (D-239, Opus review) restructured `Sidebar.tsx`'s `NavRow`/tooltip block and `SidebarFooter.tsx` for unrelated bugs, shifting most `Sidebar.tsx:NN` line numbers cited here. Re-derive from the file at HEAD before relying on any specific line number in this report — the described behavior and verdicts still hold.
+
 **Verdict: PASS ✅** — all 4 of round 1's hard gaps are closed with fresh evidence, 4/4 injected mutations killed (including round 1's surviving blocker), gate green.
 
 **Post-verification update (2026-08-28, same day, follow-up commit)**: all 7 spec-precision gaps listed below were closed — see `## Post-Round-2 Gap Closure` at the end of this file. One of the new assertions (RESP-01/RESP-02 AC3's fill/weight/tint check) surfaced a real production bug: `NavRow`'s active-state tint/weight/color never applied in `Sidebar.tsx` (desktop and tablet rail) because Radix `Tooltip.Trigger asChild` silently drops `NavLink`'s function-valued `style` prop when merging. Fixed in production code, not just the test.

@@ -101,7 +101,7 @@ export function Sidebar({ companyName, banner, footer }: SidebarProps) {
   // fit an icon-only rail, so both are hidden below `lg` (desktop) rather
   // than introducing a new icon-only logo asset not requested in scope.
   return (
-    <aside className="sticky top-0 flex h-screen flex-col border-r border-[var(--border)] bg-[var(--surface)] px-3.5 py-5 hidden md:flex md:w-[72px] lg:w-[264px]">
+    <aside className="sticky top-0 h-screen flex-col border-r border-[var(--border)] bg-[var(--surface)] px-3.5 py-5 hidden md:flex md:w-[72px] lg:w-[264px]">
       <div className="mb-4 hidden items-center gap-2.5 px-2 lg:flex">
         <div className="flex items-start min-w-0 flex-col">
           <img src={orbitWordmark} alt="Orbit" className="mb-0.5 h-[20px] w-auto object-contain" />

@@ -99,7 +99,7 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/meu-app/tarefas
 
 | Funcionalidade           | Descrição                                                |
 | ------------------------ | -------------------------------------------------------- |
-| **Web Dashboard**        | Interface dark premium para gerenciar tudo              |
+| **Web Dashboard**        | Interface dark premium para gerenciar tudo, totalmente responsiva (barra inferior mobile, rail de ícones tablet, sidebar desktop, cap de conteúdo ultra-wide) |
 | **Build with AI**       | Descreva um app em linguagem natural num drawer de chat, revise o plano proposto (tabelas, auth), confirme para criar; depois de criado, use "Edit with AI" no app para adicionar tabelas/colunas/índices/relacionamentos ou alternar RLS/auth uma mudança por vez — usa uma chave OpenAI configurada pelo superadmin (Gemini/Claude em breve) |
 | **Data Browser**         | Navegar, filtrar, ordenar, editar, excluir e exportar CSV (limite de linhas configurável) |
 | **Gestão de Usuários**   | Gerencie usuários do dashboard e usuários dos apps      |

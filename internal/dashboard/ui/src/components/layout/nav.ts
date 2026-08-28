@@ -42,7 +42,7 @@ export const NAV_SECTIONS: NavSectionDef[] = [
     titleKey: 'nav.sectionDeployment',
     items: [
       { icon: 'analytics', labelKey: 'nav.logs', path: '/logs' },
-      { icon: 'code', labelKey: 'SDKs', path: '/sdks' },
+      { icon: 'code', labelKey: 'nav.sdks', path: '/sdks' },
       { icon: 'key', labelKey: 'nav.mcp', path: '/mcp-settings' },
     ],
   },
@@ -62,5 +62,5 @@ export const MOBILE_TABS: NavItemDef[] = [
   { icon: 'grid_view', labelKey: 'nav.apps', path: '/apps' },
   { icon: 'table', labelKey: 'nav.dataBrowser', path: '/data-browser' },
   { icon: 'analytics', labelKey: 'nav.logs', path: '/logs' },
-  { icon: 'code', labelKey: 'SDKs', path: '/sdks' },
+  { icon: 'code', labelKey: 'nav.sdks', path: '/sdks' },
 ]

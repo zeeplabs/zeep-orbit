@@ -99,7 +99,7 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/aminhaapp/tarefas
 
 | Funcionalidade          | Descrição                                                |
 | ------------------------ | -------------------------------------------------------- |
-| **Dashboard Web**       | Interface escura premium para gerir tudo                 |
+| **Dashboard Web**       | Interface escura premium para gerir tudo, totalmente responsiva (barra inferior mobile, rail de ícones tablet, sidebar desktop, cap de conteúdo ultra-wide) |
 | **Build with AI**       | Descreva uma app em linguagem natural num painel de chat, reveja o plano proposto (tabelas, auth), confirme para criar; depois de criada, use "Edit with AI" na app para adicionar tabelas/colunas/índices/relações ou alternar RLS/auth uma alteração de cada vez — usa uma chave OpenAI configurada pelo superadmin (Gemini/Claude brevemente) |
 | **Data Browser**        | GUI para navegar, filtrar, editar, eliminar registos e exportar CSV (limite de linhas configurável) |
 | **Gestão de Utilizadores** | Gerir utilizadores do dashboard e utilizadores de cada app |
