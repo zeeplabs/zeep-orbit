@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test'
+import { STORAGE_STATE_PATH } from './e2e/storage-state'
 
 export default defineConfig({
   testDir: './e2e',
@@ -8,8 +9,14 @@ export default defineConfig({
   workers: 1,
   reporter: 'html',
   timeout: 30000,
+  // Logs in once and reuses that session across every project/spec via
+  // `storageState` below -- avoids ~20 fresh POST /api/login calls tripping
+  // the backend's per-IP login rate limiter. auth.spec.ts opts out per-file
+  // (test.use({ storageState: ... })) since it tests the login flow itself.
+  globalSetup: './e2e/global-setup',
   use: {
     baseURL: process.env.BASE_URL || 'http://localhost:8080/dashboard',
+    storageState: STORAGE_STATE_PATH,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },

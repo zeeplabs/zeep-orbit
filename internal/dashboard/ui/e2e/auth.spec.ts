@@ -2,6 +2,11 @@ import { test, expect } from '@playwright/test'
 import { bootstrapOrSkip, login } from './helpers'
 
 test.describe('Authentication', () => {
+  // This file exercises the login/logout flow itself, so it must start
+  // unauthenticated -- opts out of the shared storageState every other spec
+  // reuses (see playwright.config.ts / global-setup.ts).
+  test.use({ storageState: { cookies: [], origins: [] } })
+
   test('bootstrap + login + logout', async ({ page }) => {
     await bootstrapOrSkip(page)
     await login(page)

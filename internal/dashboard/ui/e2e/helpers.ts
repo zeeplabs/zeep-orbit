@@ -19,7 +19,13 @@ export async function bootstrapOrSkip(page: Page) {
 
 export async function login(page: Page) {
   await page.goto('/dashboard')
-  await page.waitForURL('**/login')
+  // Most specs run with the shared storageState set up by global-setup.ts,
+  // which already lands here on /apps -- only submit the login form when a
+  // spec genuinely starts unauthenticated (e.g. auth.spec.ts opts out of
+  // storageState), so the rest don't each trip a fresh POST /api/login
+  // against the backend's per-IP rate limiter.
+  await Promise.race([page.waitForURL('**/login'), page.waitForURL('**/apps')])
+  if (!page.url().includes('/login')) return
   await page.fill('input[type="email"]', 'admin@test.com')
   await page.fill('input[type="password"]', 'test1234')
   await page.click('button[type="submit"]')
