@@ -203,7 +203,7 @@ Tasks: T9.
 
 ---
 
-### T6: Fix `min-w-[420px]` overflow in `BrandSettingsPage.tsx`
+### T6: Fix `min-w-[420px]` overflow in `BrandSettingsPage.tsx` — ✅ Complete
 
 **What**: Replace every `min-w-[420px]` in `BrandSettingsPage.tsx` (lines 151, 241, 387, 540, 661) with `min-w-0` (dropping the hard floor), keeping the existing `flex-1`/`w-full` so fields still fill available width above 420px and simply stop forcing overflow below it.
 **Where**: `src/pages/BrandSettingsPage.tsx`
