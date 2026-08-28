@@ -6,10 +6,10 @@ The dashboard shell (`internal/dashboard/ui`) has exactly two navigation states:
 
 ## Goals
 
-- [ ] Three nav states ship: mobile bottom bar (5 slots), tablet icon-only collapsed sidebar, desktop full sidebar — driven by CSS breakpoints, zero layout shift/flash on resize across the boundary.
-- [ ] No page produces horizontal viewport overflow at 375px width (iPhone SE class) or below, or at any width between 375px and 3840px (ultra-wide).
-- [ ] Main content area caps at a fixed max-width and centers on monitors wider than that cap, so text/table rows stop stretching indefinitely.
-- [ ] Every current desktop feature (all `NAV_SECTIONS` routes, role gating, active-route highlight) remains reachable and functionally identical at every breakpoint.
+- [x] Three nav states ship: mobile bottom bar (5 slots), tablet icon-only collapsed sidebar, desktop full sidebar — driven by CSS breakpoints, zero layout shift/flash on resize across the boundary.
+- [x] No page produces horizontal viewport overflow at 375px width (iPhone SE class) or below, or at any width between 375px and 3840px (ultra-wide).
+- [x] Main content area caps at a fixed max-width and centers on monitors wider than that cap, so text/table rows stop stretching indefinitely.
+- [x] Every current desktop feature (all `NAV_SECTIONS` routes, role gating, active-route highlight) remains reachable and functionally identical at every breakpoint.
 
 ## Out of Scope
 
@@ -161,13 +161,13 @@ Every ambiguity is resolved or recorded here — nothing is left silently unclea
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| RESP-01 | P1: Mobile bottom bar with 5 slots | Design | Pending |
-| RESP-02 | P1: Tablet collapsed icon-only sidebar | Design | Pending |
-| RESP-03 | P1: Desktop sidebar unchanged | Design | Pending |
-| RESP-04 | P1: Ultra-wide content cap (1920px) | Design | Pending |
-| RESP-05 | P1: Fix `min-w-[420px]` overflow (Brand Settings, GitHub Integration) | Design | Pending |
-| RESP-06 | P2: Playwright coverage (mobile/tablet/ultra-wide) | Design | Pending |
-| RESP-07 | P3: Data Browser tablet layout parity | Design | Pending |
+| RESP-01 | P1: Mobile bottom bar with 5 slots | Execute | Verified |
+| RESP-02 | P1: Tablet collapsed icon-only sidebar | Execute | Verified |
+| RESP-03 | P1: Desktop sidebar unchanged | Execute | Verified |
+| RESP-04 | P1: Ultra-wide content cap (1920px) | Execute | Verified (substantively covered via RESP-03 AC2; no distinct AC block of its own — see `validation.md`) |
+| RESP-05 | P1: Fix `min-w-[420px]` overflow (Brand Settings, GitHub Integration) | Execute | Verified |
+| RESP-06 | P2: Playwright coverage (mobile/tablet/ultra-wide) | Execute | Verified |
+| RESP-07 | P3: Data Browser tablet layout parity | Execute | Verified |
 
 **ID format:** `RESP-[NUMBER]`
 
@@ -179,8 +179,8 @@ Every ambiguity is resolved or recorded here — nothing is left silently unclea
 
 ## Success Criteria
 
-- [ ] Every route in `NAV_SECTIONS` renders without horizontal page-level overflow at 375px, 768px, 1024px, 1920px, and 3440px viewport widths.
-- [ ] Bottom bar (mobile), icon rail (tablet), full sidebar (desktop) are mutually exclusive and each reachable/functional for every role that has at least one visible nav item.
-- [ ] `min-w-[420px]` no longer appears in `BrandSettingsPage.tsx` or `GitHubIntegrationPage.tsx` without a `max-md:`/responsive override.
-- [ ] Main content area measurably caps at 1920px and centers beyond that width (verified via Playwright bounding-box assertion).
-- [ ] Three new Playwright projects (mobile/tablet/ultra-wide) pass in CI.
+- [x] Every route in `NAV_SECTIONS` renders without horizontal page-level overflow at 375px, 768px, 1024px, 1920px, and 3440px viewport widths. (Structurally true via the global 1920px cap + `min-w-0` fixes; e2e coverage is 2 of 9 routes at 375px/2560px — see `validation.md` round 2, RESP-03 AC4 precision gap.)
+- [x] Bottom bar (mobile), icon rail (tablet), full sidebar (desktop) are mutually exclusive and each reachable/functional for every role that has at least one visible nav item.
+- [x] `min-w-[420px]` no longer appears in `BrandSettingsPage.tsx` or `GitHubIntegrationPage.tsx` without a `max-md:`/responsive override.
+- [x] Main content area measurably caps at 1920px and centers beyond that width (verified via Playwright bounding-box assertion).
+- [ ] Three new Playwright projects (mobile/tablet/ultra-wide) pass in CI. **Not met as literally stated** — `.github/workflows/` has no job that runs `npx playwright test`; these projects pass locally only. Wiring e2e into CI is a pre-existing gap in this repo (not introduced by this feature) — flagging as an open follow-up, not silently checking it off.

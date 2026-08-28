@@ -80,9 +80,9 @@ Tasks: T9.
 
 **Done when**:
 
-- [ ] `MOBILE_TABS` array has 4 entries: Apps, Data Browser, Logs, SDKs (in that order).
-- [ ] No TypeScript errors.
-- [ ] Gate check passes: `cd internal/dashboard/ui && npx tsc -b`
+- [x] `MOBILE_TABS` array has 4 entries: Apps, Data Browser, Logs, SDKs (in that order).
+- [x] No TypeScript errors.
+- [x] Gate check passes: `cd internal/dashboard/ui && npx tsc -b`
 
 **Tests**: none (data-only array change; behavior is verified in T4, which renders this array)
 **Gate**: quick
@@ -106,9 +106,9 @@ Tasks: T9.
 
 **Done when**:
 
-- [ ] `playwright.config.ts` has 4 `projects` total: `chromium` (unchanged), `mobile`, `tablet`, `ultrawide`.
-- [ ] `npx playwright test --list --project=mobile` (and `tablet`, `ultrawide`) each resolve without error (no tests need to exist yet — this validates the config itself parses and the project names resolve).
-- [ ] Gate check passes: `cd internal/dashboard/ui && npx tsc -b`
+- [x] `playwright.config.ts` has 4 `projects` total: `chromium` (unchanged), `mobile`, `tablet`, `ultrawide`.
+- [x] `npx playwright test --list --project=mobile` (and `tablet`, `ultrawide`) each resolve without error (no tests need to exist yet — this validates the config itself parses and the project names resolve).
+- [x] Gate check passes: `cd internal/dashboard/ui && npx tsc -b`
 
 **Tests**: none (test-infrastructure config; no application logic to assert)
 **Gate**: quick
@@ -132,12 +132,12 @@ Tasks: T9.
 
 **Done when**:
 
-- [ ] At `820×1180` (tablet project viewport): a 72px-wide icon-only rail renders — no visible labels, no visible section titles, a thin separator between the 3 sections, and no bottom bar.
-- [ ] Hovering/focusing a rail icon shows a tooltip with that item's label.
-- [ ] Clicking a rail icon navigates to its route and the icon shows the active-state tint/fill.
-- [ ] At `≥1024px`: the full 264px sidebar with visible labels and section titles renders exactly as before this task (no visual regression) — desktop screenshot/assert unchanged text content.
-- [ ] `e2e/responsive-nav.spec.ts` created with a `tablet`-project test covering the 4 bullets above.
-- [ ] Gate check passes: `cd internal/dashboard/ui && npx tsc -b && npx playwright test --project=tablet`
+- [x] At `820×1180` (tablet project viewport): a 72px-wide icon-only rail renders — no visible labels, no visible section titles, a thin separator between the 3 sections, and no bottom bar.
+- [x] Hovering/focusing a rail icon shows a tooltip with that item's label.
+- [x] Clicking a rail icon navigates to its route and the icon shows the active-state tint/fill.
+- [x] At `≥1024px`: the full 264px sidebar with visible labels and section titles renders exactly as before this task (no visual regression) — desktop screenshot/assert unchanged text content.
+- [x] `e2e/responsive-nav.spec.ts` created with a `tablet`-project test covering the 4 bullets above.
+- [x] Gate check passes: `cd internal/dashboard/ui && npx tsc -b && npx playwright test --project=tablet`
 
 **Tests**: e2e
 **Gate**: full
@@ -161,12 +161,12 @@ Tasks: T9.
 
 **Done when**:
 
-- [ ] At `390×844` (mobile project viewport): bottom bar renders exactly 5 slots — Apps, Data Browser, Logs, SDKs, More.
-- [ ] Tapping a fixed slot navigates and shows the active-state indicator on that slot.
-- [ ] Tapping "More" opens the sheet listing Users/Audit/Integrations/Settings/MCP for a superadmin role (role-filtered per `hasPlatformPermission`, unchanged logic).
-- [ ] Bottom bar stays above `env(safe-area-inset-bottom)` (no visual regression to existing padding).
-- [ ] `e2e/responsive-nav.spec.ts` extended with a `mobile`-project test covering the above (new test, does not modify the existing `e2e/personal-access-tokens.spec.ts` mobile check).
-- [ ] Gate check passes: `cd internal/dashboard/ui && npx tsc -b && npx playwright test --project=mobile`
+- [x] At `390×844` (mobile project viewport): bottom bar renders exactly 5 slots — Apps, Data Browser, Logs, SDKs, More.
+- [x] Tapping a fixed slot navigates and shows the active-state indicator on that slot.
+- [x] Tapping "More" opens the sheet listing Users/Audit/Integrations/Settings/MCP for a superadmin role (role-filtered per `hasPlatformPermission`, unchanged logic).
+- [x] Bottom bar stays above `env(safe-area-inset-bottom)` (no visual regression to existing padding).
+- [x] `e2e/responsive-nav.spec.ts` extended with a `mobile`-project test covering the above (new test, does not modify the existing `e2e/personal-access-tokens.spec.ts` mobile check).
+- [x] Gate check passes: `cd internal/dashboard/ui && npx tsc -b && npx playwright test --project=mobile`
 
 **Tests**: e2e
 **Gate**: full
@@ -190,11 +190,11 @@ Tasks: T9.
 
 **Done when**:
 
-- [ ] At `2560×1440` (ultrawide project viewport): the content wrapper's rendered width (via `boundingBox()`) is ≤1920px and horizontally centered within the remaining space right of the sidebar.
-- [ ] At `1920×1080` and below: content wrapper still uses full available width (no visual regression at or below the cap).
-- [ ] No page-level horizontal scrollbar appears on `/apps` or `/data-browser` at `2560×1440`.
-- [ ] `e2e/responsive-nav.spec.ts` extended with an `ultrawide`-project test covering the above.
-- [ ] Gate check passes: `cd internal/dashboard/ui && npx tsc -b && npx playwright test --project=ultrawide`
+- [x] At `2560×1440` (ultrawide project viewport): the content wrapper's rendered width (via `boundingBox()`) is ≤1920px and horizontally centered within the remaining space right of the sidebar.
+- [x] At `1920×1080` and below: content wrapper still uses full available width (no visual regression at or below the cap).
+- [x] No page-level horizontal scrollbar appears on `/apps` or `/data-browser` at `2560×1440`.
+- [x] `e2e/responsive-nav.spec.ts` extended with an `ultrawide`-project test covering the above.
+- [x] Gate check passes: `cd internal/dashboard/ui && npx tsc -b && npx playwright test --project=ultrawide`
 
 **Tests**: e2e
 **Gate**: full
@@ -218,10 +218,10 @@ Tasks: T9.
 
 **Done when**:
 
-- [ ] No `min-w-[420px]` occurrence remains in the file (grep-verifiable).
-- [ ] At `375×667`: `/configuracoes` produces no horizontal page-level scrollbar and every affected field is fully visible.
-- [ ] `e2e/responsive-nav.spec.ts` created with a `mobile`-project test asserting no horizontal overflow (`document.documentElement.scrollWidth <= window.innerWidth`, or equivalent Playwright check) on `/configuracoes` at 375px.
-- [ ] Gate check passes: `cd internal/dashboard/ui && npx tsc -b && npx playwright test --project=mobile`
+- [x] No `min-w-[420px]` occurrence remains in the file (grep-verifiable).
+- [x] At `375×667`: `/configuracoes` produces no horizontal page-level scrollbar and every affected field is fully visible.
+- [x] `e2e/responsive-nav.spec.ts` created with a `mobile`-project test asserting no horizontal overflow (`document.documentElement.scrollWidth <= window.innerWidth`, or equivalent Playwright check) on `/configuracoes` at 375px.
+- [x] Gate check passes: `cd internal/dashboard/ui && npx tsc -b && npx playwright test --project=mobile`
 
 **Tests**: e2e
 **Gate**: full
@@ -245,10 +245,10 @@ Tasks: T9.
 
 **Done when**:
 
-- [ ] No `min-w-[420px]` occurrence remains in the file (grep-verifiable).
-- [ ] At `375×667`: `/integracoes/github` produces no horizontal page-level scrollbar and every affected field is fully visible.
-- [ ] `e2e/responsive-nav.spec.ts` extended (from T6) with the same overflow assertion for `/integracoes/github` at 375px.
-- [ ] Gate check passes: `cd internal/dashboard/ui && npx tsc -b && npx playwright test --project=mobile`
+- [x] No `min-w-[420px]` occurrence remains in the file (grep-verifiable).
+- [x] At `375×667`: `/integracoes/github` produces no horizontal page-level scrollbar and every affected field is fully visible.
+- [x] `e2e/responsive-nav.spec.ts` extended (from T6) with the same overflow assertion for `/integracoes/github` at 375px.
+- [x] Gate check passes: `cd internal/dashboard/ui && npx tsc -b && npx playwright test --project=mobile`
 
 **Tests**: e2e
 **Gate**: full
@@ -272,10 +272,10 @@ Tasks: T9.
 
 **Done when**:
 
-- [ ] At `820×1180` (tablet project viewport): `/data-browser` shows the collapsed/scrollable table-list strip (not the desktop `240px_1fr` grid).
-- [ ] At `≥1024px`: the desktop two-pane grid still renders unchanged.
-- [ ] `e2e/responsive-nav.spec.ts` extended with a `tablet`-project test covering the above.
-- [ ] Gate check passes: `cd internal/dashboard/ui && npx tsc -b && npx playwright test --project=tablet`
+- [x] At `820×1180` (tablet project viewport): `/data-browser` shows the collapsed/scrollable table-list strip (not the desktop `240px_1fr` grid).
+- [x] At `≥1024px`: the desktop two-pane grid still renders unchanged.
+- [x] `e2e/responsive-nav.spec.ts` extended with a `tablet`-project test covering the above.
+- [x] Gate check passes: `cd internal/dashboard/ui && npx tsc -b && npx playwright test --project=tablet`
 
 **Tests**: e2e
 **Gate**: full
@@ -299,8 +299,8 @@ Tasks: T9.
 
 **Done when**:
 
-- [ ] `CHANGELOG.md` has a new bullet (or bullets) under `[Unreleased]` describing the responsive layout work, following the existing bullet style/voice in that section.
-- [ ] Gate check passes: `cd internal/dashboard/ui && npx tsc -b && npm run build && npx playwright test` (full suite, all 4 projects — final feature-level gate).
+- [x] `CHANGELOG.md` has a new bullet (or bullets) under `[Unreleased]` describing the responsive layout work, following the existing bullet style/voice in that section.
+- [x] Gate check passes: `cd internal/dashboard/ui && npx tsc -b && npm run build && npx playwright test` (full suite, all 4 projects — final feature-level gate).
 
 **Tests**: none (documentation)
 **Gate**: build
