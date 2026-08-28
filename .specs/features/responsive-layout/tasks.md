@@ -146,7 +146,7 @@ Tasks: T9.
 
 ---
 
-### T4: `MobileNav.tsx` — 5-slot bottom bar
+### T4: `MobileNav.tsx` — 5-slot bottom bar — ✅ Complete (no code change needed: the existing `flex-1`-per-tab layout already scales correctly from 3 to 4 fixed tabs + More once T1 grew `MOBILE_TABS`; this task's actual deliverable was verification + the e2e test. Confirmed via a baseline-vs-fix comparison that a naive Portuguese-label assertion (`'Mais'`) would have trivially passed for the wrong reason under the default English locale — fixed to assert `'More'`, the actually-rendered text, same correction applied retroactively to T3's test)
 
 **What**: Confirm/adjust the bottom bar's layout math (flex-basis / grid-cols) to correctly render 5 slots now that `MOBILE_TABS` has 4 entries (T1) instead of 3, with "More" as the 5th; verify the existing "More" bottom-sheet still lists the full role-filtered `NAV_SECTIONS` unchanged.
 **Where**: `src/components/layout/MobileNav.tsx`

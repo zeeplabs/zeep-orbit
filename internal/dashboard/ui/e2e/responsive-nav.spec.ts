@@ -25,13 +25,17 @@ test.describe('Tablet icon-only sidebar rail', () => {
     await expect(aside.locator('img[alt="Orbit"]')).toBeHidden()
 
     // Section titles (only shown at desktop width) are hidden in rail mode.
-    await expect(aside.getByText('Geral', { exact: true })).toBeHidden()
+    // Default language is English (see src/lib/i18n.ts) unless localStorage
+    // sets otherwise -- assert the real rendered text, not a translation
+    // that wouldn't exist yet (a trivially-passing "hidden" check on absent
+    // text proves nothing).
+    await expect(aside.getByText('General', { exact: true })).toBeHidden()
 
     // A thin separator marks the section boundary in place of the hidden title.
     await expect(aside.getByRole('separator')).toHaveCount(2) // between 3 sections
 
     // Mobile bottom bar ("More" button) must not be visible at tablet width.
-    await expect(page.getByRole('button', { name: 'Mais' })).toBeHidden()
+    await expect(page.getByRole('button', { name: 'More' })).toBeHidden()
 
     // Hovering the Apps rail icon shows its tooltip label.
     const appsLink = page.locator('aside a[href="/dashboard/apps"]')
@@ -47,5 +51,53 @@ test.describe('Tablet icon-only sidebar rail', () => {
       'aria-current',
       'page',
     )
+  })
+})
+
+// RESP-01: mobile (390x844, `mobile` project) gets a 5-slot bottom bar
+// (Apps/Data Browser/Logs/SDKs + "More") instead of the sidebar/rail.
+test.describe('Mobile 5-slot bottom bar', () => {
+  test('renders 5 fixed-bar slots and the "More" drawer lists the rest, role-filtered', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile', 'mobile-only assertions')
+    await bootstrapOrSkip(page)
+    await login(page)
+    await page.goto('/dashboard/apps')
+
+    // The fixed bottom bar is the only <nav> with these positioning classes;
+    // the "More" sheet's inner <nav data-testid="mobile-nav-sheet"> doesn't
+    // share them, so this selector stays unique even once the sheet is open.
+    const bottomBar = page.locator('nav.fixed.inset-x-0.bottom-0')
+    await expect(bottomBar).toBeVisible()
+    await expect(bottomBar.getByRole('link', { name: 'Apps' })).toBeVisible()
+    await expect(bottomBar.getByRole('link', { name: 'Data Browser' })).toBeVisible()
+    await expect(bottomBar.getByRole('link', { name: 'Logs' })).toBeVisible()
+    await expect(bottomBar.getByRole('link', { name: 'SDKs' })).toBeVisible()
+    await expect(bottomBar.getByRole('button', { name: 'More' })).toBeVisible()
+
+    // Tapping a fixed slot navigates and marks it active.
+    await bottomBar.getByRole('link', { name: 'Logs' }).click()
+    await expect(page).toHaveURL(/\/dashboard\/logs$/)
+    await expect(bottomBar.getByRole('link', { name: 'Logs' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+
+    // "More" opens the sheet listing the role-filtered remainder
+    // (superadmin test user sees Users/Audit/Integrations/Settings/MCP).
+    await bottomBar.getByRole('button', { name: 'More' }).click()
+    const sheet = page.getByTestId('mobile-nav-sheet')
+    await expect(sheet).toBeVisible()
+    await expect(sheet.getByRole('link', { name: 'MCP' })).toBeVisible()
+    await expect(sheet.getByRole('link', { name: 'Users' })).toBeVisible()
+    await expect(sheet.getByRole('link', { name: 'Audit' })).toBeVisible()
+    await expect(sheet.getByRole('link', { name: 'Integrations' })).toBeVisible()
+    await expect(sheet.getByRole('link', { name: 'Settings' })).toBeVisible()
+
+    // Bottom bar stays above the safe-area inset (existing padding, no
+    // regression): its own height (60px) plus inset must fit the viewport.
+    const box = await bottomBar.boundingBox()
+    expect(box?.height).toBeGreaterThanOrEqual(60)
   })
 })
