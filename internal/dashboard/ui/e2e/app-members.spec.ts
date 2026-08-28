@@ -46,6 +46,11 @@ test.describe('App Members', () => {
     await addDrawer.locator('button:has-text("Pick a user")').click()
     // Pick the second user
     await page.click(`[role="option"]:has-text("${secondEmail}")`)
+    // The role Select defaults to "editor" (AppMembersList.tsx's
+    // `useState<AppRole>("editor")`) -- select "Viewer" explicitly so the
+    // add and the later role-change actually exercise different roles.
+    await page.click('button#add-member-role')
+    await page.click('[role="option"]:has-text("Viewer")')
     // Submit -- scoped to the drawer, since the page-level "Add member"
     // trigger button behind it matches the same text and is covered by it
     await addDrawer.locator('button:has-text("Add member"):not(:has-text("Adding"))').click()
@@ -53,9 +58,6 @@ test.describe('App Members', () => {
     // The new member joins the owner's row in the list
     await expect(table.getByRole('row')).toHaveCount(3)
     await expect(page.locator(`text=${secondEmail}`)).toBeVisible()
-    // Role badge reads "Viewer" (the initial state — we picked editor
-    // in the code but e2e was authored to leave the default; the test
-    // asserts the *behavior*, not a specific initial role).
     await expect(page.locator('text=Viewer')).toBeVisible()
 
     // --- Change the member's role to editor ---
@@ -68,8 +70,9 @@ test.describe('App Members', () => {
     await page.click('[role="option"]:has-text("Editor")')
     await page.click('button:has-text("Save"):not(:has-text("Saving"))')
 
-    // The role badge now reads "Editor" in the row
-    await expect(row.locator('text=Editor')).toBeVisible()
+    // The role badge now reads "Editor" in the row -- exact match, since the
+    // second user's display name ("Editor User") also contains the substring
+    await expect(row.getByText('Editor', { exact: true })).toBeVisible()
 
     // --- Remove the member ---
     await row.locator('[data-testid^="member-remove-"]').click()
