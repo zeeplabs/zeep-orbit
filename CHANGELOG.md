@@ -13,6 +13,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 - **MCP server now sends `instructions` on `initialize`**, so any MCP client can drive the Orbit server correctly without a separately-installed skill: tool categories, `enum`/partial-update/RLS-default gotchas, and English-only error strings.
 - **`orbit-internals` Claude Code skill** (`.claude/skills/orbit-internals/`), for agents working on this codebase itself: schema-per-app provisioning, RLS modes, the `*ForUser` shared-operation pattern between REST and MCP, and testing conventions — grounded in the actual code, not a separate consumer-facing doc (that's the `orbit-usage` skill in `zeeplabs/zeep-orbit-agent-skills`).
+- **Dashboard is now responsive across phone, tablet, and ultra-wide monitors.** The sidebar resolves to one of three states purely via CSS breakpoints: a 5-slot bottom bar with a "More" drawer below 768px (Apps/Data Browser/Logs/SDKs + the rest), a 72px icon-only rail with tooltips between 768–1023px, and the existing full 264px sidebar at 1024px and up. Main content now caps at 1920px and centers on wider monitors instead of stretching indefinitely. See `.specs/features/responsive-layout/`.
+
+### Fixed
+
+- **Several settings fields (Brand Settings, GitHub Integration) forced horizontal overflow on viewports narrower than 420px** (e.g. iPhone SE) via a hardcoded `min-w-[420px]`. Replaced with `min-w-0` so fields keep filling available width above 420px without forcing a scroll floor below it.
+- **Data Browser's two-pane table-list layout stayed at the cramped desktop grid through the whole tablet range**, collapsing to the mobile stacked view only below 768px. Widened that collapse to below 1024px, matching the new tablet nav breakpoint.
 
 ## [1.7.0] — 2026-08-26
 

@@ -284,7 +284,7 @@ Tasks: T9.
 
 ---
 
-### T9: Document the feature in `CHANGELOG.md`
+### T9: Document the feature in `CHANGELOG.md` — ✅ Complete
 
 **What**: Add an entry under `## [Unreleased]` → `### Added` (or `### Fixed` for RESP-05/RESP-07, per existing changelog convention of splitting by type) summarizing: the 3-state responsive nav (mobile bottom bar/tablet icon rail/desktop sidebar), the 1920px ultra-wide content cap, and the `min-w-[420px]` overflow fix.
 **Where**: `CHANGELOG.md`
