@@ -134,8 +134,7 @@ test.describe('Ultra-wide content cap', () => {
 
 // RESP-05: min-w-[420px] on several BrandSettingsPage.tsx/GitHubIntegrationPage.tsx
 // fields forced horizontal overflow below 420px. Both pages must render
-// clean at 375px (iPhone SE class) now. (T7 extends this test with the
-// GitHub integration route once that file's fix lands.)
+// clean at 375px (iPhone SE class) now.
 test.describe('No overflow below 420px on settings pages', () => {
   test('brand settings and GitHub integration pages produce no horizontal overflow at 375px', async ({
     page,
@@ -149,5 +148,11 @@ test.describe('No overflow below 420px on settings pages', () => {
       () => document.documentElement.scrollWidth - window.innerWidth,
     )
     expect(brandOverflow).toBeLessThanOrEqual(0)
+
+    await page.goto('/dashboard/integracoes/github')
+    const githubOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    )
+    expect(githubOverflow).toBeLessThanOrEqual(0)
   })
 })

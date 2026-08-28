@@ -230,7 +230,7 @@ Tasks: T9.
 
 ---
 
-### T7: Fix `min-w-[420px]` overflow in `GitHubIntegrationPage.tsx`
+### T7: Fix `min-w-[420px]` overflow in `GitHubIntegrationPage.tsx` — ✅ Complete
 
 **What**: Replace every `min-w-[420px]` in `GitHubIntegrationPage.tsx` (lines 334, 1037, 1292) with `min-w-0`, same fix as T6, applied to the GitHub integration page's fields.
 **Where**: `src/pages/GitHubIntegrationPage.tsx`
