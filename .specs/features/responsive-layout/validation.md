@@ -5,7 +5,9 @@
 **Diff range**: `d7e2d53^..HEAD` (branch `develop`, 11 commits, HEAD = `096adc7`)
 **Verifier**: independent sub-agent (author ≠ verifier) — **round 2 re-verification**, findings re-derived from scratch, not inherited from round 1
 
-**Verdict: PASS ✅** — all 4 of round 1's hard gaps are closed with fresh evidence, 4/4 injected mutations killed (including round 1's surviving blocker), gate green. 7 spec-precision gaps remain, all on visual-proxy assertions; none blocking.
+**Verdict: PASS ✅** — all 4 of round 1's hard gaps are closed with fresh evidence, 4/4 injected mutations killed (including round 1's surviving blocker), gate green.
+
+**Post-verification update (2026-08-28, same day, follow-up commit)**: all 7 spec-precision gaps listed below were closed — see `## Post-Round-2 Gap Closure` at the end of this file. One of the new assertions (RESP-01/RESP-02 AC3's fill/weight/tint check) surfaced a real production bug: `NavRow`'s active-state tint/weight/color never applied in `Sidebar.tsx` (desktop and tablet rail) because Radix `Tooltip.Trigger asChild` silently drops `NavLink`'s function-valued `style` prop when merging. Fixed in production code, not just the test.
 
 ---
 
@@ -242,3 +244,23 @@ Live resize across a breakpoint (with the sheet open), exact boundary widths (76
 **Issues found**: no blocker, no major. Follow-up 1 and 2 (Minor, assertion strength and coverage breadth), Follow-up 3 (Minor, untested spec edge cases), Follow-up 4 (Cosmetic, RESP-04 orphan + unchecked task boxes).
 
 **Next steps**: feature is done. Route Follow-ups 1-4 to the backlog rather than a third fix iteration — none of them is a correctness risk, and the fix commit changed no production code, so the shipped behavior is what round 1 already validated as correct. Remaining orchestrator step is interactive UAT with the user on the three nav states.
+
+---
+
+## Post-Round-2 Gap Closure (2026-08-28)
+
+All 7 spec-precision gaps flagged in the round-2 AC table were closed in `internal/dashboard/ui/e2e/responsive-nav.spec.ts`, plus one production fix:
+
+| Gap | Fix | Result |
+| --- | --- | --- |
+| RESP-01 AC2 (grouping) | Assert `sheet.locator('span.uppercase')` text equals `['General', 'Deployment', 'Superadmin']` in order | ✅ Closed |
+| RESP-01 AC3 / RESP-02 AC3 (fill/weight/tint proxy) | Assert computed `fontWeight`/`color` differ between active and inactive `NavLink`s | ✅ Closed — **found a real bug**: `Sidebar.tsx`'s `NavRow` never applied active tint/weight/color at all. Radix `Tooltip.Trigger asChild` clones the wrapped `NavLink` and merges its own props into it; its merge treats `style` as a plain object and spreads it (`{...childStyle, ...slotStyle}`) — but `NavRow` passed `style` as a *function* (`NavLink`'s supported form for computing per-route active styles), and spreading a function yields `{}` (functions have no enumerable own properties). The icon's `fill` prop and the left accent bar were unaffected because those come from `NavLink`'s `children` render-prop, which Radix's `asChild` doesn't touch. Fixed by replacing the function `style` prop with static Tailwind classes gated on `aria-[current=page]:` (the `aria-current` attribute is set directly by `NavLink`, unaffected by the merge) — `Sidebar.tsx:44`. |
+| RESP-02 AC2 (focus path) | Add `appsLink.focus()` → tooltip visible, alongside the existing hover check | ✅ Closed |
+| RESP-02 AC4 (separator visibility) | Assert `.first()` separator `toBeVisible()` at tablet width and `toBeHidden()` at desktop width (new assertion in the `chromium` sub-cap test) | ✅ Closed |
+| RESP-03 AC1 (264px width) | Assert `aside.boundingBox().width === 264` in the `chromium` sub-cap test | ✅ Closed |
+| RESP-03 AC4 (breadth) | Widened from 2 routes to all 9 `NAV_SECTIONS` routes at ultrawide, using `page.waitForLoadState('networkidle')` instead of per-route heading text (avoids hardcoding 9 different headings while still not measuring during the loading fallback) | ✅ Closed |
+| RESP-07 (paired class) | Assert the table-list panel's computed `maxHeight`/`overflowY` match the `max-lg:max-h-[220px] max-lg:overflow-y-auto` pair, not just the parent's `display` swap | ✅ Closed |
+
+**Gate re-run**: `npx tsc -b` + `npm run build` clean. All 4 Playwright projects (`chromium`, `mobile`, `tablet`, `ultrawide`) green, one project at a time against a fresh server (avoids the documented login rate-limiter false-flake — code observation #4 above). 8 targeted tests + the desktop `personal-access-tokens.spec.ts` regression check all pass.
+
+**Requirement traceability**: RESP-01, RESP-02, RESP-03 now have **0 remaining precision gaps** from the round-2 list. Follow-up 3 (untested edge cases: live resize, exact boundary widths, heading-level omission) and Follow-up 4 (RESP-04 traceability orphan, `tasks.md` checkbox bookkeeping) were not in scope of this closure pass and remain open, unchanged from round 2's assessment (Minor/Cosmetic, non-blocking).

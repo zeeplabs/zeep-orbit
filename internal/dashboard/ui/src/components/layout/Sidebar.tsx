@@ -41,12 +41,17 @@ export function NavRow({
             to={item.path}
             end={item.path === '/apps'}
             onClick={onNavigate}
-            className="group relative flex items-center gap-2.5 rounded-[8px] px-3 py-2 text-sm no-underline transition-colors"
-            style={({ isActive }) => ({
-              background: isActive ? 'var(--primary-tint)' : 'transparent',
-              color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
-              fontWeight: isActive ? 600 : 400,
-            })}
+            // Active tint/color/weight is expressed as static Tailwind
+            // classes keyed off `aria-current`, not NavLink's `style`
+            // function prop: Radix's Tooltip.Trigger asChild clones this
+            // element and merges its own props via a naive object-spread
+            // for `style`, which silently collapses a *function* style prop
+            // into `{}` (spreading a function has no enumerable own
+            // properties) -- the active tint/weight/color never applied.
+            // aria-current itself is unaffected (NavLink sets it directly,
+            // not through the props Radix merges), so keying off it in CSS
+            // sidesteps the bug entirely.
+            className="group relative flex items-center gap-2.5 rounded-[8px] px-3 py-2 text-sm text-[var(--text-secondary)] no-underline transition-colors aria-[current=page]:bg-[var(--primary-tint)] aria-[current=page]:text-[var(--text-primary)] aria-[current=page]:font-semibold"
           >
             {({ isActive }) => (
               <>

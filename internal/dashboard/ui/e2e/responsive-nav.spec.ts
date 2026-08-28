@@ -54,6 +54,7 @@ test.describe('Tablet icon-only sidebar rail', () => {
 
     // A thin separator marks the section boundary in place of the hidden title.
     await expect(aside.getByRole('separator')).toHaveCount(2) // between 3 sections
+    await expect(aside.getByRole('separator').first()).toBeVisible()
 
     // Mobile bottom bar ("More" button) must not be visible at tablet width.
     await expect(page.getByRole('button', { name: 'More' })).toBeHidden()
@@ -63,8 +64,17 @@ test.describe('Tablet icon-only sidebar rail', () => {
     await appsLink.hover()
     await expect(page.getByRole('tooltip', { name: 'Apps' })).toBeVisible()
 
+    // Focusing (not just hovering) the icon shows the same tooltip -- Radix
+    // Tooltip.Trigger fires on either interaction path. Reload first so the
+    // hover above doesn't leave the tooltip already open/animating.
+    await page.reload()
+    await appsLink.focus()
+    await expect(page.getByRole('tooltip', { name: 'Apps' })).toBeVisible()
+    await appsLink.blur()
+
     // Clicking a rail icon still navigates correctly and applies the active
-    // state (React Router's aria-current="page" on the matched NavLink).
+    // state (React Router's aria-current="page" on the matched NavLink) with
+    // the desktop-equivalent fill/weight/tint, not just the ARIA attribute.
     const dataBrowserLink = page.locator('aside a[href="/dashboard/data-browser"]')
     await dataBrowserLink.click()
     await expect(page).toHaveURL(/\/dashboard\/data-browser$/)
@@ -72,6 +82,14 @@ test.describe('Tablet icon-only sidebar rail', () => {
       'aria-current',
       'page',
     )
+    const activeWeight = Number(
+      await dataBrowserLink.evaluate((el) => getComputedStyle(el).fontWeight),
+    )
+    const inactiveWeight = Number(await appsLink.evaluate((el) => getComputedStyle(el).fontWeight))
+    expect(activeWeight).toBeGreaterThan(inactiveWeight)
+    const activeColor = await dataBrowserLink.evaluate((el) => getComputedStyle(el).color)
+    const inactiveColor = await appsLink.evaluate((el) => getComputedStyle(el).color)
+    expect(activeColor).not.toBe(inactiveColor)
   })
 })
 
@@ -100,19 +118,30 @@ test.describe('Mobile 5-slot bottom bar', () => {
     await expect(bottomBar.getByRole('link', { name: 'SDKs' })).toBeVisible()
     await expect(bottomBar.getByRole('button', { name: 'More' })).toBeVisible()
 
-    // Tapping a fixed slot navigates and marks it active.
+    // Tapping a fixed slot navigates and marks it active with the
+    // desktop-equivalent fill/weight/tint, not just the ARIA attribute.
     await bottomBar.getByRole('link', { name: 'Logs' }).click()
     await expect(page).toHaveURL(/\/dashboard\/logs$/)
-    await expect(bottomBar.getByRole('link', { name: 'Logs' })).toHaveAttribute(
-      'aria-current',
-      'page',
+    const logsLink = bottomBar.getByRole('link', { name: 'Logs' })
+    const appsLinkBar = bottomBar.getByRole('link', { name: 'Apps' })
+    await expect(logsLink).toHaveAttribute('aria-current', 'page')
+    const activeWeight = Number(await logsLink.evaluate((el) => getComputedStyle(el).fontWeight))
+    const inactiveWeight = Number(
+      await appsLinkBar.evaluate((el) => getComputedStyle(el).fontWeight),
     )
+    expect(activeWeight).toBeGreaterThan(inactiveWeight)
+    const activeColor = await logsLink.evaluate((el) => getComputedStyle(el).color)
+    const inactiveColor = await appsLinkBar.evaluate((el) => getComputedStyle(el).color)
+    expect(activeColor).not.toBe(inactiveColor)
 
     // "More" opens the sheet listing the role-filtered remainder
-    // (superadmin test user sees Users/Audit/Integrations/Settings/MCP).
+    // (superadmin test user sees Users/Audit/Integrations/Settings/MCP),
+    // grouped under the same section headings and order as the desktop
+    // sidebar (nav.ts's NAV_SECTIONS: General, Deployment, Superadmin).
     await bottomBar.getByRole('button', { name: 'More' }).click()
     const sheet = page.getByTestId('mobile-nav-sheet')
     await expect(sheet).toBeVisible()
+    await expect(sheet.locator('span.uppercase')).toHaveText(['General', 'Deployment', 'Superadmin'])
     await expect(sheet.getByRole('link', { name: 'MCP' })).toBeVisible()
     await expect(sheet.getByRole('link', { name: 'Users' })).toBeVisible()
     await expect(sheet.getByRole('link', { name: 'Audit' })).toBeVisible()
@@ -199,17 +228,28 @@ test.describe('Ultra-wide content cap', () => {
     const asideBox = await page.locator('aside').boundingBox()
     expect(asideBox?.x).toBe(0)
 
-    const overflowX = await page.evaluate(
-      () => document.documentElement.scrollWidth - window.innerWidth,
-    )
-    expect(overflowX).toBeLessThanOrEqual(0)
-
-    await page.goto('/dashboard/data-browser')
-    await expect(page.getByText('Select a table from the tree')).toBeVisible()
-    const overflowXDataBrowser = await page.evaluate(
-      () => document.documentElement.scrollWidth - window.innerWidth,
-    )
-    expect(overflowXDataBrowser).toBeLessThanOrEqual(0)
+    // No page-level horizontal overflow on any NAV_SECTIONS route, not just
+    // Apps/Data Browser -- wait for the network to settle before measuring so
+    // a route's loading fallback (scrollWidth === innerWidth unconditionally)
+    // can't mask a real overflow.
+    for (const route of [
+      '/dashboard/apps',
+      '/dashboard/data-browser',
+      '/dashboard/logs',
+      '/dashboard/sdks',
+      '/dashboard/mcp-settings',
+      '/dashboard/usuarios',
+      '/dashboard/auditoria',
+      '/dashboard/integracoes/github',
+      '/dashboard/configuracoes',
+    ]) {
+      await page.goto(route)
+      await page.waitForLoadState('networkidle')
+      const overflowX = await page.evaluate(
+        () => document.documentElement.scrollWidth - window.innerWidth,
+      )
+      expect(overflowX, `overflow on ${route}`).toBeLessThanOrEqual(0)
+    }
   })
 })
 
@@ -235,6 +275,16 @@ test.describe('Content is full-width below the ultra-wide cap', () => {
     // since content is narrower than <main> only once the cap engages) --
     // assert the two widths are equal, proving no cap is in effect.
     expect(Math.abs((mainBox?.width ?? 0) - (box?.width ?? 0))).toBeLessThanOrEqual(2)
+
+    // RESP-03 AC1: the existing 264px full sidebar, unchanged at desktop
+    // width -- no test asserted the literal width before.
+    const asideBox = await page.locator('aside').boundingBox()
+    expect(asideBox?.width).toBe(264)
+
+    // RESP-02 AC4's counterpart: the section separator (visible at the
+    // tablet rail width in place of the hidden section title) is hidden
+    // again at desktop, where the section title itself is shown instead.
+    await expect(page.locator('aside').getByRole('separator').first()).toBeHidden()
   })
 })
 
@@ -287,5 +337,19 @@ test.describe('Data Browser tablet parity', () => {
       .locator('div.grid.h-full.min-h-full.items-stretch')
       .evaluate((el) => getComputedStyle(el).display)
     expect(display).toBe('flex')
+
+    // The paired panel class (max-lg:max-h-[220px] max-lg:overflow-y-auto)
+    // caps the table-list panel's height once it's no longer a grid column --
+    // asserted separately from the parent's `display` swap above.
+    const panel = page
+      .locator('div.grid.h-full.min-h-full.items-stretch > div')
+      .first()
+    const panelStyle = await panel.evaluate((el) => {
+      const s = getComputedStyle(el)
+      return { maxHeight: s.maxHeight, overflowY: s.overflowY }
+    })
+    expect(panelStyle.maxHeight).toBe('220px')
+    expect(panelStyle.overflowY).toBe('auto')
   })
 })
+
