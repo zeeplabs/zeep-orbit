@@ -7,12 +7,13 @@ test.describe('Authentication', () => {
     await login(page)
 
     // Should be on apps page
-    await expect(page.locator('text=Apps')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Your apps' })).toBeVisible()
 
     // Click user menu → logout
-    await page.click('text=Sair')
-    await expect(page.locator('text=Sair do dashboard?')).toBeVisible()
-    await page.click('button:has-text("Sair")')
+    await page.getByRole('button', { name: 'Log Out' }).first().click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog.getByText('Leave dashboard?')).toBeVisible()
+    await dialog.getByRole('button', { name: 'Log Out' }).click()
     await page.waitForURL('**/login')
   })
 

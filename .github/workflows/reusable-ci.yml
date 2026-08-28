@@ -130,8 +130,8 @@ jobs:
       # used for local runs (see .specs/features/responsive-layout/validation.md).
       - name: Run Playwright projects
         run: |
-          set -e
           cd internal/dashboard/ui
+          failed=0
           for project in chromium mobile tablet ultrawide; do
             echo "::group::Playwright project: $project"
             /tmp/zeep-e2e serve --port 8090 &
@@ -140,11 +140,17 @@ jobs:
               curl -sf http://localhost:8090/dashboard/api/bootstrap/status > /dev/null && break
               sleep 1
             done
-            BASE_URL=http://localhost:8090 npx playwright test --project="$project"
-            kill "$server_pid"
+            # Run every project even if an earlier one fails -- each covers a
+            # distinct viewport, so one broken project shouldn't hide results
+            # from the other three. The job still fails overall if any did.
+            if ! BASE_URL=http://localhost:8090 npx playwright test --project="$project"; then
+              failed=1
+            fi
+            kill "$server_pid" 2>/dev/null || true
             wait "$server_pid" 2>/dev/null || true
             echo "::endgroup::"
           done
+          exit "$failed"
 
       - name: Upload Playwright report
         if: failure()

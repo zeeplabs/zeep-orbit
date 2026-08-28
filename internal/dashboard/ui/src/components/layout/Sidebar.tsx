@@ -29,6 +29,46 @@ export function NavRow({
 }) {
   const { t } = useTranslation()
   const itemLabel = label(item.labelKey, t)
+
+  const link = (
+    <NavLink
+      to={item.path}
+      end={item.path === '/apps'}
+      onClick={onNavigate}
+      // Active tint/color/weight is expressed as static Tailwind
+      // classes keyed off `aria-current`, not NavLink's `style`
+      // function prop: Radix's Tooltip.Trigger asChild clones this
+      // element and merges its own props via a naive object-spread
+      // for `style`, which silently collapses a *function* style prop
+      // into `{}` (spreading a function has no enumerable own
+      // properties) -- the active tint/weight/color never applied.
+      // aria-current itself is unaffected (NavLink sets it directly,
+      // not through the props Radix merges), so keying off it in CSS
+      // sidesteps the bug entirely.
+      className="group relative flex items-center gap-2.5 rounded-[8px] px-3 py-2 text-sm text-[var(--text-secondary)] no-underline transition-colors aria-[current=page]:bg-[var(--primary-tint)] aria-[current=page]:text-[var(--text-primary)] aria-[current=page]:font-semibold"
+    >
+      {({ isActive }) => (
+        <>
+          {isActive && (
+            <span
+              className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full"
+              style={{ background: 'var(--primary)' }}
+            />
+          )}
+          <Icon name={item.icon} size={18} fill={isActive ? 1 : 0} />
+          <span className={alwaysShowLabel ? 'inline' : 'hidden lg:inline'}>{itemLabel}</span>
+        </>
+      )}
+    </NavLink>
+  )
+
+  // MobileNav's "More" sheet always renders the label inline (alwaysShowLabel),
+  // so a hover tooltip there would just repeat visible text -- only the
+  // Sidebar's icon-only tablet rail needs it. And even on Sidebar, the label
+  // itself becomes visible again at `lg` (desktop), so the tooltip content is
+  // forced hidden there too instead of duplicating it on hover.
+  if (alwaysShowLabel) return link
+
   return (
     // Self-contained provider: NavRow is reused by MobileNav.tsx's "More"
     // sheet too, which has no TooltipProvider ancestor of its own — Radix's
@@ -36,38 +76,10 @@ export function NavRow({
     // fails to render as an anchor.
     <TooltipProvider delayDuration={200}>
       <Tooltip>
-        <TooltipTrigger asChild>
-          <NavLink
-            to={item.path}
-            end={item.path === '/apps'}
-            onClick={onNavigate}
-            // Active tint/color/weight is expressed as static Tailwind
-            // classes keyed off `aria-current`, not NavLink's `style`
-            // function prop: Radix's Tooltip.Trigger asChild clones this
-            // element and merges its own props via a naive object-spread
-            // for `style`, which silently collapses a *function* style prop
-            // into `{}` (spreading a function has no enumerable own
-            // properties) -- the active tint/weight/color never applied.
-            // aria-current itself is unaffected (NavLink sets it directly,
-            // not through the props Radix merges), so keying off it in CSS
-            // sidesteps the bug entirely.
-            className="group relative flex items-center gap-2.5 rounded-[8px] px-3 py-2 text-sm text-[var(--text-secondary)] no-underline transition-colors aria-[current=page]:bg-[var(--primary-tint)] aria-[current=page]:text-[var(--text-primary)] aria-[current=page]:font-semibold"
-          >
-            {({ isActive }) => (
-              <>
-                {isActive && (
-                  <span
-                    className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full"
-                    style={{ background: 'var(--primary)' }}
-                  />
-                )}
-                <Icon name={item.icon} size={18} fill={isActive ? 1 : 0} />
-                <span className={alwaysShowLabel ? 'inline' : 'hidden lg:inline'}>{itemLabel}</span>
-              </>
-            )}
-          </NavLink>
-        </TooltipTrigger>
-        <TooltipContent side="right">{itemLabel}</TooltipContent>
+        <TooltipTrigger asChild>{link}</TooltipTrigger>
+        <TooltipContent side="right" className="lg:hidden">
+          {itemLabel}
+        </TooltipContent>
       </Tooltip>
     </TooltipProvider>
   )

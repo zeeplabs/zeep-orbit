@@ -125,8 +125,8 @@ test.describe('Policy Templates & Help Drawer', () => {
 
     // --- P1 AC3 (PTPL-01): "Only the owner sees/edits" for 2 actions. ---
     await useTemplateButton(page, 0).click()
-    await page.getByRole('button', { name: 'select', exact: true }).click()
-    await page.getByRole('button', { name: 'update', exact: true }).click()
+    await page.getByRole('button', { name: 'Select', exact: true }).click()
+    await page.getByRole('button', { name: 'Update', exact: true }).click()
     await page.getByRole('button', { name: 'member', exact: true }).click()
     await page.getByRole('button', { name: 'Apply template' }).click()
     await expect(page.locator('text=Policy created')).toBeVisible()
@@ -240,9 +240,9 @@ test.describe('Policy Templates & Help Drawer', () => {
     await useTemplateButton(page, 4).click()
     await page.getByRole('button', { name: 'member', exact: true }).click()
     await page.getByRole('button', { name: 'Apply template' }).click()
-    await expect(page.getByText('select: created', { exact: true })).toBeVisible()
-    await expect(page.getByText('update: created', { exact: true })).toBeVisible()
-    await expect(page.getByText('delete: created', { exact: true })).toBeVisible()
+    await expect(page.getByText('Select: created', { exact: true })).toBeVisible()
+    await expect(page.getByText('Update: created', { exact: true })).toBeVisible()
+    await expect(page.getByText('Delete: created', { exact: true })).toBeVisible()
     const compositeHappy = (await getPolicies(page, appId, 'posts')).filter((p) =>
       p.pg_policy_name.startsWith('tpl_open_read_owner_write_'),
     )
@@ -274,9 +274,9 @@ test.describe('Policy Templates & Help Drawer', () => {
     await page.getByRole('button', { name: 'Apply template' }).click()
 
     // select succeeded, update failed (name collision), delete never attempted.
-    await expect(page.getByText('select: created', { exact: true })).toBeVisible()
-    await expect(page.getByText(/^update: failed/)).toBeVisible()
-    await expect(page.getByText('delete: pending', { exact: true })).toBeVisible()
+    await expect(page.getByText('Select: created', { exact: true })).toBeVisible()
+    await expect(page.getByText(/^Update: failed/)).toBeVisible()
+    await expect(page.getByText('Delete: pending', { exact: true })).toBeVisible()
     const afterFailure = await getPolicies(page, appId, 'comments')
     expect(afterFailure.some((p) => p.pg_policy_name === 'tpl_open_read_owner_write_select')).toBe(true)
     expect(afterFailure.some((p) => p.pg_policy_name === 'tpl_open_read_owner_write_delete')).toBe(false)
@@ -285,9 +285,9 @@ test.describe('Policy Templates & Help Drawer', () => {
     // skips both select (created above) and update (the collision) — no
     // duplicate-create attempt against either. ---
     await page.getByRole('button', { name: 'Apply template' }).click()
-    await expect(page.getByText('select: already exists, skipped', { exact: true })).toBeVisible()
-    await expect(page.getByText('update: already exists, skipped', { exact: true })).toBeVisible()
-    await expect(page.getByText('delete: created', { exact: true })).toBeVisible()
+    await expect(page.getByText('Select: already exists, skipped', { exact: true })).toBeVisible()
+    await expect(page.getByText('Update: already exists, skipped', { exact: true })).toBeVisible()
+    await expect(page.getByText('Delete: created', { exact: true })).toBeVisible()
     const afterRetry = await getPolicies(page, appId, 'comments')
     expect(afterRetry.some((p) => p.pg_policy_name === 'tpl_open_read_owner_write_delete')).toBe(true)
     expect(afterRetry.filter((p) => p.pg_policy_name === 'tpl_open_read_owner_write_select')).toHaveLength(1)
