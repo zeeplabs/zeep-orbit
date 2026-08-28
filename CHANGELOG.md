@@ -9,6 +9,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **MCP server now sends `instructions` on `initialize`**, so any MCP client can drive the Orbit server correctly without a separately-installed skill: tool categories, `enum`/partial-update/RLS-default gotchas, and English-only error strings.
+- **`orbit-internals` Claude Code skill** (`.claude/skills/orbit-internals/`), for agents working on this codebase itself: schema-per-app provisioning, RLS modes, the `*ForUser` shared-operation pattern between REST and MCP, and testing conventions — grounded in the actual code, not a separate consumer-facing doc (that's the `orbit-usage` skill in `zeeplabs/zeep-orbit-agent-skills`).
+
 ## [1.7.0] — 2026-08-26
 
 ### Added
