@@ -129,7 +129,11 @@ export default function DashboardShell({ user }: { user: User | null }) {
 
   return (
     <div
-      className="grid min-h-screen grid-cols-[264px_1fr] max-md:grid-cols-1"
+      // SPEC_DEVIATION: design.md described only Sidebar.tsx's own width
+      // classes; the grid track itself was still hardcoded to 264px and
+      // needed the matching responsive columns for the tablet 72px rail
+      // to actually get 72px of track instead of leaving a 192px gap.
+      className="grid min-h-screen max-md:grid-cols-1 md:grid-cols-[72px_1fr] lg:grid-cols-[264px_1fr]"
       style={{ background: "var(--bg-page)" }}
     >
       <Sidebar companyName={companyName} banner={<UpdateAvailableBanner />} footer={footer} />

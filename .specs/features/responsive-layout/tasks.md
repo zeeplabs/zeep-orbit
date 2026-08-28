@@ -117,7 +117,7 @@ Tasks: T9.
 
 ---
 
-### T3: `Sidebar.tsx` — tablet icon-only rail
+### T3: `Sidebar.tsx` — tablet icon-only rail — ✅ Complete (3 SPEC_DEVIATIONs: (1) `DashboardShell.tsx`'s grid track was still hardcoded to `264px_1fr` — design.md only covered `Sidebar.tsx`'s own width classes, but the grid column itself needed matching responsive tracks or the 72px rail would leave a 192px gap; (2) the logo/company-name block's fate at 72px width wasn't specified — hidden below `lg` rather than adding a new icon-only logo asset out of scope; (3) `NavRow` (shared with `MobileNav.tsx`'s "More" sheet) needed a new `alwaysShowLabel` prop — the rail's `hidden lg:inline` label class broke the sheet's always-full-label requirement below 1024px, confirmed via a real regression in the existing `personal-access-tokens.spec.ts` "MCP nav link ... reachable on mobile" test, fixed and reverified passing. Also confirmed via a baseline diff run that 11 pre-existing e2e failures in the full chromium suite are environmental, unrelated to this task.)
 
 **What**: Make `Sidebar.tsx` render as a 72px icon-only rail at tablet width (768–1023px) and the unchanged 264px full sidebar at desktop width (≥1024px): remove the inline `style={{width: 264}}` in favor of `hidden md:flex md:w-[72px] lg:w-[264px]`; add `hidden lg:inline` to each nav-item label span; add `hidden lg:block` to each section-title div; insert a `<Separator>` between sections classed `md:block lg:hidden`; wrap each `NavRow` icon in a `<Tooltip>` showing the item's label (always-attached, per design's Tech Decisions — no breakpoint-conditional JS).
 **Where**: `src/components/layout/Sidebar.tsx`

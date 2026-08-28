@@ -15,7 +15,11 @@ export default defineConfig({
   },
   projects: [
     {
+      // Excludes responsive-nav.spec.ts: that file asserts viewport-specific
+      // layout (rail width, bottom-bar visibility) that only holds under the
+      // mobile/tablet/ultrawide projects below, not this default viewport.
       name: 'chromium',
+      testIgnore: /responsive-nav\.spec\.ts/,
       use: { ...devices['Desktop Chrome'] },
     },
     {
