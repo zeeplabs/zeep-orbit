@@ -57,9 +57,10 @@ export const NAV_SECTIONS: NavSectionDef[] = [
   },
 ]
 
-/** Itens fixos da tab bar mobile (README: Apps / Data / Logs). */
+/** Itens fixos da tab bar mobile (Apps / Data Browser / Logs / SDKs). 5º slot é o botão "Mais". */
 export const MOBILE_TABS: NavItemDef[] = [
   { icon: 'grid_view', labelKey: 'nav.apps', path: '/apps' },
   { icon: 'table', labelKey: 'nav.dataBrowser', path: '/data-browser' },
   { icon: 'analytics', labelKey: 'nav.logs', path: '/logs' },
+  { icon: 'code', labelKey: 'SDKs', path: '/sdks' },
 ]
