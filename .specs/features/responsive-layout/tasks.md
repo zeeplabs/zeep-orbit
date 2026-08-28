@@ -257,7 +257,7 @@ Tasks: T9.
 
 ---
 
-### T8: `DataBrowserPage.tsx` — extend table-list collapse to tablet
+### T8: `DataBrowserPage.tsx` — extend table-list collapse to tablet — ✅ Complete
 
 **What**: Change the two-pane layout's collapse breakpoint from `max-md:` to `max-lg:` (both the `flex flex-col` container class and the paired `max-h-[220px]` scrollable-strip class on the table-list panel), so the desktop `240px_1fr` grid only applies at `≥1024px` instead of `≥768px`.
 **Where**: `src/pages/DataBrowserPage.tsx`

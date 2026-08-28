@@ -156,3 +156,22 @@ test.describe('No overflow below 420px on settings pages', () => {
     expect(githubOverflow).toBeLessThanOrEqual(0)
   })
 })
+
+// RESP-07: DataBrowserPage's two-pane grid (240px_1fr) used to only collapse
+// to a stacked mobile layout below 768px; it must now collapse below 1024px
+// (tablet) too, matching the new nav breakpoint scheme.
+test.describe('Data Browser tablet parity', () => {
+  test('collapses the table-list panel at tablet width instead of the desktop grid', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'tablet', 'tablet-only assertions')
+    await bootstrapOrSkip(page)
+    await login(page)
+    await page.goto('/dashboard/data-browser')
+
+    const display = await page
+      .locator('div.grid.h-full.min-h-full.items-stretch')
+      .evaluate((el) => getComputedStyle(el).display)
+    expect(display).toBe('flex')
+  })
+})
