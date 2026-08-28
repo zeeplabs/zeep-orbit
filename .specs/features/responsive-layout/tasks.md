@@ -175,7 +175,7 @@ Tasks: T9.
 
 ---
 
-### T5: `DashboardShell.tsx` — ultra-wide content cap
+### T5: `DashboardShell.tsx` — ultra-wide content cap — ✅ Complete
 
 **What**: Add `mx-auto max-w-[1920px]` to the main content wrapper (currently `w-full min-w-0 p-10 max-md:px-4 max-md:py-4`) so content centers and stops stretching past 1920px, while the sidebar/rail/bottom-bar stay outside this wrapper (pinned to the viewport edge, not centered with content).
 **Where**: `src/pages/DashboardShell.tsx`

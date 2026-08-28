@@ -139,7 +139,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
       <Sidebar companyName={companyName} banner={<UpdateAvailableBanner />} footer={footer} />
 
       <main className="flex min-h-screen min-w-0 justify-center max-md:pb-[65px]">
-        <div className="w-full min-w-0 p-10 max-md:px-4 max-md:py-4">
+        <div className="mx-auto w-full min-w-0 max-w-[1920px] p-10 max-md:px-4 max-md:py-4">
           <Outlet />
         </div>
       </main>

@@ -101,3 +101,33 @@ test.describe('Mobile 5-slot bottom bar', () => {
     expect(box?.height).toBeGreaterThanOrEqual(60)
   })
 })
+
+// RESP-03: ultra-wide (2560x1440, `ultrawide` project) caps the main content
+// area at 1920px instead of stretching it edge-to-edge.
+test.describe('Ultra-wide content cap', () => {
+  test('caps content at 1920px and produces no page-level horizontal overflow', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'ultrawide', 'ultrawide-only assertions')
+    await bootstrapOrSkip(page)
+    await login(page)
+    await page.goto('/dashboard/apps')
+
+    // DashboardShell.tsx renders exactly one direct <div> child of <main> --
+    // the capped/centered content wrapper around <Outlet/>.
+    const content = page.locator('main > div').first()
+    const box = await content.boundingBox()
+    expect(box?.width).toBeLessThanOrEqual(1920)
+
+    const overflowX = await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    )
+    expect(overflowX).toBeLessThanOrEqual(0)
+
+    await page.goto('/dashboard/data-browser')
+    const overflowXDataBrowser = await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    )
+    expect(overflowXDataBrowser).toBeLessThanOrEqual(0)
+  })
+})
