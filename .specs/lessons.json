@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 39,
+  "next_id": 43,
   "lessons": [
     {
       "id": "L-001",
@@ -688,6 +688,78 @@
       ],
       "created": "2026-08-26T23:15:04Z",
       "last_seen": "2026-08-26T23:15:04Z"
+    },
+    {
+      "id": "L-039",
+      "key": "surviving_mutant::in playwright await a real content locator on the loaded route before measuring layout geometry a measurement taken right after page goto reads the loading fallback and passes unconditionally",
+      "text": "In Playwright, await a real content locator on the loaded route before measuring layout geometry; a measurement taken right after page.goto reads the loading fallback and passes unconditionally.",
+      "signal": "surviving_mutant",
+      "scope": "e2e",
+      "status": "candidate",
+      "features": [
+        "responsive-layout"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "internal/dashboard/ui/e2e/responsive-nav.spec.ts:146 (e2e)"
+      ],
+      "created": "2026-08-28T17:57:02Z",
+      "last_seen": "2026-08-28T17:57:02Z"
+    },
+    {
+      "id": "L-040",
+      "key": "ac_gap::do not assert a value the component hardcodes and the test environment cannot vary assert the mechanism that produces it instead",
+      "text": "Do not assert a value the component hardcodes and the test environment cannot vary; assert the mechanism that produces it instead.",
+      "signal": "ac_gap",
+      "scope": "e2e",
+      "status": "candidate",
+      "features": [
+        "responsive-layout"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "internal/dashboard/ui/e2e/responsive-nav.spec.ts:100 (e2e)"
+      ],
+      "created": "2026-08-28T17:57:02Z",
+      "last_seen": "2026-08-28T17:57:02Z"
+    },
+    {
+      "id": "L-041",
+      "key": "ac_gap::cover permission gated ui in both directions assert the item is present for a permitted role and absent for a denied one",
+      "text": "Cover permission-gated UI in both directions: assert the item is present for a permitted role and absent for a denied one.",
+      "signal": "ac_gap",
+      "scope": "dashboard-ui",
+      "status": "candidate",
+      "features": [
+        "responsive-layout"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "spec.md RESP-01 AC4 (dashboard-ui)"
+      ],
+      "created": "2026-08-28T17:57:02Z",
+      "last_seen": "2026-08-28T17:57:02Z"
+    },
+    {
+      "id": "L-042",
+      "key": "spec_precision_gap::when an ac says an exact number of elements assert cardinality with tohavecount not the visibility of each expected item",
+      "text": "When an AC says an exact number of elements, assert cardinality with toHaveCount, not the visibility of each expected item.",
+      "signal": "spec_precision_gap",
+      "scope": "e2e",
+      "status": "candidate",
+      "features": [
+        "responsive-layout"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "internal/dashboard/ui/e2e/responsive-nav.spec.ts:71 (e2e)"
+      ],
+      "created": "2026-08-28T17:57:02Z",
+      "last_seen": "2026-08-28T17:57:02Z"
     }
   ]
 }

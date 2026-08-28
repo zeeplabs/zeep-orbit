@@ -31,6 +31,27 @@ test.describe('Tablet icon-only sidebar rail', () => {
     // text proves nothing).
     await expect(aside.getByText('General', { exact: true })).toBeHidden()
 
+    // Nav-item labels themselves (not just section titles) are hidden at
+    // rail width -- reverting NavRow's `hidden lg:inline` on the label span
+    // must fail this.
+    await expect(aside.getByText('Apps', { exact: true })).toBeHidden()
+
+    // Every role-visible NAV_SECTIONS item is present in the rail (all 9
+    // items for the superadmin test user), not just a subset.
+    for (const href of [
+      '/dashboard/apps',
+      '/dashboard/data-browser',
+      '/dashboard/logs',
+      '/dashboard/sdks',
+      '/dashboard/mcp-settings',
+      '/dashboard/usuarios',
+      '/dashboard/auditoria',
+      '/dashboard/integracoes/github',
+      '/dashboard/configuracoes',
+    ]) {
+      await expect(aside.locator(`a[href="${href}"]`)).toBeVisible()
+    }
+
     // A thin separator marks the section boundary in place of the hidden title.
     await expect(aside.getByRole('separator')).toHaveCount(2) // between 3 sections
 
@@ -70,6 +91,9 @@ test.describe('Mobile 5-slot bottom bar', () => {
     // share them, so this selector stays unique even once the sheet is open.
     const bottomBar = page.locator('nav.fixed.inset-x-0.bottom-0')
     await expect(bottomBar).toBeVisible()
+    // Exactly 5 slots -- not just "these 4 are present" (a 6th slot must fail
+    // this).
+    await expect(bottomBar.locator(':scope > *')).toHaveCount(5)
     await expect(bottomBar.getByRole('link', { name: 'Apps' })).toBeVisible()
     await expect(bottomBar.getByRole('link', { name: 'Data Browser' })).toBeVisible()
     await expect(bottomBar.getByRole('link', { name: 'Logs' })).toBeVisible()
@@ -95,10 +119,50 @@ test.describe('Mobile 5-slot bottom bar', () => {
     await expect(sheet.getByRole('link', { name: 'Integrations' })).toBeVisible()
     await expect(sheet.getByRole('link', { name: 'Settings' })).toBeVisible()
 
-    // Bottom bar stays above the safe-area inset (existing padding, no
-    // regression): its own height (60px) plus inset must fit the viewport.
-    const box = await bottomBar.boundingBox()
-    expect(box?.height).toBeGreaterThanOrEqual(60)
+    // Bottom bar's bottom padding is wired to the safe-area inset -- assert
+    // the mechanism itself (the unresolved `env()` expression React set on
+    // the element), not just the bar's rendered height, which is a hardcoded
+    // constant (MobileNav.tsx `height: 60`) that a getComputedStyle read
+    // would report as 60 regardless of whether the inset rule exists (it
+    // resolves to 0px under headless-Chrome emulation either way).
+    const paddingBottom = await bottomBar.evaluate((el) => (el as HTMLElement).style.paddingBottom)
+    expect(paddingBottom).toContain('env(safe-area-inset-bottom')
+  })
+})
+
+test.describe('Mobile bottom bar role-gates the "More" drawer', () => {
+  test('a role with no platformAction permissions sees only ungated items', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile', 'mobile-only assertions')
+    await bootstrapOrSkip(page)
+    await login(page)
+
+    // Downgrade the logged-in session to 'member' for the client only --
+    // 'member' has none of users/audit/integrations/branding (see
+    // src/lib/permissions.ts PLATFORM_PERMISSIONS), so every gated item in
+    // NAV_SECTIONS' Superadmin section must be absent from the drawer.
+    await page.route('**/dashboard/api/me', async (route) => {
+      const response = await route.fetch()
+      const body = await response.json()
+      await route.fulfill({ response, json: { ...body, role: 'member' } })
+    })
+    await page.goto('/dashboard/apps')
+
+    await page.locator('nav.fixed.inset-x-0.bottom-0').getByRole('button', { name: 'More' }).click()
+    const sheet = page.getByTestId('mobile-nav-sheet')
+    await expect(sheet).toBeVisible()
+
+    // Ungated item stays visible.
+    await expect(sheet.getByRole('link', { name: 'MCP' })).toBeVisible()
+
+    // Every gated item is omitted, not merely hidden -- toHaveCount(0)
+    // rather than toBeHidden(), since the omission is a conditional render
+    // (`visible.length === 0 return null` in MobileNav.tsx), not a CSS hide.
+    await expect(sheet.getByRole('link', { name: 'Users' })).toHaveCount(0)
+    await expect(sheet.getByRole('link', { name: 'Audit' })).toHaveCount(0)
+    await expect(sheet.getByRole('link', { name: 'Integrations' })).toHaveCount(0)
+    await expect(sheet.getByRole('link', { name: 'Settings' })).toHaveCount(0)
   })
 })
 
@@ -112,6 +176,10 @@ test.describe('Ultra-wide content cap', () => {
     await bootstrapOrSkip(page)
     await login(page)
     await page.goto('/dashboard/apps')
+    // Wait for the route to actually paint before measuring -- immediately
+    // after goto() the shell can still show its loading fallback, where
+    // scrollWidth === innerWidth unconditionally and proves nothing.
+    await expect(page.getByRole('heading', { name: 'Your apps' })).toBeVisible()
 
     // DashboardShell.tsx renders exactly one direct <div> child of <main> --
     // the capped/centered content wrapper around <Outlet/>.
@@ -119,12 +187,25 @@ test.describe('Ultra-wide content cap', () => {
     const box = await content.boundingBox()
     expect(box?.width).toBeLessThanOrEqual(1920)
 
+    // Centered: equal space on both sides of the capped content within
+    // <main>, and the sidebar stays pinned to the viewport's left edge
+    // rather than being centered along with the content.
+    const main = page.locator('main')
+    const mainBox = await main.boundingBox()
+    const leftGap = box!.x - mainBox!.x
+    const rightGap = mainBox!.x + mainBox!.width - (box!.x + box!.width)
+    expect(Math.abs(leftGap - rightGap)).toBeLessThanOrEqual(2)
+
+    const asideBox = await page.locator('aside').boundingBox()
+    expect(asideBox?.x).toBe(0)
+
     const overflowX = await page.evaluate(
       () => document.documentElement.scrollWidth - window.innerWidth,
     )
     expect(overflowX).toBeLessThanOrEqual(0)
 
     await page.goto('/dashboard/data-browser')
+    await expect(page.getByText('Select a table from the tree')).toBeVisible()
     const overflowXDataBrowser = await page.evaluate(
       () => document.documentElement.scrollWidth - window.innerWidth,
     )
@@ -132,24 +213,57 @@ test.describe('Ultra-wide content cap', () => {
   })
 })
 
+// RESP-03 AC3: at or below the 1920px cap, content keeps using full
+// available width -- the cap only engages past it. `chromium` runs at
+// Desktop Chrome's default viewport (well under 1920px), so this is the
+// right project to prove the cap does NOT engage here.
+test.describe('Content is full-width below the ultra-wide cap', () => {
+  test('content wrapper fills the space right of the sidebar at a sub-cap desktop width', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium', 'chromium-only assertions')
+    await bootstrapOrSkip(page)
+    await login(page)
+    await page.goto('/dashboard/apps')
+    await expect(page.getByRole('heading', { name: 'Your apps' })).toBeVisible()
+
+    const main = page.locator('main')
+    const content = page.locator('main > div').first()
+    const mainBox = await main.boundingBox()
+    const box = await content.boundingBox()
+    // Full width of <main> (minus its own centering, which is a no-op here
+    // since content is narrower than <main> only once the cap engages) --
+    // assert the two widths are equal, proving no cap is in effect.
+    expect(Math.abs((mainBox?.width ?? 0) - (box?.width ?? 0))).toBeLessThanOrEqual(2)
+  })
+})
+
 // RESP-05: min-w-[420px] on several BrandSettingsPage.tsx/GitHubIntegrationPage.tsx
 // fields forced horizontal overflow below 420px. Both pages must render
-// clean at 375px (iPhone SE class) now.
+// clean at exactly 375px (iPhone SE class, the width the spec/Independent
+// Test/Success Criteria all name) now.
 test.describe('No overflow below 420px on settings pages', () => {
   test('brand settings and GitHub integration pages produce no horizontal overflow at 375px', async ({
     page,
   }, testInfo) => {
     test.skip(testInfo.project.name !== 'mobile', 'mobile-only assertions')
+    await page.setViewportSize({ width: 375, height: 667 })
     await bootstrapOrSkip(page)
     await login(page)
 
     await page.goto('/dashboard/configuracoes')
+    // Wait for real content before measuring -- immediately after goto() the
+    // route can still show its loading fallback, where scrollWidth ===
+    // innerWidth unconditionally and the min-w-[420px] bug (if reintroduced)
+    // would go undetected.
+    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible()
     const brandOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth - window.innerWidth,
     )
     expect(brandOverflow).toBeLessThanOrEqual(0)
 
     await page.goto('/dashboard/integracoes/github')
+    await expect(page.getByRole('heading', { name: 'Integrations' })).toBeVisible()
     const githubOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth - window.innerWidth,
     )

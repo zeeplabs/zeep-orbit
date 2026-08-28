@@ -242,6 +242,30 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: internal/dashboard/ai/client.go:55 (SPEC_DEVIATION) (dashboard-ai)
 - last seen: 2026-08-26T23:15:04Z
 
+### L-039 - In Playwright, await a real content locator on the loaded route before measuring layout geometry; a measurement taken right after page.goto reads the loading fallback and passes unconditionally.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `e2e` · harmful: 0
+- features: responsive-layout
+- evidence: internal/dashboard/ui/e2e/responsive-nav.spec.ts:146 (e2e)
+- last seen: 2026-08-28T17:57:02Z
+
+### L-040 - Do not assert a value the component hardcodes and the test environment cannot vary; assert the mechanism that produces it instead.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `e2e` · harmful: 0
+- features: responsive-layout
+- evidence: internal/dashboard/ui/e2e/responsive-nav.spec.ts:100 (e2e)
+- last seen: 2026-08-28T17:57:02Z
+
+### L-041 - Cover permission-gated UI in both directions: assert the item is present for a permitted role and absent for a denied one.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `dashboard-ui` · harmful: 0
+- features: responsive-layout
+- evidence: spec.md RESP-01 AC4 (dashboard-ui)
+- last seen: 2026-08-28T17:57:02Z
+
+### L-042 - When an AC says an exact number of elements, assert cardinality with toHaveCount, not the visibility of each expected item.
+- signal: `spec_precision_gap` · recurrence: 1 feature(s) · scope: `e2e` · harmful: 0
+- features: responsive-layout
+- evidence: internal/dashboard/ui/e2e/responsive-nav.spec.ts:71 (e2e)
+- last seen: 2026-08-28T17:57:02Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.
