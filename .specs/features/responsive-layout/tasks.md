@@ -91,7 +91,7 @@ Tasks: T9.
 
 ---
 
-### T2: Add mobile/tablet/ultrawide Playwright projects
+### T2: Add mobile/tablet/ultrawide Playwright projects — ✅ Complete (SPEC_DEVIATION: added `testMatch` scoping each new project to `responsive-nav.spec.ts` — not in design.md, added to avoid the existing 26-test suite silently running 4x under untested viewports)
 
 **What**: Add 3 new `projects` entries to `playwright.config.ts` — `mobile` (390×844), `tablet` (820×1180), `ultrawide` (2560×1440) — each based on `devices['Desktop Chrome']` with an overridden `viewport`, alongside the existing `chromium` project (kept unchanged).
 **Where**: `playwright.config.ts`
