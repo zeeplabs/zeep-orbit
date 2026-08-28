@@ -264,3 +264,23 @@ All 7 spec-precision gaps flagged in the round-2 AC table were closed in `intern
 **Gate re-run**: `npx tsc -b` + `npm run build` clean. All 4 Playwright projects (`chromium`, `mobile`, `tablet`, `ultrawide`) green, one project at a time against a fresh server (avoids the documented login rate-limiter false-flake — code observation #4 above). 8 targeted tests + the desktop `personal-access-tokens.spec.ts` regression check all pass.
 
 **Requirement traceability**: RESP-01, RESP-02, RESP-03 now have **0 remaining precision gaps** from the round-2 list. Follow-up 3 (untested edge cases: live resize, exact boundary widths, heading-level omission) and Follow-up 4 (RESP-04 traceability orphan, `tasks.md` checkbox bookkeeping) were not in scope of this closure pass and remain open, unchanged from round 2's assessment (Minor/Cosmetic, non-blocking).
+
+---
+
+## Follow-up 3/4 Closure (2026-08-28, second follow-up pass)
+
+**Follow-up 3 (untested spec edge cases)** — all closed in `e2e/responsive-nav.spec.ts`:
+
+- **Live resize with the sheet open**: new test opens the mobile "More" sheet, resizes the viewport from 390px to 820px, asserts the sheet becomes hidden — proves `MobileNav.tsx`'s `md:hidden` overlay wrapper actually hides a statefully-open sheet on a live resize, not just on fresh page loads at different viewports.
+- **Exact boundary widths**: new test asserts 768px renders the tablet rail (not the mobile bottom bar), 1024px renders the exact 264px desktop sidebar (not the tablet rail), and 1920px keeps content uncapped (matches `<main>` width) — the three breakpoints resolve to the wider range as `spec.md`'s EARS clauses (`≥768px`, `≥1024px`, `≤1920px`) require.
+- **Heading-level omission for a fully role-gated section**: extended the existing `member`-role interception test with `expect(sheet.getByText('Superadmin', { exact: true })).toHaveCount(0)` — proves the section heading itself is dropped, not just its items, closing the gap code observation #2 warned about.
+- **Code observation #2** (the concrete counter-case for the above): `Sidebar.tsx`'s separator was gated on `index > 0` over the raw `NAV_SECTIONS` index rather than the index among *rendered* sections. Fixed — sections are now filtered by visibility before the array carrying the separator's index is built, so a role gating out an early section can no longer produce a leading separator. No role does this today (only the Superadmin section has any `platformAction` gating, and it's last), so this was latent, not reachable — fixed anyway since the fix is one small refactor and the risk was explicitly flagged.
+
+**Follow-up 4 (traceability / bookkeeping)** — both items closed:
+
+- **`tasks.md` "Done when" checkboxes**: already `- [x]` on every completed task as of this pass (closed in an earlier bookkeeping edit, re-verified here — no drift found).
+- **RESP-04 traceability orphan**: `spec.md`'s combined desktop/ultra-wide story now tags each AC with its requirement ID inline (`(RESP-03)` on AC1, `(RESP-04)` on AC2-4), and the traceability table's RESP-03/RESP-04 rows spell out which ACs each ID covers instead of RESP-04 reading as "substantively covered, no block of its own." No requirement IDs were renumbered (would have broken cross-references in this file and `tasks.md`) — the fix is precision, not restructuring.
+
+**Gate re-run**: `npx tsc -b` + `npm run build` clean. All 4 Playwright projects green (`chromium`: 4 targeted tests + `personal-access-tokens.spec.ts` regression; `tablet`/`mobile`/`ultrawide`: their scoped tests, unaffected by the `Sidebar.tsx` separator refactor).
+
+**Status**: all items from both Follow-up 3 and Follow-up 4 are closed. No further residuals from the round-2 validation report remain open.

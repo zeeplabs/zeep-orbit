@@ -192,6 +192,71 @@ test.describe('Mobile bottom bar role-gates the "More" drawer', () => {
     await expect(sheet.getByRole('link', { name: 'Audit' })).toHaveCount(0)
     await expect(sheet.getByRole('link', { name: 'Integrations' })).toHaveCount(0)
     await expect(sheet.getByRole('link', { name: 'Settings' })).toHaveCount(0)
+
+    // The section HEADING itself is omitted too, not just its items -- a
+    // role with every item in a section gated out must not leave a bare
+    // "Superadmin" label with nothing under it (MobileNav.tsx's
+    // `visible.length === 0 return null` drops the whole section div,
+    // heading included).
+    await expect(sheet.getByText('Superadmin', { exact: true })).toHaveCount(0)
+  })
+})
+
+// Edge case (spec.md's Edge Cases section): the "More" bottom sheet is CSS-hidden
+// at md+ (`MobileNav.tsx`'s overlay wrapper carries `md:hidden`), so live-resizing
+// past the mobile breakpoint while it's open must not leave a dead click-blocking
+// overlay behind, even though the sheet's open/close state lives in React, not CSS.
+test.describe('Bottom sheet closes on resize across breakpoint', () => {
+  test('resizing from mobile to tablet width hides the open "More" sheet overlay', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium', 'viewport-controlled, run once')
+    await page.setViewportSize({ width: 390, height: 844 })
+    await bootstrapOrSkip(page)
+    await login(page)
+    await page.goto('/dashboard/apps')
+
+    await page.locator('nav.fixed.inset-x-0.bottom-0').getByRole('button', { name: 'More' }).click()
+    const sheet = page.getByTestId('mobile-nav-sheet')
+    await expect(sheet).toBeVisible()
+
+    await page.setViewportSize({ width: 820, height: 1180 })
+    await expect(sheet).toBeHidden()
+  })
+})
+
+// Edge case: exact boundary widths (768/1024/1920) resolve to the WIDER range
+// per spec.md's breakpoint definitions (mobile `<768px`, tablet `768-1023px`,
+// desktop `>=1024px`, ultra-wide cap engages `>1920px`) -- off-by-one here
+// would put a real device exactly at a boundary into the wrong nav state.
+test.describe('Breakpoint boundaries resolve to the wider range', () => {
+  test('768px is tablet (not mobile), 1024px is desktop (not tablet), 1920px is uncapped', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium', 'viewport-controlled, run once')
+    await bootstrapOrSkip(page)
+    await login(page)
+
+    await page.setViewportSize({ width: 768, height: 1024 })
+    await page.goto('/dashboard/apps')
+    await expect(page.locator('aside')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'More' })).toBeHidden()
+
+    await page.setViewportSize({ width: 1024, height: 900 })
+    await page.reload()
+    const asideAt1024 = page.locator('aside')
+    await expect(asideAt1024).toBeVisible()
+    const boxAt1024 = await asideAt1024.boundingBox()
+    expect(boxAt1024?.width).toBe(264)
+
+    await page.setViewportSize({ width: 1920, height: 1080 })
+    await page.reload()
+    await expect(page.getByRole('heading', { name: 'Your apps' })).toBeVisible()
+    const content = page.locator('main > div').first()
+    const main = page.locator('main')
+    const contentBox = await content.boundingBox()
+    const mainBox = await main.boundingBox()
+    expect(Math.abs((mainBox?.width ?? 0) - (contentBox?.width ?? 0))).toBeLessThanOrEqual(2)
   })
 })
 

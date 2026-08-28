@@ -103,12 +103,17 @@ export function Sidebar({ companyName, banner, footer }: SidebarProps) {
       <div className="mb-4 border-t border-[var(--border)]" />
 
       <nav className="flex flex-1 flex-col gap-4">
-        {NAV_SECTIONS.map((section, index) => {
-          const visible = section.items.filter(
+        {NAV_SECTIONS.map((section) => ({
+          section,
+          visible: section.items.filter(
             (item) => !item.platformAction || hasPlatformPermission(role, item.platformAction),
-          )
-          if (visible.length === 0) return null
-          return (
+          ),
+        }))
+          .filter(({ visible }) => visible.length > 0)
+          // Separator goes between *rendered* sections, not raw NAV_SECTIONS
+          // position -- if a role ever fully gates out the first section(s),
+          // the separator must not lead the remaining ones.
+          .map(({ section, visible }, index) => (
             <div key={section.titleKey} className="flex flex-col gap-0.5">
               {index > 0 && (
                 <Separator decorative={false} className="mb-1.5 md:block lg:hidden" />
@@ -120,8 +125,7 @@ export function Sidebar({ companyName, banner, footer }: SidebarProps) {
                 <NavRow key={item.path} item={item} />
               ))}
             </div>
-          )
-        })}
+          ))}
       </nav>
 
       {banner}

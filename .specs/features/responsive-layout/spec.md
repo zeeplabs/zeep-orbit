@@ -96,10 +96,12 @@ Every ambiguity is resolved or recorded here — nothing is left silently unclea
 
 **Acceptance Criteria**:
 
-1. WHILE viewport width is `≥1024px` THEN the system SHALL render the existing 264px full sidebar with labels, exactly as implemented today (no visual regression).
-2. WHILE viewport width exceeds `1920px` THEN the system SHALL cap the main content area (the `<main>` region inside `DashboardShell`) at `max-width: 1920px` and SHALL center it horizontally, with the sidebar remaining pinned to the left edge of the viewport (not centered with the content).
-3. WHILE viewport width is `≤1920px` (and `≥1024px`) THEN the main content area SHALL continue to use the full available width, unchanged from current behavior.
-4. The system SHALL NOT introduce horizontal scrolling on the `<body>`/page level at any width from 1024px to 3840px on any route listed in `NAV_SECTIONS`.
+1. (RESP-03) WHILE viewport width is `≥1024px` THEN the system SHALL render the existing 264px full sidebar with labels, exactly as implemented today (no visual regression).
+2. (RESP-04) WHILE viewport width exceeds `1920px` THEN the system SHALL cap the main content area (the `<main>` region inside `DashboardShell`) at `max-width: 1920px` and SHALL center it horizontally, with the sidebar remaining pinned to the left edge of the viewport (not centered with the content).
+3. (RESP-04) WHILE viewport width is `≤1920px` (and `≥1024px`) THEN the main content area SHALL continue to use the full available width, unchanged from current behavior.
+4. (RESP-04) The system SHALL NOT introduce horizontal scrolling on the `<body>`/page level at any width from 1024px to 3840px on any route listed in `NAV_SECTIONS`.
+
+This single story carries two requirement IDs (RESP-03: AC1, the desktop-unchanged baseline; RESP-04: AC2-4, the ultra-wide cap) rather than a story each, since the ultra-wide cap is inseparable from the desktop sidebar's regression baseline in this implementation — see the Requirement Traceability table below.
 
 **Independent Test**: Load `/apps` and `/data-browser` at 3440×1440 (ultra-wide) and 1920×1080, confirm content is capped/centered at the former and full-width at the latter, confirm no page-level horizontal scrollbar appears.
 
@@ -163,8 +165,8 @@ Every ambiguity is resolved or recorded here — nothing is left silently unclea
 | --- | --- | --- | --- |
 | RESP-01 | P1: Mobile bottom bar with 5 slots | Execute | Verified |
 | RESP-02 | P1: Tablet collapsed icon-only sidebar | Execute | Verified |
-| RESP-03 | P1: Desktop sidebar unchanged | Execute | Verified |
-| RESP-04 | P1: Ultra-wide content cap (1920px) | Execute | Verified (substantively covered via RESP-03 AC2; no distinct AC block of its own — see `validation.md`) |
+| RESP-03 | P1: Desktop sidebar unchanged, ultra-wide content capped — AC1 | Execute | Verified |
+| RESP-04 | P1: Desktop sidebar unchanged, ultra-wide content capped — AC2-4 (ultra-wide cap) | Execute | Verified |
 | RESP-05 | P1: Fix `min-w-[420px]` overflow (Brand Settings, GitHub Integration) | Execute | Verified |
 | RESP-06 | P2: Playwright coverage (mobile/tablet/ultra-wide) | Execute | Verified |
 | RESP-07 | P3: Data Browser tablet layout parity | Execute | Verified |

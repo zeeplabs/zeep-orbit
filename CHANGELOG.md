@@ -14,9 +14,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **MCP server now sends `instructions` on `initialize`**, so any MCP client can drive the Orbit server correctly without a separately-installed skill: tool categories, `enum`/partial-update/RLS-default gotchas, and English-only error strings.
 - **`orbit-internals` Claude Code skill** (`.claude/skills/orbit-internals/`), for agents working on this codebase itself: schema-per-app provisioning, RLS modes, the `*ForUser` shared-operation pattern between REST and MCP, and testing conventions — grounded in the actual code, not a separate consumer-facing doc (that's the `orbit-usage` skill in `zeeplabs/zeep-orbit-agent-skills`).
 - **Dashboard is now responsive across phone, tablet, and ultra-wide monitors.** The sidebar resolves to one of three states purely via CSS breakpoints: a 5-slot bottom bar with a "More" drawer below 768px (Apps/Data Browser/Logs/SDKs + the rest), a 72px icon-only rail with tooltips between 768–1023px, and the existing full 264px sidebar at 1024px and up. Main content now caps at 1920px and centers on wider monitors instead of stretching indefinitely. See `.specs/features/responsive-layout/`.
-
-### Added
-
 - **`e2e` CI job** (`.github/workflows/reusable-ci.yml`) runs the Playwright suite across `chromium`/`mobile`/`tablet`/`ultrawide` on every PR and `develop` push — previously local-only. Each project gets its own freshly started server so the backend's per-IP login rate limiter doesn't trip from back-to-back projects sharing one process.
 
 ### Fixed
@@ -24,6 +21,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **Several settings fields (Brand Settings, GitHub Integration) forced horizontal overflow on viewports narrower than 420px** (e.g. iPhone SE) via a hardcoded `min-w-[420px]`. Replaced with `min-w-0` so fields keep filling available width above 420px without forcing a scroll floor below it.
 - **Data Browser's two-pane table-list layout stayed at the cramped desktop grid through the whole tablet range**, collapsing to the mobile stacked view only below 768px. Widened that collapse to below 1024px, matching the new tablet nav breakpoint.
 - **Sidebar/tablet-rail nav items never got their active tint, bold weight, or text color** — only the icon fill and left accent bar reflected the active route. Root cause: `NavRow`'s active styling was a `NavLink` `style` function prop, and Radix `Tooltip.Trigger asChild` clones that element and merges its own props via a plain object-spread for `style` — spreading a function has no enumerable properties, so it silently collapsed to `{}`. Replaced with static Tailwind classes keyed off the `aria-current` attribute (which `NavLink` sets directly and Radix's merge doesn't touch), sidestepping the interaction entirely.
+- **Sidebar section separator was keyed on `NAV_SECTIONS`' raw index instead of the rendered index**, so a role that fully gates out an early section (none do today, but the risk was live) would have shown a leading separator above the first visible section. Sections are now filtered by visibility before indexing.
 
 ## [1.7.0] — 2026-08-26
 
