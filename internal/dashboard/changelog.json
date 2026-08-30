@@ -1,6 +1,27 @@
 {
   "entries": [
     {
+      "version": "v1.8.0",
+      "release_date": "2026-08-30",
+      "title": {"en": "Responsive Dashboard, MCP Client Instructions & E2E CI Hardening", "pt-BR": "Dashboard Responsivo, Instruções MCP para Clientes e Reforço do CI E2E"},
+      "summary": {"en": "The dashboard now adapts its layout to phone, tablet, and ultra-wide screens; any MCP client gets full operating instructions on connect without a separately-installed skill; and the Playwright end-to-end suite now runs for real on every PR after a login rate-limiter conflict was fixed at its root.", "pt-BR": "O dashboard agora adapta seu layout para telas de celular, tablet e ultra-wide; qualquer client MCP recebe instruções completas de operação ao conectar, sem precisar de uma skill instalada separadamente; e a suíte end-to-end do Playwright agora roda de verdade em todo PR, depois de corrigido na raiz um conflito com o rate limiter de login."},
+      "sections": [
+        {
+          "type": "features",
+          "items": [
+            {"description": {"en": "Dashboard layout is now responsive across phone, tablet, and ultra-wide monitors: a bottom nav bar with a \"More\" drawer below 768px, a 72px icon-only rail with tooltips between 768–1023px, and the full sidebar at 1024px and up. Main content caps at 1920px on very wide screens instead of stretching indefinitely.", "pt-BR": "O layout do dashboard agora é responsivo em celular, tablet e monitores ultra-wide: uma barra de navegação inferior com um menu \"Mais\" abaixo de 768px, um rail de ícones de 72px com tooltips entre 768–1023px, e a sidebar completa a partir de 1024px. O conteúdo principal tem um limite de 1920px em telas muito largas em vez de esticar indefinidamente."}},
+            {"description": {"en": "The MCP server now sends `instructions` on `initialize`, so any MCP client can operate Orbit correctly out of the box — tool categories, `enum`/partial-update/RLS-default gotchas, and the English-only error string convention.", "pt-BR": "O servidor MCP agora envia `instructions` no `initialize`, permitindo que qualquer client MCP opere o Orbit corretamente de imediato — categorias de tools, pegadinhas de `enum`/atualização parcial/RLS padrão, e a convenção de mensagens de erro só em inglês."}}
+          ]
+        },
+        {
+          "type": "fixes",
+          "items": [
+            {"description": {"en": "The Playwright end-to-end suite tripped the backend's login rate limiter when run as one process, since each spec file logged in independently. Fixed by logging in once per CI run and reusing that session across specs, and by fixing several legacy specs that had drifted from the current UI — the suite now runs for real on every PR across desktop, mobile, tablet, and ultra-wide viewports instead of silently passing on a partial run.", "pt-BR": "A suíte end-to-end do Playwright estourava o rate limiter de login do backend quando rodada como um único processo, já que cada arquivo de spec fazia login de forma independente. Corrigido fazendo login uma vez por execução do CI e reutilizando essa sessão entre as specs, além de corrigir várias specs legadas que haviam ficado dessincronizadas da UI atual — a suíte agora roda de verdade em todo PR, em desktop, celular, tablet e ultra-wide, em vez de passar silenciosamente numa execução parcial."}}
+          ]
+        }
+      ]
+    },
+    {
       "version": "v1.7.0",
       "release_date": "2026-08-26",
       "title": {"en": "Enum Columns, Advanced Policy Clauses & App-Update Provisioning Fix", "pt-BR": "Colunas Enum, Cláusulas de Policy Avançadas e Correção de Provisionamento no Update de App"},

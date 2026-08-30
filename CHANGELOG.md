@@ -9,6 +9,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.8.0] — 2026-08-30
+
 ### Added
 
 - **MCP server now sends `instructions` on `initialize`**, so any MCP client can drive the Orbit server correctly without a separately-installed skill: tool categories, `enum`/partial-update/RLS-default gotchas, and English-only error strings.
