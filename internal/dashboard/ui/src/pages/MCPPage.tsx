@@ -308,6 +308,7 @@ function PersonalAccessTokensSection() {
                 {pats.map((pat) => (
                   <div
                     key={pat.id}
+                    data-testid={`pat-row-${pat.name}`}
                     className="flex items-center justify-between rounded-[10px] border border-[var(--border)] bg-[var(--sunken)] px-4 py-3"
                   >
                     <div className="flex min-w-0 flex-col gap-0.5">
