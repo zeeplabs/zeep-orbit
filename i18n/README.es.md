@@ -630,8 +630,10 @@ make run          # go run ./cmd/zeep
 Los tests de integración requieren PostgreSQL:
 
 ```bash
-TEST_DATABASE_URL=postgres://user:pass@localhost/testdb go test ./...
+TEST_DATABASE_URL=postgres://user:pass@localhost/testdb go test -p 1 -parallel 4 ./...
 ```
+
+`-p 1 -parallel 4` importa aquí: `internal/dashboard` e `internal/mcpserver` comparten la misma base de datos de prueba, y el paralelismo predeterminado de Go entre paquetes hace que uno interfiera con las filas del otro (deadlocks / violaciones de FK espurias, no bugs reales). Coincide con lo que ejecuta el CI — ver `CONTRIBUTING.md`.
 
 ### Estructura del proyecto
 

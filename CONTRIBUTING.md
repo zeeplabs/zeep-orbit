@@ -26,17 +26,19 @@ make test
 Integration tests:
 
 ```bash
-TEST_DATABASE_URL=postgres://user:pass@localhost/testdb go test ./...
+TEST_DATABASE_URL=postgres://user:pass@localhost/testdb go test -p 1 -parallel 4 ./...
 ```
 
 Integration tests skip automatically when `TEST_DATABASE_URL` is not set. They create isolated schemas with unique names and clean up after themselves.
+
+`-p 1 -parallel 4` matters once `TEST_DATABASE_URL` is set: `internal/dashboard` and `internal/mcpserver` both run integration tests against the same database and step on each other's shared rows under Go's default cross-package parallelism (deadlocks / spurious FK violations, not a real bug). This is what CI runs (`.github/workflows/reusable-ci.yml`) — match it locally or a plain `go test ./...` can fail for reasons that have nothing to do with your change.
 
 ## Making changes
 
 1. Fork the repository
 2. Create a branch: `git checkout -b feat/my-change`
 3. Make your changes
-4. Run `go vet ./...` and `go test ./...`
+4. Run `go vet ./...` and `go test -p 1 -parallel 4 ./...`
 5. Commit with a clear message (see style below)
 6. Open a pull request against `main`
 

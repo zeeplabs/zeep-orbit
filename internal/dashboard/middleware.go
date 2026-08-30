@@ -116,6 +116,16 @@ func (rl *RateLimiter) allow(key string) bool {
 	return e.count <= rl.max
 }
 
+// Allow reports whether a request keyed by key is within budget, consuming
+// one unit of budget if so. Exported for callers that need to gate on the
+// limiter without going through Middleware/MiddlewareKeyedBy — e.g. the
+// public webhook route, which must resolve {webhookId} against the database
+// before charging any budget against it (see WebhookHandler.SetRateLimiter),
+// so an attacker cannot mint a fresh budget for every made-up id.
+func (rl *RateLimiter) Allow(key string) bool {
+	return rl.allow(key)
+}
+
 // sweep drops every entry whose window has already expired. Caller holds rl.mu.
 func (rl *RateLimiter) sweep(now time.Time) {
 	for key, e := range rl.entries {
