@@ -7,27 +7,29 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 )
 
-// buildConfig is a helper that creates a config.Config with N simple apps.
-func buildConfig(apps ...config.AppConfig) *config.Config {
-	return &config.Config{Apps: apps}
-}
-
-func sampleApp(name string) config.AppConfig {
-	return config.AppConfig{
-		Name: name,
-		Auth: config.AuthConfig{JWTSecret: "secret-" + name},
-		Tables: []config.TableConfig{
-			{
+// newTestApp builds an *App the way LoadFromDB would for production data —
+// the same shape Load() used to build before it was removed as dead code
+// (D-243/item 6: no production caller, registry is populated from the
+// database, not from a config.Config file — see LoadFromDB).
+func newTestApp(name string) *App {
+	return &App{
+		Config: config.AppConfig{
+			Name: name,
+			Auth: config.AuthConfig{JWTSecret: "secret-" + name},
+		},
+		SchemaName: name,
+		Tables: map[string]*Table{
+			"users": {
 				Name: "users",
-				Columns: []config.ColumnConfig{
+				Columns: []Column{
 					{Name: "id", Type: "uuid", Required: true, Unique: true},
 					{Name: "email", Type: "text", Required: true, Unique: true},
 					{Name: "role", Type: "text", Default: "viewer"},
 				},
 			},
-			{
+			"posts": {
 				Name: "posts",
-				Columns: []config.ColumnConfig{
+				Columns: []Column{
 					{Name: "id", Type: "uuid", Required: true},
 					{Name: "title", Type: "text", Required: true},
 				},
@@ -36,12 +38,10 @@ func sampleApp(name string) config.AppConfig {
 	}
 }
 
-func TestLoad(t *testing.T) {
+func TestRegister(t *testing.T) {
 	r := New()
-	cfg := buildConfig(sampleApp("alpha"), sampleApp("beta"), sampleApp("gamma"))
-
-	if err := r.Load(cfg); err != nil {
-		t.Fatalf("Load inesperado: %v", err)
+	for _, name := range []string{"alpha", "beta", "gamma"} {
+		r.Register(newTestApp(name))
 	}
 
 	for _, name := range []string{"alpha", "beta", "gamma"} {
@@ -53,9 +53,8 @@ func TestLoad(t *testing.T) {
 		if app.Config.Name != name {
 			t.Errorf("app.Config.Name: esperado %q, obteve %q", name, app.Config.Name)
 		}
-		want := name
-		if app.SchemaName != want {
-			t.Errorf("app.SchemaName: esperado %q, obteve %q", want, app.SchemaName)
+		if app.SchemaName != name {
+			t.Errorf("app.SchemaName: esperado %q, obteve %q", name, app.SchemaName)
 		}
 		if len(app.Tables) != 2 {
 			t.Errorf("app %q: esperado 2 tabelas, obteve %d", name, len(app.Tables))
@@ -65,10 +64,7 @@ func TestLoad(t *testing.T) {
 
 func TestGetMissing(t *testing.T) {
 	r := New()
-	cfg := buildConfig(sampleApp("only"))
-	if err := r.Load(cfg); err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	r.Register(newTestApp("only"))
 
 	_, ok := r.Get("nonexistent")
 	if ok {
@@ -78,9 +74,7 @@ func TestGetMissing(t *testing.T) {
 
 func TestGetTable(t *testing.T) {
 	r := New()
-	if err := r.Load(buildConfig(sampleApp("myapp"))); err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	r.Register(newTestApp("myapp"))
 
 	tbl, ok := r.GetTable("myapp", "users")
 	if !ok {
@@ -106,10 +100,7 @@ func TestGetTable(t *testing.T) {
 
 func TestConcurrentReads(t *testing.T) {
 	r := New()
-	cfg := buildConfig(sampleApp("concurrent"))
-	if err := r.Load(cfg); err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	r.Register(newTestApp("concurrent"))
 
 	const goroutines = 10
 	var wg sync.WaitGroup
@@ -133,29 +124,29 @@ func TestConcurrentReads(t *testing.T) {
 	wg.Wait()
 }
 
-func TestLoadReplace(t *testing.T) {
+func TestUnregister(t *testing.T) {
 	r := New()
 
-	if err := r.Load(buildConfig(sampleApp("first"))); err != nil {
-		t.Fatalf("Load 1: %v", err)
-	}
+	r.Register(newTestApp("first"))
 	if _, ok := r.Get("first"); !ok {
-		t.Fatal("após Load 1: \"first\" deveria existir")
+		t.Fatal("após Register: \"first\" deveria existir")
 	}
 
-	if err := r.Load(buildConfig(sampleApp("second"))); err != nil {
-		t.Fatalf("Load 2: %v", err)
+	r.Register(newTestApp("second"))
+	if _, ok := r.Get("first"); !ok {
+		t.Fatal("Register de \"second\" não deveria afetar \"first\"")
 	}
 
+	r.Unregister("first")
 	if _, ok := r.Get("first"); ok {
-		t.Error("após Load 2: \"first\" não deveria mais existir")
+		t.Error("após Unregister: \"first\" não deveria mais existir")
 	}
 	if _, ok := r.Get("second"); !ok {
-		t.Error("após Load 2: \"second\" deveria existir")
+		t.Error("após Unregister(\"first\"): \"second\" deveria continuar existindo")
 	}
 
 	apps := r.Apps()
 	if len(apps) != 1 {
-		t.Errorf("Apps() após Load 2: esperado 1, obteve %d", len(apps))
+		t.Errorf("Apps() após Unregister: esperado 1, obteve %d", len(apps))
 	}
 }

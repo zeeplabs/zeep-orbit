@@ -117,36 +117,35 @@ func TestMain(m *testing.M) {
 	}
 
 	testReg = registry.New()
-	_ = testReg.Load(&config.Config{
-		Apps: []config.AppConfig{
-			{
-				Name: "testhandler",
-				Auth: config.AuthConfig{JWTSecret: "test-secret"},
-				Tables: []config.TableConfig{
-					{
-						Name: testTable,
-						Columns: []config.ColumnConfig{
-							{Name: "name", Type: "text", Required: true},
-							{Name: "value", Type: "text", Required: false},
-							{Name: "status", Type: "enum", Required: false, AllowedValues: []string{"pending", "active", "closed"}},
-						},
-					},
+	testReg.Register(&registry.App{
+		Config:     config.AppConfig{Name: "testhandler", Auth: config.AuthConfig{JWTSecret: "test-secret"}},
+		SchemaName: "testhandler",
+		Tables: map[string]*registry.Table{
+			testTable: {
+				Name: testTable,
+				Columns: []registry.Column{
+					{Name: "name", Type: "text", Required: true},
+					{Name: "value", Type: "text", Required: false},
+					{Name: "status", Type: "enum", Required: false, AllowedValues: []string{"pending", "active", "closed"}},
 				},
 			},
-			{
-				Name: rlsAppName,
-				Auth: config.AuthConfig{
-					JWTSecret: rlsSecret,
-					Providers: config.AuthProviders{Email: true},
-				},
-				Tables: []config.TableConfig{
-					{
-						Name: "notes",
-						RLS:  "owner",
-						Columns: []config.ColumnConfig{
-							{Name: "title", Type: "text", Required: true},
-						},
-					},
+		},
+	})
+	testReg.Register(&registry.App{
+		Config: config.AppConfig{
+			Name: rlsAppName,
+			Auth: config.AuthConfig{
+				JWTSecret: rlsSecret,
+				Providers: config.AuthProviders{Email: true},
+			},
+		},
+		SchemaName: rlsAppName,
+		Tables: map[string]*registry.Table{
+			"notes": {
+				Name: "notes",
+				RLS:  "owner",
+				Columns: []registry.Column{
+					{Name: "title", Type: "text", Required: true},
 				},
 			},
 		},
