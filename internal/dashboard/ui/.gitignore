@@ -3,3 +3,4 @@ dist/
 test-results/
 playwright-report/
 tsconfig.tsbuildinfo
+e2e/.auth/

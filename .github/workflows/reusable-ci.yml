@@ -7,6 +7,7 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:16
@@ -39,7 +40,7 @@ jobs:
       - name: Build Dashboard UI
         run: |
           cd internal/dashboard/ui
-          npm install
+          npm ci
           npx tsc -b
           npm run build
 
@@ -72,3 +73,91 @@ jobs:
         # with "sorry, too many clients already" regardless of package.
         # Capping concurrent subtests keeps peak connections well under 100.
         run: go test -p 1 -parallel 4 ./...
+
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: zeep_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/zeep_e2e?sslmode=disable
+      DASHBOARD_BOOTSTRAP_SECRET: ci-test-bootstrap-secret-not-for-prod
+      BOOTSTRAP_SECRET: ci-test-bootstrap-secret-not-for-prod
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Build Dashboard UI
+        run: |
+          cd internal/dashboard/ui
+          npm ci
+          npx tsc -b
+          npm run build
+
+      - name: Build zeep binary
+        run: go build -o /tmp/zeep-e2e ./cmd/zeep
+
+      - name: Install Playwright browsers
+        run: |
+          cd internal/dashboard/ui
+          npx playwright install --with-deps chromium
+
+      # Each project runs against its own freshly started server: the
+      # backend's login rate limiter (5/min per IP, internal/server/server.go
+      # `authLimiter`) trips when every project's tests log in from the same
+      # runner IP back-to-back — a real, intentional security control we
+      # don't weaken for CI's convenience. Restarting the server per project
+      # resets its in-memory limiter state, matching the workaround already
+      # used for local runs (see .specs/features/responsive-layout/validation.md).
+      - name: Run Playwright projects
+        run: |
+          cd internal/dashboard/ui
+          failed=0
+          for project in chromium mobile tablet ultrawide; do
+            echo "::group::Playwright project: $project"
+            /tmp/zeep-e2e serve --port 8090 &
+            server_pid=$!
+            for i in $(seq 1 30); do
+              curl -sf http://localhost:8090/dashboard/api/bootstrap/status > /dev/null && break
+              sleep 1
+            done
+            # Run every project even if an earlier one fails -- each covers a
+            # distinct viewport, so one broken project shouldn't hide results
+            # from the other three. The job still fails overall if any did.
+            if ! BASE_URL=http://localhost:8090 npx playwright test --project="$project"; then
+              failed=1
+            fi
+            kill "$server_pid" 2>/dev/null || true
+            wait "$server_pid" 2>/dev/null || true
+            echo "::endgroup::"
+          done
+          exit "$failed"
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: internal/dashboard/ui/playwright-report/
+          retention-days: 7

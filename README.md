@@ -101,7 +101,7 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/myapp/tasks
 
 | Feature                 | Description                                              |
 | ----------------------- | -------------------------------------------------------- |
-| **Web Dashboard**       | Premium dark UI to manage everything                    |
+| **Web Dashboard**       | Premium dark UI to manage everything, fully responsive (mobile bottom bar, tablet icon rail, desktop sidebar, ultra-wide content cap) |
 | **Build with AI**       | Describe an app in plain language in a chat drawer, review the proposed plan (tables, auth), confirm to create it; once created, use "Edit with AI" on the app to add tables/columns/indexes/relationships or toggle RLS/auth one change at a time — backed by a superadmin-configured OpenAI key (Gemini/Claude coming soon) |
 | **Data Browser**        | GUI to browse, filter, edit, delete rows and export CSV (configurable row cap) |
 | **User Management**     | Manage dashboard users and app users                     |

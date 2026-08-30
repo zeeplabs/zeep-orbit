@@ -2,17 +2,23 @@ import { test, expect } from '@playwright/test'
 import { bootstrapOrSkip, login } from './helpers'
 
 test.describe('Authentication', () => {
+  // This file exercises the login/logout flow itself, so it must start
+  // unauthenticated -- opts out of the shared storageState every other spec
+  // reuses (see playwright.config.ts / global-setup.ts).
+  test.use({ storageState: { cookies: [], origins: [] } })
+
   test('bootstrap + login + logout', async ({ page }) => {
     await bootstrapOrSkip(page)
     await login(page)
 
     // Should be on apps page
-    await expect(page.locator('text=Apps')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Your apps' })).toBeVisible()
 
     // Click user menu → logout
-    await page.click('text=Sair')
-    await expect(page.locator('text=Sair do dashboard?')).toBeVisible()
-    await page.click('button:has-text("Sair")')
+    await page.getByRole('button', { name: 'Log Out' }).first().click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog.getByText('Leave dashboard?')).toBeVisible()
+    await dialog.getByRole('button', { name: 'Log Out' }).click()
     await page.waitForURL('**/login')
   })
 

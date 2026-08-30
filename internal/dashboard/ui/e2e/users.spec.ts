@@ -7,6 +7,6 @@ test.describe('User Management', () => {
     await login(page)
 
     await page.goto('/dashboard/usuarios')
-    await expect(page.locator('text=Gerenciar Usuários')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Dashboard users' })).toBeVisible()
   })
 })

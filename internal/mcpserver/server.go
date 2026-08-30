@@ -33,7 +33,7 @@ import (
 // tool call runs through the identical provisioner/audit wiring a REST call
 // would (design.md: Shared Operation Functions).
 func NewHandler(pool *db.Pool, dashH *dashboard.Handler, rl *dashboard.RateLimiter) http.Handler {
-	server := mcp.NewServer(&mcp.Implementation{Name: "zeep-orbit", Version: "1.0.0"}, nil)
+	server := mcp.NewServer(&mcp.Implementation{Name: "zeep-orbit", Version: "1.0.0"}, &mcp.ServerOptions{Instructions: serverInstructions})
 	RegisterTools(server, ToolDeps{Pool: pool, DashH: dashH})
 
 	streamable := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {

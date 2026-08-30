@@ -331,7 +331,7 @@ function GitHubConfigTab() {
 
   return (
     <div className="flex flex-wrap items-start gap-6">
-      <div className="flex min-w-[420px] flex-1 flex-col gap-6">
+      <div className="flex min-w-0 flex-1 flex-col gap-6">
       <div className="flex flex-col gap-3">
         <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
           {t('integrations.codeHostSectionTitle')}
@@ -1034,7 +1034,7 @@ function DeployTab() {
 
   return (
     <div className="flex flex-wrap items-start gap-6">
-      <div className="flex min-w-[420px] flex-1 flex-col gap-6">
+      <div className="flex min-w-0 flex-1 flex-col gap-6">
       <div className="flex flex-col gap-3">
         <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
           {t('integrations.deployProviderSectionTitle')}
@@ -1289,7 +1289,7 @@ function AIProviderTab() {
 
   return (
     <div className="flex flex-wrap items-start gap-6">
-      <div className="flex min-w-[420px] flex-1 flex-col gap-6">
+      <div className="flex min-w-0 flex-1 flex-col gap-6">
         <div className="flex flex-col gap-3">
           <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
             {t('aiProvider.sectionTitle')}

@@ -288,8 +288,8 @@ export default function DataBrowserPage() {
   }));
 
   return (
-    <div className="grid h-full min-h-full items-stretch grid-cols-[240px_1fr] gap-4 max-md:flex max-md:flex-col">
-      <div className="h-full overflow-hidden rounded-[14px] bg-[var(--surface)] py-4 max-md:h-auto max-md:max-h-[220px] max-md:overflow-y-auto">
+    <div className="grid h-full min-h-full items-stretch grid-cols-[240px_1fr] gap-4 max-lg:flex max-lg:flex-col">
+      <div className="h-full overflow-hidden rounded-[14px] bg-[var(--surface)] py-4 max-lg:h-auto max-lg:max-h-[220px] max-lg:overflow-y-auto">
         <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
           {t("dataBrowser.appsLabel")}
         </div>

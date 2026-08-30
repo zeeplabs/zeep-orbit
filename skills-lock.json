@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "orbit-usage": {
+      "source": "zeeplabs/zeep-orbit-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/orbit-usage/SKILL.md",
+      "computedHash": "e2b1b801e4825bb3a64f23bd97098bab113667671a021ad4b7e99232a382d152"
+    }
+  }
+}

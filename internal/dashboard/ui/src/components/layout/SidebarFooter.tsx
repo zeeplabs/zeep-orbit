@@ -93,22 +93,31 @@ export function SidebarFooter({
         className="mb-2 flex items-center gap-2 px-2 text-[13px] no-underline transition-colors"
         style={{ color: 'var(--text-secondary)' }}
       >
-        <Icon name="campaign" size={17} />
-        <span>{t('nav.changelog')}</span>
+        <Icon name="campaign" size={17} className="shrink-0" />
+        {/* Hidden at the Sidebar's icon-only tablet rail (72px, md:not(lg)) --
+            same breakpoint NavRow uses for its own labels -- since a fixed
+            label here has no truncation room at that width. MobileNav's
+            sheet and the desktop sidebar both fall outside md-not-lg, so the
+            label still always shows there. */}
+        <span className="hidden truncate max-md:inline lg:inline">{t('nav.changelog')}</span>
       </NavLink>
-      <div className="mb-2.5 flex items-center gap-2.5 rounded-[10px] bg-[var(--sunken)] p-2.5">
+      <div className="mb-2.5 flex items-center gap-2.5 rounded-[10px] bg-[var(--sunken)] p-2.5 max-md:justify-center md:px-0 lg:px-2.5">
         <div
           className="h-8 w-8 shrink-0 rounded-full"
           style={{ background: 'linear-gradient(135deg, var(--primary), var(--accent))' }}
         />
-        <div className="min-w-0 flex-1">
+        <div className="hidden min-w-0 flex-1 max-md:block lg:block">
           <p className="truncate text-[13px] font-bold text-[var(--text-primary)]">
             {user.name ? firstLastName(user.name) : user.email}
           </p>
           <p className="text-[11px] capitalize text-[var(--text-tertiary)]">{user.role}</p>
         </div>
       </div>
-      <div className="flex items-center gap-1.5 pb-3">
+      {/* flex-wrap: the 72px tablet rail (~44px content box) can't fit 5
+          flex-1 icon buttons on one row -- each button's intrinsic min-width
+          forces a wrap to one-per-line there instead of clipping/overflowing
+          the rail. Desktop (lg, 264px) has room for all 5 on one row. */}
+      <div className="flex flex-wrap items-center gap-1.5 pb-3">
         <GitHubBtn />
         <IconBtn
           icon={mode === 'dark' ? 'light_mode' : 'dark_mode'}
@@ -126,7 +135,7 @@ export function SidebarFooter({
       </div>
       {version && (
         <p
-          className="pb-1 text-center text-[10.5px]"
+          className="hidden pb-1 text-center text-[10.5px] max-md:block lg:block"
           style={{ color: 'var(--text-tertiary)' }}
         >
           {t('app.productName', { defaultValue: 'Zeep Orbit' })} · v{version}

@@ -102,7 +102,12 @@ export function MobileNav({
                       {t(section.titleKey)}
                     </span>
                     {visible.map((it) => (
-                      <NavRow key={it.path} item={it} onNavigate={() => setSheetOpen(false)} />
+                      <NavRow
+                        key={it.path}
+                        item={it}
+                        onNavigate={() => setSheetOpen(false)}
+                        alwaysShowLabel
+                      />
                     ))}
                   </div>
                 )

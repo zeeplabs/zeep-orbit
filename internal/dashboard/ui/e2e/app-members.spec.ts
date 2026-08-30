@@ -31,24 +31,33 @@ test.describe('App Members', () => {
     await createTestApp(page, 'e2e_members')
 
     // Open the Members tab
-    await page.click('[role="tab"]:has-text("Membros")')
-    // Empty state visible
-    await expect(page.locator('text=Nenhum membro ainda')).toBeVisible()
+    await page.click('[role="tab"]:has-text("Members")')
+    // The app creator is auto-added as an Admin member on creation, so
+    // there's no "no members yet" empty state to observe here -- just the
+    // owner's row (header row + 1 data row).
+    const table = page.locator('main table')
+    await expect(table.getByRole('row')).toHaveCount(2)
 
     // --- Add the second user as viewer ---
-    await page.click('button:has-text("Adicionar membro")')
-    // Open the user Select (the trigger is the only button with the placeholder)
-    await page.click('button:has-text("Escolha um usuário")')
+    await page.click('button:has-text("Add member")')
+    const addDrawer = page.getByRole('dialog')
+    // Open the user Select (the trigger is the only button with the placeholder;
+    // it's a Radix Select trigger with role="combobox", not getByRole('button'))
+    await addDrawer.locator('button:has-text("Pick a user")').click()
     // Pick the second user
     await page.click(`[role="option"]:has-text("${secondEmail}")`)
-    // Submit
-    await page.click('button:has-text("Adicionar membro"):not(:has-text("Adicionando"))')
+    // The role Select defaults to "editor" (AppMembersList.tsx's
+    // `useState<AppRole>("editor")`) -- select "Viewer" explicitly so the
+    // add and the later role-change actually exercise different roles.
+    await page.click('button#add-member-role')
+    await page.click('[role="option"]:has-text("Viewer")')
+    // Submit -- scoped to the drawer, since the page-level "Add member"
+    // trigger button behind it matches the same text and is covered by it
+    await addDrawer.locator('button:has-text("Add member"):not(:has-text("Adding"))').click()
 
-    // The empty state is gone; the new member is in the list
+    // The new member joins the owner's row in the list
+    await expect(table.getByRole('row')).toHaveCount(3)
     await expect(page.locator(`text=${secondEmail}`)).toBeVisible()
-    // Role badge reads "Viewer" (the initial state — we picked editor
-    // in the code but e2e was authored to leave the default; the test
-    // asserts the *behavior*, not a specific initial role).
     await expect(page.locator('text=Viewer')).toBeVisible()
 
     // --- Change the member's role to editor ---
@@ -59,19 +68,20 @@ test.describe('App Members', () => {
     // Open the role Select inside the drawer
     await page.click('button#change-member-role')
     await page.click('[role="option"]:has-text("Editor")')
-    await page.click('button:has-text("Salvar"):not(:has-text("Salvando"))')
+    await page.click('button:has-text("Save"):not(:has-text("Saving"))')
 
-    // The role badge now reads "Editor" in the row
-    await expect(row.locator('text=Editor')).toBeVisible()
+    // The role badge now reads "Editor" in the row -- exact match, since the
+    // second user's display name ("Editor User") also contains the substring
+    await expect(row.getByText('Editor', { exact: true })).toBeVisible()
 
     // --- Remove the member ---
     await row.locator('[data-testid^="member-remove-"]').click()
     // ConfirmDialog opens
-    await expect(page.locator('text=Remover membro?')).toBeVisible()
-    await page.click('button:has-text("Remover"):not(:has-text("Removendo"))')
+    await expect(page.locator('text=Remove member?')).toBeVisible()
+    await page.click('button:has-text("Remove"):not(:has-text("Removing"))')
 
-    // The member is gone; the empty state is back
+    // The member is gone; only the owner's row remains
     await expect(page.locator(`text=${secondEmail}`)).toHaveCount(0)
-    await expect(page.locator('text=Nenhum membro ainda')).toBeVisible()
+    await expect(table.getByRole('row')).toHaveCount(2)
   })
 })

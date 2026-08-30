@@ -177,7 +177,7 @@ cd clients/php
 
 ## 9. Verify
 
-- [ ] Docker image: `docker pull ghcr.io/zeeplabs/zeep-orbit:v0.4.1`
+- [ ] Docker image: `docker pull ghcr.io/zeeplabs/zeep-orbit:0.4.1` (docker-metadata-action strips the leading `v` from the git tag — the image tag has no `v`, unlike the git tag/GitHub Release)
 - [ ] GitHub Release: https://github.com/zeeplabs/zeep-orbit/releases
 - [ ] Helm chart: `helm repo update zeeplabs && helm search repo zeeplabs/zeep-orbit --versions`
 - [ ] Dashboard `/changelog` page shows the new entry

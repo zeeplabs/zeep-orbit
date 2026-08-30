@@ -148,7 +148,7 @@ function BrandingTab() {
 
   return (
     <div className="flex flex-wrap items-start gap-6">
-      <div className="min-w-[420px] flex-1 rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-5">
+      <div className="min-w-0 flex-1 rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-5">
         <Label className="text-[13px] font-semibold text-[var(--text-secondary)]">
           {t("brand.companyName")}
         </Label>
@@ -238,7 +238,7 @@ function SoftDeleteCard() {
 
   return (
     <div className="flex flex-wrap items-start gap-6">
-    <div className="min-w-[420px] flex-1 rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-5">
+    <div className="min-w-0 flex-1 rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-5">
       <SettingRow
         label={t("system.softDelete")}
         description={t("system.softDeleteDesc")}
@@ -384,7 +384,7 @@ function GoogleAuthProviderCard() {
 
   return (
     <div className="flex flex-wrap items-start gap-6">
-    <div className="flex min-w-[420px] flex-1 flex-col gap-4">
+    <div className="flex min-w-0 flex-1 flex-col gap-4">
       <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-5">
         <SoonRow label={t("settings.require2fa")} description={t("settings.require2faDesc")} />
       </div>
@@ -537,7 +537,7 @@ function GlobalStorageCard() {
 
   return (
     <div className="flex flex-wrap items-start gap-6">
-    <div className="flex min-w-[420px] flex-1 flex-col gap-4">
+    <div className="flex min-w-0 flex-1 flex-col gap-4">
     <ProviderCard
       name={t("settings.globalStorage")}
       icon="hard_drive"
@@ -658,7 +658,7 @@ function LicenseTab() {
 
   return (
     <div className="flex flex-wrap items-start gap-6">
-      <div className="flex min-w-[420px] flex-1 flex-col gap-4">
+      <div className="flex min-w-0 flex-1 flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">
           <span className="mr-1 text-[11.5px] text-[var(--text-tertiary)]">
             {t("settings.licensePreviewLabel")}

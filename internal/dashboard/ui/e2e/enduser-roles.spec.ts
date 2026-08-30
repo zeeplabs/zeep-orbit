@@ -223,7 +223,11 @@ test.describe('End-user roles configuration', () => {
 
     // Open the table's Policies tab and create a policy via chips only.
     await page.click('[role="tab"]:has-text("Policies")')
-    await page.click('button:has-text("Add policy")')
+    // Templates mode is the default; flipping "Advanced mode" on
+    // (TablePolicies.tsx's enterAdvancedMode) opens the manual form
+    // directly -- there's no separate "Add policy" button to click once
+    // switched.
+    await page.click('button[role="switch"]')
     await page.fill('input[placeholder="Policy name"]', 'admin_only')
     // Select only "admin" — "member" stays untoggled.
     await page.click('button:has-text("admin")')
@@ -261,7 +265,11 @@ test.describe('End-user roles configuration', () => {
     await page.click('text=items')
 
     await page.click('[role="tab"]:has-text("Policies")')
-    await page.click('button:has-text("Add policy")')
+    // Templates mode is the default; flipping "Advanced mode" on
+    // (TablePolicies.tsx's enterAdvancedMode) opens the manual form
+    // directly -- there's no separate "Add policy" button to click once
+    // switched.
+    await page.click('button[role="switch"]')
     await page.fill('input[placeholder="Policy name"]', 'editable_policy')
     // Exact match: "button:has-text()" is a case-insensitive substring
     // match, so a plain "member" text selector also hits the sidebar's
@@ -306,7 +314,11 @@ test.describe('End-user roles configuration', () => {
     await page.click('text=items')
 
     await page.click('[role="tab"]:has-text("Policies")')
-    await page.click('button:has-text("Add policy")')
+    // Templates mode is the default; flipping "Advanced mode" on
+    // (TablePolicies.tsx's enterAdvancedMode) opens the manual form
+    // directly -- there's no separate "Add policy" button to click once
+    // switched.
+    await page.click('button[role="switch"]')
     await page.fill('input[placeholder="Policy name"]', 'orphan_policy')
     // Exact match: see the note in the previous test — "member" also
     // substring-matches the sidebar's "Members" tab button.
