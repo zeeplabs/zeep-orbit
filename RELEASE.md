@@ -13,7 +13,9 @@ git checkout -b release-v0.4.1
 git push origin release-v0.4.1
 ```
 
-Open a PR `release-v0.4.1` → `main`. Do steps 1-4 below as commits on this branch (either locally before pushing, or as follow-up commits on the open PR). Once CI is green and the PR is reviewed, merge it using **"Rebase and merge"** — not "Create a merge commit" — to keep `main`'s history linear (it has no merge commits today).
+Open a PR `release-v0.4.1` → `main`. Do steps 1-4 below as commits on this branch (either locally before pushing, or as follow-up commits on the open PR). Once CI is green and the PR is reviewed, merge it using **"Squash and merge"** — see the note below for why, and never "Create a merge commit."
+
+> **Why squash, not rebase.** After every release, `develop` gets reconciled with `main` via `git merge --no-ff` (so `develop` sees the version-bump commit and any release-branch-only fixes). That reconciliation is itself a merge commit, and it stays in `develop`'s history forever — so every release branch cut afterward carries at least one merge commit in its diff against `main`. GitHub's "Rebase and merge" replays commits via cherry-pick, which can't replay a merge commit (two parents, no single diff to apply), so it fails with "This branch can't be rebased" as soon as the range includes one — which is every release from v1.5.0 onward. Squash-and-merge sidesteps this entirely: the whole release branch (version bumps + any release-only fixes) becomes one commit on `main`, and the full per-commit history stays intact on `develop`. Use `gh pr merge <n> --squash --admin` if branch protection also requires a review approval that hasn't landed yet — confirm with whoever owns that protection rule before overriding it.
 
 After the PR merges, `main` has everything needed for the release. Continue from step 5 (tag).
 
@@ -90,7 +92,7 @@ git commit -m "release: bump to v0.4.1"
 git push origin release-v0.4.1
 ```
 
-Merge the PR into `main` once CI is green (rebase and merge — see step 0).
+Merge the PR into `main` once CI is green (squash and merge — see step 0).
 
 > **Note:** Landing on `main` triggers `docs.yml`, which packages the Helm chart and publishes it to `https://zeeplabs.github.io/zeep-orbit/helm/`. The chart version comes from `Chart.yaml`.
 
@@ -196,7 +198,7 @@ cd clients/php
 - [ ] `internal/dashboard/changelog.json` entry added
 - [ ] `.github/release-notes-vX.Y.Z.md` written
 - [ ] PR opened, CI green, reviewed
-- [ ] PR merged into `main` via **rebase and merge** (no merge commit)
+- [ ] PR merged into `main` via **squash and merge**
 - [ ] Tag pushed to GitHub (`git push origin v0.4.1`)
 - [ ] CI workflows passed
 - [ ] Docker pull works
