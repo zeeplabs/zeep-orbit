@@ -42,7 +42,7 @@ func main() {
 func cmdServe() *cobra.Command {
 	return &cobra.Command{
 		Use:   "serve",
-		Short: "Inicia o servidor HTTP",
+		Short: "Starts the HTTP server",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dsn := dbOverride
 			if dsn == "" {
@@ -167,7 +167,7 @@ func cmdServe() *cobra.Command {
 func cmdStatus() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
-		Short: "Verifica se o servidor está rodando",
+		Short: "Checks whether the server is running",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			url := fmt.Sprintf("http://localhost:%d/health", port)
 			client := &http.Client{Timeout: 3 * time.Second}

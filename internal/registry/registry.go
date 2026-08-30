@@ -57,13 +57,13 @@ func New() *Registry {
 	}
 }
 
-// Retorna erro se algum app tiver Name vazio.
+// Load returns an error if any app has an empty Name.
 func (r *Registry) Load(cfg *config.Config) error {
 	newApps := make(map[string]*App, len(cfg.Apps))
 
 	for _, appCfg := range cfg.Apps {
 		if appCfg.Name == "" {
-			return fmt.Errorf("registry: app com Name vazio encontrado na configuração")
+			return fmt.Errorf("registry: app with empty Name found in config")
 		}
 
 		tables := make(map[string]*Table, len(appCfg.Tables))

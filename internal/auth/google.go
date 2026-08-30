@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -168,7 +169,8 @@ func (h *AppGoogleHandler) Callback(w http.ResponseWriter, r *http.Request) {
 
 	token, err := h.exchangeCode(r.Context(), clientID, clientSecret, redirectURL, code)
 	if err != nil {
-		h.redirectOrError(w, r, frontendRedirect, "Google token exchange failed (redirect_url="+redirectURL+"): "+err.Error(), http.StatusInternalServerError)
+		log.Printf("app google oauth: token exchange failed (redirect_url=%s): %v", redirectURL, err)
+		h.redirectOrError(w, r, frontendRedirect, "Google authentication failed", http.StatusInternalServerError)
 		return
 	}
 

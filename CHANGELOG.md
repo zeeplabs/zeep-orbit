@@ -9,6 +9,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`internal/auth/google.go`'s per-app Google OAuth callback leaked the raw token-exchange error and the app's configured `redirect_url` in a 500 response.** The client now gets a fixed generic message; the real error is logged server-side only.
+- **Several user-facing strings were still in Portuguese despite the dashboard's language default having moved to English**: the platform-wide (non-per-app) Google OAuth callback's server-rendered error page (`internal/dashboard/google.go`, including its `lang` attribute and "try again" link), the CLI's `serve`/`status` command descriptions (`cmd/zeep/main.go`), and a `registry.Load` config-validation error string. Removed `auditActionLabel` (`internal/dashboard/audit_store.go`) instead of translating it — it was dead code, never called from anywhere.
+
 ## [1.8.0] — 2026-08-30
 
 ### Added
