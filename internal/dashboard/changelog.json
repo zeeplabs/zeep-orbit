@@ -1,6 +1,34 @@
 {
   "entries": [
     {
+      "version": "v1.8.1",
+      "release_date": "2026-08-31",
+      "title": {"en": "Error Leak, i18n Cleanup & Webhook Rate-Limiter Hardening", "pt-BR": "Correção de Vazamento de Erro, Limpeza de i18n e Reforço do Rate Limiter de Webhooks"},
+      "summary": {"en": "Patch release closing a Google OAuth error-leak, translating the last hardcoded Portuguese strings on English-default surfaces, removing dead registry code, and hardening the public webhook route's rate limiter against two gaps a pre-release review found in the fix that shipped last version.", "pt-BR": "Release de correção fechando um vazamento de erro no OAuth do Google, traduzindo as últimas strings em português fixas em superfícies com padrão inglês, removendo código morto do registry, e reforçando o rate limiter da rota pública de webhooks contra duas lacunas encontradas numa revisão pré-release da correção lançada na versão anterior."},
+      "sections": [
+        {
+          "type": "security",
+          "items": [
+            {"description": {"en": "Per-app Google OAuth callback no longer leaks the raw token-exchange error or the app's configured redirect URL in its 500 response — the client gets a fixed generic message, the real error is logged server-side only.", "pt-BR": "O callback do Google OAuth por app não vaza mais o erro bruto da troca de token nem a redirect URL configurada do app na resposta 500 — o cliente recebe uma mensagem genérica fixa, o erro real é logado só no servidor."}},
+            {"description": {"en": "The public inbound-webhook route's rate limiter is hardened against two gaps found in a pre-release review: a flood against one fixed nonexistent webhookId had no budget to hit, and the per-webhook budget was charged before token verification, letting anyone who learns a real webhookId burn a legitimate subscription's quota with garbage tokens. Added a coarse per-IP guard ahead of the database lookup, moved the delivery budget to charge only after a request's token verifies, and gave invalid-token attempts their own separate, smaller budget.", "pt-BR": "O rate limiter da rota pública de webhooks recebidos foi reforçado contra duas lacunas encontradas numa revisão pré-release: uma inundação contra um webhookId fixo inexistente não tinha budget algum pra atingir, e o budget por webhook era cobrado antes da verificação do token, permitindo que quem descobrisse um webhookId real esgotasse a cota de uma subscription legítima com tokens inválidos. Adicionada uma proteção per-IP antes da consulta ao banco, o budget de entrega agora só é cobrado depois que o token verifica, e tentativas de token inválido ganharam seu próprio budget, menor e separado."}}
+          ]
+        },
+        {
+          "type": "fixes",
+          "items": [
+            {"description": {"en": "Several user-facing strings were still in Portuguese despite the dashboard's language default having moved to English: the platform-wide Google OAuth error page, the CLI's serve/status command descriptions, and a registry config-validation error string.", "pt-BR": "Várias strings visíveis ao usuário ainda estavam em português mesmo com o padrão de idioma do dashboard já em inglês: a página de erro do OAuth do Google no nível da plataforma, as descrições dos comandos serve/status da CLI, e uma mensagem de erro de validação de config do registry."}},
+            {"description": {"en": "The Makefile, README, and CONTRIBUTING docs (all 4 languages) still documented running the Go test suite without the flags that avoid spurious deadlocks between two packages sharing one integration-test database — updated to match what CI already runs.", "pt-BR": "O Makefile, o README e o CONTRIBUTING (nos 4 idiomas) ainda documentavam rodar a suíte de testes Go sem as flags que evitam deadlocks espúrios entre dois pacotes que compartilham um mesmo banco de testes de integração — atualizados para bater com o que o CI já roda."}}
+          ]
+        },
+        {
+          "type": "improvements",
+          "items": [
+            {"description": {"en": "Removed dead registry.Registry.Load config-loading code left over from the removed YAML-config-apply flow — production has populated the registry from the database since that flow was retired.", "pt-BR": "Removido código morto registry.Registry.Load de carregamento de config, remanescente do fluxo de apply de config via YAML já removido — em produção o registry é populado a partir do banco desde que esse fluxo foi desativado."}}
+          ]
+        }
+      ]
+    },
+    {
       "version": "v1.8.0",
       "release_date": "2026-08-30",
       "title": {"en": "Responsive Dashboard, MCP Client Instructions & E2E CI Hardening", "pt-BR": "Dashboard Responsivo, Instruções MCP para Clientes e Reforço do CI E2E"},
