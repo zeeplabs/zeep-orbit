@@ -9,6 +9,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.8.1] — 2026-08-31
+
 ### Fixed
 
 - **`internal/auth/google.go`'s per-app Google OAuth callback leaked the raw token-exchange error and the app's configured `redirect_url` in a 500 response.** The client now gets a fixed generic message; the real error is logged server-side only.
