@@ -163,9 +163,20 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 	// subscription instead — wired via SetRateLimiter (not router middleware)
 	// so the handler can resolve {webhookId} against the database first and
 	// key on the real wh.ID, instead of charging budget against whatever
-	// string sits in the URL, existing or not (D-175).
+	// string sits in the URL, existing or not (D-175). Charged only once a
+	// request's token has verified, so a real subscription's budget can't be
+	// spent by someone guessing tokens (see webhook_handler.go).
+	//
+	// Two more limiters cover what that per-id budget can't, by definition,
+	// bound: SetLookupRateLimiter is a coarse per-IP gate ahead of the
+	// database lookup, since a nonexistent id never resolves to a wh.ID to
+	// charge against; SetAuthFailureRateLimiter caps invalid-token attempts
+	// against a real, resolved id on its own budget, separate from the
+	// delivery budget above.
 	webhookH := NewWebhookHandler(pool, reg)
 	webhookH.SetRateLimiter(dashboard.NewRateLimiter(120, time.Minute))
+	webhookH.SetLookupRateLimiter(dashboard.NewRateLimiter(300, time.Minute))
+	webhookH.SetAuthFailureRateLimiter(dashboard.NewRateLimiter(20, time.Minute))
 	r.HandleFunc("/hooks/{webhookId}/{token}", webhookH.HandleWebhookDelivery)
 
 	// MCP transport (mcp-server spec): sibling to the /dashboard route

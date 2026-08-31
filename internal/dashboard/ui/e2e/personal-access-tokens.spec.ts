@@ -62,10 +62,17 @@ test.beforeEach(async ({ page, context }) => {
   // second token, and unscoped assertions on shared account state start
   // matching more than one row). Each test creates and cleans up its own
   // token(s), so nothing here should ever legitimately exist beforehand.
+  //
+  // Scoped to this suite's own `e2e_pat_` name prefix (both create sites
+  // below use it), not every token on the account -- this endpoint runs
+  // against whatever BASE_URL points at, and an unscoped delete-everything
+  // here would silently revoke a real user's tokens if that were ever
+  // something other than a disposable test environment.
   const res = await page.request.get('/dashboard/api/me/pats')
   if (res.ok()) {
-    const pats: Array<{ id: string }> = await res.json()
+    const pats: Array<{ id: string; name: string }> = await res.json()
     for (const pat of pats) {
+      if (!pat.name.startsWith('e2e_pat_')) continue
       await page.request.delete(`/dashboard/api/me/pats/${pat.id}`)
     }
   }
@@ -101,11 +108,15 @@ test('create, reload, authenticate, and revoke a personal access token', async (
 
   // MCPUI-10: a token that has never authenticated a request shows "Never
   // used", not a last-used date. Scoped to this token's own row
-  // (data-testid) rather than a bare page-wide text match -- with the
+  // (data-testid, keyed on the token's id -- names aren't unique, so keying
+  // on tokenName the way this used to would break the moment two tokens
+  // shared a name) rather than a bare page-wide text match -- with the
   // account-cleanup in beforeEach this is now the only row on the page,
   // but scoping costs nothing and matches the pattern used below where it
   // does matter.
-  const patRow = page.getByTestId(`pat-row-${tokenName}`)
+  const patsRes = await page.request.get('/dashboard/api/me/pats')
+  const [{ id: patId }] = (await patsRes.json()) as Array<{ id: string; name: string }>
+  const patRow = page.getByTestId(`pat-row-${patId}`)
   await expect(patRow.getByText('Never used')).toBeVisible()
 
   // Stage 3: the UI-created token must actually authenticate a raw HTTP

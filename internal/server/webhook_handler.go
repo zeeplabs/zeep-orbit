@@ -29,7 +29,25 @@ type WebhookHandler struct {
 	// handler is wired into the router. Kept separate from the constructor
 	// instead of a parameter so the ~30 existing test call sites don't need
 	// touching — a nil limiter just skips the check (see HandleWebhookDelivery).
+	// Charged only once a request's token has verified — see
+	// HandleWebhookDelivery — so a real subscription's budget can only be
+	// spent by genuine deliveries, never by someone guessing tokens against a
+	// known webhookId (visible in the dashboard URL).
 	limiter *dashboard.RateLimiter
+
+	// lookupLimiter bounds GetWebhookByID lookups before a webhook row (and
+	// therefore any per-webhook budget) exists to charge against — keyed by
+	// source IP, coarse and shared across tenants behind the LB on purpose
+	// (see SetLookupRateLimiter): its job is bounding raw junk traffic to the
+	// database, not per-tenant fairness, which the resolved-id limiter above
+	// already provides once a request clears this gate.
+	lookupLimiter *dashboard.RateLimiter
+
+	// authFailureLimiter bounds invalid-token attempts against a real,
+	// resolved webhookId — keyed by wh.ID, separate from limiter so a flood
+	// of garbage tokens against a known id can't exhaust the budget real
+	// deliveries need (see SetAuthFailureRateLimiter).
+	authFailureLimiter *dashboard.RateLimiter
 
 	// dedupLockPool is a small pool dedicated to lockEventID's held
 	// connections, separate from pool so a burst of concurrent deliveries
@@ -65,6 +83,26 @@ func (h *WebhookHandler) SetRateLimiter(rl *dashboard.RateLimiter) {
 	h.limiter = rl
 }
 
+// SetLookupRateLimiter wires a rate limiter that HandleWebhookDelivery
+// consults before resolving {webhookId} against the database — keyed by
+// source IP rather than webhookId, since at this point no webhook row (and
+// therefore no per-tenant budget) has been resolved yet. Without this, a
+// flood of requests against a single fixed nonexistent id performs one
+// unbounded GetWebhookByID per request forever: SetRateLimiter's budget
+// never applies to an id that never resolves.
+func (h *WebhookHandler) SetLookupRateLimiter(rl *dashboard.RateLimiter) {
+	h.lookupLimiter = rl
+}
+
+// SetAuthFailureRateLimiter wires a rate limiter that HandleWebhookDelivery
+// consults on an invalid-token attempt against a resolved webhookId — kept
+// separate from SetRateLimiter's budget so a flood of garbage tokens against
+// a real, known webhookId (visible in the dashboard URL) can't exhaust the
+// budget genuine deliveries need.
+func (h *WebhookHandler) SetAuthFailureRateLimiter(rl *dashboard.RateLimiter) {
+	h.authFailureLimiter = rl
+}
+
 // HandleWebhookDelivery is the single entrypoint for
 // /hooks/{webhookId}/{token}, registered method-agnostically — the handler
 // itself checks the stored method against r.Method and 404s on mismatch,
@@ -84,6 +122,14 @@ func (h *WebhookHandler) HandleWebhookDelivery(w http.ResponseWriter, r *http.Re
 	webhookID := chi.URLParam(r, "webhookId")
 	token := chi.URLParam(r, "token")
 
+	// Coarse, pre-resolution guard: no webhook row exists yet at this point,
+	// so there's no per-tenant budget to key on — see SetLookupRateLimiter.
+	if h.lookupLimiter != nil && !h.lookupLimiter.Allow(remoteIP(r)) {
+		w.Header().Set("Retry-After", "60")
+		writeError(w, http.StatusTooManyRequests, "too many requests")
+		return
+	}
+
 	// Unscoped lookup: the public URL carries only {webhookId}, not the
 	// owning app. A soft-deleted or nonexistent webhook resolves to
 	// ErrWebhookNotFound identically — both cases plain 404, no delivery
@@ -96,21 +142,30 @@ func (h *WebhookHandler) HandleWebhookDelivery(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// Keyed by the resolved wh.ID, not the raw URL param — see SetRateLimiter.
-	if h.limiter != nil && !h.limiter.Allow(wh.ID) {
-		w.Header().Set("Retry-After", "60")
-		writeError(w, http.StatusTooManyRequests, "too many requests")
-		return
-	}
-
 	if r.Method != wh.Method {
 		writeError(w, http.StatusNotFound, "webhook not found")
 		return
 	}
 
 	if !dashboard.VerifyWebhookToken(wh.TokenSecret, token) {
+		// Own budget, not the delivery limiter below — a flood of garbage
+		// tokens against this real, resolved id must not be able to exhaust
+		// the quota genuine deliveries need. See SetAuthFailureRateLimiter.
+		if h.authFailureLimiter != nil && !h.authFailureLimiter.Allow(wh.ID) {
+			w.Header().Set("Retry-After", "60")
+			writeError(w, http.StatusTooManyRequests, "too many requests")
+			return
+		}
 		h.logDelivery(ctx, wh.ID, http.StatusUnauthorized, "invalid_token", nil, "", "", "")
 		writeError(w, http.StatusUnauthorized, "invalid or missing token")
+		return
+	}
+
+	// Charged only for a request whose token just verified — keyed by the
+	// resolved wh.ID, not the raw URL param. See SetRateLimiter.
+	if h.limiter != nil && !h.limiter.Allow(wh.ID) {
+		w.Header().Set("Retry-After", "60")
+		writeError(w, http.StatusTooManyRequests, "too many requests")
 		return
 	}
 

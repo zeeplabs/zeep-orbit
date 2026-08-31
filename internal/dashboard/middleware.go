@@ -71,7 +71,9 @@ func SecurityHeaders(next http.Handler) http.Handler {
 	})
 }
 
-// RateLimiter is a simple per-IP sliding-window rate limiter.
+// RateLimiter is a simple sliding-window rate limiter, keyed either by
+// source IP (Middleware) or by a caller-supplied key (MiddlewareKeyedBy,
+// Allow) — see those for which callers use which.
 type RateLimiter struct {
 	mu      sync.Mutex
 	entries map[string]*rlEntry
@@ -95,12 +97,20 @@ func NewRateLimiter(max int, window time.Duration) *RateLimiter {
 
 // rlSweepThreshold bounds how large entries can grow before a stale-entry
 // sweep runs. Without this, a limiter keyed by anything an unauthenticated
-// caller controls (e.g. a made-up webhook id — see MiddlewareKeyedBy) grows
-// one entry per distinct key ever seen and never shrinks, since allow only
-// ever touches the one key of the current request.
+// caller controls grows one entry per distinct key ever seen and never
+// shrinks, since Allow only ever touches the one key of the current request
+// — e.g. WebhookHandler's lookup-guard limiter, intentionally keyed by
+// source IP rather than webhookId for exactly this reason (see
+// webhook_handler.go SetLookupRateLimiter).
 const rlSweepThreshold = 10_000
 
-func (rl *RateLimiter) allow(key string) bool {
+// Allow reports whether a request keyed by key is within budget, consuming
+// one unit of budget if so. Exported for callers that need to gate on the
+// limiter without going through Middleware/MiddlewareKeyedBy — e.g. the
+// public webhook route, which must resolve {webhookId} against the database
+// before charging any budget against it (see WebhookHandler.SetRateLimiter),
+// so an attacker cannot mint a fresh budget for every made-up id.
+func (rl *RateLimiter) Allow(key string) bool {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 	now := time.Now()
@@ -114,16 +124,6 @@ func (rl *RateLimiter) allow(key string) bool {
 	}
 	e.count++
 	return e.count <= rl.max
-}
-
-// Allow reports whether a request keyed by key is within budget, consuming
-// one unit of budget if so. Exported for callers that need to gate on the
-// limiter without going through Middleware/MiddlewareKeyedBy — e.g. the
-// public webhook route, which must resolve {webhookId} against the database
-// before charging any budget against it (see WebhookHandler.SetRateLimiter),
-// so an attacker cannot mint a fresh budget for every made-up id.
-func (rl *RateLimiter) Allow(key string) bool {
-	return rl.allow(key)
 }
 
 // sweep drops every entry whose window has already expired. Caller holds rl.mu.
@@ -156,7 +156,7 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 func (rl *RateLimiter) MiddlewareKeyedBy(keyFn func(*http.Request) string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !rl.allow(keyFn(r)) {
+			if !rl.Allow(keyFn(r)) {
 				w.Header().Set("Retry-After", "60")
 				writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many requests"})
 				return

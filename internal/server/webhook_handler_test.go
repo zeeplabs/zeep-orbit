@@ -343,13 +343,14 @@ func TestWebhookDelivery_OversizedBodyRejectedAsMalformed(t *testing.T) {
 }
 
 // TestWebhookDelivery_RateLimitedAfter120RequestsPerMinute: F3/B2 (Opus
-// pre-release review) — the public /hooks/ route is wrapped with a 120
-// req/min limiter (server.go's webhookLimiter, keyed on the resolved
-// wh.ID) so an unauthenticated caller can't flood webhook_deliveries for a
-// given subscription. Hits the real router built by New() (not
-// buildWebhookRouter's bare handler-only router, which has no rate
-// limiter) — the independent Verifier's mutation sensor found that
-// removing this middleware from server.go still passed the full suite,
+// pre-release review) — the public /hooks/ route's handler consults a 120
+// req/min limiter (server.go's webhookH.SetRateLimiter, keyed on the
+// resolved wh.ID, charged only once a request's token has verified — see
+// webhook_handler.go) so an unauthenticated caller can't flood
+// webhook_deliveries for a given subscription. Hits the real router built
+// by New() (not buildWebhookRouter's bare handler-only router, which has no
+// rate limiter) — the independent Verifier's mutation sensor found that
+// removing this check from webhook_handler.go still passed the full suite,
 // because nothing exercised the route through the real server.
 //
 // Uses a real, provisioned webhook rather than a made-up id: since D-175's
