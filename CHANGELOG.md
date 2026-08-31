@@ -9,6 +9,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`internal/auth/google.go`'s per-app Google OAuth callback leaked the raw token-exchange error and the app's configured `redirect_url` in a 500 response.** The client now gets a fixed generic message; the real error is logged server-side only.
+- **Several user-facing strings were still in Portuguese despite the dashboard's language default having moved to English**: the platform-wide (non-per-app) Google OAuth callback's server-rendered error page (`internal/dashboard/google.go`, including its `lang` attribute and "try again" link), the CLI's `serve`/`status` command descriptions (`cmd/zeep/main.go`), and a `registry.Load` config-validation error string. Removed `auditActionLabel` (`internal/dashboard/audit_store.go`) instead of translating it — it was dead code, never called from anywhere.
+- **The public `/hooks/{webhookId}/{token}` route's rate limiter charged a fresh 120/min budget against any string in the URL, including nonexistent or soft-deleted webhook ids** — an attacker cycling through made-up ids never hit a limit. `WebhookHandler` now resolves `{webhookId}` against the database first and rate-limits on the resolved `wh.ID`, so budget only ever exists for real webhooks (`internal/server/webhook_handler.go`, `internal/server/server.go`; `RateLimiter.Allow` exported in `internal/dashboard/middleware.go` for this).
+- **`go test ./...` without `-p 1 -parallel 4` could fail with spurious deadlocks/FK violations** (`internal/dashboard` and `internal/mcpserver` share one integration-test database and step on each other's rows under Go's default cross-package parallelism) — CI already ran with the right flags, but `Makefile`'s `test` target, `README.md`, `CONTRIBUTING.md`, and all 3 translated READMEs still documented the plain form. Updated all of them to match CI.
+
+### Removed
+
+- **`registry.Registry.Load(*config.Config)`** — dead code left over from the removed YAML-config-apply flow; production populates the registry from the database via `LoadFromDB`, and `Load` had no caller outside its own unit tests. Removed, and the 5 tests that only existed to exercise it (`internal/registry/registry_test.go`) now build `*registry.App` directly and use `Register` instead. 3 other packages' test setups (`internal/auth/handler_test.go`, `internal/server/handler_test.go`, `internal/server/middleware_test.go`) also called `Load` to seed their test registries — converted to `Register` as well.
+
 ## [1.8.0] — 2026-08-30
 
 ### Added

@@ -159,14 +159,14 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 	// multiple replicas behind a non-sticky load balancer, so remoteIP would
 	// be the LB's address, sharing one budget across every tenant's webhooks
 	// on that replica — a single noisy provider would 429 everyone else's
-	// deliveries too. Keying by webhookId (visible in the URL, ahead of the
-	// token check) scopes the budget to one webhook subscription instead.
+	// deliveries too. Keying by webhookId scopes the budget to one webhook
+	// subscription instead — wired via SetRateLimiter (not router middleware)
+	// so the handler can resolve {webhookId} against the database first and
+	// key on the real wh.ID, instead of charging budget against whatever
+	// string sits in the URL, existing or not (D-175).
 	webhookH := NewWebhookHandler(pool, reg)
-	webhookLimiter := dashboard.NewRateLimiter(120, time.Minute)
-	webhookLimiterMW := webhookLimiter.MiddlewareKeyedBy(func(r *http.Request) string {
-		return chi.URLParam(r, "webhookId")
-	})
-	r.With(webhookLimiterMW).HandleFunc("/hooks/{webhookId}/{token}", webhookH.HandleWebhookDelivery)
+	webhookH.SetRateLimiter(dashboard.NewRateLimiter(120, time.Minute))
+	r.HandleFunc("/hooks/{webhookId}/{token}", webhookH.HandleWebhookDelivery)
 
 	// MCP transport (mcp-server spec): sibling to the /dashboard route
 	// group, not nested inside it — it authenticates with a bearer PAT via

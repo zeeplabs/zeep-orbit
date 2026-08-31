@@ -25,6 +25,12 @@ type WebhookHandler struct {
 	pool *db.Pool
 	reg  *registry.Registry
 
+	// limiter is optional (nil in tests): set via SetRateLimiter once the
+	// handler is wired into the router. Kept separate from the constructor
+	// instead of a parameter so the ~30 existing test call sites don't need
+	// touching — a nil limiter just skips the check (see HandleWebhookDelivery).
+	limiter *dashboard.RateLimiter
+
 	// dedupLockPool is a small pool dedicated to lockEventID's held
 	// connections, separate from pool so a burst of concurrent deliveries
 	// with distinct event ids can't tie up every connection the actual
@@ -45,6 +51,18 @@ const dedupLockPoolMaxConns = 4
 // NewWebhookHandler creates a WebhookHandler with injected dependencies.
 func NewWebhookHandler(pool *db.Pool, reg *registry.Registry) *WebhookHandler {
 	return &WebhookHandler{pool: pool, reg: reg}
+}
+
+// SetRateLimiter wires a rate limiter that HandleWebhookDelivery consults
+// after resolving {webhookId} against the database, keyed by the resolved
+// wh.ID rather than the raw URL param. Doing the resolution first means a
+// made-up or soft-deleted id never gets a fresh rate-limit budget of its
+// own — previously the route was wrapped in
+// limiter.MiddlewareKeyedBy(webhookId-from-URL), which charged budget
+// against whatever string the caller put in the URL, existing or not
+// (D-175: "rate limiter accepts a new budget for a nonexistent webhookId").
+func (h *WebhookHandler) SetRateLimiter(rl *dashboard.RateLimiter) {
+	h.limiter = rl
 }
 
 // HandleWebhookDelivery is the single entrypoint for
@@ -75,6 +93,13 @@ func (h *WebhookHandler) HandleWebhookDelivery(w http.ResponseWriter, r *http.Re
 	wh, err := dashboard.GetWebhookByID(ctx, h.pool, "", webhookID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "webhook not found")
+		return
+	}
+
+	// Keyed by the resolved wh.ID, not the raw URL param — see SetRateLimiter.
+	if h.limiter != nil && !h.limiter.Allow(wh.ID) {
+		w.Header().Set("Retry-After", "60")
+		writeError(w, http.StatusTooManyRequests, "too many requests")
 		return
 	}
 

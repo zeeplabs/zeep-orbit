@@ -108,53 +108,53 @@ func (h *GoogleOAuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	errorParam := r.URL.Query().Get("error")
 
 	if errorParam != "" {
-		h.callbackErrorPage(w, "A autorização foi recusada. Tente novamente.")
+		h.callbackErrorPage(w, "Authorization was denied. Please try again.")
 		return
 	}
 
 	if code == "" || state == "" {
-		h.callbackErrorPage(w, "Requisição inválida. Tente novamente.")
+		h.callbackErrorPage(w, "Invalid request. Please try again.")
 		return
 	}
 
 	returnTo, ok := verifyGoogleState([]byte(cfg.ClientSecret), state)
 	if !ok {
-		h.callbackErrorPage(w, "Sessão expirada ou inválida. Tente novamente.")
+		h.callbackErrorPage(w, "Session expired or invalid. Please try again.")
 		return
 	}
 
 	token, err := h.exchangeCode(r.Context(), code, cfg)
 	if err != nil {
-		h.callbackErrorPage(w, "Falha na autenticação com Google. Tente novamente.")
+		h.callbackErrorPage(w, "Google authentication failed. Please try again.")
 		return
 	}
 
 	email, googleID := extractGoogleInfo(token)
 	if email == "" || googleID == "" {
-		h.callbackErrorPage(w, "Não foi possível obter seus dados do Google. Tente novamente.")
+		h.callbackErrorPage(w, "Could not retrieve your Google account details. Please try again.")
 		return
 	}
 
 	if !h.verifyDomain(email, cfg.AllowedDomains) {
-		h.callbackErrorPage(w, "Seu email não pertence a um domínio autorizado. Contacte o administrador.")
+		h.callbackErrorPage(w, "Your email does not belong to an authorized domain. Contact your administrator.")
 		return
 	}
 
 	user, err := h.findOrCreateUser(r.Context(), email, googleID)
 	if err != nil {
-		h.callbackErrorPage(w, "Erro ao criar sua conta. Contacte o administrador.")
+		h.callbackErrorPage(w, "Error creating your account. Contact your administrator.")
 		return
 	}
 
 	sessionToken, err := generateToken()
 	if err != nil {
-		h.callbackErrorPage(w, "Erro interno. Tente novamente.")
+		h.callbackErrorPage(w, "Internal error. Please try again.")
 		return
 	}
 
 	expiresAt := time.Now().Add(24 * time.Hour)
 	if err := CreateSession(r.Context(), h.pool, sessionToken, user.ID, expiresAt); err != nil {
-		h.callbackErrorPage(w, "Erro ao criar sessão. Tente novamente.")
+		h.callbackErrorPage(w, "Error creating your session. Please try again.")
 		return
 	}
 
@@ -410,7 +410,7 @@ func (h *GoogleOAuthHandler) callbackErrorPage(w http.ResponseWriter, msg string
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, `<!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head><meta charset="utf-8"><title>Login</title>
 <style>
 body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;
@@ -423,6 +423,6 @@ a{display:inline-block;padding:10px 24px;border-radius:8px;font-size:14px;font-w
 color:#fff;text-decoration:none;
 background:linear-gradient(to bottom right,var(--brand-primary,#3B82F6),var(--brand-secondary,#8B5CF6))}
 </style></head>
-<body><div class="card"><h2>Login</h2><p>%s</p><a href="/dashboard">Tentar novamente</a></div></body>
+<body><div class="card"><h2>Login</h2><p>%s</p><a href="/dashboard">Try again</a></div></body>
 </html>`, msg)
 }

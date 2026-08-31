@@ -76,16 +76,15 @@ func TestMain(m *testing.M) {
 	}
 
 	testReg = registry.New()
-	_ = testReg.Load(&config.Config{
-		Apps: []config.AppConfig{
-			{
-				Name: testApp,
-				Auth: config.AuthConfig{
-					JWTSecret: testSecret,
-					Providers: config.AuthProviders{Email: true},
-				},
+	testReg.Register(&registry.App{
+		Config: config.AppConfig{
+			Name: testApp,
+			Auth: config.AuthConfig{
+				JWTSecret: testSecret,
+				Providers: config.AuthProviders{Email: true},
 			},
 		},
+		SchemaName: testApp,
 	})
 
 	testH = New(testPool, testReg)
@@ -401,13 +400,12 @@ func TestInvalidJWTReturns401(t *testing.T) {
 
 func TestNoEmailProviderReturns404(t *testing.T) {
 	noAuthReg := registry.New()
-	_ = noAuthReg.Load(&config.Config{
-		Apps: []config.AppConfig{
-			{
-				Name: "noauth",
-				Auth: config.AuthConfig{JWTSecret: "s"},
-			},
+	noAuthReg.Register(&registry.App{
+		Config: config.AppConfig{
+			Name: "noauth",
+			Auth: config.AuthConfig{JWTSecret: "s"},
 		},
+		SchemaName: "noauth",
 	})
 	h := New(testPool, noAuthReg)
 

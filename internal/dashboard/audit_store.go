@@ -150,34 +150,3 @@ func ListAuditLog(ctx context.Context, pool *db.Pool, f AuditLogFilter) ([]Audit
 	}
 	return entries, total, nil
 }
-
-func auditActionLabel(a string) string {
-	labels := map[string]string{
-		"app.create":              "App Criado",
-		"app.update":              "App Atualizado",
-		"app.delete":              "App Excluído",
-		"user.create":             "Usuário Criado",
-		"user.role_changed":       "Papel de Usuário Alterado",
-		"user.delete":             "Usuário Excluído",
-		"user.login":              "Login",
-		"user.logout":             "Logout",
-		"user.password.change":    "Senha Alterada",
-		"config.update":           "Configuração Alterada",
-		"auth.provider.update":    "Provedor Auth Atualizado",
-		"app.user.deactivate":     "Usuário App Desativado",
-		"app.user.activate":       "Usuário App Ativado",
-		"app.user.sessions.reset": "Sessões App Resetadas",
-		"app.user.role_update":    "Papel de Usuário Final Alterado",
-		"app_member.added":        "Membro Adicionado",
-		"app_member.role_changed": "Papel de Membro Alterado",
-		"app_member.removed":      "Membro Removido",
-		"data.create":             "Registro Criado",
-		"data.update":             "Registro Atualizado",
-		"data.delete":             "Registro Excluído",
-		"bootstrap.complete":      "Bootstrap Concluído",
-	}
-	if l, ok := labels[a]; ok {
-		return l
-	}
-	return a
-}
