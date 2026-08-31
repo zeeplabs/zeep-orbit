@@ -55,6 +55,28 @@ test.beforeAll(async ({ browser }) => {
 
 test.beforeEach(async ({ page, context }) => {
   await context.addCookies(storageState.cookies)
+
+  // Purge any tokens left over from a previous run's retry (a failed
+  // attempt above the revoke step -- e.g. Stage 4/5 below -- leaves its
+  // token behind; Playwright then reruns the whole test, which creates a
+  // second token, and unscoped assertions on shared account state start
+  // matching more than one row). Each test creates and cleans up its own
+  // token(s), so nothing here should ever legitimately exist beforehand.
+  //
+  // Scoped to this suite's own `e2e_pat_` name prefix (both create sites
+  // below use it), not every token on the account -- this endpoint runs
+  // against whatever BASE_URL points at, and an unscoped delete-everything
+  // here would silently revoke a real user's tokens if that were ever
+  // something other than a disposable test environment.
+  const res = await page.request.get('/dashboard/api/me/pats')
+  if (res.ok()) {
+    const pats: Array<{ id: string; name: string }> = await res.json()
+    for (const pat of pats) {
+      if (!pat.name.startsWith('e2e_pat_')) continue
+      await page.request.delete(`/dashboard/api/me/pats/${pat.id}`)
+    }
+  }
+
   await page.goto('/dashboard/mcp-settings')
 })
 
@@ -85,8 +107,17 @@ test('create, reload, authenticate, and revoke a personal access token', async (
   await expect(page.getByTestId('revealed-pat-token')).toHaveCount(0)
 
   // MCPUI-10: a token that has never authenticated a request shows "Never
-  // used", not a last-used date.
-  await expect(page.getByText('Never used')).toBeVisible()
+  // used", not a last-used date. Scoped to this token's own row
+  // (data-testid, keyed on the token's id -- names aren't unique, so keying
+  // on tokenName the way this used to would break the moment two tokens
+  // shared a name) rather than a bare page-wide text match -- with the
+  // account-cleanup in beforeEach this is now the only row on the page,
+  // but scoping costs nothing and matches the pattern used below where it
+  // does matter.
+  const patsRes = await page.request.get('/dashboard/api/me/pats')
+  const [{ id: patId }] = (await patsRes.json()) as Array<{ id: string; name: string }>
+  const patRow = page.getByTestId(`pat-row-${patId}`)
+  await expect(patRow.getByText('Never used')).toBeVisible()
 
   // Stage 3: the UI-created token must actually authenticate a raw HTTP
   // request to /dashboard/mcp (not via a full MCP client -- a bearer-auth'd
@@ -103,13 +134,18 @@ test('create, reload, authenticate, and revoke a personal access token', async (
   expect(authedRes.status()).not.toBe(401)
 
   // MCPUI-10: once a token has authenticated a request, its row switches
-  // from "Never used" to a "Last used" date.
+  // from "Never used" to a "Last used" date. Scoped to this token's row --
+  // unscoped, a leftover token from a prior failed/retried run (see
+  // beforeEach) would render its own "Last used" text and turn this into a
+  // strict-mode violation (2 matching elements) instead of the intended
+  // assertion.
   await page.reload()
-  await expect(page.getByText(/^Last used /)).toBeVisible()
+  await expect(patRow.getByText(/^Last used /)).toBeVisible()
 
   // Stage 4: revoke the token -- it must disappear from the list without a
-  // manual reload.
-  await page.getByRole('button', { name: 'Revoke' }).first().click()
+  // manual reload. The icon click is scoped to this row so a second,
+  // unrelated row (if one somehow exists) can't absorb it.
+  await patRow.getByRole('button', { name: 'Revoke' }).click()
   await page.getByRole('button', { name: 'Revoke', exact: true }).last().click()
   await expect(page.getByText(tokenName)).toHaveCount(0)
 

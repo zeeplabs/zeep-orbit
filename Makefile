@@ -10,7 +10,7 @@ build-go:
 	go build -o bin/zeep ./cmd/zeep
 
 test:
-	go test ./...
+	go test -p 1 -parallel 4 ./...
 
 test-e2e:
 	cd internal/dashboard/ui && npx playwright test

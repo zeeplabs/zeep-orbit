@@ -159,14 +159,25 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 	// multiple replicas behind a non-sticky load balancer, so remoteIP would
 	// be the LB's address, sharing one budget across every tenant's webhooks
 	// on that replica — a single noisy provider would 429 everyone else's
-	// deliveries too. Keying by webhookId (visible in the URL, ahead of the
-	// token check) scopes the budget to one webhook subscription instead.
+	// deliveries too. Keying by webhookId scopes the budget to one webhook
+	// subscription instead — wired via SetRateLimiter (not router middleware)
+	// so the handler can resolve {webhookId} against the database first and
+	// key on the real wh.ID, instead of charging budget against whatever
+	// string sits in the URL, existing or not (D-175). Charged only once a
+	// request's token has verified, so a real subscription's budget can't be
+	// spent by someone guessing tokens (see webhook_handler.go).
+	//
+	// Two more limiters cover what that per-id budget can't, by definition,
+	// bound: SetLookupRateLimiter is a coarse per-IP gate ahead of the
+	// database lookup, since a nonexistent id never resolves to a wh.ID to
+	// charge against; SetAuthFailureRateLimiter caps invalid-token attempts
+	// against a real, resolved id on its own budget, separate from the
+	// delivery budget above.
 	webhookH := NewWebhookHandler(pool, reg)
-	webhookLimiter := dashboard.NewRateLimiter(120, time.Minute)
-	webhookLimiterMW := webhookLimiter.MiddlewareKeyedBy(func(r *http.Request) string {
-		return chi.URLParam(r, "webhookId")
-	})
-	r.With(webhookLimiterMW).HandleFunc("/hooks/{webhookId}/{token}", webhookH.HandleWebhookDelivery)
+	webhookH.SetRateLimiter(dashboard.NewRateLimiter(120, time.Minute))
+	webhookH.SetLookupRateLimiter(dashboard.NewRateLimiter(300, time.Minute))
+	webhookH.SetAuthFailureRateLimiter(dashboard.NewRateLimiter(20, time.Minute))
+	r.HandleFunc("/hooks/{webhookId}/{token}", webhookH.HandleWebhookDelivery)
 
 	// MCP transport (mcp-server spec): sibling to the /dashboard route
 	// group, not nested inside it — it authenticates with a bearer PAT via

@@ -13,7 +13,7 @@ Rules for any AI agent (Claude Code, Codex, Cursor, etc.) working in this reposi
 
 ## 2. Branching and commits
 
-- Day-to-day work happens on `develop`. `main` is release-only, and it's never pushed to directly — a release branch (`release-vX.Y.Z`, cut from `develop`) carries the version-bump commit, gets opened as a PR into `main`, and only lands after CI is green and it's reviewed. Merge via "Rebase and merge" (not "Create a merge commit") to keep `main`'s history linear. Full steps in `RELEASE.md`.
+- Day-to-day work happens on `develop`. `main` is release-only, and it's never pushed to directly — a release branch (`release-vX.Y.Z`, cut from `develop`) carries the version-bump commit, gets opened as a PR into `main`, and only lands after CI is green and it's reviewed. Merge via "Squash and merge" — `develop` carries a `merge --no-ff` reconciliation commit after every release, and GitHub's "Rebase and merge" can't replay merge commits via cherry-pick, so it fails once that commit is in the release branch's diff against `main` (recurring since v1.5.0). Full steps and rationale in `RELEASE.md`.
 - Never commit directly to `main` outside that PR flow.
 - Commit style follows `CONTRIBUTING.md`: `type: short description` (types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `release`). Keep messages about *why*, not just *what*.
 - **Never commit unless explicitly asked to.** Staging/committing on your own initiative is not acceptable, even at the end of a task.

@@ -57,49 +57,6 @@ func New() *Registry {
 	}
 }
 
-// Retorna erro se algum app tiver Name vazio.
-func (r *Registry) Load(cfg *config.Config) error {
-	newApps := make(map[string]*App, len(cfg.Apps))
-
-	for _, appCfg := range cfg.Apps {
-		if appCfg.Name == "" {
-			return fmt.Errorf("registry: app com Name vazio encontrado na configuração")
-		}
-
-		tables := make(map[string]*Table, len(appCfg.Tables))
-		for _, tblCfg := range appCfg.Tables {
-			cols := make([]Column, 0, len(tblCfg.Columns))
-			for _, colCfg := range tblCfg.Columns {
-				cols = append(cols, Column{
-					Name:       colCfg.Name,
-					Type:       colCfg.Type,
-					Required:   colCfg.Required,
-					Default:    colCfg.Default,
-					Unique:     colCfg.Unique,
-					RenameFrom: colCfg.RenameFrom,
-				})
-			}
-			tables[tblCfg.Name] = &Table{
-				Name:    tblCfg.Name,
-				RLS:     tblCfg.RLS,
-				Columns: cols,
-			}
-		}
-
-		newApps[appCfg.Name] = &App{
-			Config:     appCfg,
-			SchemaName: strings.ReplaceAll(appCfg.Name, "-", "_"),
-			Tables:     tables,
-		}
-	}
-
-	r.mu.Lock()
-	r.apps = newApps
-	r.mu.Unlock()
-
-	return nil
-}
-
 // O segundo valor indica se o app foi encontrado.
 func (r *Registry) Get(appName string) (*App, bool) {
 	r.mu.RLock()

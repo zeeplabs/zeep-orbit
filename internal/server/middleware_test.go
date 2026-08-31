@@ -16,13 +16,9 @@ import (
 // buildRegistry creates a Registry with a single app of the given appName and secret.
 func buildRegistry(appName, secret string) *registry.Registry {
 	reg := registry.New()
-	_ = reg.Load(&config.Config{
-		Apps: []config.AppConfig{
-			{
-				Name: appName,
-				Auth: config.AuthConfig{JWTSecret: secret},
-			},
-		},
+	reg.Register(&registry.App{
+		Config:     config.AppConfig{Name: appName, Auth: config.AuthConfig{JWTSecret: secret}},
+		SchemaName: appName,
 	})
 	return reg
 }
@@ -234,12 +230,8 @@ func TestCacheFunctions(t *testing.T) {
 
 func TestMiddlewareCrossApp(t *testing.T) {
 	reg := registry.New()
-	_ = reg.Load(&config.Config{
-		Apps: []config.AppConfig{
-			{Name: "appa", Auth: config.AuthConfig{JWTSecret: "secret-a"}},
-			{Name: "appb", Auth: config.AuthConfig{JWTSecret: "secret-b"}},
-		},
-	})
+	reg.Register(&registry.App{Config: config.AppConfig{Name: "appa", Auth: config.AuthConfig{JWTSecret: "secret-a"}}, SchemaName: "appa"})
+	reg.Register(&registry.App{Config: config.AppConfig{Name: "appb", Auth: config.AuthConfig{JWTSecret: "secret-b"}}, SchemaName: "appb"})
 	router := buildRouter(reg)
 
 	tokenA := buildToken("secret-a", false)

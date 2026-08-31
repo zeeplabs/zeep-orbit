@@ -343,17 +343,23 @@ func TestWebhookDelivery_OversizedBodyRejectedAsMalformed(t *testing.T) {
 }
 
 // TestWebhookDelivery_RateLimitedAfter120RequestsPerMinute: F3/B2 (Opus
-// pre-release review) — the public /hooks/ route is wrapped with a 120
-// req/min per-IP limiter (server.go's webhookLimiter) so an unauthenticated
-// caller can't flood webhook_deliveries. Hits the real router built by
-// New() (not buildWebhookRouter's bare handler-only router, which has no
+// pre-release review) — the public /hooks/ route's handler consults a 120
+// req/min limiter (server.go's webhookH.SetRateLimiter, keyed on the
+// resolved wh.ID, charged only once a request's token has verified — see
+// webhook_handler.go) so an unauthenticated caller can't flood
+// webhook_deliveries for a given subscription. Hits the real router built
+// by New() (not buildWebhookRouter's bare handler-only router, which has no
 // rate limiter) — the independent Verifier's mutation sensor found that
-// removing this middleware from server.go still passed the full suite,
+// removing this check from webhook_handler.go still passed the full suite,
 // because nothing exercised the route through the real server.
+//
+// Uses a real, provisioned webhook rather than a made-up id: since D-175's
+// fix (webhook_handler.go), the limiter only ever runs after {webhookId}
+// resolves against the database, precisely so a nonexistent id can never
+// mint its own rate-limit budget — a made-up id here would just 404 all
+// 121 times and never reach the limiter at all.
 func TestWebhookDelivery_RateLimitedAfter120RequestsPerMinute(t *testing.T) {
-	if os.Getenv("TEST_DATABASE_URL") == "" {
-		t.Skip("TEST_DATABASE_URL não configurado")
-	}
+	wh, _, token := webhookTestSetup(t, "POST")
 	s, err := New(testReg, testPool, 0)
 	if err != nil {
 		t.Fatalf("New(): %v", err)
@@ -361,7 +367,7 @@ func TestWebhookDelivery_RateLimitedAfter120RequestsPerMinute(t *testing.T) {
 	ts := httptest.NewServer(s.Router())
 	defer ts.Close()
 
-	url := ts.URL + "/hooks/00000000-0000-0000-0000-000000000000/whatever"
+	url := ts.URL + "/hooks/" + wh.ID + "/" + token
 	var lastStatus int
 	for i := 1; i <= 121; i++ {
 		resp, err := http.Post(url, "application/json", bytes.NewBufferString(`{}`))
