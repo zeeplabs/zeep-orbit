@@ -1,6 +1,21 @@
 {
   "entries": [
     {
+      "version": "v1.8.2",
+      "release_date": "2026-09-04",
+      "title": {"en": "Google OAuth Routes Missing from Generated API Docs", "pt-BR": "Rotas do Google OAuth Ausentes na Documentação de API Gerada"},
+      "summary": {"en": "Patch release fixing the per-app OpenAPI/Swagger documentation, which listed email/password auth routes but silently omitted an app's Google sign-in routes even when Google login was fully configured.", "pt-BR": "Release de correção para a documentação OpenAPI/Swagger por app, que listava as rotas de login por email/senha mas omitia silenciosamente as rotas de login com Google mesmo quando o Google estava totalmente configurado."},
+      "sections": [
+        {
+          "type": "fixes",
+          "items": [
+            {"description": {"en": "The generated API docs for an app now include GET /{app}/auth/google/login and GET /{app}/auth/google/callback whenever Google sign-in is enabled and fully configured for that app — previously these routes worked correctly but never appeared in the generated spec.", "pt-BR": "A documentação de API gerada para um app agora inclui GET /{app}/auth/google/login e GET /{app}/auth/google/callback sempre que o login com Google estiver habilitado e totalmente configurado para esse app — antes essas rotas funcionavam normalmente mas nunca apareciam na spec gerada."}},
+            {"description": {"en": "GET /{app}/auth/providers, which exists for every app regardless of which auth providers are enabled, is now always documented instead of only appearing alongside Google sign-in.", "pt-BR": "GET /{app}/auth/providers, que existe para todo app independente de quais providers de auth estão habilitados, agora é sempre documentado em vez de aparecer só junto com o login por Google."}}
+          ]
+        }
+      ]
+    },
+    {
       "version": "v1.8.1",
       "release_date": "2026-08-31",
       "title": {"en": "Error Leak, i18n Cleanup & Webhook Rate-Limiter Hardening", "pt-BR": "Correção de Vazamento de Erro, Limpeza de i18n e Reforço do Rate Limiter de Webhooks"},

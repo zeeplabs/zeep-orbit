@@ -134,6 +134,11 @@ func generate(apps []*registry.App) *Spec {
 			addAppTokenRefreshPath(spec, appName, security)
 		}
 
+		addAuthProvidersPath(spec, appName)
+		if googleAuthEnabled(app) {
+			addGoogleAuthPaths(spec, appName)
+		}
+
 		if app.StorageConfig != nil {
 			addFilePaths(spec, appName, security)
 		}
@@ -577,6 +582,107 @@ func addAuthPaths(spec *Spec, appName string, security []map[string][]string) {
 			Responses: map[string]response{"200": {Description: "OK", Content: jsonContent(userSchema)}, "401": {Description: "Unauthorized"}},
 		},
 	}
+}
+
+// googleAuthEnabled reports whether Google OAuth is configured and enabled
+// for the app. Mirrors the enabled-check in AppGoogleHandler.getGoogleConfig
+// (internal/auth/google.go) exactly, including the client_id requirement —
+// enabled:true with no client_id still makes getGoogleConfig fail and
+// /google/login 503, so the doc must not advertise the routes for that case.
+func googleAuthEnabled(app *registry.App) bool {
+	if app.AuthProviders == nil {
+		return false
+	}
+	cfg, ok := app.AuthProviders["google"].(map[string]any)
+	if !ok {
+		return false
+	}
+	enabled, _ := cfg["enabled"].(bool)
+	if !enabled {
+		return false
+	}
+	clientID, _ := cfg["client_id"].(string)
+	return clientID != ""
+}
+
+// addAuthProvidersPath documents GET /{app}/auth/providers, which
+// AppGoogleHandler.ListProviders (internal/auth/google.go) registers
+// unconditionally for every app (internal/server/server.go) regardless of
+// which providers are enabled — so, unlike addAuthPaths/addGoogleAuthPaths,
+// this must always be added, not gated on any provider's enabled flag.
+func addAuthProvidersPath(spec *Spec, appName string) {
+	base := fmt.Sprintf("/%s/auth", appName)
+	noSec := []map[string][]string{}
+
+	providersSchema := schemaOrRef{
+		Type: "object",
+		Properties: map[string]schemaOrRef{
+			"google": {
+				Type: "object",
+				Properties: map[string]schemaOrRef{
+					"enabled":   {Type: "boolean"},
+					"client_id": {Type: "string"},
+				},
+			},
+			"email": {
+				Type: "object",
+				Properties: map[string]schemaOrRef{
+					"enabled": {Type: "boolean"},
+				},
+			},
+		},
+	}
+
+	spec.Paths[base+"/providers"] = pathItem{Get: &operation{
+		Tags: []string{appName}, Summary: "List enabled auth providers", OperationID: "auth_providers_" + appName,
+		Security: noSec,
+		Responses: map[string]response{
+			"200": {Description: "OK", Content: jsonContent(providersSchema)},
+			"404": {Description: "App not found"},
+		},
+	}}
+}
+
+func addGoogleAuthPaths(spec *Spec, appName string) {
+	base := fmt.Sprintf("/%s/auth", appName)
+	noSec := []map[string][]string{}
+
+	spec.Paths[base+"/google/login"] = pathItem{Get: &operation{
+		Tags:        []string{appName},
+		Summary:     "Start Google OAuth sign-in (redirects to Google)",
+		OperationID: "auth_google_login_" + appName,
+		Security:    noSec,
+		Parameters: []parameter{
+			{Name: "redirect", In: "query", Schema: schemaOrRef{Type: "string"}},
+		},
+		Responses: map[string]response{
+			"302": {Description: "Redirect to Google's consent screen"},
+			"503": {Description: "Google OAuth not configured for this app"},
+		},
+	}}
+
+	spec.Paths[base+"/google/callback"] = pathItem{Get: &operation{
+		Tags:        []string{appName},
+		Summary:     "Google OAuth callback. Redirects to the caller's `redirect` URL with the JWT in the fragment (`#token=...`), or `#error=...` on failure. If no `redirect` was passed to /google/login, returns the token as JSON instead.",
+		OperationID: "auth_google_callback_" + appName,
+		Security:    noSec,
+		Parameters: []parameter{
+			{Name: "code", In: "query", Schema: schemaOrRef{Type: "string"}},
+			{Name: "state", In: "query", Schema: schemaOrRef{Type: "string"}},
+			{Name: "error", In: "query", Schema: schemaOrRef{Type: "string"}},
+		},
+		Responses: map[string]response{
+			"200": {Description: "OK (only when no redirect was requested)", Content: jsonContent(schemaOrRef{
+				Type:       "object",
+				Properties: map[string]schemaOrRef{"token": {Type: "string"}},
+			})},
+			"302": {Description: "Redirect to the app's frontend with token/error in the URL fragment"},
+			"400": {Description: "Bad Request"},
+			"403": {Description: "Email domain not allowed"},
+			"500": {Description: "Internal Server Error"},
+			"503": {Description: "Google OAuth not configured for this app"},
+		},
+	}}
 }
 
 func addAppTokenRefreshPath(spec *Spec, appName string, security []map[string][]string) {

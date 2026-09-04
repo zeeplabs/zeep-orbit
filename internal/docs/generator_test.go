@@ -3,6 +3,7 @@ package docs
 import (
 	"testing"
 
+	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/registry"
 )
 
@@ -121,4 +122,132 @@ func TestBuildResponseSchema_NonEnumColumnHasNoEnumList(t *testing.T) {
 	if schema.Properties["title"].Enum != nil {
 		t.Fatalf("expected no Enum list for a text column, got %v", schema.Properties["title"].Enum)
 	}
+}
+
+// TestGenerate_GoogleAuthEnabledExposesPaths covers the gap reported by a
+// user integrating a frontend against an app with Google login enabled: the
+// generated spec included the email/password auth paths but silently
+// omitted /auth/google/login, /auth/google/callback and /auth/providers,
+// because generate() only ever checked app.Config.Auth.Providers.Email and
+// never looked at app.AuthProviders["google"].
+func TestGenerate_GoogleAuthEnabledExposesPaths(t *testing.T) {
+	app := &registry.App{
+		Config: config.AppConfig{Name: "myapp"},
+		AuthProviders: map[string]any{
+			"google": map[string]any{"enabled": true, "client_id": "abc"},
+		},
+	}
+
+	spec := GenerateForApp(app)
+
+	for _, path := range []string{"/myapp/auth/providers", "/myapp/auth/google/login", "/myapp/auth/google/callback"} {
+		if _, ok := spec.Paths[path]; !ok {
+			t.Fatalf("expected path %q to be present when Google auth is enabled, got paths: %v", path, keysOf(spec.Paths))
+		}
+	}
+}
+
+// TestGenerate_GoogleAuthDisabledOmitsPaths is the negative control: no
+// AuthProviders configured at all must omit the Google-specific paths, but
+// /auth/providers must still be present — AppGoogleHandler.ListProviders
+// (internal/auth/google.go) is registered unconditionally for every app
+// (internal/server/server.go), regardless of which providers are enabled.
+func TestGenerate_GoogleAuthDisabledOmitsPaths(t *testing.T) {
+	app := &registry.App{Config: config.AppConfig{Name: "myapp"}}
+
+	spec := GenerateForApp(app)
+
+	for _, path := range []string{"/myapp/auth/google/login", "/myapp/auth/google/callback"} {
+		if _, ok := spec.Paths[path]; ok {
+			t.Fatalf("expected path %q to be absent when Google auth is not configured", path)
+		}
+	}
+	if _, ok := spec.Paths["/myapp/auth/providers"]; !ok {
+		t.Fatal("expected /auth/providers to always be present, regardless of which providers are enabled")
+	}
+}
+
+// TestGenerate_GoogleAuthExplicitlyDisabledOmitsGooglePaths covers
+// AuthProviders["google"] present but {"enabled": false} — a real state (the
+// Dashboard write path can toggle it off without deleting the key).
+func TestGenerate_GoogleAuthExplicitlyDisabledOmitsGooglePaths(t *testing.T) {
+	app := &registry.App{
+		Config: config.AppConfig{Name: "myapp"},
+		AuthProviders: map[string]any{
+			"google": map[string]any{"enabled": false, "client_id": "abc"},
+		},
+	}
+
+	spec := GenerateForApp(app)
+
+	if _, ok := spec.Paths["/myapp/auth/google/login"]; ok {
+		t.Fatal("expected Google auth paths to be absent when enabled is false")
+	}
+}
+
+// TestGenerate_GoogleAuthEnabledWithoutClientIDOmitsGooglePaths mirrors
+// AppGoogleHandler.getGoogleConfig (internal/auth/google.go), which treats
+// enabled:true with an empty client_id as not configured (Login/Callback
+// both 503 in that state) — the doc must not advertise routes that 503.
+func TestGenerate_GoogleAuthEnabledWithoutClientIDOmitsGooglePaths(t *testing.T) {
+	app := &registry.App{
+		Config: config.AppConfig{Name: "myapp"},
+		AuthProviders: map[string]any{
+			"google": map[string]any{"enabled": true},
+		},
+	}
+
+	spec := GenerateForApp(app)
+
+	if _, ok := spec.Paths["/myapp/auth/google/login"]; ok {
+		t.Fatal("expected Google auth paths to be absent when client_id is empty, even with enabled: true")
+	}
+}
+
+// TestGenerate_GoogleAuthMalformedConfigOmitsGooglePaths covers
+// AuthProviders["google"] set to a non-map value (e.g. corrupted JSONB) —
+// must degrade to "not configured", never panic.
+func TestGenerate_GoogleAuthMalformedConfigOmitsGooglePaths(t *testing.T) {
+	app := &registry.App{
+		Config: config.AppConfig{Name: "myapp"},
+		AuthProviders: map[string]any{
+			"google": "not-a-map",
+		},
+	}
+
+	spec := GenerateForApp(app)
+
+	if _, ok := spec.Paths["/myapp/auth/google/login"]; ok {
+		t.Fatal("expected Google auth paths to be absent when the provider config is malformed")
+	}
+}
+
+// TestGenerate_EmailOnlyAppKeepsProvidersPathAndAuthPaths is a regression
+// control for the pre-existing email/password path: it must keep working
+// exactly as before, and /auth/providers must coexist with it.
+func TestGenerate_EmailOnlyAppKeepsProvidersPathAndAuthPaths(t *testing.T) {
+	app := &registry.App{
+		Config: config.AppConfig{Name: "myapp", Auth: config.AuthConfig{Providers: config.AuthProviders{Email: true}}},
+	}
+
+	spec := GenerateForApp(app)
+
+	for _, path := range []string{"/myapp/auth/providers", "/myapp/auth/login", "/myapp/auth/register"} {
+		if _, ok := spec.Paths[path]; !ok {
+			t.Fatalf("expected path %q to be present for an email-auth app, got paths: %v", path, keysOf(spec.Paths))
+		}
+	}
+	for _, path := range []string{"/myapp/auth/google/login", "/myapp/auth/google/callback"} {
+		if _, ok := spec.Paths[path]; ok {
+			t.Fatalf("expected path %q to be absent for an email-only app", path)
+		}
+	}
+}
+
+func keysOf(m map[string]pathItem) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
