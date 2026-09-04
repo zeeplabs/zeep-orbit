@@ -9,6 +9,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.8.2] — 2026-09-04
+
 ### Fixed
 
 - **The per-app OpenAPI/Swagger doc generator omitted an app's Google OAuth routes even when Google login was enabled**, while email/password routes were generated correctly for the same app. `generate()` (`internal/docs/generator.go`) only ever checked `app.Config.Auth.Providers.Email` and never looked at `app.AuthProviders["google"]`, the field Google's actual enablement lives in — the two auth surfaces are configured and stored independently. Added `googleAuthEnabled` (mirroring `AppGoogleHandler.getGoogleConfig`'s `enabled` + `client_id` check exactly, so a misconfigured provider that would 503 at runtime isn't advertised as working) and `addGoogleAuthPaths`, so `GET /{app}/auth/google/login` and `GET /{app}/auth/google/callback` now appear in the generated spec whenever an app has Google login fully configured. Also fixed a related gap in the same code path: `GET /{app}/auth/providers` is registered unconditionally for every app (`internal/server/server.go`) regardless of which providers are enabled, but the generator only ever documented it alongside Google — an email-only (or no-auth-provider) app was missing it from its spec too. Split into its own always-emitted `addAuthProvidersPath`.
