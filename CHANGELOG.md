@@ -11,6 +11,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **An app with only Google auth enabled (email/password never toggled on) could fail every Google login with a raw `relation "<schema>._auth_users" does not exist` error.** `_auth_users`/`_auth_sessions` are shared by every provider, but `EnsureAuthTables` provisioning was gated solely on `AuthEmailEnabled` in both `UpdateApp` (`internal/dashboard/handler.go`) and the dedicated `PUT /api/apps/{id}/auth/providers` endpoint (`internal/dashboard/app_providers.go`) never called it at all. Added `anyProviderEnabled` and now provision auth tables whenever any provider — Google included — is enabled, from either endpoint.
 - **The per-app Google OAuth callback (`internal/auth/google.go`, `findOrCreateAppUser`) compared/inserted the Google account's email case-sensitively**, unlike the email/password `Register` path which lowercases per `AGENTS.md`'s normalization rule. A user with an existing `Foo@X.com` row logging in via Google as `foo@x.com` failed the lookup and got a duplicate `_auth_users` row instead of being linked. Callback now lowercases the email immediately after extracting it from the id_token.
 
 ## [1.8.2] — 2026-09-04

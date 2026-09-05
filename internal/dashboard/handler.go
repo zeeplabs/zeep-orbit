@@ -1160,7 +1160,7 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 	// Auth/storage system tables still need provisioning though — that's
 	// EnsureAuthTables/EnsureStorageTables above and below, scoped to just
 	// those two tables instead of the whole app.
-	if app.AuthEmailEnabled {
+	if app.AuthEmailEnabled || anyProviderEnabled(app.AuthProviders) {
 		if err := h.prov.EnsureAuthTables(r.Context(), schemaNameForDB(app.Name)); err != nil {
 			h.writeError(w, r, http.StatusInternalServerError, "failed to provision auth tables", err)
 			return
