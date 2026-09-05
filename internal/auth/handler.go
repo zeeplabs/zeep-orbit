@@ -140,6 +140,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	body.Email = normalizeEmail(body.Email)
 
 	schema := app.SchemaName
 	var userID, passwordHash, role string

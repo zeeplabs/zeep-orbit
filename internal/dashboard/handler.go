@@ -978,6 +978,17 @@ func (h *Handler) CreateAppForUser(ctx context.Context, user *DashboardUser, bod
 		return nil, err
 	}
 
+	// buildAppConfig only maps AuthEmailEnabled into cfg.Auth.Providers.Email,
+	// so Apply above provisions _auth_users/_auth_sessions solely on that
+	// flag — an app created with Google as its only provider would otherwise
+	// get no auth tables at all (EnsureAuthTables is idempotent, so this is
+	// safe to call again when AuthEmailEnabled already triggered it via Apply).
+	if app.AuthEmailEnabled || anyProviderEnabled(app.AuthProviders) {
+		if err := h.prov.EnsureAuthTables(ctx, schemaNameForDB(app.Name)); err != nil {
+			return nil, err
+		}
+	}
+
 	h.reg.Register(appRowToRegistryApp(app))
 
 	app.RedactSecrets()
@@ -1565,7 +1576,7 @@ func (h *Handler) UpdateAppForUser(ctx context.Context, user *DashboardUser, app
 		return nil, err
 	}
 
-	if app.AuthEmailEnabled {
+	if app.AuthEmailEnabled || anyProviderEnabled(app.AuthProviders) {
 		if err := h.prov.EnsureAuthTables(ctx, schemaNameForDB(app.Name)); err != nil {
 			return nil, err
 		}
