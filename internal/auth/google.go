@@ -179,6 +179,7 @@ func (h *AppGoogleHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		h.redirectOrError(w, r, frontendRedirect, "Failed to get user info", http.StatusInternalServerError)
 		return
 	}
+	email = strings.ToLower(email)
 
 	if !h.checkAllowedDomain(email, app) {
 		h.redirectOrError(w, r, frontendRedirect, "Email domain not allowed", http.StatusForbidden)

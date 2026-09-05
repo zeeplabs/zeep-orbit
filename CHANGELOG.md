@@ -9,6 +9,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **The per-app Google OAuth callback (`internal/auth/google.go`, `findOrCreateAppUser`) compared/inserted the Google account's email case-sensitively**, unlike the email/password `Register` path which lowercases per `AGENTS.md`'s normalization rule. A user with an existing `Foo@X.com` row logging in via Google as `foo@x.com` failed the lookup and got a duplicate `_auth_users` row instead of being linked. Callback now lowercases the email immediately after extracting it from the id_token.
+
 ## [1.8.2] — 2026-09-04
 
 ### Fixed
