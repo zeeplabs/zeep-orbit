@@ -62,6 +62,28 @@ func UpdateAppAuthProvidersRaw(ctx context.Context, pool *db.Pool, appID string,
 	return updateAppProvidersRaw(ctx, pool, appID, providers)
 }
 
+// anyProviderEnabled reports whether the auth_providers JSONB has at least
+// one provider (google, etc.) with "enabled": true. _auth_users/_auth_sessions
+// are shared by every provider, not just email/password, so any caller that
+// gates EnsureAuthTables on AuthEmailEnabled alone must also check this —
+// otherwise an app with only Google enabled never gets those tables
+// provisioned and its first OAuth login fails with "relation does not exist".
+func anyProviderEnabled(providers json.RawMessage) bool {
+	if len(providers) == 0 {
+		return false
+	}
+	var parsed map[string]map[string]any
+	if err := json.Unmarshal(providers, &parsed); err != nil {
+		return false
+	}
+	for _, cfg := range parsed {
+		if enabled, _ := cfg["enabled"].(bool); enabled {
+			return true
+		}
+	}
+	return false
+}
+
 func updateAppProvidersRaw(ctx context.Context, pool *db.Pool, appID string, providers json.RawMessage) error {
 	_, err := pool.Exec(ctx,
 		`UPDATE zeep_system.apps SET auth_providers = $1 WHERE id = $2`,
@@ -126,6 +148,14 @@ func (h *Handler) UpdateAppProviders(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}
+
+	if anyProviderEnabled(app.AuthProviders) {
+		if err := h.prov.EnsureAuthTables(r.Context(), schemaNameForDB(app.Name)); err != nil {
+			h.writeError(w, r, http.StatusInternalServerError, "failed to provision auth tables", err)
+			return
+		}
+	}
+
 	h.reg.Register(appRowToRegistryApp(app))
 
 	// Echo back the merged, redacted config — never the caller's raw

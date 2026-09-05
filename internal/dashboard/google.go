@@ -134,6 +134,7 @@ func (h *GoogleOAuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		h.callbackErrorPage(w, "Could not retrieve your Google account details. Please try again.")
 		return
 	}
+	email = strings.ToLower(email)
 
 	if !h.verifyDomain(email, cfg.AllowedDomains) {
 		h.callbackErrorPage(w, "Your email does not belong to an authorized domain. Contact your administrator.")

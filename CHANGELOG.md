@@ -9,6 +9,15 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.8.3] — 2026-09-05
+
+### Fixed
+
+- **An app with only Google auth enabled (email/password never toggled on) could fail every Google login with a raw `relation "<schema>._auth_users" does not exist` error.** `_auth_users`/`_auth_sessions` are shared by every provider, but `EnsureAuthTables` provisioning was gated solely on `AuthEmailEnabled` in `UpdateApp`, `CreateApp`/`orbit_create_app` (`CreateAppForUser`), and `UpdateAppForUser` (the shared MCP/AI-edit path) — and the dedicated `PUT /api/apps/{id}/auth/providers` endpoint never called it at all. Added `anyProviderEnabled` and now provision auth tables whenever any provider — Google included — is enabled, from every one of those call sites.
+- **The per-app Google OAuth callback (`internal/auth/google.go`, `findOrCreateAppUser`) compared/inserted the Google account's email case-sensitively**, unlike the email/password `Register` path which lowercases per `AGENTS.md`'s normalization rule. A user with an existing `Foo@X.com` row logging in via Google as `foo@x.com` failed the lookup and got a duplicate `_auth_users` row instead of being linked. Callback now lowercases the email immediately after extracting it from the id_token.
+- **The dashboard's own (platform-wide, not per-app) Google login had the same case-sensitivity bug, with a worse consequence**: `findOrCreateUser` (`internal/dashboard/google.go`) looked up `dashboard_users` by raw, non-lowercased email while `CreateGoogleUser` (`internal/dashboard/store.go`) inserts new Google sign-ins with `role = 'admin'` — so an existing user whose stored (normalized, lowercase) email differed only in case from their Google account's casing got a second row created with **admin** role instead of being linked to their existing account. Callback now lowercases the email the same way the per-app fix does.
+- **`POST /{app}/auth/login` (`internal/auth/handler.go`) never normalized the submitted email**, unlike `Register` on the same file, so a correctly-lowercased stored user failed to log in with a mixed-case email. Login now calls `normalizeEmail` before the lookup, matching `Register`.
+
 ## [1.8.2] — 2026-09-04
 
 ### Fixed
