@@ -9,6 +9,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.8.3] — 2026-09-05
+
 ### Fixed
 
 - **An app with only Google auth enabled (email/password never toggled on) could fail every Google login with a raw `relation "<schema>._auth_users" does not exist` error.** `_auth_users`/`_auth_sessions` are shared by every provider, but `EnsureAuthTables` provisioning was gated solely on `AuthEmailEnabled` in `UpdateApp`, `CreateApp`/`orbit_create_app` (`CreateAppForUser`), and `UpdateAppForUser` (the shared MCP/AI-edit path) — and the dedicated `PUT /api/apps/{id}/auth/providers` endpoint never called it at all. Added `anyProviderEnabled` and now provision auth tables whenever any provider — Google included — is enabled, from every one of those call sites.

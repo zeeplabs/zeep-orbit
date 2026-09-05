@@ -1,6 +1,22 @@
 {
   "entries": [
     {
+      "version": "v1.8.3",
+      "release_date": "2026-09-05",
+      "title": {"en": "Google Sign-In Provisioning & Email-Case Fixes", "pt-BR": "Correções de Provisionamento do Login Google e Case de Email"},
+      "summary": {"en": "Patch release fixing an app configured with Google as its only auth provider, which could fail every sign-in attempt because the shared auth tables were never provisioned — plus several email-case-sensitivity bugs across the per-app and platform-wide Google login and email/password login paths.", "pt-BR": "Release de correção para um app configurado só com Google como provider de auth, que podia falhar em todo login porque as tabelas de auth compartilhadas nunca eram provisionadas — além de vários bugs de sensibilidade a maiúsculas/minúsculas de email nos fluxos de login por Google (por app e da plataforma) e por email/senha."},
+      "sections": [
+        {
+          "type": "fixes",
+          "items": [
+            {"description": {"en": "An app with Google as its only enabled auth provider (email/password never toggled on) now gets its shared _auth_users/_auth_sessions tables provisioned correctly — previously its first Google login failed with a raw database error, across every place an app's auth config is created or updated (dashboard UI, REST API, and MCP tools).", "pt-BR": "Um app com Google como único provider de auth habilitado (sem email/senha nunca ligado) agora tem suas tabelas compartilhadas _auth_users/_auth_sessions provisionadas corretamente — antes o primeiro login via Google falhava com um erro bruto de banco de dados, em todo lugar onde a config de auth de um app é criada ou atualizada (dashboard, API REST e ferramentas MCP)."}},
+            {"description": {"en": "Google sign-in (both per-app and the platform dashboard's own login) now matches emails case-insensitively, same as email/password registration. Previously a user could end up with a duplicate account — or, on the dashboard, a second account with admin role — if their Google account's email casing didn't exactly match their existing stored email.", "pt-BR": "O login com Google (tanto por app quanto o login do próprio dashboard da plataforma) agora compara emails ignorando maiúsculas/minúsculas, igual ao cadastro por email/senha. Antes um usuário podia acabar com uma conta duplicada — ou, no dashboard, uma segunda conta com papel de admin — se o case do email da conta Google não batesse exatamente com o email já armazenado."}},
+            {"description": {"en": "Email/password login for end-user apps now normalizes the submitted email the same way registration already did, so a correctly-registered user could no longer fail to log in just because they typed their email with different casing.", "pt-BR": "O login por email/senha dos apps de usuário final agora normaliza o email enviado da mesma forma que o cadastro já fazia, então um usuário corretamente cadastrado não falha mais o login só por digitar o email com um case diferente."}}
+          ]
+        }
+      ]
+    },
+    {
       "version": "v1.8.2",
       "release_date": "2026-09-04",
       "title": {"en": "Google OAuth Routes Missing from Generated API Docs", "pt-BR": "Rotas do Google OAuth Ausentes na Documentação de API Gerada"},
