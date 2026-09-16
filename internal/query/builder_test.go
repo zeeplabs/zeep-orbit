@@ -441,6 +441,78 @@ func TestBuildInsert_ValidTimestampPassesThrough(t *testing.T) {
 	}
 }
 
+// conflictTable is a fixture with a unique-ish column for ON CONFLICT tests.
+func conflictTable() *registry.Table {
+	return &registry.Table{
+		Name: "events",
+		Columns: []registry.Column{
+			{Name: "label", Type: "text", Required: true},
+			{Name: "external_id", Type: "text", Required: false, Unique: true},
+		},
+	}
+}
+
+func TestBuildInsert_OnConflictIgnoreNoTargetBareDoNothing(t *testing.T) {
+	tbl := conflictTable()
+	body := map[string]any{"label": "x"}
+	q, err := BuildInsertWithOptions("app_events", "events", tbl, body, "", InsertOptions{OnConflict: "ignore"})
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if !strings.Contains(q.SQL, "ON CONFLICT DO NOTHING") {
+		t.Errorf("SQL deveria conter ON CONFLICT DO NOTHING sem alvo: %q", q.SQL)
+	}
+	if strings.Contains(q.SQL, "ON CONFLICT (") {
+		t.Errorf("SQL não deveria ter alvo de conflito quando conflict_columns está vazio: %q", q.SQL)
+	}
+}
+
+func TestBuildInsert_OnConflictIgnoreWithTarget(t *testing.T) {
+	tbl := conflictTable()
+	body := map[string]any{"label": "x"}
+	q, err := BuildInsertWithOptions("app_events", "events", tbl, body, "", InsertOptions{OnConflict: "ignore", ConflictColumns: []string{"external_id"}})
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if !strings.Contains(q.SQL, "ON CONFLICT (external_id) DO NOTHING") {
+		t.Errorf("SQL deveria conter ON CONFLICT (external_id) DO NOTHING: %q", q.SQL)
+	}
+}
+
+func TestBuildInsert_OnConflictUpdateSetsNonTargetColumns(t *testing.T) {
+	tbl := conflictTable()
+	body := map[string]any{"label": "x", "external_id": "ext-1"}
+	q, err := BuildInsertWithOptions("app_events", "events", tbl, body, "", InsertOptions{OnConflict: "update", ConflictColumns: []string{"external_id"}})
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if !strings.Contains(q.SQL, "ON CONFLICT (external_id) DO UPDATE SET label = excluded.label, updated_at = now()") {
+		t.Errorf("SQL de update inesperado: %q", q.SQL)
+	}
+	if strings.Contains(q.SQL, "external_id = excluded.external_id") {
+		t.Errorf("SET não deveria incluir a própria coluna de conflito: %q", q.SQL)
+	}
+}
+
+func TestBuildInsert_OnConflictAbsentUnchanged(t *testing.T) {
+	tbl := conflictTable()
+	body := map[string]any{"label": "x"}
+	withOpts, err := BuildInsertWithOptions("app_events", "events", tbl, body, "", InsertOptions{})
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	plain, err := BuildInsert("app_events", "events", tbl, body, "")
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if withOpts.SQL != plain.SQL {
+		t.Errorf("SQL deveria ser idêntico sem on_conflict: %q vs %q", withOpts.SQL, plain.SQL)
+	}
+	if strings.Contains(plain.SQL, "ON CONFLICT") {
+		t.Errorf("SQL sem on_conflict não deveria conter ON CONFLICT: %q", plain.SQL)
+	}
+}
+
 // ── BuildUpdate ───────────────────────────────────────────────────────────────
 
 func TestBuildUpdate_Valid(t *testing.T) {

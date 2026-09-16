@@ -233,7 +233,28 @@ func normalizeTimestamptz(col registry.Column, val any) (any, error) {
 	return val, nil
 }
 
+// InsertOptions controls ON CONFLICT behavior for BuildInsertWithOptions.
+// The zero value ("" OnConflict) is today's behavior: a conflict surfaces
+// as an unhandled unique_violation error.
+type InsertOptions struct {
+	// OnConflict is "", "error" (equivalent to ""), "ignore", or "update".
+	OnConflict string
+	// ConflictColumns is the caller-supplied conflict target. Required
+	// (non-empty) when OnConflict is "update"; optional for "ignore" (a
+	// bare ON CONFLICT DO NOTHING catches a violation on any constraint).
+	// The registry only models single-column uniques, so this is never
+	// inferred from the schema — validating it is the caller's job.
+	ConflictColumns []string
+}
+
+// BuildInsert builds an INSERT with no ON CONFLICT handling (OnConflict
+// "error" semantics) — a thin wrapper over BuildInsertWithOptions for
+// call sites that don't need upsert behavior.
 func BuildInsert(schemaName, tableName string, table *registry.Table, body map[string]any, ownerID string) (*WriteQuery, error) {
+	return BuildInsertWithOptions(schemaName, tableName, table, body, ownerID, InsertOptions{})
+}
+
+func BuildInsertWithOptions(schemaName, tableName string, table *registry.Table, body map[string]any, ownerID string, opts InsertOptions) (*WriteQuery, error) {
 	known := columnSet(table)
 	types := columnTypes(table)
 
@@ -292,13 +313,51 @@ func BuildInsert(schemaName, tableName string, table *registry.Table, body map[s
 	}
 
 	sql := fmt.Sprintf(
-		"INSERT INTO %s.%s (%s) VALUES (%s) RETURNING *",
+		"INSERT INTO %s.%s (%s) VALUES (%s)",
 		schemaName, tableName,
 		strings.Join(cols, ", "),
 		strings.Join(placeholders, ", "),
 	)
 
-	return &WriteQuery{SQL: sql, Args: args}, nil
+	// Column names interpolated below come only from `known` (the table's
+	// own schema) or from opts.ConflictColumns after being checked against
+	// it — never raw, unvalidated caller input — since this builds SQL by
+	// string concatenation.
+	switch opts.OnConflict {
+	case "ignore":
+		if len(opts.ConflictColumns) == 0 {
+			sql += " ON CONFLICT DO NOTHING"
+			break
+		}
+		for _, c := range opts.ConflictColumns {
+			if _, ok := known[c]; !ok {
+				return nil, fmt.Errorf("query: unknown column in conflict_columns: %q", c)
+			}
+		}
+		sql += fmt.Sprintf(" ON CONFLICT (%s) DO NOTHING", strings.Join(opts.ConflictColumns, ", "))
+	case "update":
+		if len(opts.ConflictColumns) == 0 {
+			return nil, fmt.Errorf("query: on_conflict \"update\" requires conflict_columns")
+		}
+		conflictSet := make(map[string]struct{}, len(opts.ConflictColumns))
+		for _, c := range opts.ConflictColumns {
+			if _, ok := known[c]; !ok {
+				return nil, fmt.Errorf("query: unknown column in conflict_columns: %q", c)
+			}
+			conflictSet[c] = struct{}{}
+		}
+		var setClauses []string
+		for _, c := range cols {
+			if _, isTarget := conflictSet[c]; isTarget || c == "owner_id" {
+				continue
+			}
+			setClauses = append(setClauses, fmt.Sprintf("%s = excluded.%s", c, c))
+		}
+		setClauses = append(setClauses, "updated_at = now()")
+		sql += fmt.Sprintf(" ON CONFLICT (%s) DO UPDATE SET %s", strings.Join(opts.ConflictColumns, ", "), strings.Join(setClauses, ", "))
+	}
+
+	return &WriteQuery{SQL: sql + " RETURNING *", Args: args}, nil
 }
 
 func BuildUpdate(schemaName, tableName string, table *registry.Table, id string, body map[string]any, ownerID string) (*WriteQuery, error) {

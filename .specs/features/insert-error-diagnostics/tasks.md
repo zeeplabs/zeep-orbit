@@ -174,7 +174,7 @@ T3 → T4 → T5 → T6
 
 ---
 
-### T5: Build `ON CONFLICT` SQL in the insert query
+### T5: Build `ON CONFLICT` SQL in the insert query ✅ Complete
 
 **What**: Extend `query.BuildInsert` (or the options it now accepts from T4) to emit the conflict clause: `on_conflict == "ignore"` with `conflict_columns` present → `ON CONFLICT (<conflict_columns>) DO NOTHING`; `"ignore"` with `conflict_columns` absent → bare `ON CONFLICT DO NOTHING`; `"update"` (always has `conflict_columns` per T4's validation) → `ON CONFLICT (<conflict_columns>) DO UPDATE SET <every column present in the request body except conflict_columns and system fields>, updated_at = now()`; `"error"`/absent → no conflict clause (today's SQL, unchanged). Column names interpolated into the conflict target and `SET` clause come only from `table`'s known column set (already validated in T4) or from `conflict_columns` (already validated) - never raw user strings beyond that whitelist, since this is string-built SQL.
 **Where**: `internal/query/builder.go` (modify `BuildInsert`)
