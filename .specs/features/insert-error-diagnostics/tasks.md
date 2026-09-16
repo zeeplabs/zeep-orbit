@@ -118,7 +118,7 @@ T3 → T4 → T5 → T6
 
 ---
 
-### T3: Normalize empty string to NULL, validate timestamptz format for timestamptz columns
+### T3: Normalize empty string to NULL, validate timestamptz format for timestamptz columns ✅ Complete
 
 **SPEC_DEVIATION carried from T2**: this task now also implements INSERTERR-01 (moved from T2 - see T2's SPEC_DEVIATION note). Any non-empty, non-nil string value for a `timestamptz` column that fails to parse gets a 400 naming the column, via Go-side validation (`pgtype.Timestamptz.Scan`) instead of a Postgres error-code branch.
 

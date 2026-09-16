@@ -878,6 +878,67 @@ func TestHandlerCreateOtherErrorStillGeneric500(t *testing.T) {
 	}
 }
 
+// TestHandlerCreateEmptyTimestampNormalizesToNull proves "" sent for a
+// nullable timestamptz column succeeds and stores NULL, end-to-end through
+// the HTTP handler (INSERTERR-06).
+func TestHandlerCreateEmptyTimestampNormalizesToNull(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{"label": "normalize-empty", "opened_at": "2026-01-01T00:00:00Z", "closed_at": ""}
+	req := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("esperado 201, obtido %d: %s", rec.Code, rec.Body.String())
+	}
+	var row map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&row); err != nil {
+		t.Fatalf("decode falhou: %v", err)
+	}
+	if row["closed_at"] != nil {
+		t.Errorf("esperado closed_at nulo, obtido %v", row["closed_at"])
+	}
+}
+
+// TestHandlerCreateEmptyTimestampOnRequiredColumnFails proves "" sent for a
+// required timestamptz column still 400s, naming the column, instead of
+// being silently normalized (INSERTERR-07).
+func TestHandlerCreateEmptyTimestampOnRequiredColumnFails(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{"label": "empty-required", "opened_at": ""}
+	req := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("esperado 400, obtido %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode falhou: %v", err)
+	}
+	msg, _ := resp["error"].(string)
+	if !strings.Contains(msg, "opened_at") {
+		t.Fatalf("esperada mensagem citando opened_at, obtido %q", msg)
+	}
+}
+
 // TestHandlerCreateUniqueViolation proves a duplicate insert against a
 // unique column is classified 409 naming the constraint, not 500
 // (INSERTERR-02, INSERTERR-04, INSERTERR-05).

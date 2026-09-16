@@ -324,6 +324,123 @@ func TestBuildInsert_StripsSystemFields(t *testing.T) {
 	}
 }
 
+// timestamptzTable is a dedicated fixture for the "" -> NULL normalization
+// and timestamptz-format validation tests (INSERTERR-01, INSERTERR-06..08):
+// closed_at is nullable, opened_at is required - testTable()'s created_at/
+// updated_at are systemFields and always stripped by BuildInsert, so they
+// can't exercise this behavior.
+func timestamptzTable() *registry.Table {
+	return &registry.Table{
+		Name: "events",
+		Columns: []registry.Column{
+			{Name: "label", Type: "text", Required: true},
+			{Name: "opened_at", Type: "timestamptz", Required: true},
+			{Name: "closed_at", Type: "timestamptz", Required: false},
+		},
+	}
+}
+
+func TestBuildInsert_EmptyStringNormalizesToNullForNullableTimestamptz(t *testing.T) {
+	tbl := timestamptzTable()
+	body := map[string]any{
+		"label":     "x",
+		"opened_at": "2026-01-01T00:00:00Z",
+		"closed_at": "",
+	}
+	q, err := BuildInsert("app_events", "events", tbl, body, "")
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	found := false
+	for i, col := range []string{"label", "opened_at", "closed_at"} {
+		if col == "closed_at" {
+			found = true
+			if q.Args[i] != nil {
+				t.Errorf("esperava nil para closed_at, got %v (%T)", q.Args[i], q.Args[i])
+			}
+		}
+	}
+	if !found {
+		t.Fatal("closed_at não apareceu nos args - teste mal formado")
+	}
+}
+
+func TestBuildInsert_EmptyStringOnTextColumnUnchanged(t *testing.T) {
+	tbl := testTable()
+	body := map[string]any{
+		"amount":      "10.00",
+		"customer_id": "uuid-abc",
+		"status":      "",
+	}
+	q, err := BuildInsert("app_billing", "invoices", tbl, body, "")
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	statusFound := false
+	for _, arg := range q.Args {
+		if arg == "" {
+			statusFound = true
+		}
+	}
+	if !statusFound {
+		t.Error("esperava \"\" preservada para coluna text (normalização não deve vazar pra outros tipos)")
+	}
+}
+
+func TestBuildInsert_InvalidTimestampNamesColumn(t *testing.T) {
+	tbl := timestamptzTable()
+	body := map[string]any{
+		"label":     "x",
+		"opened_at": "not-a-timestamp",
+	}
+	_, err := BuildInsert("app_events", "events", tbl, body, "")
+	if err == nil {
+		t.Fatal("esperava erro para timestamptz inválido, got nil")
+	}
+	if !strings.Contains(err.Error(), "opened_at") {
+		t.Errorf("mensagem de erro deveria citar 'opened_at': %v", err)
+	}
+	if strings.Contains(err.Error(), "not-a-timestamp") {
+		t.Errorf("mensagem de erro não deve ecoar o valor tentado: %v", err)
+	}
+}
+
+func TestBuildInsert_EmptyStringOnRequiredTimestamptzStillFails(t *testing.T) {
+	tbl := timestamptzTable()
+	body := map[string]any{
+		"label":     "x",
+		"opened_at": "",
+	}
+	_, err := BuildInsert("app_events", "events", tbl, body, "")
+	if err == nil {
+		t.Fatal("esperava erro para \"\" em coluna timestamptz required, got nil")
+	}
+	if !strings.Contains(err.Error(), "opened_at") {
+		t.Errorf("mensagem de erro deveria citar 'opened_at': %v", err)
+	}
+}
+
+func TestBuildInsert_ValidTimestampPassesThrough(t *testing.T) {
+	tbl := timestamptzTable()
+	body := map[string]any{
+		"label":     "x",
+		"opened_at": "2026-01-01T00:00:00Z",
+	}
+	q, err := BuildInsert("app_events", "events", tbl, body, "")
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	found := false
+	for _, arg := range q.Args {
+		if arg == "2026-01-01T00:00:00Z" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("esperava valor de opened_at preservado sem alteração")
+	}
+}
+
 // ── BuildUpdate ───────────────────────────────────────────────────────────────
 
 func TestBuildUpdate_Valid(t *testing.T) {

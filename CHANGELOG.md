@@ -9,6 +9,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`POST /{app}/{table}` collapsed every insert failure Postgres didn't reject on `23514` (check_violation) into a generic `{"error":"failed to insert row"}` HTTP 500**, forcing integrators to read Orbit server logs to tell a duplicate row apart from an internal failure. A unique-constraint violation (`23505`) now responds `409` naming the constraint (`internal/server/handler.go`).
+- **An empty string `""` sent for a `timestamptz` column reached Postgres as-is**: on a nullable column it raised a raw, unclassified error (500); on a required column, same. `query.BuildInsert` now normalizes `""` to `NULL` for nullable `timestamptz` columns, and validates any other non-empty `timestamptz` value (RFC3339 or Postgres's own text format) before the query is built — a malformed value (including `""` on a required column) now responds `400` naming the column, never leaking the raw attempted value or a raw driver error.
+
 ## [1.8.4] — 2026-09-10
 
 ### Fixed

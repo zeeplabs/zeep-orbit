@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/zeeplabs/zeep-orbit/internal/registry"
 )
 
@@ -202,6 +204,35 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 	}, nil
 }
 
+// normalizeTimestamptz handles a timestamptz column's incoming value before
+// it reaches Postgres. An empty string on a nullable column becomes NULL
+// (integrators commonly send "" instead of omitting an optional date/time
+// field) — a "" on a required column is left as-is and falls through to the
+// validation below, which rejects it. Any other string is validated as
+// either RFC3339 (the common case for webhook/API payloads) or Postgres's
+// own text format, via pgtype's parser: Postgres itself doesn't attach
+// column context to a cast failure on a typed placeholder
+// ($1::timestamptz), so this is the only reliable way to name the
+// offending column in a 400 instead of leaking a raw driver error as a 500
+// (see SPEC_DEVIATION note in internal/server/handler.go).
+func normalizeTimestamptz(col registry.Column, val any) (any, error) {
+	s, ok := val.(string)
+	if !ok {
+		return val, nil
+	}
+	if s == "" && !col.Required {
+		return nil, nil
+	}
+	if _, err := time.Parse(time.RFC3339Nano, s); err == nil {
+		return val, nil
+	}
+	var tstz pgtype.Timestamptz
+	if err := tstz.Scan(s); err != nil {
+		return nil, fmt.Errorf("query: invalid value for column %q: not a valid timestamp", col.Name)
+	}
+	return val, nil
+}
+
 func BuildInsert(schemaName, tableName string, table *registry.Table, body map[string]any, ownerID string) (*WriteQuery, error) {
 	known := columnSet(table)
 	types := columnTypes(table)
@@ -237,6 +268,13 @@ func BuildInsert(schemaName, tableName string, table *registry.Table, body map[s
 		val, present := body[col.Name]
 		if !present {
 			continue
+		}
+		if types[col.Name] == "timestamptz" {
+			var err error
+			val, err = normalizeTimestamptz(col, val)
+			if err != nil {
+				return nil, err
+			}
 		}
 		cols = append(cols, col.Name)
 		args = append(args, val)
