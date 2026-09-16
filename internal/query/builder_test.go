@@ -494,6 +494,28 @@ func TestBuildInsert_OnConflictUpdateSetsNonTargetColumns(t *testing.T) {
 	}
 }
 
+// TestBuildInsert_OnConflictUpdateExcludesOwnerID proves owner_id is never
+// part of the ON CONFLICT DO UPDATE SET clause, even when ownerID is set —
+// upserting a conflicting row must not reassign its ownership. Uses a
+// non-empty ownerID specifically: every other on_conflict:"update" test
+// uses "" (no owner_id column at all), which can't distinguish "owner_id is
+// correctly excluded" from "owner_id is absent and therefore trivially not
+// in the SET list".
+func TestBuildInsert_OnConflictUpdateExcludesOwnerID(t *testing.T) {
+	tbl := conflictTable()
+	body := map[string]any{"label": "x", "external_id": "ext-1"}
+	q, err := BuildInsertWithOptions("app_events", "events", tbl, body, "owner-uuid-123", InsertOptions{OnConflict: "update", ConflictColumns: []string{"external_id"}})
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if strings.Contains(q.SQL, "owner_id = excluded.owner_id") {
+		t.Errorf("SET não deveria reatribuir owner_id no upsert: %q", q.SQL)
+	}
+	if !strings.Contains(q.SQL, "owner_id") {
+		t.Errorf("owner_id deveria continuar na lista de colunas do INSERT (só não no SET): %q", q.SQL)
+	}
+}
+
 func TestBuildInsert_OnConflictAbsentUnchanged(t *testing.T) {
 	tbl := conflictTable()
 	body := map[string]any{"label": "x"}
