@@ -84,6 +84,25 @@ func checkViolationMessage(pgErr *pgconn.PgError) string {
 	return "value violates a check constraint"
 }
 
+// SPEC_DEVIATION: insert-error-diagnostics INSERTERR-01 (classifying
+// invalid_datetime_format/datetime_field_overflow/invalid_text_representation
+// as 400 naming the column) is NOT implemented here as a pgErr.Code branch.
+// Reason: pgErr.ColumnName is empty for a cast failure on a typed
+// placeholder ($1::timestamptz) — Postgres doesn't attach column context to
+// that error class, verified empirically. See query.BuildInsert's
+// timestamptz validation instead, which catches this before the query ever
+// reaches Postgres and can therefore name the column reliably.
+
+// uniqueViolationMessage builds a safe, non-leaking message for a Postgres
+// unique_violation (23505). Never includes pgErr.Message/Detail, since those
+// can echo back the attempted value.
+func uniqueViolationMessage(pgErr *pgconn.PgError) string {
+	if pgErr.ConstraintName != "" {
+		return fmt.Sprintf("row already exists: unique constraint %q", pgErr.ConstraintName)
+	}
+	return "row already exists"
+}
+
 // Response: {"data": [...], "count": N, "limit": L, "offset": O}
 func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 	app, ok := AppFromContext(r.Context())
@@ -204,6 +223,10 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23514" {
 			writeError(w, http.StatusBadRequest, checkViolationMessage(pgErr))
+			return
+		}
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			writeError(w, http.StatusConflict, uniqueViolationMessage(pgErr))
 			return
 		}
 		if db.IsStatementTimeout(err) {

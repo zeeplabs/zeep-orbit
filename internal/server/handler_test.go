@@ -877,3 +877,45 @@ func TestHandlerCreateOtherErrorStillGeneric500(t *testing.T) {
 		t.Fatalf("esperado 500 para erro não relacionado a enum (22021), obtido %d: %s", rec.Code, rec.Body.String())
 	}
 }
+
+// TestHandlerCreateUniqueViolation proves a duplicate insert against a
+// unique column is classified 409 naming the constraint, not 500
+// (INSERTERR-02, INSERTERR-04, INSERTERR-05).
+func TestHandlerCreateUniqueViolation(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{"label": "first", "opened_at": "2026-01-01T00:00:00Z", "external_id": "dup-ext-id"}
+	createReq := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	createReq.Header.Set("Content-Type", "application/json")
+	createRec := httptest.NewRecorder()
+	router.ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("setup: esperado 201, obtido %d: %s", createRec.Code, createRec.Body.String())
+	}
+
+	dupBody := map[string]any{"label": "second", "opened_at": "2026-01-01T00:00:00Z", "external_id": "dup-ext-id"}
+	dupReq := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(dupBody))
+	dupReq.Header.Set("Content-Type", "application/json")
+	dupRec := httptest.NewRecorder()
+	router.ServeHTTP(dupRec, dupReq)
+
+	if dupRec.Code != http.StatusConflict {
+		t.Fatalf("esperado 409 para violação de unique constraint, obtido %d: %s", dupRec.Code, dupRec.Body.String())
+	}
+	var resp map[string]any
+	if err := json.NewDecoder(dupRec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode falhou: %v", err)
+	}
+	msg, _ := resp["error"].(string)
+	if !strings.Contains(msg, "insert_diag_external_id_key") {
+		t.Fatalf("esperada mensagem citando a constraint, obtido %q", msg)
+	}
+	if strings.Contains(msg, "dup-ext-id") {
+		t.Fatalf("mensagem de erro não deve ecoar o valor tentado (raw Postgres detail leak): %q", msg)
+	}
+}

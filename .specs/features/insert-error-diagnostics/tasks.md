@@ -90,13 +90,15 @@ T3 → T4 → T5 → T6
 
 ---
 
-### T2: Classify insert errors - 400 for invalid input, 409 for unique violation
+### T2: Classify insert errors - 409 for unique violation ✅ Complete
 
-**What**: In `HandleCreate`'s error branch (`internal/server/handler.go`, currently around the `pgErr.Code == "23514"` check), add two more classified branches before the generic 500 fallback: (a) `pgErr.Code` in `{"22007","22008","22P02"}` → `http.StatusBadRequest` with a message built by a new `invalidInputMessage(pgErr *pgconn.PgError) string` helper (mirrors `checkViolationMessage`: names `pgErr.ColumnName` when present, else falls back to a generic "invalid value" message; never includes `pgErr.Message`/`pgErr.Detail`); (b) `pgErr.Code == "23505"` (only when the request's `on_conflict` is absent or `"error"` - `on_conflict` parsing itself is added in T4, so for this task treat every `23505` as the `"error"` path) → `http.StatusConflict` with a message from a new `uniqueViolationMessage(pgErr *pgconn.PgError) string` helper (names `pgErr.ConstraintName` when present, else a generic "row already exists"). Leave the existing `23514` and statement-timeout branches untouched.
-**Where**: `internal/server/handler.go` (modify `HandleCreate` and add the two helper functions near `checkViolationMessage`)
+**SPEC_DEVIATION**: The `22007`/`22008`/`22P02` → 400 branch originally planned here was dropped. `pgErr.ColumnName` is empty for a cast failure on a typed placeholder (`$1::timestamptz`) - verified empirically, the branch was unreachable-with-column-name and untestable as designed. INSERTERR-01 moves to T3, implemented as Go-side validation in `query.BuildInsert` instead (reliably names the column, no dependency on Postgres error metadata, unit-testable).
+
+**What**: In `HandleCreate`'s error branch (`internal/server/handler.go`, currently around the `pgErr.Code == "23514"` check), add one more classified branch before the generic 500 fallback: `pgErr.Code == "23505"` (only when the request's `on_conflict` is absent or `"error"` - `on_conflict` parsing itself is added in T4, so for this task treat every `23505` as the `"error"` path) → `http.StatusConflict` with a message from a new `uniqueViolationMessage(pgErr *pgconn.PgError) string` helper (names `pgErr.ConstraintName` when present, else a generic "row already exists"). Leave the existing `23514` and statement-timeout branches untouched.
+**Where**: `internal/server/handler.go` (modify `HandleCreate` and add the helper function near `checkViolationMessage`)
 **Depends on**: T1
-**Reuses**: `checkViolationMessage` as the structural pattern for both new helpers
-**Requirement**: INSERTERR-01, INSERTERR-02, INSERTERR-03, INSERTERR-04, INSERTERR-05
+**Reuses**: `checkViolationMessage` as the structural pattern for the new helper
+**Requirement**: INSERTERR-02, INSERTERR-03, INSERTERR-04, INSERTERR-05
 
 **Tools**:
 - MCP: NONE
@@ -116,13 +118,15 @@ T3 → T4 → T5 → T6
 
 ---
 
-### T3: Normalize empty string to NULL for nullable timestamptz columns
+### T3: Normalize empty string to NULL, validate timestamptz format for timestamptz columns
 
-**What**: In `query.BuildInsert` (`internal/query/builder.go`), before appending a column's value to `args`, check: if `types[col.Name] == "timestamptz"` and the incoming value is the empty string `""` and the column is not in `table`'s required set (`!col.Required`), substitute `nil` instead of `""`. Leave every other type and every required timestamptz column untouched - a `""` sent for `opened_at` (required) still reaches Postgres as-is and is now classified 400 by T2.
+**SPEC_DEVIATION carried from T2**: this task now also implements INSERTERR-01 (moved from T2 - see T2's SPEC_DEVIATION note). Any non-empty, non-nil string value for a `timestamptz` column that fails to parse gets a 400 naming the column, via Go-side validation (`pgtype.Timestamptz.Scan`) instead of a Postgres error-code branch.
+
+**What**: In `query.BuildInsert` (`internal/query/builder.go`), for every column where `types[col.Name] == "timestamptz"` and the incoming value is a string: (a) if the value is `""` and `!col.Required`, substitute `nil` instead of `""` (skip validation - it's now NULL); (b) otherwise, validate the string parses as a timestamp via `pgtype.Timestamptz{}.Scan(value)` (already an indirect dependency via `pgx/v5`) - if `Scan` returns an error, return `fmt.Errorf("query: invalid value for column %q: not a valid timestamp", col.Name)` from `BuildInsert` (surfaces as 400 through `HandleCreate`'s existing `if err != nil { writeError(w, http.StatusBadRequest, err.Error()) }` path, unchanged). A `""` sent for a *required* timestamptz column is not substituted (stays `""`) and therefore fails validation in (b), naming the column - satisfying the "required column still 400s" case without a separate branch. Leave every other type untouched.
 **Where**: `internal/query/builder.go` (modify `BuildInsert`)
 **Depends on**: T2
 **Reuses**: The existing `types := columnTypes(table)` lookup already present in `BuildInsert`
-**Requirement**: INSERTERR-06, INSERTERR-07, INSERTERR-08
+**Requirement**: INSERTERR-01, INSERTERR-06, INSERTERR-07, INSERTERR-08
 
 **Tools**:
 - MCP: NONE
@@ -131,14 +135,16 @@ T3 → T4 → T5 → T6
 **Done when**:
 - [ ] Unit test: `BuildInsert` with `{"closed_at": ""}` on a nullable timestamptz column produces `nil` in `Args`, not `""`
 - [ ] Unit test: `BuildInsert` with `{"closed_at": ""}` on a `text` column leaves `""` unchanged (scope check - normalization never leaks to other types)
+- [ ] Unit test: `BuildInsert` with `{"opened_at": "not-a-timestamp"}` (required column, malformed) returns an error naming `opened_at`, no raw value in the message
+- [ ] Unit test: `BuildInsert` with `{"opened_at": "2026-01-01T00:00:00Z"}` (valid RFC3339) succeeds, value passed through unchanged
 - [ ] Integration test: POST `{"label":"x","opened_at":"","closed_at":""}` to `insert_diag` → 201, response has `closed_at: null`
-- [ ] Integration test: POST `{"label":"x","opened_at":""}` (required column empty) → 400 naming `opened_at` (proves T2's classification still fires - normalization must not silently "fix" a required field)
+- [ ] Integration test: POST `{"label":"x","opened_at":""}` (required column empty) → 400 naming `opened_at`
 - [ ] Full gate passes
 
 **Tests**: unit, integration
 **Gate**: full
 
-**Commit**: `fix(query): normalize empty string to NULL for nullable timestamptz columns`
+**Commit**: `fix(query): normalize empty string and validate timestamptz format for timestamptz columns`
 
 ---
 
