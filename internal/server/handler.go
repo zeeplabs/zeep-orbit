@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
@@ -262,22 +263,28 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	_ = onConflict
-	_ = conflictColumns
 
-	q, err := query.BuildInsert(app.SchemaName, tableName, table, body, ownerID)
+	q, err := query.BuildInsertWithOptions(app.SchemaName, tableName, table, body, ownerID, query.InsertOptions{
+		OnConflict:      onConflict,
+		ConflictColumns: conflictColumns,
+	})
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	var row map[string]any
+	var noRowsFromConflict bool
 	err = h.pool.WithRLSContext(r.Context(), rlsClaimsFromContext(r.Context()), h.reg.SystemConfig().StatementTimeoutMs, func(qx db.Querier) error {
 		rows, err := qx.Query(r.Context(), q.SQL, q.Args...)
 		if err != nil {
 			return err
 		}
 		row, err = pgx.CollectOneRow(rows, pgx.RowToMap)
+		if onConflict == "ignore" && errors.Is(err, pgx.ErrNoRows) {
+			noRowsFromConflict = true
+			return nil
+		}
 		return err
 	})
 	if err != nil {
@@ -298,7 +305,55 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if noRowsFromConflict {
+		if len(conflictColumns) == 0 {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		existing, err := h.fetchRowByColumns(r.Context(), app.SchemaName, tableName, table, conflictColumns, body)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to fetch existing row")
+			return
+		}
+		writeJSON(w, http.StatusOK, sanitizeRow(existing))
+		return
+	}
+
+	if onConflict == "update" {
+		writeJSON(w, http.StatusOK, sanitizeRow(row))
+		return
+	}
+
 	writeJSON(w, http.StatusCreated, sanitizeRow(row))
+}
+
+// fetchRowByColumns runs a single-row SELECT matching each name in columns
+// to its value in body — used only to fetch the pre-existing row after an
+// on_conflict:"ignore" insert short-circuits with zero rows via DO NOTHING.
+func (h *Handler) fetchRowByColumns(ctx context.Context, schemaName, tableName string, table *registry.Table, columns []string, body map[string]any) (map[string]any, error) {
+	types := make(map[string]string, len(table.Columns))
+	for _, col := range table.Columns {
+		types[col.Name] = col.Type
+	}
+
+	var whereClauses []string
+	var args []any
+	for _, c := range columns {
+		args = append(args, body[c])
+		whereClauses = append(whereClauses, fmt.Sprintf("%s = $%d%s", c, len(args), query.PgCast(types[c])))
+	}
+	sql := fmt.Sprintf("SELECT * FROM %s.%s WHERE %s", schemaName, tableName, strings.Join(whereClauses, " AND "))
+
+	var row map[string]any
+	err := h.pool.WithRLSContext(ctx, rlsClaimsFromContext(ctx), h.reg.SystemConfig().StatementTimeoutMs, func(qx db.Querier) error {
+		rows, err := qx.Query(ctx, sql, args...)
+		if err != nil {
+			return err
+		}
+		row, err = pgx.CollectOneRow(rows, pgx.RowToMap)
+		return err
+	})
+	return row, err
 }
 
 // 404 {"error":"not found"} if not found.

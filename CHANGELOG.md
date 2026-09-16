@@ -9,6 +9,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **`POST /{app}/{table}` now accepts `on_conflict: "ignore" | "update"` with `conflict_columns: [...]`** for idempotent inserts against a unique constraint (e.g. retried webhook deliveries). `"ignore"` no-ops on a conflict (200 with the existing row when `conflict_columns` was given, 204 otherwise); `"update"` upserts the conflicting row (200) and requires `conflict_columns` explicitly — the registry only models single-column uniques, so the conflict target for composite constraints can't be inferred and must be supplied by the caller. Omitting `on_conflict` is unchanged (a conflict still 409s, per the fix below).
+
 ### Fixed
 
 - **`POST /{app}/{table}` collapsed every insert failure Postgres didn't reject on `23514` (check_violation) into a generic `{"error":"failed to insert row"}` HTTP 500**, forcing integrators to read Orbit server logs to tell a duplicate row apart from an internal failure. A unique-constraint violation (`23505`) now responds `409` naming the constraint (`internal/server/handler.go`).

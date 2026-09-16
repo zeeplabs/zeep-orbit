@@ -200,7 +200,7 @@ T3 → T4 → T5 → T6
 
 ---
 
-### T6: Wire response status branching for ignore / update outcomes
+### T6: Wire response status branching for ignore / update outcomes ✅ Complete
 
 **What**: In `HandleCreate`, after executing the (possibly upsert) insert query: if `on_conflict != "update"` and a row came back from `RETURNING *`, respond 201 (today's behavior, unchanged - covers both plain insert and `"ignore"` when no conflict occurred). If `on_conflict == "update"`, respond 200 with the returned row (conflict path always returns a row via `DO UPDATE ... RETURNING *`). If `on_conflict == "ignore"` and the query returns zero rows (conflict occurred, `DO NOTHING` short-circuited `RETURNING`): when `conflict_columns` was supplied, run a follow-up `SELECT * FROM <schema>.<table> WHERE <conflict_columns match the submitted values>` and respond 200 with that row; when `conflict_columns` was absent, respond 204 with no body.
 **Where**: `internal/server/handler.go` (modify `HandleCreate`)
