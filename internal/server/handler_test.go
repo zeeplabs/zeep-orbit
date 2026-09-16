@@ -76,6 +76,19 @@ func TestMain(m *testing.M) {
 			created_at  TIMESTAMPTZ DEFAULT now(),
 			updated_at  TIMESTAMPTZ DEFAULT now()
 		)`,
+		// insert_diag exists only for insert-error-diagnostics tests: opened_at
+		// (required timestamptz) exercises the "required column still 400s"
+		// case, closed_at (nullable timestamptz) exercises "" -> NULL
+		// normalization, external_id (unique) exercises 409/on_conflict.
+		`CREATE TABLE ` + testSchema + `.insert_diag (
+			id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			label       TEXT NOT NULL,
+			opened_at   TIMESTAMPTZ NOT NULL,
+			closed_at   TIMESTAMPTZ,
+			external_id TEXT UNIQUE,
+			created_at  TIMESTAMPTZ DEFAULT now(),
+			updated_at  TIMESTAMPTZ DEFAULT now()
+		)`,
 		`GRANT USAGE ON SCHEMA ` + testSchema + ` TO zeep_app_enduser`,
 		`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ` + testSchema + ` TO zeep_app_enduser`,
 	}
@@ -127,6 +140,15 @@ func TestMain(m *testing.M) {
 					{Name: "name", Type: "text", Required: true},
 					{Name: "value", Type: "text", Required: false},
 					{Name: "status", Type: "enum", Required: false, AllowedValues: []string{"pending", "active", "closed"}},
+				},
+			},
+			"insert_diag": {
+				Name: "insert_diag",
+				Columns: []registry.Column{
+					{Name: "label", Type: "text", Required: true},
+					{Name: "opened_at", Type: "timestamptz", Required: true},
+					{Name: "closed_at", Type: "timestamptz", Required: false},
+					{Name: "external_id", Type: "text", Required: false, Unique: true},
 				},
 			},
 		},
