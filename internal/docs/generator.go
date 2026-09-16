@@ -201,6 +201,7 @@ func generate(apps []*registry.App) *Spec {
 				Post: &operation{
 					Tags:        []string{appName},
 					Summary:     fmt.Sprintf("Create %s", tableName),
+					Description: "Accepts two optional fields alongside the table's own columns for idempotent inserts against a unique constraint: `on_conflict` (`\"ignore\"` or `\"update\"`; omitted or `\"error\"` is a plain insert — a conflict 409s) and `conflict_columns` (array of column names; required for `\"update\"`, optional for `\"ignore\"`). `\"ignore\"` no-ops on a conflict: 200 with the existing row when `conflict_columns` was given, 204 otherwise. `\"update\"` upserts the conflicting row via `ON CONFLICT (...) DO UPDATE`, returning 201 if the row was actually inserted (no real conflict) or 200 if it was updated.",
 					OperationID: fmt.Sprintf("create_%s_%s", appName, tableName),
 					Security:    security,
 					RequestBody: &requestBody{
@@ -209,8 +210,11 @@ func generate(apps []*registry.App) *Spec {
 					},
 					Responses: map[string]response{
 						"201": {Description: "Created", Content: jsonContent(schemaOrRef{Ref: "#/components/schemas/" + schemaName})},
+						"200": {Description: "OK (on_conflict:\"update\" upserted an existing row, or on_conflict:\"ignore\" no-opped and returned it)", Content: jsonContent(schemaOrRef{Ref: "#/components/schemas/" + schemaName})},
+						"204": {Description: "No Content (on_conflict:\"ignore\" no-opped with no conflict_columns to fetch the existing row by)"},
 						"400": {Description: "Bad Request"},
 						"401": {Description: "Unauthorized"},
+						"409": {Description: "Conflict (unique constraint violated; on_conflict omitted or \"error\")"},
 					},
 				},
 			}

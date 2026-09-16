@@ -516,6 +516,38 @@ func TestBuildInsert_OnConflictUpdateExcludesOwnerID(t *testing.T) {
 	}
 }
 
+// TestBuildInsert_OnConflictUpdateReturningIncludesInsertMarker proves the
+// RETURNING clause for on_conflict:"update" carries the xmax-based
+// zeep_was_insert marker the handler uses to answer 201 vs 200 correctly —
+// without it, a fresh row (no real conflict) would misreport as 200
+// ("updated") to any client keying off status code.
+func TestBuildInsert_OnConflictUpdateReturningIncludesInsertMarker(t *testing.T) {
+	tbl := conflictTable()
+	body := map[string]any{"label": "x", "external_id": "ext-1"}
+	q, err := BuildInsertWithOptions("app_events", "events", tbl, body, "", InsertOptions{OnConflict: "update", ConflictColumns: []string{"external_id"}})
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if !strings.Contains(q.SQL, "RETURNING *, (xmax = 0) AS zeep_was_insert") {
+		t.Errorf("SQL deveria conter o marcador zeep_was_insert: %q", q.SQL)
+	}
+}
+
+// TestBuildInsert_OnConflictIgnoreReturningHasNoInsertMarker proves the
+// marker is scoped only to "update" — "ignore" and plain inserts don't need
+// it and shouldn't carry the extra column into every response.
+func TestBuildInsert_OnConflictIgnoreReturningHasNoInsertMarker(t *testing.T) {
+	tbl := conflictTable()
+	body := map[string]any{"label": "x", "external_id": "ext-1"}
+	q, err := BuildInsertWithOptions("app_events", "events", tbl, body, "", InsertOptions{OnConflict: "ignore"})
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if strings.Contains(q.SQL, "zeep_was_insert") {
+		t.Errorf("on_conflict:ignore não deveria carregar zeep_was_insert: %q", q.SQL)
+	}
+}
+
 func TestBuildInsert_OnConflictAbsentUnchanged(t *testing.T) {
 	tbl := conflictTable()
 	body := map[string]any{"label": "x"}
@@ -564,6 +596,36 @@ func TestBuildUpdate_Valid(t *testing.T) {
 	last := q.Args[len(q.Args)-1]
 	if last != "uuid-999" {
 		t.Errorf("último arg deveria ser o id 'uuid-999', got %v", last)
+	}
+}
+
+// TestBuildUpdate_EmptyStringNormalizesToNullForNullableTimestamptz proves
+// BuildUpdate applies the same "" -> NULL timestamptz normalization as
+// BuildInsert (asymmetry found in pre-release review: PATCH with "" on a
+// nullable timestamptz previously reached Postgres raw and 500'd).
+func TestBuildUpdate_EmptyStringNormalizesToNullForNullableTimestamptz(t *testing.T) {
+	tbl := timestamptzTable()
+	body := map[string]any{"closed_at": ""}
+	q, err := BuildUpdate("app_events", "events", tbl, "uuid-1", body, "")
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if q.Args[0] != nil {
+		t.Errorf("esperava nil para closed_at, got %v (%T)", q.Args[0], q.Args[0])
+	}
+}
+
+// TestBuildUpdate_InvalidTimestampNamesColumn mirrors
+// TestBuildInsert_InvalidTimestampNamesColumn for the UPDATE path.
+func TestBuildUpdate_InvalidTimestampNamesColumn(t *testing.T) {
+	tbl := timestamptzTable()
+	body := map[string]any{"opened_at": "not-a-timestamp"}
+	_, err := BuildUpdate("app_events", "events", tbl, "uuid-1", body, "")
+	if err == nil {
+		t.Fatal("esperava erro para timestamptz inválido, got nil")
+	}
+	if !strings.Contains(err.Error(), "opened_at") {
+		t.Errorf("mensagem de erro deveria citar 'opened_at': %v", err)
 	}
 }
 

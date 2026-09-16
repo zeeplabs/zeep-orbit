@@ -204,7 +204,7 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 	}, nil
 }
 
-// normalizeTimestamptz handles a timestamptz column's incoming value before
+// NormalizeTimestamptz handles a timestamptz column's incoming value before
 // it reaches Postgres. An empty string on a nullable column becomes NULL
 // (integrators commonly send "" instead of omitting an optional date/time
 // field) — a "" on a required column is left as-is and falls through to the
@@ -214,8 +214,12 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 // column context to a cast failure on a typed placeholder
 // ($1::timestamptz), so this is the only reliable way to name the
 // offending column in a 400 instead of leaking a raw driver error as a 500
-// (see SPEC_DEVIATION note in internal/server/handler.go).
-func normalizeTimestamptz(col registry.Column, val any) (any, error) {
+// (see SPEC_DEVIATION note in internal/server/handler.go). Exported so
+// callers building a query outside BuildInsert/BuildUpdate (e.g.
+// server.fetchRowByColumns, matching a conflict_columns value against an
+// existing row) apply the exact same rules instead of sending a raw "" or
+// unvalidated string straight to Postgres.
+func NormalizeTimestamptz(col registry.Column, val any) (any, error) {
 	s, ok := val.(string)
 	if !ok {
 		return val, nil
@@ -292,7 +296,7 @@ func BuildInsertWithOptions(schemaName, tableName string, table *registry.Table,
 		}
 		if types[col.Name] == "timestamptz" {
 			var err error
-			val, err = normalizeTimestamptz(col, val)
+			val, err = NormalizeTimestamptz(col, val)
 			if err != nil {
 				return nil, err
 			}
@@ -357,7 +361,18 @@ func BuildInsertWithOptions(schemaName, tableName string, table *registry.Table,
 		sql += fmt.Sprintf(" ON CONFLICT (%s) DO UPDATE SET %s", strings.Join(opts.ConflictColumns, ", "), strings.Join(setClauses, ", "))
 	}
 
-	return &WriteQuery{SQL: sql + " RETURNING *", Args: args}, nil
+	// "update" upserts can also hit no real conflict (a fresh row) — xmax = 0
+	// is Postgres's own signal that RETURNING is reporting a row this
+	// statement inserted, not one it updated via the DO UPDATE branch. The
+	// handler uses this to answer 201 vs 200 correctly instead of always
+	// reporting 200 for on_conflict:"update", which would misreport a
+	// genuine creation as an update to any client keying off status code.
+	returning := " RETURNING *"
+	if opts.OnConflict == "update" {
+		returning = " RETURNING *, (xmax = 0) AS zeep_was_insert"
+	}
+
+	return &WriteQuery{SQL: sql + returning, Args: args}, nil
 }
 
 func BuildUpdate(schemaName, tableName string, table *registry.Table, id string, body map[string]any, ownerID string) (*WriteQuery, error) {
@@ -384,6 +399,13 @@ func BuildUpdate(schemaName, tableName string, table *registry.Table, id string,
 		val, present := body[col.Name]
 		if !present {
 			continue
+		}
+		if types[col.Name] == "timestamptz" {
+			var err error
+			val, err = NormalizeTimestamptz(col, val)
+			if err != nil {
+				return nil, err
+			}
 		}
 		args = append(args, val)
 		setClauses = append(setClauses, fmt.Sprintf("%s = $%d%s", col.Name, len(args), PgCast(types[col.Name])))

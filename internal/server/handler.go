@@ -279,6 +279,7 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var row map[string]any
+	var existing map[string]any
 	var noRowsFromConflict bool
 	err = h.pool.WithRLSContext(r.Context(), rlsClaimsFromContext(r.Context()), h.reg.SystemConfig().StatementTimeoutMs, func(qx db.Querier) error {
 		rows, err := qx.Query(r.Context(), q.SQL, q.Args...)
@@ -286,13 +287,31 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		row, err = pgx.CollectOneRow(rows, pgx.RowToMap)
-		if onConflict == "ignore" && errors.Is(err, pgx.ErrNoRows) {
-			noRowsFromConflict = true
+		if onConflict != "ignore" || !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		noRowsFromConflict = true
+		if len(conflictColumns) == 0 {
 			return nil
 		}
+		// Runs in the same transaction as the INSERT above — fetching the
+		// pre-existing row via a separate WithRLSContext call (a second,
+		// later transaction) left a window for the row to be deleted or
+		// reassigned between the two, and for a soft-deleted row's
+		// deleted_at to be seen inconsistently. A single transaction removes
+		// that window entirely.
+		existing, err = h.fetchRowByColumns(r.Context(), qx, app.SchemaName, tableName, table, conflictColumns, body, filterOwner(ownerID, table), h.reg.SystemConfig().SoftDeleteEnabled)
 		return err
 	})
 	if err != nil {
+		if noRowsFromConflict {
+			if errors.Is(err, pgx.ErrNoRows) {
+				writeError(w, http.StatusConflict, "row already exists")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "failed to fetch existing row")
+			return
+		}
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23514" {
 			writeError(w, http.StatusBadRequest, checkViolationMessage(pgErr))
@@ -319,21 +338,23 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		existing, err := h.fetchRowByColumns(r.Context(), app.SchemaName, tableName, table, conflictColumns, body, filterOwner(ownerID, table), h.reg.SystemConfig().SoftDeleteEnabled)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				writeError(w, http.StatusConflict, "row already exists")
-				return
-			}
-			writeError(w, http.StatusInternalServerError, "failed to fetch existing row")
-			return
-		}
 		writeJSON(w, http.StatusOK, sanitizeRow(existing))
 		return
 	}
 
 	if onConflict == "update" {
-		writeJSON(w, http.StatusOK, sanitizeRow(row))
+		// zeep_was_insert (from BuildInsertWithOptions's RETURNING *,
+		// (xmax = 0) AS zeep_was_insert) distinguishes a genuine first-time
+		// insert from a real upsert-over-a-conflict — both take the
+		// on_conflict:"update" path, but reporting 200 for a fresh row would
+		// misreport creation to any client keying off status code.
+		wasInsert, _ := row["zeep_was_insert"].(bool)
+		delete(row, "zeep_was_insert")
+		status := http.StatusOK
+		if wasInsert {
+			status = http.StatusCreated
+		}
+		writeJSON(w, status, sanitizeRow(row))
 		return
 	}
 
@@ -343,6 +364,9 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 // fetchRowByColumns runs a single-row SELECT matching each name in columns
 // to its value in body — used only to fetch the pre-existing row after an
 // on_conflict:"ignore" insert short-circuits with zero rows via DO NOTHING.
+// Always called with the same qx (Querier/transaction) as that INSERT, so
+// the two run atomically — a separate transaction here would let the row be
+// deleted or its deleted_at change between the two statements.
 //
 // ownerFilter must be the caller's filterOwner(ownerID, table) result, never
 // a raw ownerID — omitting this filter let any caller fetch any other
@@ -350,16 +374,32 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 // "owner"/"enabled" RLS modes have no native Postgres policy backing them;
 // the app-level predicate here is the only enforcement. softDelete excludes
 // soft-deleted rows the same way BuildList/BuildDelete do.
-func (h *Handler) fetchRowByColumns(ctx context.Context, schemaName, tableName string, table *registry.Table, columns []string, body map[string]any, ownerFilter string, softDelete bool) (map[string]any, error) {
+func (h *Handler) fetchRowByColumns(ctx context.Context, qx db.Querier, schemaName, tableName string, table *registry.Table, columns []string, body map[string]any, ownerFilter string, softDelete bool) (map[string]any, error) {
+	colByName := make(map[string]registry.Column, len(table.Columns))
 	types := make(map[string]string, len(table.Columns))
 	for _, col := range table.Columns {
+		colByName[col.Name] = col
 		types[col.Name] = col.Type
 	}
 
 	var whereClauses []string
 	var args []any
 	for _, c := range columns {
-		args = append(args, body[c])
+		val := body[c]
+		if types[c] == "timestamptz" {
+			// Mirrors the normalization BuildInsertWithOptions applied to
+			// this same value before the INSERT — body isn't mutated there,
+			// so without this an "" conflict_columns value (valid, and
+			// normalized to NULL for the INSERT) would reach this SELECT as
+			// a raw ""::timestamptz cast, failing with an unclassified 500
+			// instead of matching the row the INSERT just conflicted with.
+			var err error
+			val, err = query.NormalizeTimestamptz(colByName[c], val)
+			if err != nil {
+				return nil, err
+			}
+		}
+		args = append(args, val)
 		whereClauses = append(whereClauses, fmt.Sprintf("%s = $%d%s", c, len(args), query.PgCast(types[c])))
 	}
 	if ownerFilter != "" {
@@ -371,16 +411,11 @@ func (h *Handler) fetchRowByColumns(ctx context.Context, schemaName, tableName s
 	}
 	sql := fmt.Sprintf("SELECT * FROM %s.%s WHERE %s", schemaName, tableName, strings.Join(whereClauses, " AND "))
 
-	var row map[string]any
-	err := h.pool.WithRLSContext(ctx, rlsClaimsFromContext(ctx), h.reg.SystemConfig().StatementTimeoutMs, func(qx db.Querier) error {
-		rows, err := qx.Query(ctx, sql, args...)
-		if err != nil {
-			return err
-		}
-		row, err = pgx.CollectOneRow(rows, pgx.RowToMap)
-		return err
-	})
-	return row, err
+	rows, err := qx.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectOneRow(rows, pgx.RowToMap)
 }
 
 // 404 {"error":"not found"} if not found.

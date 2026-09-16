@@ -1239,6 +1239,43 @@ func TestHandlerCreateOnConflictUpdateOverwritesRow(t *testing.T) {
 	}
 }
 
+// TestHandlerCreateOnConflictUpdateFreshRowReturns201 proves on_conflict:
+// "update" against a value that doesn't actually conflict with anything
+// still reports 201 (a real creation), not 200 — a client keying off status
+// code to detect "row created" must get a correct answer even on the
+// upsert path. Also proves the xmax-based zeep_was_insert marker never
+// leaks into the JSON response.
+func TestHandlerCreateOnConflictUpdateFreshRowReturns201(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{
+		"label": "no real conflict", "opened_at": "2026-01-01T00:00:00Z",
+		"external_id":      "fresh-row-no-conflict-id",
+		"on_conflict":      "update",
+		"conflict_columns": []string{"external_id"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("esperado 201 (linha nova, sem conflito real), obtido %d: %s", rec.Code, rec.Body.String())
+	}
+	var row map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&row); err != nil {
+		t.Fatalf("decode falhou: %v", err)
+	}
+	if _, present := row["zeep_was_insert"]; present {
+		t.Fatalf("zeep_was_insert vazou na resposta: %v", row)
+	}
+}
+
 // TestHandlerCreateOnConflictErrorStillConflicts proves a plain retry (no
 // on_conflict field) against the same unique value still 409s, unaffected
 // by the on_conflict machinery (regression check for INSERTERR-16's "error"
