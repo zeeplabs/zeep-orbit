@@ -113,9 +113,13 @@ func TestMain(m *testing.M) {
 			"created_at"         TIMESTAMPTZ NOT NULL DEFAULT now(),
 			"updated_at"         TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
+		// slug exists only for TestHandlerCreateOnConflictIgnoreDoesNotLeakOtherOwnersRow
+		// (insert-error-diagnostics cross-tenant fix): it's the unique column
+		// two different owners can collide on via on_conflict/conflict_columns.
 		`CREATE TABLE ` + rlsSchema + `.notes (
 			id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			title      TEXT NOT NULL,
+			slug       TEXT UNIQUE,
 			owner_id   UUID NOT NULL REFERENCES ` + rlsSchema + `."_auth_users"("id"),
 			created_at TIMESTAMPTZ DEFAULT now(),
 			updated_at TIMESTAMPTZ DEFAULT now()
@@ -168,6 +172,7 @@ func TestMain(m *testing.M) {
 				RLS:  "owner",
 				Columns: []registry.Column{
 					{Name: "title", Type: "text", Required: true},
+					{Name: "slug", Type: "text", Required: false, Unique: true},
 				},
 			},
 		},
@@ -1013,6 +1018,60 @@ func TestHandlerCreateOnConflictUnknownConflictColumn(t *testing.T) {
 	msg, _ := resp["error"].(string)
 	if !strings.Contains(msg, "does_not_exist") {
 		t.Fatalf("esperada mensagem citando does_not_exist, obtido %q", msg)
+	}
+}
+
+// TestHandlerCreateOnConflictDuplicateConflictColumn proves parseOnConflict
+// rejects a repeated column name in conflict_columns as 400, instead of
+// letting it reach Postgres as ON CONFLICT (col, col), which raises 42P10
+// (invalid_column_reference) and would otherwise fall through to a raw 500.
+func TestHandlerCreateOnConflictDuplicateConflictColumn(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{
+		"label": "x", "opened_at": "2026-01-01T00:00:00Z",
+		"on_conflict": "update", "conflict_columns": []string{"external_id", "external_id"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("esperado 400 para conflict_columns duplicada, obtido %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestHandlerCreateOnConflictColumnWithoutUniqueConstraint proves a
+// conflict_columns target that passes schema validation (a real column) but
+// has no unique/exclusion constraint backing it in Postgres is classified as
+// 400, not left to fall through as a raw 500 from an unclassified 42P10.
+func TestHandlerCreateOnConflictColumnWithoutUniqueConstraint(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{
+		"label": "x", "opened_at": "2026-01-01T00:00:00Z",
+		"on_conflict": "update", "conflict_columns": []string{"label"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("esperado 400 para conflict_columns sem constraint unique, obtido %d: %s", rec.Code, rec.Body.String())
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -210,4 +211,63 @@ func TestRLS(t *testing.T) {
 			t.Errorf("tabela %q não deveria ter RLS, obtido %q", testTable, tbl.RLS)
 		}
 	})
+}
+
+// TestHandlerCreateOnConflictIgnoreDoesNotLeakOtherOwnersRow is the
+// regression test for the cross-tenant leak found in pre-release review:
+// fetchRowByColumns (the SELECT that runs after an on_conflict:"ignore"
+// insert short-circuits with zero rows) had no owner_id filter, unlike every
+// other read path. On an "owner"-RLS table there is no native Postgres
+// policy backing that filter — the app-level predicate is the only
+// enforcement — so an attacker could read any other tenant's row by
+// guessing/brute-forcing a value in a unique column and colliding on it via
+// on_conflict/conflict_columns.
+func TestHandlerCreateOnConflictIgnoreDoesNotLeakOtherOwnersRow(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildRLSRouter(h)
+	basePath := "/" + rlsAppName + "/notes"
+
+	victimID := insertRLSUser(t, "victim-conflict@test.com")
+	attackerID := insertRLSUser(t, "attacker-conflict@test.com")
+
+	victimJWT, err := auth.IssueJWT([]byte(rlsSecret), victimID, "victim-conflict@test.com", rlsAppName, "member")
+	if err != nil {
+		t.Fatalf("IssueJWT victim: %v", err)
+	}
+	attackerJWT, err := auth.IssueJWT([]byte(rlsSecret), attackerID, "attacker-conflict@test.com", rlsAppName, "member")
+	if err != nil {
+		t.Fatalf("IssueJWT attacker: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, basePath+"/",
+		jsonBody(map[string]any{"title": "victim's private note", "slug": "shared-slug-leak-test"}))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+victimJWT)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("seed da vítima: esperado 201, obtido %d: %s", rec.Code, rec.Body.String())
+	}
+
+	attackReq := httptest.NewRequest(http.MethodPost, basePath+"/", jsonBody(map[string]any{
+		"title":            "attacker probing for victim's row",
+		"slug":             "shared-slug-leak-test",
+		"on_conflict":      "ignore",
+		"conflict_columns": []string{"slug"},
+	}))
+	attackReq.Header.Set("Content-Type", "application/json")
+	attackReq.Header.Set("Authorization", "Bearer "+attackerJWT)
+	attackRec := httptest.NewRecorder()
+	router.ServeHTTP(attackRec, attackReq)
+
+	if attackRec.Code == http.StatusOK && strings.Contains(attackRec.Body.String(), "victim's private note") {
+		t.Fatalf("VAZAMENTO CROSS-TENANT: attacker recebeu a linha da vítima: %d: %s", attackRec.Code, attackRec.Body.String())
+	}
+	if attackRec.Code != http.StatusConflict {
+		t.Fatalf("esperado 409 (colisão pertence a outro owner, não é 'sua' linha), obtido %d: %s", attackRec.Code, attackRec.Body.String())
+	}
 }

@@ -123,11 +123,16 @@ func parseOnConflict(body map[string]any, table *registry.Table) (onConflict str
 		if !ok {
 			return "", nil, fmt.Errorf("conflict_columns must be an array of column names")
 		}
+		seen := make(map[string]struct{}, len(arr))
 		for _, v := range arr {
 			s, ok := v.(string)
 			if !ok {
 				return "", nil, fmt.Errorf("conflict_columns must be an array of column names")
 			}
+			if _, dup := seen[s]; dup {
+				return "", nil, fmt.Errorf("duplicate column in conflict_columns: %q", s)
+			}
+			seen[s] = struct{}{}
 			conflictColumns = append(conflictColumns, s)
 		}
 	}
@@ -297,6 +302,10 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, uniqueViolationMessage(pgErr))
 			return
 		}
+		if errors.As(err, &pgErr) && pgErr.Code == "42P10" {
+			writeError(w, http.StatusBadRequest, "conflict_columns does not match any unique or exclusion constraint on this table")
+			return
+		}
 		if db.IsStatementTimeout(err) {
 			writeError(w, http.StatusServiceUnavailable, "query exceeded statement timeout")
 			return
@@ -310,8 +319,12 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		existing, err := h.fetchRowByColumns(r.Context(), app.SchemaName, tableName, table, conflictColumns, body)
+		existing, err := h.fetchRowByColumns(r.Context(), app.SchemaName, tableName, table, conflictColumns, body, filterOwner(ownerID, table), h.reg.SystemConfig().SoftDeleteEnabled)
 		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				writeError(w, http.StatusConflict, "row already exists")
+				return
+			}
 			writeError(w, http.StatusInternalServerError, "failed to fetch existing row")
 			return
 		}
@@ -330,7 +343,14 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 // fetchRowByColumns runs a single-row SELECT matching each name in columns
 // to its value in body — used only to fetch the pre-existing row after an
 // on_conflict:"ignore" insert short-circuits with zero rows via DO NOTHING.
-func (h *Handler) fetchRowByColumns(ctx context.Context, schemaName, tableName string, table *registry.Table, columns []string, body map[string]any) (map[string]any, error) {
+//
+// ownerFilter must be the caller's filterOwner(ownerID, table) result, never
+// a raw ownerID — omitting this filter let any caller fetch any other
+// tenant's row by guessing/brute-forcing a unique column's value, since
+// "owner"/"enabled" RLS modes have no native Postgres policy backing them;
+// the app-level predicate here is the only enforcement. softDelete excludes
+// soft-deleted rows the same way BuildList/BuildDelete do.
+func (h *Handler) fetchRowByColumns(ctx context.Context, schemaName, tableName string, table *registry.Table, columns []string, body map[string]any, ownerFilter string, softDelete bool) (map[string]any, error) {
 	types := make(map[string]string, len(table.Columns))
 	for _, col := range table.Columns {
 		types[col.Name] = col.Type
@@ -341,6 +361,13 @@ func (h *Handler) fetchRowByColumns(ctx context.Context, schemaName, tableName s
 	for _, c := range columns {
 		args = append(args, body[c])
 		whereClauses = append(whereClauses, fmt.Sprintf("%s = $%d%s", c, len(args), query.PgCast(types[c])))
+	}
+	if ownerFilter != "" {
+		args = append(args, ownerFilter)
+		whereClauses = append(whereClauses, fmt.Sprintf("owner_id = $%d::uuid", len(args)))
+	}
+	if softDelete {
+		whereClauses = append(whereClauses, "deleted_at IS NULL")
 	}
 	sql := fmt.Sprintf("SELECT * FROM %s.%s WHERE %s", schemaName, tableName, strings.Join(whereClauses, " AND "))
 
