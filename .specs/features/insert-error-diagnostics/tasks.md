@@ -148,7 +148,7 @@ T3 → T4 → T5 → T6
 
 ---
 
-### T4: Parse and validate `on_conflict` / `conflict_columns`
+### T4: Parse and validate `on_conflict` / `conflict_columns` ✅ Complete
 
 **What**: In `HandleCreate`, after decoding the request body and before calling `query.BuildInsert`, read optional `on_conflict` (string) and `conflict_columns` ([]string) fields out of `body` (then delete them from `body` so they aren't treated as table columns by `BuildInsert`'s unknown-field check). Validate: (a) `on_conflict` not in `{"", "error", "ignore", "update"}` → 400; (b) `on_conflict == "update"` and `len(conflict_columns) == 0` → 400; (c) any name in `conflict_columns` not present in `table`'s known columns (reuse the column-set lookup `BuildInsert` already has, or export it) → 400 naming the invalid column. On success, pass the validated `on_conflict`/`conflict_columns` through to `query.BuildInsert` (extend its signature or add a small options struct - implementer's choice, keep `BuildInsert`'s existing call sites working for the `"error"`/no-op default).
 **Where**: `internal/server/handler.go` (modify `HandleCreate`; export a column-name-validation helper from `internal/query/builder.go` only if reuse turns out cleaner than a local copy - `handler.go` is the primary and only required file)

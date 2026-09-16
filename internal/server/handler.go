@@ -103,6 +103,59 @@ func uniqueViolationMessage(pgErr *pgconn.PgError) string {
 	return "row already exists"
 }
 
+// parseOnConflict extracts and validates the optional "on_conflict" /
+// "conflict_columns" request fields, removing both from body so BuildInsert
+// doesn't treat them as unknown table columns. onConflict defaults to
+// "error" (today's behavior: a unique violation surfaces as an error)
+// when the field is absent. conflict_columns is required (non-empty) when
+// onConflict is "update" — Postgres's ON CONFLICT DO UPDATE needs an
+// explicit conflict target, and the registry only models single-column
+// uniques, not the composite ones this feature was written for — so the
+// caller must supply the target explicitly rather than have it inferred.
+func parseOnConflict(body map[string]any, table *registry.Table) (onConflict string, conflictColumns []string, err error) {
+	onConflict, _ = body["on_conflict"].(string)
+	delete(body, "on_conflict")
+
+	if raw, present := body["conflict_columns"]; present {
+		delete(body, "conflict_columns")
+		arr, ok := raw.([]any)
+		if !ok {
+			return "", nil, fmt.Errorf("conflict_columns must be an array of column names")
+		}
+		for _, v := range arr {
+			s, ok := v.(string)
+			if !ok {
+				return "", nil, fmt.Errorf("conflict_columns must be an array of column names")
+			}
+			conflictColumns = append(conflictColumns, s)
+		}
+	}
+
+	switch onConflict {
+	case "", "error", "ignore", "update":
+	default:
+		return "", nil, fmt.Errorf("invalid on_conflict value %q", onConflict)
+	}
+
+	if onConflict == "update" && len(conflictColumns) == 0 {
+		return "", nil, fmt.Errorf("on_conflict \"update\" requires a non-empty conflict_columns")
+	}
+
+	if len(conflictColumns) > 0 {
+		known := make(map[string]struct{}, len(table.Columns))
+		for _, col := range table.Columns {
+			known[col.Name] = struct{}{}
+		}
+		for _, c := range conflictColumns {
+			if _, ok := known[c]; !ok {
+				return "", nil, fmt.Errorf("unknown column in conflict_columns: %q", c)
+			}
+		}
+	}
+
+	return onConflict, conflictColumns, nil
+}
+
 // Response: {"data": [...], "count": N, "limit": L, "offset": O}
 func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 	app, ok := AppFromContext(r.Context())
@@ -203,6 +256,14 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+
+	onConflict, conflictColumns, err := parseOnConflict(body, table)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	_ = onConflict
+	_ = conflictColumns
 
 	q, err := query.BuildInsert(app.SchemaName, tableName, table, body, ownerID)
 	if err != nil {

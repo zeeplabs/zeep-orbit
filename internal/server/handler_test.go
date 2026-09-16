@@ -939,6 +939,106 @@ func TestHandlerCreateEmptyTimestampOnRequiredColumnFails(t *testing.T) {
 	}
 }
 
+// TestHandlerCreateOnConflictInvalidValue proves an unrecognized on_conflict
+// value 400s instead of silently falling back (INSERTERR-15).
+func TestHandlerCreateOnConflictInvalidValue(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{"label": "x", "opened_at": "2026-01-01T00:00:00Z", "on_conflict": "bogus"}
+	req := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("esperado 400 para on_conflict inválido, obtido %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestHandlerCreateOnConflictUpdateRequiresConflictColumns proves
+// on_conflict:"update" without conflict_columns 400s (INSERTERR-13).
+func TestHandlerCreateOnConflictUpdateRequiresConflictColumns(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{"label": "x", "opened_at": "2026-01-01T00:00:00Z", "on_conflict": "update"}
+	req := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("esperado 400 para on_conflict update sem conflict_columns, obtido %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestHandlerCreateOnConflictUnknownConflictColumn proves an unknown column
+// name in conflict_columns 400s naming it (INSERTERR-17).
+func TestHandlerCreateOnConflictUnknownConflictColumn(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{
+		"label": "x", "opened_at": "2026-01-01T00:00:00Z",
+		"on_conflict": "update", "conflict_columns": []string{"does_not_exist"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("esperado 400 para conflict_columns com coluna inexistente, obtido %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode falhou: %v", err)
+	}
+	msg, _ := resp["error"].(string)
+	if !strings.Contains(msg, "does_not_exist") {
+		t.Fatalf("esperada mensagem citando does_not_exist, obtido %q", msg)
+	}
+}
+
+// TestHandlerCreateOnConflictAbsentBehavesAsError proves omitting
+// on_conflict entirely doesn't change today's create behavior
+// (INSERTERR-16).
+func TestHandlerCreateOnConflictAbsentBehavesAsError(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{"label": "no-on-conflict", "opened_at": "2026-01-01T00:00:00Z"}
+	req := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("esperado 201, obtido %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 // TestHandlerCreateUniqueViolation proves a duplicate insert against a
 // unique column is classified 409 naming the constraint, not 500
 // (INSERTERR-02, INSERTERR-04, INSERTERR-05).
