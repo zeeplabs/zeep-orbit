@@ -1,6 +1,27 @@
 {
   "entries": [
     {
+      "version": "v1.9.0",
+      "release_date": "2026-09-17",
+      "title": {"en": "Insert Error Diagnostics & Native Upsert", "pt-BR": "Diagnóstico de Erros de Inserção e Upsert Nativo"},
+      "summary": {"en": "Minor release adding native upsert support to the generic insert endpoint (on_conflict: \"ignore\" | \"update\"), classifying Postgres insert failures into proper HTTP status codes instead of a generic 500, and normalizing/validating timestamptz values before insert.", "pt-BR": "Release menor adicionando suporte a upsert nativo no endpoint genérico de inserção (on_conflict: \"ignore\" | \"update\"), classificando falhas de inserção do Postgres em códigos HTTP apropriados em vez de um 500 genérico, e normalizando/validando valores timestamptz antes da inserção."},
+      "sections": [
+        {
+          "type": "features",
+          "items": [
+            {"description": {"en": "POST /{app}/{table} now accepts on_conflict: \"ignore\" | \"update\" with conflict_columns: [...] for idempotent inserts against a unique constraint (e.g. retried webhook deliveries). Both modes run in a single transaction with the insert and respect owner-scoping, soft-delete exclusion, and native row-level-security policies, so a conflict belonging to another tenant or a policy-denied row is consistently 409 instead of being leaked, overwritten, or silently resurrected.", "pt-BR": "POST /{app}/{table} agora aceita on_conflict: \"ignore\" | \"update\" com conflict_columns: [...] para inserções idempotentes contra uma constraint de unicidade (ex.: entregas de webhook reenviadas). Ambos os modos rodam numa única transação com a inserção e respeitam escopo por owner, exclusão de soft-delete e políticas nativas de row-level-security, então um conflito de outro tenant ou negado por política é sempre 409, em vez de ser exposto, sobrescrito ou ressuscitado silenciosamente."}}
+          ]
+        },
+        {
+          "type": "fixes",
+          "items": [
+            {"description": {"en": "POST /{app}/{table} used to collapse almost every insert failure into a generic {\"error\":\"failed to insert row\"} HTTP 500. A unique-constraint violation now responds 409 naming the constraint; the real error is now always logged server-side for any case still left as a generic 500.", "pt-BR": "POST /{app}/{table} antes agregava quase toda falha de inserção num {\"error\":\"failed to insert row\"} HTTP 500 genérico. Uma violação de constraint de unicidade agora responde 409 nomeando a constraint; o erro real agora é sempre logado no servidor para qualquer caso que ainda vire um 500 genérico."}},
+            {"description": {"en": "An empty string sent for a timestamptz column reached Postgres as-is and raised a raw, unclassified error. Empty string now normalizes to NULL for nullable timestamptz columns; a non-empty malformed value responds 400 naming the column instead of leaking a raw driver error.", "pt-BR": "Uma string vazia enviada para uma coluna timestamptz chegava ao Postgres sem tratamento e gerava um erro bruto e não classificado. String vazia agora é normalizada para NULL em colunas timestamptz opcionais; um valor não vazio e malformado responde 400 nomeando a coluna, em vez de expor um erro bruto do driver."}}
+          ]
+        }
+      ]
+    },
+    {
       "version": "v1.8.4",
       "release_date": "2026-09-10",
       "title": {"en": "List Endpoint Filter & Soft-Delete Docs", "pt-BR": "Documentação de Filtros e Soft-Delete do Endpoint de Listagem"},
