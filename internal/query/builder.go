@@ -208,17 +208,36 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 // accepts (interpreted in the session's TimeZone, same as it always was —
 // this validation never rewrites the value, only checks it parses in some
 // form Postgres would also accept) but that neither time.RFC3339Nano nor
-// pgtype.Timestamptz.Scan recognize: a bare date, or a "T"-separated or
-// space-separated timestamp with no UTC offset. Pre-release review found
-// these regressed from "accepted" (passed raw to Postgres) to a 400 once
-// Go-side validation was added — this closes that gap without weakening the
-// validation itself (a genuinely malformed string still hits none of these).
+// pgtype.Timestamptz.Scan recognize: a bare date, a "T"-separated or
+// space-separated timestamp with no UTC offset, no seconds, or a
+// colon-less/short numeric offset (e.g. "+0000", "+00", "-03" — the default
+// ISO-8601 basic output of Java's SimpleDateFormat, many .NET serializers,
+// and a lot of third-party webhook payloads; this feature's own webhook
+// ingestion path, internal/server/webhook_handler.go, runs values through
+// this same validator, so an unsupported shape here breaks ingestion for a
+// sender the operator doesn't control, not just a direct API caller).
+// Pre-release review found the first gap (offset-less) in round 3 and the
+// second (colon-less/short offset, no-seconds) in round 5 — both regressed
+// from "accepted" (passed raw to Postgres) to a 400 once Go-side validation
+// was added. Named zone abbreviations ("UTC", "America/Sao_Paulo") and
+// relative values ("now", "epoch", "infinity") remain unsupported; a
+// genuinely malformed string still hits none of these layouts.
 var timestamptzOffsetlessLayouts = []string{
 	"2006-01-02",
+	"2006-01-02 15:04",
 	"2006-01-02 15:04:05",
 	"2006-01-02 15:04:05.999999999",
+	"2006-01-02 15:04:05Z0700",
+	"2006-01-02 15:04:05.999999999Z0700",
+	"2006-01-02 15:04:05Z07",
+	"2006-01-02 15:04:05.999999999Z07",
+	"2006-01-02T15:04",
 	"2006-01-02T15:04:05",
 	"2006-01-02T15:04:05.999999999",
+	"2006-01-02T15:04:05Z0700",
+	"2006-01-02T15:04:05.999999999Z0700",
+	"2006-01-02T15:04:05Z07",
+	"2006-01-02T15:04:05.999999999Z07",
 }
 
 // NormalizeTimestamptz handles a timestamptz column's incoming value before
@@ -244,15 +263,19 @@ func NormalizeTimestamptz(col registry.Column, val any) (any, error) {
 	if s == "" && !col.Required {
 		return nil, nil
 	}
-	if _, err := time.Parse(time.RFC3339Nano, s); err == nil {
+	// Trimmed only for the parse check below — val (the original string,
+	// whitespace included) is what's returned and sent to Postgres, which
+	// tolerates surrounding whitespace in a timestamptz literal itself.
+	trimmed := strings.TrimSpace(s)
+	if _, err := time.Parse(time.RFC3339Nano, trimmed); err == nil {
 		return val, nil
 	}
 	var tstz pgtype.Timestamptz
-	if err := tstz.Scan(s); err == nil {
+	if err := tstz.Scan(trimmed); err == nil {
 		return val, nil
 	}
 	for _, layout := range timestamptzOffsetlessLayouts {
-		if _, err := time.Parse(layout, s); err == nil {
+		if _, err := time.Parse(layout, trimmed); err == nil {
 			return val, nil
 		}
 	}

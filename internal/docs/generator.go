@@ -214,7 +214,7 @@ func generate(apps []*registry.App) *Spec {
 						"204": {Description: "No Content (on_conflict:\"ignore\" no-opped with no conflict_columns to fetch the existing row by)"},
 						"400": {Description: "Bad Request"},
 						"401": {Description: "Unauthorized"},
-						"409": {Description: "Conflict (unique constraint violated; on_conflict omitted or \"error\")"},
+						"409": {Description: "Conflict: a unique constraint was violated (on_conflict omitted or \"error\"), or the on_conflict target row belongs to another tenant, is soft-deleted, or is denied by a native row policy (on_conflict \"ignore\"/\"update\")"},
 					},
 				},
 			}

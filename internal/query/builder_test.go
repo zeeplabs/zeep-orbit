@@ -463,6 +463,37 @@ func TestBuildInsert_OffsetlessTimestampFormsAccepted(t *testing.T) {
 	}
 }
 
+// TestBuildInsert_ColonlessOffsetTimestampFormsAccepted proves formats using
+// a colon-less or short numeric UTC offset — the default ISO-8601 basic
+// output of Java's SimpleDateFormat, many .NET serializers, and a lot of
+// third-party webhook payloads — are accepted, along with no-seconds and
+// surrounding-whitespace shapes. Round 5 of pre-release review found these
+// still 400'd after round 3 fixed only the offset-less gap: this feature's
+// own webhook ingestion path runs values through this same validator, so an
+// unsupported shape here breaks ingestion for a sender the operator can't
+// fix, not just a direct API caller.
+func TestBuildInsert_ColonlessOffsetTimestampFormsAccepted(t *testing.T) {
+	tbl := timestamptzTable()
+	cases := []string{
+		"2026-01-01T00:00:00+0000",
+		"2026-01-01T00:00:00.000+0000",
+		"2026-01-01T00:00:00+00",
+		"2026-01-01T00:00:00.000+00",
+		"2026-01-01T00:00:00-03",
+		"2026-01-01 00:00:00-0300",
+		"2026-01-01 00:00",
+		"2026-01-01T00:00",
+		"2026-01-01T00:00:00Z ",
+		" 2026-01-01T00:00:00Z",
+	}
+	for _, val := range cases {
+		body := map[string]any{"label": "x", "opened_at": val}
+		if _, err := BuildInsert("app_events", "events", tbl, body, ""); err != nil {
+			t.Errorf("valor %q deveria ser aceito (Postgres aceita raw), obtido erro: %v", val, err)
+		}
+	}
+}
+
 // conflictTable is a fixture with a unique-ish column for ON CONFLICT tests.
 func conflictTable() *registry.Table {
 	return &registry.Table{

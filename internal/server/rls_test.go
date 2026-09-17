@@ -481,6 +481,101 @@ func TestHandlerCreateOnConflictUpdateOwnerAndSoftDeleteComposition(t *testing.T
 	})
 }
 
+// TestHandlerCreateOnConflictIgnoreOwnerAndSoftDeleteComposition is the
+// "ignore" counterpart to the "update" composition test above — round 5 of
+// pre-release review noted the CHANGELOG claims consistency between
+// on_conflict:"ignore" and on_conflict:"update" across owner-scoping and
+// soft-delete, but only "update" had a test combining both conditions. The
+// behavior is correct by construction (fetchRowByColumns applies
+// filterOwner AND deleted_at IS NULL together, internal/server/handler.go),
+// this pins it down.
+func TestHandlerCreateOnConflictIgnoreOwnerAndSoftDeleteComposition(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	orig := testReg.SystemConfig()
+	t.Cleanup(func() { testReg.SetSystemConfig(orig) })
+	cfg := orig
+	cfg.SoftDeleteEnabled = true
+	testReg.SetSystemConfig(cfg)
+
+	h := NewHandler(testPool, testReg)
+	router := buildRLSRouter(h)
+	basePath := "/" + rlsAppName + "/notes"
+
+	ownerID := insertRLSUser(t, "ignore-composition-owner@test.com")
+	otherID := insertRLSUser(t, "ignore-composition-other@test.com")
+	ownerJWT, err := auth.IssueJWT([]byte(rlsSecret), ownerID, "ignore-composition-owner@test.com", rlsAppName, "member")
+	if err != nil {
+		t.Fatalf("IssueJWT owner: %v", err)
+	}
+	otherJWT, err := auth.IssueJWT([]byte(rlsSecret), otherID, "ignore-composition-other@test.com", rlsAppName, "member")
+	if err != nil {
+		t.Fatalf("IssueJWT other: %v", err)
+	}
+
+	t.Run("cross-tenant collision still 409s with soft delete on", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, basePath+"/",
+			jsonBody(map[string]any{"title": "owner's row", "slug": "ignore-composition-cross-tenant-slug"}))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+ownerJWT)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("seed: esperado 201, obtido %d: %s", rec.Code, rec.Body.String())
+		}
+
+		attackReq := httptest.NewRequest(http.MethodPost, basePath+"/", jsonBody(map[string]any{
+			"title": "attacker", "slug": "ignore-composition-cross-tenant-slug",
+			"on_conflict": "ignore", "conflict_columns": []string{"slug"},
+		}))
+		attackReq.Header.Set("Content-Type", "application/json")
+		attackReq.Header.Set("Authorization", "Bearer "+otherJWT)
+		attackRec := httptest.NewRecorder()
+		router.ServeHTTP(attackRec, attackReq)
+		if attackRec.Code != http.StatusConflict {
+			t.Fatalf("esperado 409 (owner guard deveria bloquear mesmo com soft delete ligado), obtido %d: %s", attackRec.Code, attackRec.Body.String())
+		}
+	})
+
+	t.Run("own soft-deleted row still 409s with owner guard satisfied", func(t *testing.T) {
+		createReq := httptest.NewRequest(http.MethodPost, basePath+"/",
+			jsonBody(map[string]any{"title": "to be soft-deleted", "slug": "ignore-composition-soft-delete-slug"}))
+		createReq.Header.Set("Content-Type", "application/json")
+		createReq.Header.Set("Authorization", "Bearer "+ownerJWT)
+		createRec := httptest.NewRecorder()
+		router.ServeHTTP(createRec, createReq)
+		if createRec.Code != http.StatusCreated {
+			t.Fatalf("seed: esperado 201, obtido %d: %s", createRec.Code, createRec.Body.String())
+		}
+		var created map[string]any
+		if err := json.NewDecoder(createRec.Body).Decode(&created); err != nil {
+			t.Fatalf("decode falhou: %v", err)
+		}
+
+		deleteReq := httptest.NewRequest(http.MethodDelete, basePath+"/"+created["id"].(string)+"/", nil)
+		deleteReq.Header.Set("Authorization", "Bearer "+ownerJWT)
+		deleteRec := httptest.NewRecorder()
+		router.ServeHTTP(deleteRec, deleteReq)
+		if deleteRec.Code != http.StatusNoContent {
+			t.Fatalf("soft-delete: esperado 204, obtido %d: %s", deleteRec.Code, deleteRec.Body.String())
+		}
+
+		retryReq := httptest.NewRequest(http.MethodPost, basePath+"/", jsonBody(map[string]any{
+			"title": "resurrection attempt", "slug": "ignore-composition-soft-delete-slug",
+			"on_conflict": "ignore", "conflict_columns": []string{"slug"},
+		}))
+		retryReq.Header.Set("Content-Type", "application/json")
+		retryReq.Header.Set("Authorization", "Bearer "+ownerJWT)
+		retryRec := httptest.NewRecorder()
+		router.ServeHTTP(retryRec, retryReq)
+		if retryRec.Code != http.StatusConflict {
+			t.Fatalf("esperado 409 (soft-delete guard deveria bloquear mesmo owner batendo), obtido %d: %s", retryRec.Code, retryRec.Body.String())
+		}
+	})
+}
+
 // TestHandlerCreateOnConflictUpdatePolicyDenialReturns409 is the regression
 // test for the third pre-release review's rls:"policy" finding:
 // on_conflict:"update" colliding with a row a native Postgres UPDATE policy
