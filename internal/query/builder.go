@@ -219,9 +219,13 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 // Pre-release review found the first gap (offset-less) in round 3 and the
 // second (colon-less/short offset, no-seconds) in round 5 — both regressed
 // from "accepted" (passed raw to Postgres) to a 400 once Go-side validation
-// was added. Named zone abbreviations ("UTC", "America/Sao_Paulo") and
-// relative values ("now", "epoch", "infinity") remain unsupported; a
-// genuinely malformed string still hits none of these layouts.
+// was added. "infinity"/"-infinity" are accepted (pgtype.Timestamptz.Scan
+// parses them). Named zone abbreviations ("UTC", "America/Sao_Paulo") and
+// relative values ("now", "epoch", "today") are now rejected with 400 —
+// Postgres accepted these raw before this validator existed, so this is a
+// real, if narrow, behavior change for anyone relying on them (most likely
+// on the webhook-ingestion path above, where the operator can't fix the
+// sender). A genuinely malformed string still hits none of these layouts.
 var timestamptzOffsetlessLayouts = []string{
 	"2006-01-02",
 	"2006-01-02 15:04",
