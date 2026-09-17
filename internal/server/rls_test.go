@@ -11,6 +11,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/zeeplabs/zeep-orbit/internal/auth"
+	"github.com/zeeplabs/zeep-orbit/internal/config"
+	"github.com/zeeplabs/zeep-orbit/internal/registry"
 )
 
 // buildRLSRouter creates a chi.Router with real JWTMiddleware (injects AuthUser).
@@ -349,5 +351,129 @@ func TestHandlerCreateOnConflictUpdateDoesNotOverwriteOtherOwnersRow(t *testing.
 	}
 	if currentRow["title"] != "victim's private title" {
 		t.Fatalf("linha da vítima foi sobrescrita pelo attacker: title = %v", currentRow["title"])
+	}
+}
+
+// TestHandlerCreateOnConflictUpdatePolicyDenialReturns409 is the regression
+// test for the third pre-release review's rls:"policy" finding:
+// on_conflict:"update" colliding with a row a native Postgres UPDATE policy
+// denies raises Postgres 42501 (insufficient_privilege /
+// row_security_violation), which no branch classified — it fell through as
+// a raw 500 "failed to insert row", the exact class of unclassified
+// failure this feature was written to eliminate. on_conflict:"ignore"
+// already answered 409 on the identical input (its own conflict
+// rejection); "update" disagreeing was the bug.
+func TestHandlerCreateOnConflictUpdatePolicyDenialReturns409(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+	ctx := context.Background()
+
+	const schema = "rls_policy_conflict_test_app"
+	const secret = "rls-policy-conflict-jwt-secret"
+
+	setup := []string{
+		"DROP SCHEMA IF EXISTS " + schema + " CASCADE",
+		"CREATE SCHEMA " + schema,
+		`CREATE TABLE ` + schema + `."_auth_users" (
+			"id"            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			"email"         TEXT NOT NULL UNIQUE,
+			"password_hash" TEXT NOT NULL
+		)`,
+		`CREATE TABLE ` + schema + `.items (
+			id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			title      TEXT NOT NULL,
+			slug       TEXT UNIQUE,
+			owner_id   UUID NOT NULL REFERENCES ` + schema + `."_auth_users"("id"),
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`GRANT USAGE ON SCHEMA ` + schema + ` TO zeep_app_enduser`,
+		`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ` + schema + ` TO zeep_app_enduser`,
+		`ALTER TABLE ` + schema + `.items ENABLE ROW LEVEL SECURITY`,
+		`CREATE POLICY select_all ON ` + schema + `.items FOR SELECT TO zeep_app_enduser USING (true)`,
+		`CREATE POLICY insert_any ON ` + schema + `.items FOR INSERT TO zeep_app_enduser WITH CHECK (true)`,
+		// Only the owning user can UPDATE their own row — this is what turns
+		// an on_conflict:"update" collision on another user's row into a
+		// Postgres-level denial (42501) instead of a normal row update.
+		`CREATE POLICY update_own ON ` + schema + `.items FOR UPDATE TO zeep_app_enduser
+			USING (owner_id = current_setting('app.jwt_sub', true)::UUID)`,
+	}
+	for _, sql := range setup {
+		if _, err := testPool.Exec(ctx, sql); err != nil {
+			t.Fatalf("setup: %v", err)
+		}
+	}
+	t.Cleanup(func() {
+		_, _ = testPool.Exec(context.Background(), "DROP SCHEMA IF EXISTS "+schema+" CASCADE")
+	})
+
+	testReg.Register(&registry.App{
+		Config: config.AppConfig{
+			Name: schema,
+			Auth: config.AuthConfig{JWTSecret: secret, Providers: config.AuthProviders{Email: true}},
+		},
+		SchemaName: schema,
+		Tables: map[string]*registry.Table{
+			"items": {
+				Name: "items",
+				RLS:  "policy",
+				Columns: []registry.Column{
+					{Name: "title", Type: "text", Required: true},
+					{Name: "slug", Type: "text", Required: false, Unique: true},
+				},
+			},
+		},
+	})
+	t.Cleanup(func() { testReg.Unregister(schema) })
+
+	var victimID, attackerID string
+	if err := testPool.QueryRow(ctx,
+		`INSERT INTO `+schema+`."_auth_users" (email, password_hash) VALUES ('policy-victim@test.com', 'x') RETURNING id`,
+	).Scan(&victimID); err != nil {
+		t.Fatalf("insert victim: %v", err)
+	}
+	if err := testPool.QueryRow(ctx,
+		`INSERT INTO `+schema+`."_auth_users" (email, password_hash) VALUES ('policy-attacker@test.com', 'x') RETURNING id`,
+	).Scan(&attackerID); err != nil {
+		t.Fatalf("insert attacker: %v", err)
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildRLSRouter(h)
+	basePath := "/" + schema + "/items"
+
+	victimJWT, err := auth.IssueJWT([]byte(secret), victimID, "policy-victim@test.com", schema, "member")
+	if err != nil {
+		t.Fatalf("IssueJWT victim: %v", err)
+	}
+	attackerJWT, err := auth.IssueJWT([]byte(secret), attackerID, "policy-attacker@test.com", schema, "member")
+	if err != nil {
+		t.Fatalf("IssueJWT attacker: %v", err)
+	}
+
+	seedReq := httptest.NewRequest(http.MethodPost, basePath+"/",
+		jsonBody(map[string]any{"title": "victim's item", "slug": "policy-conflict-slug"}))
+	seedReq.Header.Set("Content-Type", "application/json")
+	seedReq.Header.Set("Authorization", "Bearer "+victimJWT)
+	seedRec := httptest.NewRecorder()
+	router.ServeHTTP(seedRec, seedReq)
+	if seedRec.Code != http.StatusCreated {
+		t.Fatalf("seed da vítima: esperado 201, obtido %d: %s", seedRec.Code, seedRec.Body.String())
+	}
+
+	attackReq := httptest.NewRequest(http.MethodPost, basePath+"/", jsonBody(map[string]any{
+		"title":            "attacker's attempted update",
+		"slug":             "policy-conflict-slug",
+		"on_conflict":      "update",
+		"conflict_columns": []string{"slug"},
+	}))
+	attackReq.Header.Set("Content-Type", "application/json")
+	attackReq.Header.Set("Authorization", "Bearer "+attackerJWT)
+	attackRec := httptest.NewRecorder()
+	router.ServeHTTP(attackRec, attackReq)
+
+	if attackRec.Code != http.StatusConflict {
+		t.Fatalf("esperado 409 (colisão negada pela policy de UPDATE), obtido %d: %s", attackRec.Code, attackRec.Body.String())
 	}
 }

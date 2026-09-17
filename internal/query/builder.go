@@ -281,6 +281,15 @@ type InsertOptions struct {
 	// via RETURNING) another tenant's row on an "owner"/"enabled" table,
 	// which has no native Postgres policy backing it.
 	ConflictOwnerFilter string
+	// ConflictExcludeSoftDeleted adds "AND deleted_at IS NULL" to the same
+	// WHERE guard when OnConflict is "update" — third pre-release review
+	// finding: without it, an upsert colliding with the caller's own
+	// soft-deleted row silently resurrected it as a live update and
+	// answered 200, while on_conflict:"ignore" already 409s on the same
+	// situation via fetchRowByColumns' deleted_at filter. This makes
+	// "update" consistent with "ignore" instead of disagreeing on
+	// identical input.
+	ConflictExcludeSoftDeleted bool
 }
 
 // BuildInsert builds an INSERT with no ON CONFLICT handling (OnConflict
@@ -391,9 +400,16 @@ func BuildInsertWithOptions(schemaName, tableName string, table *registry.Table,
 		}
 		setClauses = append(setClauses, "updated_at = now()")
 		sql += fmt.Sprintf(" ON CONFLICT (%s) DO UPDATE SET %s", strings.Join(opts.ConflictColumns, ", "), strings.Join(setClauses, ", "))
+		var whereGuards []string
 		if opts.ConflictOwnerFilter != "" {
 			args = append(args, opts.ConflictOwnerFilter)
-			sql += fmt.Sprintf(" WHERE %s.owner_id = $%d::uuid", tableName, len(args))
+			whereGuards = append(whereGuards, fmt.Sprintf("%s.owner_id = $%d::uuid", tableName, len(args)))
+		}
+		if opts.ConflictExcludeSoftDeleted {
+			whereGuards = append(whereGuards, fmt.Sprintf("%s.deleted_at IS NULL", tableName))
+		}
+		if len(whereGuards) > 0 {
+			sql += " WHERE " + strings.Join(whereGuards, " AND ")
 		}
 	}
 

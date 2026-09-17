@@ -62,6 +62,7 @@ func New(reg *registry.Registry, pool *db.Pool, port int) (*Server, error) {
 	}
 
 	h := NewHandler(pool, reg)
+	h.SetLogger(logger)
 	dashH := dashboard.NewHandler(pool, reg, logger)
 	githubConfigH := dashboard.NewGitHubConfigHandler(pool)
 	githubTemplatesH := dashboard.NewGitHubTemplatesHandler(pool)

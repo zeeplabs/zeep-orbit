@@ -16,17 +16,27 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 	"github.com/zeeplabs/zeep-orbit/internal/query"
 	"github.com/zeeplabs/zeep-orbit/internal/registry"
+	"go.uber.org/zap"
 )
 
 // Handler holds dependencies for CRUD HTTP handlers.
 type Handler struct {
-	pool *db.Pool
-	reg  *registry.Registry
+	pool   *db.Pool
+	reg    *registry.Registry
+	logger *zap.Logger
 }
 
-// NewHandler creates a Handler with injected pool and registry.
+// NewHandler creates a Handler with injected pool and registry. Defaults to
+// a no-op logger — call SetLogger to wire the real one (server.go does this
+// for the production router; tests and other call sites that don't care
+// about log output are unaffected).
 func NewHandler(pool *db.Pool, reg *registry.Registry) *Handler {
-	return &Handler{pool: pool, reg: reg}
+	return &Handler{pool: pool, reg: reg, logger: zap.NewNop()}
+}
+
+// SetLogger wires a real logger in place of the no-op default.
+func (h *Handler) SetLogger(logger *zap.Logger) {
+	h.logger = logger
 }
 
 // resolveOwner returns the owner_id value to write/filter with. It reports
@@ -114,7 +124,13 @@ func uniqueViolationMessage(pgErr *pgconn.PgError) string {
 // uniques, not the composite ones this feature was written for — so the
 // caller must supply the target explicitly rather than have it inferred.
 func parseOnConflict(body map[string]any, table *registry.Table) (onConflict string, conflictColumns []string, err error) {
-	onConflict, _ = body["on_conflict"].(string)
+	if raw, present := body["on_conflict"]; present {
+		s, ok := raw.(string)
+		if !ok {
+			return "", nil, fmt.Errorf("on_conflict must be a string")
+		}
+		onConflict = s
+	}
 	delete(body, "on_conflict")
 
 	if raw, present := body["conflict_columns"]; present {
@@ -278,9 +294,10 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q, err := query.BuildInsertWithOptions(app.SchemaName, tableName, table, body, ownerID, query.InsertOptions{
-		OnConflict:          onConflict,
-		ConflictColumns:     conflictColumns,
-		ConflictOwnerFilter: filterOwner(ownerID, table),
+		OnConflict:                 onConflict,
+		ConflictColumns:            conflictColumns,
+		ConflictOwnerFilter:        filterOwner(ownerID, table),
+		ConflictExcludeSoftDeleted: h.reg.SystemConfig().SoftDeleteEnabled,
 	})
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -322,6 +339,8 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusServiceUnavailable, "query exceeded statement timeout")
 				return
 			}
+			h.logger.Error("failed to fetch existing row after on_conflict:\"ignore\"",
+				zap.String("app", app.Config.Name), zap.String("table", tableName), zap.Error(err))
 			writeError(w, http.StatusInternalServerError, "failed to fetch existing row")
 			return
 		}
@@ -329,7 +348,9 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		// UPDATE on owner-scoped tables (query.InsertOptions.ConflictOwnerFilter)
 		// — a conflict belonging to another tenant is neither updated nor
 		// inserted, so RETURNING produces zero rows here instead of leaking or
-		// overwriting a row the caller doesn't own.
+		// overwriting a row the caller doesn't own. The same zero-row result
+		// also covers ConflictExcludeSoftDeleted (colliding with the caller's
+		// own soft-deleted row) — both report the same 409.
 		if onConflict == "update" && errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, http.StatusConflict, "row already exists")
 			return
@@ -347,10 +368,22 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "conflict_columns does not match any unique or exclusion constraint on this table")
 			return
 		}
+		// 42501 (insufficient_privilege) is Postgres's row_security_violation
+		// for a "policy"-RLS table: on_conflict:"update" colliding with a row
+		// the caller's native Postgres policy denies. on_conflict:"ignore"
+		// already 409s on the identical case (its own conflict rejection),
+		// so "update" 500ing here — the exact class of unclassified failure
+		// this feature was written to eliminate — was the inconsistency.
+		if errors.As(err, &pgErr) && pgErr.Code == "42501" {
+			writeError(w, http.StatusConflict, "row already exists")
+			return
+		}
 		if db.IsStatementTimeout(err) {
 			writeError(w, http.StatusServiceUnavailable, "query exceeded statement timeout")
 			return
 		}
+		h.logger.Error("failed to insert row",
+			zap.String("app", app.Config.Name), zap.String("table", tableName), zap.Error(err))
 		writeError(w, http.StatusInternalServerError, "failed to insert row")
 		return
 	}

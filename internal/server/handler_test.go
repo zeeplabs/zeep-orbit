@@ -87,7 +87,13 @@ func TestMain(m *testing.M) {
 			closed_at   TIMESTAMPTZ,
 			external_id TEXT UNIQUE,
 			created_at  TIMESTAMPTZ DEFAULT now(),
-			updated_at  TIMESTAMPTZ DEFAULT now()
+			updated_at  TIMESTAMPTZ DEFAULT now(),
+			-- deleted_at exists only for
+			-- TestHandlerCreateOnConflictUpdateCollidingWithSoftDeletedRowReturns409
+			-- (soft delete is a system-wide toggle, HandleDelete's UPDATE SET
+			-- deleted_at = now() needs the column to exist regardless of
+			-- whether any other insert_diag test enables it).
+			deleted_at  TIMESTAMPTZ
 		)`,
 		`GRANT USAGE ON SCHEMA ` + testSchema + ` TO zeep_app_enduser`,
 		`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ` + testSchema + ` TO zeep_app_enduser`,
@@ -1323,6 +1329,97 @@ func TestHandlerCreateOnConflictUpdateFreshRowReturns201(t *testing.T) {
 	}
 	if _, present := row["zeep_was_insert"]; present {
 		t.Fatalf("zeep_was_insert vazou na resposta: %v", row)
+	}
+}
+
+// TestHandlerCreateOnConflictUpdateCollidingWithSoftDeletedRowReturns409 is
+// the regression test for the third pre-release review's soft-delete
+// finding: on_conflict:"update" colliding with the caller's own
+// soft-deleted row previously answered 200 and silently resurrected it
+// (updated it live, but deleted_at stayed set, so it never showed up again
+// in a plain list/get) — disagreeing with on_conflict:"ignore", which
+// already 409s on the identical situation via fetchRowByColumns' deleted_at
+// filter. query.InsertOptions.ConflictExcludeSoftDeleted now makes "update"
+// consistent with "ignore".
+func TestHandlerCreateOnConflictUpdateCollidingWithSoftDeletedRowReturns409(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	orig := testReg.SystemConfig()
+	t.Cleanup(func() { testReg.SetSystemConfig(orig) })
+	cfg := orig
+	cfg.SoftDeleteEnabled = true
+	testReg.SetSystemConfig(cfg)
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	createBody := map[string]any{
+		"label": "will be soft-deleted", "opened_at": "2026-01-01T00:00:00Z",
+		"external_id": "soft-deleted-update-conflict-id",
+	}
+	createReq := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(createBody))
+	createReq.Header.Set("Content-Type", "application/json")
+	createRec := httptest.NewRecorder()
+	router.ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("setup: esperado 201, obtido %d: %s", createRec.Code, createRec.Body.String())
+	}
+	var created map[string]any
+	if err := json.NewDecoder(createRec.Body).Decode(&created); err != nil {
+		t.Fatalf("decode falhou: %v", err)
+	}
+
+	deleteReq := httptest.NewRequest(http.MethodDelete, "/insert_diag/"+created["id"].(string), nil)
+	deleteRec := httptest.NewRecorder()
+	router.ServeHTTP(deleteRec, deleteReq)
+	if deleteRec.Code != http.StatusNoContent {
+		t.Fatalf("setup: esperado 204 no soft-delete, obtido %d: %s", deleteRec.Code, deleteRec.Body.String())
+	}
+
+	upsertBody := map[string]any{
+		"label": "resurrection attempt", "opened_at": "2026-01-01T00:00:00Z",
+		"external_id":      "soft-deleted-update-conflict-id",
+		"on_conflict":      "update",
+		"conflict_columns": []string{"external_id"},
+	}
+	upsertReq := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(upsertBody))
+	upsertReq.Header.Set("Content-Type", "application/json")
+	upsertRec := httptest.NewRecorder()
+	router.ServeHTTP(upsertRec, upsertReq)
+
+	if upsertRec.Code != http.StatusConflict {
+		t.Fatalf("esperado 409 (colisão com a própria linha soft-deleted, não deveria ressuscitar silenciosamente), obtido %d: %s", upsertRec.Code, upsertRec.Body.String())
+	}
+}
+
+// TestHandlerCreateOnConflictNonStringValueReturns400 proves a non-string
+// on_conflict (number, bool, object) 400s instead of being silently dropped
+// by the type assertion and treated as "" (today's default: plain error on
+// conflict) — a caller that sent the wrong type deserves a 400 naming the
+// mistake, not a request that quietly ran with different semantics than
+// intended.
+func TestHandlerCreateOnConflictNonStringValueReturns400(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{
+		"label": "x", "opened_at": "2026-01-01T00:00:00Z",
+		"on_conflict": 123,
+	}
+	req := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("esperado 400 para on_conflict não-string, obtido %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
