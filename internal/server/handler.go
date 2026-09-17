@@ -156,6 +156,14 @@ func parseOnConflict(body map[string]any, table *registry.Table) (onConflict str
 			if _, ok := known[c]; !ok {
 				return "", nil, fmt.Errorf("unknown column in conflict_columns: %q", c)
 			}
+			// A conflict_columns value that's absent from the body would
+			// build "col = NULL" in fetchRowByColumns' WHERE clause (an
+			// always-false match, since "=" with NULL is never true) —
+			// that silently misreports a genuine caller mistake as 409
+			// "row already exists" instead of naming the real problem.
+			if _, present := body[c]; !present {
+				return "", nil, fmt.Errorf("conflict_columns column %q must be present in the request body", c)
+			}
 		}
 	}
 
@@ -270,8 +278,9 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q, err := query.BuildInsertWithOptions(app.SchemaName, tableName, table, body, ownerID, query.InsertOptions{
-		OnConflict:      onConflict,
-		ConflictColumns: conflictColumns,
+		OnConflict:          onConflict,
+		ConflictColumns:     conflictColumns,
+		ConflictOwnerFilter: filterOwner(ownerID, table),
 	})
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -309,7 +318,20 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusConflict, "row already exists")
 				return
 			}
+			if db.IsStatementTimeout(err) {
+				writeError(w, http.StatusServiceUnavailable, "query exceeded statement timeout")
+				return
+			}
 			writeError(w, http.StatusInternalServerError, "failed to fetch existing row")
+			return
+		}
+		// on_conflict:"update" adds a WHERE owner_id = $n guard to the DO
+		// UPDATE on owner-scoped tables (query.InsertOptions.ConflictOwnerFilter)
+		// — a conflict belonging to another tenant is neither updated nor
+		// inserted, so RETURNING produces zero rows here instead of leaking or
+		// overwriting a row the caller doesn't own.
+		if onConflict == "update" && errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusConflict, "row already exists")
 			return
 		}
 		var pgErr *pgconn.PgError

@@ -204,21 +204,38 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 	}, nil
 }
 
+// timestamptzOffsetlessLayouts covers timestamp shapes Postgres itself
+// accepts (interpreted in the session's TimeZone, same as it always was —
+// this validation never rewrites the value, only checks it parses in some
+// form Postgres would also accept) but that neither time.RFC3339Nano nor
+// pgtype.Timestamptz.Scan recognize: a bare date, or a "T"-separated or
+// space-separated timestamp with no UTC offset. Pre-release review found
+// these regressed from "accepted" (passed raw to Postgres) to a 400 once
+// Go-side validation was added — this closes that gap without weakening the
+// validation itself (a genuinely malformed string still hits none of these).
+var timestamptzOffsetlessLayouts = []string{
+	"2006-01-02",
+	"2006-01-02 15:04:05",
+	"2006-01-02 15:04:05.999999999",
+	"2006-01-02T15:04:05",
+	"2006-01-02T15:04:05.999999999",
+}
+
 // NormalizeTimestamptz handles a timestamptz column's incoming value before
 // it reaches Postgres. An empty string on a nullable column becomes NULL
 // (integrators commonly send "" instead of omitting an optional date/time
 // field) — a "" on a required column is left as-is and falls through to the
 // validation below, which rejects it. Any other string is validated as
-// either RFC3339 (the common case for webhook/API payloads) or Postgres's
-// own text format, via pgtype's parser: Postgres itself doesn't attach
-// column context to a cast failure on a typed placeholder
-// ($1::timestamptz), so this is the only reliable way to name the
-// offending column in a 400 instead of leaking a raw driver error as a 500
-// (see SPEC_DEVIATION note in internal/server/handler.go). Exported so
-// callers building a query outside BuildInsert/BuildUpdate (e.g.
-// server.fetchRowByColumns, matching a conflict_columns value against an
-// existing row) apply the exact same rules instead of sending a raw "" or
-// unvalidated string straight to Postgres.
+// RFC3339 (the common case for webhook/API payloads), Postgres's own text
+// format via pgtype's parser, or one of timestamptzOffsetlessLayouts:
+// Postgres itself doesn't attach column context to a cast failure on a
+// typed placeholder ($1::timestamptz), so this is the only reliable way to
+// name the offending column in a 400 instead of leaking a raw driver error
+// as a 500 (see SPEC_DEVIATION note in internal/server/handler.go).
+// Exported so callers building a query outside BuildInsert/BuildUpdate
+// (e.g. server.fetchRowByColumns, matching a conflict_columns value against
+// an existing row) apply the exact same rules instead of sending a raw ""
+// or unvalidated string straight to Postgres.
 func NormalizeTimestamptz(col registry.Column, val any) (any, error) {
 	s, ok := val.(string)
 	if !ok {
@@ -231,10 +248,15 @@ func NormalizeTimestamptz(col registry.Column, val any) (any, error) {
 		return val, nil
 	}
 	var tstz pgtype.Timestamptz
-	if err := tstz.Scan(s); err != nil {
-		return nil, fmt.Errorf("query: invalid value for column %q: not a valid timestamp", col.Name)
+	if err := tstz.Scan(s); err == nil {
+		return val, nil
 	}
-	return val, nil
+	for _, layout := range timestamptzOffsetlessLayouts {
+		if _, err := time.Parse(layout, s); err == nil {
+			return val, nil
+		}
+	}
+	return nil, fmt.Errorf("query: invalid value for column %q: not a valid timestamp", col.Name)
 }
 
 // InsertOptions controls ON CONFLICT behavior for BuildInsertWithOptions.
@@ -249,6 +271,16 @@ type InsertOptions struct {
 	// The registry only models single-column uniques, so this is never
 	// inferred from the schema — validating it is the caller's job.
 	ConflictColumns []string
+	// ConflictOwnerFilter must be the caller's filterOwner(ownerID, table)
+	// result (empty for "policy" RLS mode, where native Postgres policies
+	// are the only enforcement) — never the raw ownerID used to populate
+	// the owner_id column above. When non-empty and OnConflict is "update",
+	// it's added as a WHERE guard on the DO UPDATE: without it, excluding
+	// owner_id from the SET clause only stops an upsert from reassigning
+	// ownership, it doesn't stop the upsert from overwriting (and returning
+	// via RETURNING) another tenant's row on an "owner"/"enabled" table,
+	// which has no native Postgres policy backing it.
+	ConflictOwnerFilter string
 }
 
 // BuildInsert builds an INSERT with no ON CONFLICT handling (OnConflict
@@ -359,6 +391,10 @@ func BuildInsertWithOptions(schemaName, tableName string, table *registry.Table,
 		}
 		setClauses = append(setClauses, "updated_at = now()")
 		sql += fmt.Sprintf(" ON CONFLICT (%s) DO UPDATE SET %s", strings.Join(opts.ConflictColumns, ", "), strings.Join(setClauses, ", "))
+		if opts.ConflictOwnerFilter != "" {
+			args = append(args, opts.ConflictOwnerFilter)
+			sql += fmt.Sprintf(" WHERE %s.owner_id = $%d::uuid", tableName, len(args))
+		}
 	}
 
 	// "update" upserts can also hit no real conflict (a fresh row) — xmax = 0

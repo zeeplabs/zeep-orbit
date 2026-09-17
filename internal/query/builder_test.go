@@ -441,6 +441,28 @@ func TestBuildInsert_ValidTimestampPassesThrough(t *testing.T) {
 	}
 }
 
+// TestBuildInsert_OffsetlessTimestampFormsAccepted proves formats Postgres
+// itself always accepted raw (date-only, and space/"T"-separated timestamps
+// with no explicit UTC offset — interpreted in the session's TimeZone) still
+// pass once Go-side validation was added. Pre-release review found these had
+// silently regressed from "accepted" to a 400: neither time.RFC3339Nano nor
+// pgtype.Timestamptz.Scan recognizes any of them, so without
+// timestamptzOffsetlessLayouts every one of these would previously reject.
+func TestBuildInsert_OffsetlessTimestampFormsAccepted(t *testing.T) {
+	tbl := timestamptzTable()
+	cases := []string{
+		"2026-01-01",
+		"2026-01-01 00:00:00",
+		"2026-01-01T00:00:00",
+	}
+	for _, val := range cases {
+		body := map[string]any{"label": "x", "opened_at": val}
+		if _, err := BuildInsert("app_events", "events", tbl, body, ""); err != nil {
+			t.Errorf("valor %q deveria ser aceito (Postgres aceita raw), obtido erro: %v", val, err)
+		}
+	}
+}
+
 // conflictTable is a fixture with a unique-ish column for ON CONFLICT tests.
 func conflictTable() *registry.Table {
 	return &registry.Table{
@@ -513,6 +535,47 @@ func TestBuildInsert_OnConflictUpdateExcludesOwnerID(t *testing.T) {
 	}
 	if !strings.Contains(q.SQL, "owner_id") {
 		t.Errorf("owner_id deveria continuar na lista de colunas do INSERT (só não no SET): %q", q.SQL)
+	}
+}
+
+// TestBuildInsert_OnConflictUpdateOwnerFilterAddsWhereGuard proves
+// ConflictOwnerFilter adds a WHERE owner_id = $n guard to the DO UPDATE —
+// second pre-release review finding: excluding owner_id from the SET clause
+// (proven above) only stops an upsert from reassigning ownership, it
+// doesn't stop the upsert from overwriting a row belonging to a different
+// owner. The guard is what actually closes that gap.
+func TestBuildInsert_OnConflictUpdateOwnerFilterAddsWhereGuard(t *testing.T) {
+	tbl := conflictTable()
+	body := map[string]any{"label": "x", "external_id": "ext-1"}
+	q, err := BuildInsertWithOptions("app_events", "events", tbl, body, "owner-uuid-123", InsertOptions{
+		OnConflict: "update", ConflictColumns: []string{"external_id"}, ConflictOwnerFilter: "owner-uuid-123",
+	})
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if !strings.Contains(q.SQL, "WHERE events.owner_id = $") {
+		t.Errorf("SQL deveria conter guarda WHERE por owner_id: %q", q.SQL)
+	}
+	if q.Args[len(q.Args)-1] != "owner-uuid-123" {
+		t.Errorf("último arg deveria ser o owner filter, obtido %v", q.Args[len(q.Args)-1])
+	}
+}
+
+// TestBuildInsert_OnConflictUpdateNoOwnerFilterNoWhereGuard proves the guard
+// is omitted entirely for "policy" RLS mode (ConflictOwnerFilter == "",
+// since filterOwner never auto-scopes that mode) — native Postgres policies
+// are the enforcement there, not an app-level WHERE.
+func TestBuildInsert_OnConflictUpdateNoOwnerFilterNoWhereGuard(t *testing.T) {
+	tbl := conflictTable()
+	body := map[string]any{"label": "x", "external_id": "ext-1"}
+	q, err := BuildInsertWithOptions("app_events", "events", tbl, body, "", InsertOptions{
+		OnConflict: "update", ConflictColumns: []string{"external_id"},
+	})
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if strings.Contains(q.SQL, "WHERE") {
+		t.Errorf("SQL não deveria conter guarda WHERE sem ConflictOwnerFilter: %q", q.SQL)
 	}
 }
 

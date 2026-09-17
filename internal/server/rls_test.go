@@ -271,3 +271,83 @@ func TestHandlerCreateOnConflictIgnoreDoesNotLeakOtherOwnersRow(t *testing.T) {
 		t.Fatalf("esperado 409 (colisão pertence a outro owner, não é 'sua' linha), obtido %d: %s", attackRec.Code, attackRec.Body.String())
 	}
 }
+
+// TestHandlerCreateOnConflictUpdateDoesNotOverwriteOtherOwnersRow is the
+// regression test for the second cross-tenant leak found in the second
+// pre-release review: excluding owner_id from the ON CONFLICT DO UPDATE SET
+// clause only stops an upsert from reassigning ownership — it doesn't stop
+// the upsert from overwriting (and RETURNING, disclosing) another tenant's
+// row. Same root cause as the "ignore" leak above (no native Postgres
+// policy backs "owner"/"enabled" RLS — the app-level filter is the only
+// enforcement), but on the "update" path instead of "ignore".
+func TestHandlerCreateOnConflictUpdateDoesNotOverwriteOtherOwnersRow(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildRLSRouter(h)
+	basePath := "/" + rlsAppName + "/notes"
+
+	victimID := insertRLSUser(t, "victim-update-conflict@test.com")
+	attackerID := insertRLSUser(t, "attacker-update-conflict@test.com")
+
+	victimJWT, err := auth.IssueJWT([]byte(rlsSecret), victimID, "victim-update-conflict@test.com", rlsAppName, "member")
+	if err != nil {
+		t.Fatalf("IssueJWT victim: %v", err)
+	}
+	attackerJWT, err := auth.IssueJWT([]byte(rlsSecret), attackerID, "attacker-update-conflict@test.com", rlsAppName, "member")
+	if err != nil {
+		t.Fatalf("IssueJWT attacker: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, basePath+"/",
+		jsonBody(map[string]any{"title": "victim's private title", "slug": "shared-slug-update-leak-test"}))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+victimJWT)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("seed da vítima: esperado 201, obtido %d: %s", rec.Code, rec.Body.String())
+	}
+	var victimRow map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&victimRow); err != nil {
+		t.Fatalf("decode falhou: %v", err)
+	}
+
+	attackReq := httptest.NewRequest(http.MethodPost, basePath+"/", jsonBody(map[string]any{
+		"title":            "OVERWRITTEN BY ATTACKER",
+		"slug":             "shared-slug-update-leak-test",
+		"on_conflict":      "update",
+		"conflict_columns": []string{"slug"},
+	}))
+	attackReq.Header.Set("Content-Type", "application/json")
+	attackReq.Header.Set("Authorization", "Bearer "+attackerJWT)
+	attackRec := httptest.NewRecorder()
+	router.ServeHTTP(attackRec, attackReq)
+
+	if attackRec.Code == http.StatusOK {
+		t.Fatalf("VAZAMENTO/SOBRESCRITA CROSS-TENANT: attacker conseguiu upsert na linha da vítima: %d: %s", attackRec.Code, attackRec.Body.String())
+	}
+	if attackRec.Code != http.StatusConflict {
+		t.Fatalf("esperado 409 (colisão pertence a outro owner, não é 'sua' linha), obtido %d: %s", attackRec.Code, attackRec.Body.String())
+	}
+
+	// The victim's row must be untouched — this is the part a plain 409
+	// check wouldn't catch: the WHERE guard on DO UPDATE must have actually
+	// stopped the write, not just made the response opaque.
+	getReq := httptest.NewRequest(http.MethodGet, basePath+"/"+victimRow["id"].(string)+"/", nil)
+	getReq.Header.Set("Authorization", "Bearer "+victimJWT)
+	getRec := httptest.NewRecorder()
+	router.ServeHTTP(getRec, getReq)
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("vítima deveria continuar vendo sua própria linha, obtido %d: %s", getRec.Code, getRec.Body.String())
+	}
+	var currentRow map[string]any
+	if err := json.NewDecoder(getRec.Body).Decode(&currentRow); err != nil {
+		t.Fatalf("decode falhou: %v", err)
+	}
+	if currentRow["title"] != "victim's private title" {
+		t.Fatalf("linha da vítima foi sobrescrita pelo attacker: title = %v", currentRow["title"])
+	}
+}

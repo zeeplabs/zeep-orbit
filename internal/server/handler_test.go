@@ -1046,6 +1046,56 @@ func TestHandlerCreateOnConflictDuplicateConflictColumn(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("esperado 400 para conflict_columns duplicada, obtido %d: %s", rec.Code, rec.Body.String())
 	}
+	var resp map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode falhou: %v", err)
+	}
+	// Asserts the specific "duplicate" message, not just 400 — a duplicate
+	// column also raises Postgres 42P10 (invalid_column_reference), which
+	// the handler's 42P10 branch also maps to 400. Without this assertion,
+	// the test would still pass with the dedupe check in parseOnConflict
+	// reverted, since 42P10 classification alone produces the same status
+	// code.
+	msg, _ := resp["error"].(string)
+	if !strings.Contains(msg, "duplicate column in conflict_columns") {
+		t.Fatalf("esperada mensagem de coluna duplicada, obtido %q", msg)
+	}
+}
+
+// TestHandlerCreateOnConflictColumnAbsentFromBody proves a conflict_columns
+// name that's a real, unique-backed column but wasn't included in the
+// request body 400s naming the problem, instead of silently building an
+// always-false "col = NULL" match in fetchRowByColumns and misreporting it
+// as 409 "row already exists".
+func TestHandlerCreateOnConflictColumnAbsentFromBody(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{
+		"label": "x", "opened_at": "2026-01-01T00:00:00Z",
+		"on_conflict": "ignore", "conflict_columns": []string{"external_id"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("esperado 400 para conflict_columns ausente do body, obtido %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode falhou: %v", err)
+	}
+	msg, _ := resp["error"].(string)
+	if !strings.Contains(msg, "external_id") {
+		t.Fatalf("esperada mensagem citando external_id, obtido %q", msg)
+	}
 }
 
 // TestHandlerCreateOnConflictColumnWithoutUniqueConstraint proves a
