@@ -266,6 +266,18 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: internal/dashboard/ui/e2e/responsive-nav.spec.ts:71 (e2e)
 - last seen: 2026-08-28T17:57:02Z
 
+### L-043 - When an upsert SET-clause excludes system fields (owner_id, id, created_at), add a unit test with a non-empty ownerID/populated system field so removing the exclusion actually fails a test - excluding-column logic needs a fixture where the excluded column is present to be discriminating.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `internal/query` · harmful: 0
+- features: insert-error-diagnostics
+- evidence: internal/query/builder.go:351 (internal/query)
+- last seen: 2026-09-16T22:44:03Z
+
+### L-044 - pgErr.ColumnName is empty for a cast failure on a typed placeholder (::timestamptz) - a Postgres-error-code branch cannot name the column reliably. Validate typed-column format Go-side before building the query when the AC requires naming the column in a 400.
+- signal: `spec_deviation` · recurrence: 1 feature(s) · scope: `internal/query` · harmful: 0
+- features: insert-error-diagnostics
+- evidence: internal/query/builder.go:normalizeTimestamptz; internal/server/handler.go:uniqueViolationMessage (internal/query)
+- last seen: 2026-09-16T22:44:09Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

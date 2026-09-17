@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 43,
+  "next_id": 45,
   "lessons": [
     {
       "id": "L-001",
@@ -760,6 +760,42 @@
       ],
       "created": "2026-08-28T17:57:02Z",
       "last_seen": "2026-08-28T17:57:02Z"
+    },
+    {
+      "id": "L-043",
+      "key": "surviving_mutant::when an upsert set clause excludes system fields owner id id created at add a unit test with a non empty ownerid populated system field so removing the exclusion actually fails a test excluding column logic needs a fixture where the excluded column is present to be discriminating",
+      "text": "When an upsert SET-clause excludes system fields (owner_id, id, created_at), add a unit test with a non-empty ownerID/populated system field so removing the exclusion actually fails a test - excluding-column logic needs a fixture where the excluded column is present to be discriminating.",
+      "signal": "surviving_mutant",
+      "scope": "internal/query",
+      "status": "candidate",
+      "features": [
+        "insert-error-diagnostics"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "internal/query/builder.go:351 (internal/query)"
+      ],
+      "created": "2026-09-16T22:44:03Z",
+      "last_seen": "2026-09-16T22:44:03Z"
+    },
+    {
+      "id": "L-044",
+      "key": "spec_deviation::pgerr columnname is empty for a cast failure on a typed placeholder timestamptz a postgres error code branch cannot name the column reliably validate typed column format go side before building the query when the ac requires naming the column in a 400",
+      "text": "pgErr.ColumnName is empty for a cast failure on a typed placeholder (::timestamptz) - a Postgres-error-code branch cannot name the column reliably. Validate typed-column format Go-side before building the query when the AC requires naming the column in a 400.",
+      "signal": "spec_deviation",
+      "scope": "internal/query",
+      "status": "candidate",
+      "features": [
+        "insert-error-diagnostics"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "internal/query/builder.go:normalizeTimestamptz; internal/server/handler.go:uniqueViolationMessage (internal/query)"
+      ],
+      "created": "2026-09-16T22:44:09Z",
+      "last_seen": "2026-09-16T22:44:09Z"
     }
   ]
 }
