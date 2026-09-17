@@ -128,7 +128,12 @@ func TestMain(m *testing.M) {
 			slug       TEXT UNIQUE,
 			owner_id   UUID NOT NULL REFERENCES ` + rlsSchema + `."_auth_users"("id"),
 			created_at TIMESTAMPTZ DEFAULT now(),
-			updated_at TIMESTAMPTZ DEFAULT now()
+			updated_at TIMESTAMPTZ DEFAULT now(),
+			-- deleted_at exists only for
+			-- TestHandlerCreateOnConflictUpdateOwnerAndSoftDeleteComposition
+			-- (fourth pre-release review: owner-scoping + soft-delete +
+			-- on_conflict:"update" all together, previously untested).
+			deleted_at TIMESTAMPTZ
 		)`,
 		`GRANT USAGE ON SCHEMA ` + rlsSchema + ` TO zeep_app_enduser`,
 		`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ` + rlsSchema + ` TO zeep_app_enduser`,

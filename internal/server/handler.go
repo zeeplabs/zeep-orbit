@@ -369,12 +369,18 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// 42501 (insufficient_privilege) is Postgres's row_security_violation
-		// for a "policy"-RLS table: on_conflict:"update" colliding with a row
-		// the caller's native Postgres policy denies. on_conflict:"ignore"
-		// already 409s on the identical case (its own conflict rejection),
-		// so "update" 500ing here — the exact class of unclassified failure
-		// this feature was written to eliminate — was the inconsistency.
-		if errors.As(err, &pgErr) && pgErr.Code == "42501" {
+		// for a "policy"-RLS table's ON CONFLICT DO UPDATE colliding with a
+		// row the caller's native Postgres UPDATE policy denies.
+		// on_conflict:"ignore" already 409s on the identical case (its own
+		// conflict rejection), so "update" 500ing here was the
+		// inconsistency this branch fixes. Gated to onConflict == "update"
+		// specifically: 42501 is also what Postgres raises for a plain
+		// INSERT rejected by a table's WITH CHECK policy — an unrelated,
+		// unconditional denial, not a conflict, where "row already exists"
+		// would be a factual lie (the row was never created). That case
+		// falls through to the generic 500 below instead, same as it
+		// always has (see TestWebhookActive_InsertRLSDeniedReturns500WriteErrorNoRawErrorLeaked).
+		if onConflict == "update" && errors.As(err, &pgErr) && pgErr.Code == "42501" {
 			writeError(w, http.StatusConflict, "row already exists")
 			return
 		}
