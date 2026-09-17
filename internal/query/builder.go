@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/zeeplabs/zeep-orbit/internal/registry"
 )
 
@@ -202,7 +204,129 @@ func BuildList(schemaName, tableName string, table *registry.Table, params map[s
 	}, nil
 }
 
+// timestamptzOffsetlessLayouts covers timestamp shapes Postgres itself
+// accepts (interpreted in the session's TimeZone, same as it always was —
+// this validation never rewrites the value, only checks it parses in some
+// form Postgres would also accept) but that neither time.RFC3339Nano nor
+// pgtype.Timestamptz.Scan recognize: a bare date, a "T"-separated or
+// space-separated timestamp with no UTC offset, no seconds, or a
+// colon-less/short numeric offset (e.g. "+0000", "+00", "-03" — the default
+// ISO-8601 basic output of Java's SimpleDateFormat, many .NET serializers,
+// and a lot of third-party webhook payloads; this feature's own webhook
+// ingestion path, internal/server/webhook_handler.go, runs values through
+// this same validator, so an unsupported shape here breaks ingestion for a
+// sender the operator doesn't control, not just a direct API caller).
+// Pre-release review found the first gap (offset-less) in round 3 and the
+// second (colon-less/short offset, no-seconds) in round 5 — both regressed
+// from "accepted" (passed raw to Postgres) to a 400 once Go-side validation
+// was added. "infinity"/"-infinity" are accepted (pgtype.Timestamptz.Scan
+// parses them). Named zone abbreviations ("UTC", "America/Sao_Paulo") and
+// relative values ("now", "epoch", "today") are now rejected with 400 —
+// Postgres accepted these raw before this validator existed, so this is a
+// real, if narrow, behavior change for anyone relying on them (most likely
+// on the webhook-ingestion path above, where the operator can't fix the
+// sender). A genuinely malformed string still hits none of these layouts.
+var timestamptzOffsetlessLayouts = []string{
+	"2006-01-02",
+	"2006-01-02 15:04",
+	"2006-01-02 15:04:05",
+	"2006-01-02 15:04:05.999999999",
+	"2006-01-02 15:04:05Z0700",
+	"2006-01-02 15:04:05.999999999Z0700",
+	"2006-01-02 15:04:05Z07",
+	"2006-01-02 15:04:05.999999999Z07",
+	"2006-01-02T15:04",
+	"2006-01-02T15:04:05",
+	"2006-01-02T15:04:05.999999999",
+	"2006-01-02T15:04:05Z0700",
+	"2006-01-02T15:04:05.999999999Z0700",
+	"2006-01-02T15:04:05Z07",
+	"2006-01-02T15:04:05.999999999Z07",
+}
+
+// NormalizeTimestamptz handles a timestamptz column's incoming value before
+// it reaches Postgres. An empty string on a nullable column becomes NULL
+// (integrators commonly send "" instead of omitting an optional date/time
+// field) — a "" on a required column is left as-is and falls through to the
+// validation below, which rejects it. Any other string is validated as
+// RFC3339 (the common case for webhook/API payloads), Postgres's own text
+// format via pgtype's parser, or one of timestamptzOffsetlessLayouts:
+// Postgres itself doesn't attach column context to a cast failure on a
+// typed placeholder ($1::timestamptz), so this is the only reliable way to
+// name the offending column in a 400 instead of leaking a raw driver error
+// as a 500 (see SPEC_DEVIATION note in internal/server/handler.go).
+// Exported so callers building a query outside BuildInsert/BuildUpdate
+// (e.g. server.fetchRowByColumns, matching a conflict_columns value against
+// an existing row) apply the exact same rules instead of sending a raw ""
+// or unvalidated string straight to Postgres.
+func NormalizeTimestamptz(col registry.Column, val any) (any, error) {
+	s, ok := val.(string)
+	if !ok {
+		return val, nil
+	}
+	if s == "" && !col.Required {
+		return nil, nil
+	}
+	// Trimmed only for the parse check below — val (the original string,
+	// whitespace included) is what's returned and sent to Postgres, which
+	// tolerates surrounding whitespace in a timestamptz literal itself.
+	trimmed := strings.TrimSpace(s)
+	if _, err := time.Parse(time.RFC3339Nano, trimmed); err == nil {
+		return val, nil
+	}
+	var tstz pgtype.Timestamptz
+	if err := tstz.Scan(trimmed); err == nil {
+		return val, nil
+	}
+	for _, layout := range timestamptzOffsetlessLayouts {
+		if _, err := time.Parse(layout, trimmed); err == nil {
+			return val, nil
+		}
+	}
+	return nil, fmt.Errorf("query: invalid value for column %q: not a valid timestamp", col.Name)
+}
+
+// InsertOptions controls ON CONFLICT behavior for BuildInsertWithOptions.
+// The zero value ("" OnConflict) is today's behavior: a conflict surfaces
+// as an unhandled unique_violation error.
+type InsertOptions struct {
+	// OnConflict is "", "error" (equivalent to ""), "ignore", or "update".
+	OnConflict string
+	// ConflictColumns is the caller-supplied conflict target. Required
+	// (non-empty) when OnConflict is "update"; optional for "ignore" (a
+	// bare ON CONFLICT DO NOTHING catches a violation on any constraint).
+	// The registry only models single-column uniques, so this is never
+	// inferred from the schema — validating it is the caller's job.
+	ConflictColumns []string
+	// ConflictOwnerFilter must be the caller's filterOwner(ownerID, table)
+	// result (empty for "policy" RLS mode, where native Postgres policies
+	// are the only enforcement) — never the raw ownerID used to populate
+	// the owner_id column above. When non-empty and OnConflict is "update",
+	// it's added as a WHERE guard on the DO UPDATE: without it, excluding
+	// owner_id from the SET clause only stops an upsert from reassigning
+	// ownership, it doesn't stop the upsert from overwriting (and returning
+	// via RETURNING) another tenant's row on an "owner"/"enabled" table,
+	// which has no native Postgres policy backing it.
+	ConflictOwnerFilter string
+	// ConflictExcludeSoftDeleted adds "AND deleted_at IS NULL" to the same
+	// WHERE guard when OnConflict is "update" — third pre-release review
+	// finding: without it, an upsert colliding with the caller's own
+	// soft-deleted row silently resurrected it as a live update and
+	// answered 200, while on_conflict:"ignore" already 409s on the same
+	// situation via fetchRowByColumns' deleted_at filter. This makes
+	// "update" consistent with "ignore" instead of disagreeing on
+	// identical input.
+	ConflictExcludeSoftDeleted bool
+}
+
+// BuildInsert builds an INSERT with no ON CONFLICT handling (OnConflict
+// "error" semantics) — a thin wrapper over BuildInsertWithOptions for
+// call sites that don't need upsert behavior.
 func BuildInsert(schemaName, tableName string, table *registry.Table, body map[string]any, ownerID string) (*WriteQuery, error) {
+	return BuildInsertWithOptions(schemaName, tableName, table, body, ownerID, InsertOptions{})
+}
+
+func BuildInsertWithOptions(schemaName, tableName string, table *registry.Table, body map[string]any, ownerID string, opts InsertOptions) (*WriteQuery, error) {
 	known := columnSet(table)
 	types := columnTypes(table)
 
@@ -238,6 +362,13 @@ func BuildInsert(schemaName, tableName string, table *registry.Table, body map[s
 		if !present {
 			continue
 		}
+		if types[col.Name] == "timestamptz" {
+			var err error
+			val, err = NormalizeTimestamptz(col, val)
+			if err != nil {
+				return nil, err
+			}
+		}
 		cols = append(cols, col.Name)
 		args = append(args, val)
 		placeholders = append(placeholders, fmt.Sprintf("$%d%s", len(args), PgCast(types[col.Name])))
@@ -254,13 +385,73 @@ func BuildInsert(schemaName, tableName string, table *registry.Table, body map[s
 	}
 
 	sql := fmt.Sprintf(
-		"INSERT INTO %s.%s (%s) VALUES (%s) RETURNING *",
+		"INSERT INTO %s.%s (%s) VALUES (%s)",
 		schemaName, tableName,
 		strings.Join(cols, ", "),
 		strings.Join(placeholders, ", "),
 	)
 
-	return &WriteQuery{SQL: sql, Args: args}, nil
+	// Column names interpolated below come only from `known` (the table's
+	// own schema) or from opts.ConflictColumns after being checked against
+	// it — never raw, unvalidated caller input — since this builds SQL by
+	// string concatenation.
+	switch opts.OnConflict {
+	case "ignore":
+		if len(opts.ConflictColumns) == 0 {
+			sql += " ON CONFLICT DO NOTHING"
+			break
+		}
+		for _, c := range opts.ConflictColumns {
+			if _, ok := known[c]; !ok {
+				return nil, fmt.Errorf("query: unknown column in conflict_columns: %q", c)
+			}
+		}
+		sql += fmt.Sprintf(" ON CONFLICT (%s) DO NOTHING", strings.Join(opts.ConflictColumns, ", "))
+	case "update":
+		if len(opts.ConflictColumns) == 0 {
+			return nil, fmt.Errorf("query: on_conflict \"update\" requires conflict_columns")
+		}
+		conflictSet := make(map[string]struct{}, len(opts.ConflictColumns))
+		for _, c := range opts.ConflictColumns {
+			if _, ok := known[c]; !ok {
+				return nil, fmt.Errorf("query: unknown column in conflict_columns: %q", c)
+			}
+			conflictSet[c] = struct{}{}
+		}
+		var setClauses []string
+		for _, c := range cols {
+			if _, isTarget := conflictSet[c]; isTarget || c == "owner_id" {
+				continue
+			}
+			setClauses = append(setClauses, fmt.Sprintf("%s = excluded.%s", c, c))
+		}
+		setClauses = append(setClauses, "updated_at = now()")
+		sql += fmt.Sprintf(" ON CONFLICT (%s) DO UPDATE SET %s", strings.Join(opts.ConflictColumns, ", "), strings.Join(setClauses, ", "))
+		var whereGuards []string
+		if opts.ConflictOwnerFilter != "" {
+			args = append(args, opts.ConflictOwnerFilter)
+			whereGuards = append(whereGuards, fmt.Sprintf("%s.owner_id = $%d::uuid", tableName, len(args)))
+		}
+		if opts.ConflictExcludeSoftDeleted {
+			whereGuards = append(whereGuards, fmt.Sprintf("%s.deleted_at IS NULL", tableName))
+		}
+		if len(whereGuards) > 0 {
+			sql += " WHERE " + strings.Join(whereGuards, " AND ")
+		}
+	}
+
+	// "update" upserts can also hit no real conflict (a fresh row) — xmax = 0
+	// is Postgres's own signal that RETURNING is reporting a row this
+	// statement inserted, not one it updated via the DO UPDATE branch. The
+	// handler uses this to answer 201 vs 200 correctly instead of always
+	// reporting 200 for on_conflict:"update", which would misreport a
+	// genuine creation as an update to any client keying off status code.
+	returning := " RETURNING *"
+	if opts.OnConflict == "update" {
+		returning = " RETURNING *, (xmax = 0) AS zeep_was_insert"
+	}
+
+	return &WriteQuery{SQL: sql + returning, Args: args}, nil
 }
 
 func BuildUpdate(schemaName, tableName string, table *registry.Table, id string, body map[string]any, ownerID string) (*WriteQuery, error) {
@@ -287,6 +478,13 @@ func BuildUpdate(schemaName, tableName string, table *registry.Table, id string,
 		val, present := body[col.Name]
 		if !present {
 			continue
+		}
+		if types[col.Name] == "timestamptz" {
+			var err error
+			val, err = NormalizeTimestamptz(col, val)
+			if err != nil {
+				return nil, err
+			}
 		}
 		args = append(args, val)
 		setClauses = append(setClauses, fmt.Sprintf("%s = $%d%s", col.Name, len(args), PgCast(types[col.Name])))

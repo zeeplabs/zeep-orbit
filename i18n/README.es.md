@@ -242,6 +242,8 @@ Tras autenticarte, recibes un token JWT firmado con el secret de la app.
 
 Parámetros de query para listar: `?limit=`, `?offset=`, `?field=eq.value`, `?order=field.asc`, `?deleted=true` (registros con soft-delete cuando está activo).
 
+Campos del body para crear: `on_conflict` (`"ignore"` | `"update"`, omitido = error ante conflicto) y `conflict_columns` (array de nombres de columna, obligatorio para `"update"`) permiten inserts idempotentes contra una unique constraint — por ejemplo, reintentos de entrega de webhook. `"ignore"` no hace nada ante un conflicto (200 con la fila existente si se indicó `conflict_columns`, 204 en caso contrario); `"update"` hace upsert vía `ON CONFLICT DO UPDATE` (201 si realmente se insertó, 200 si se actualizó).
+
 ### Tipos de columna
 
 `text`, `integer`, `bigint`, `numeric`, `boolean`, `uuid`, `timestamptz`, `jsonb`, `enum`

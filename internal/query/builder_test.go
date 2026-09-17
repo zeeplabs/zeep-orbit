@@ -324,6 +324,343 @@ func TestBuildInsert_StripsSystemFields(t *testing.T) {
 	}
 }
 
+// timestamptzTable is a dedicated fixture for the "" -> NULL normalization
+// and timestamptz-format validation tests (INSERTERR-01, INSERTERR-06..08):
+// closed_at is nullable, opened_at is required - testTable()'s created_at/
+// updated_at are systemFields and always stripped by BuildInsert, so they
+// can't exercise this behavior.
+func timestamptzTable() *registry.Table {
+	return &registry.Table{
+		Name: "events",
+		Columns: []registry.Column{
+			{Name: "label", Type: "text", Required: true},
+			{Name: "opened_at", Type: "timestamptz", Required: true},
+			{Name: "closed_at", Type: "timestamptz", Required: false},
+		},
+	}
+}
+
+func TestBuildInsert_EmptyStringNormalizesToNullForNullableTimestamptz(t *testing.T) {
+	tbl := timestamptzTable()
+	body := map[string]any{
+		"label":     "x",
+		"opened_at": "2026-01-01T00:00:00Z",
+		"closed_at": "",
+	}
+	q, err := BuildInsert("app_events", "events", tbl, body, "")
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	found := false
+	for i, col := range []string{"label", "opened_at", "closed_at"} {
+		if col == "closed_at" {
+			found = true
+			if q.Args[i] != nil {
+				t.Errorf("esperava nil para closed_at, got %v (%T)", q.Args[i], q.Args[i])
+			}
+		}
+	}
+	if !found {
+		t.Fatal("closed_at não apareceu nos args - teste mal formado")
+	}
+}
+
+func TestBuildInsert_EmptyStringOnTextColumnUnchanged(t *testing.T) {
+	tbl := testTable()
+	body := map[string]any{
+		"amount":      "10.00",
+		"customer_id": "uuid-abc",
+		"status":      "",
+	}
+	q, err := BuildInsert("app_billing", "invoices", tbl, body, "")
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	statusFound := false
+	for _, arg := range q.Args {
+		if arg == "" {
+			statusFound = true
+		}
+	}
+	if !statusFound {
+		t.Error("esperava \"\" preservada para coluna text (normalização não deve vazar pra outros tipos)")
+	}
+}
+
+func TestBuildInsert_InvalidTimestampNamesColumn(t *testing.T) {
+	tbl := timestamptzTable()
+	body := map[string]any{
+		"label":     "x",
+		"opened_at": "not-a-timestamp",
+	}
+	_, err := BuildInsert("app_events", "events", tbl, body, "")
+	if err == nil {
+		t.Fatal("esperava erro para timestamptz inválido, got nil")
+	}
+	if !strings.Contains(err.Error(), "opened_at") {
+		t.Errorf("mensagem de erro deveria citar 'opened_at': %v", err)
+	}
+	if strings.Contains(err.Error(), "not-a-timestamp") {
+		t.Errorf("mensagem de erro não deve ecoar o valor tentado: %v", err)
+	}
+}
+
+func TestBuildInsert_EmptyStringOnRequiredTimestamptzStillFails(t *testing.T) {
+	tbl := timestamptzTable()
+	body := map[string]any{
+		"label":     "x",
+		"opened_at": "",
+	}
+	_, err := BuildInsert("app_events", "events", tbl, body, "")
+	if err == nil {
+		t.Fatal("esperava erro para \"\" em coluna timestamptz required, got nil")
+	}
+	if !strings.Contains(err.Error(), "opened_at") {
+		t.Errorf("mensagem de erro deveria citar 'opened_at': %v", err)
+	}
+}
+
+func TestBuildInsert_ValidTimestampPassesThrough(t *testing.T) {
+	tbl := timestamptzTable()
+	body := map[string]any{
+		"label":     "x",
+		"opened_at": "2026-01-01T00:00:00Z",
+	}
+	q, err := BuildInsert("app_events", "events", tbl, body, "")
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	found := false
+	for _, arg := range q.Args {
+		if arg == "2026-01-01T00:00:00Z" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("esperava valor de opened_at preservado sem alteração")
+	}
+}
+
+// TestBuildInsert_OffsetlessTimestampFormsAccepted proves formats Postgres
+// itself always accepted raw (date-only, and space/"T"-separated timestamps
+// with no explicit UTC offset — interpreted in the session's TimeZone) still
+// pass once Go-side validation was added. Pre-release review found these had
+// silently regressed from "accepted" to a 400: neither time.RFC3339Nano nor
+// pgtype.Timestamptz.Scan recognizes any of them, so without
+// timestamptzOffsetlessLayouts every one of these would previously reject.
+func TestBuildInsert_OffsetlessTimestampFormsAccepted(t *testing.T) {
+	tbl := timestamptzTable()
+	cases := []string{
+		"2026-01-01",
+		"2026-01-01 00:00:00",
+		"2026-01-01T00:00:00",
+	}
+	for _, val := range cases {
+		body := map[string]any{"label": "x", "opened_at": val}
+		if _, err := BuildInsert("app_events", "events", tbl, body, ""); err != nil {
+			t.Errorf("valor %q deveria ser aceito (Postgres aceita raw), obtido erro: %v", val, err)
+		}
+	}
+}
+
+// TestBuildInsert_ColonlessOffsetTimestampFormsAccepted proves formats using
+// a colon-less or short numeric UTC offset — the default ISO-8601 basic
+// output of Java's SimpleDateFormat, many .NET serializers, and a lot of
+// third-party webhook payloads — are accepted, along with no-seconds and
+// surrounding-whitespace shapes. Round 5 of pre-release review found these
+// still 400'd after round 3 fixed only the offset-less gap: this feature's
+// own webhook ingestion path runs values through this same validator, so an
+// unsupported shape here breaks ingestion for a sender the operator can't
+// fix, not just a direct API caller.
+func TestBuildInsert_ColonlessOffsetTimestampFormsAccepted(t *testing.T) {
+	tbl := timestamptzTable()
+	cases := []string{
+		"2026-01-01T00:00:00+0000",
+		"2026-01-01T00:00:00.000+0000",
+		"2026-01-01T00:00:00+00",
+		"2026-01-01T00:00:00.000+00",
+		"2026-01-01T00:00:00-03",
+		"2026-01-01 00:00:00-0300",
+		"2026-01-01 00:00",
+		"2026-01-01T00:00",
+		"2026-01-01T00:00:00Z ",
+		" 2026-01-01T00:00:00Z",
+	}
+	for _, val := range cases {
+		body := map[string]any{"label": "x", "opened_at": val}
+		if _, err := BuildInsert("app_events", "events", tbl, body, ""); err != nil {
+			t.Errorf("valor %q deveria ser aceito (Postgres aceita raw), obtido erro: %v", val, err)
+		}
+	}
+}
+
+// conflictTable is a fixture with a unique-ish column for ON CONFLICT tests.
+func conflictTable() *registry.Table {
+	return &registry.Table{
+		Name: "events",
+		Columns: []registry.Column{
+			{Name: "label", Type: "text", Required: true},
+			{Name: "external_id", Type: "text", Required: false, Unique: true},
+		},
+	}
+}
+
+func TestBuildInsert_OnConflictIgnoreNoTargetBareDoNothing(t *testing.T) {
+	tbl := conflictTable()
+	body := map[string]any{"label": "x"}
+	q, err := BuildInsertWithOptions("app_events", "events", tbl, body, "", InsertOptions{OnConflict: "ignore"})
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if !strings.Contains(q.SQL, "ON CONFLICT DO NOTHING") {
+		t.Errorf("SQL deveria conter ON CONFLICT DO NOTHING sem alvo: %q", q.SQL)
+	}
+	if strings.Contains(q.SQL, "ON CONFLICT (") {
+		t.Errorf("SQL não deveria ter alvo de conflito quando conflict_columns está vazio: %q", q.SQL)
+	}
+}
+
+func TestBuildInsert_OnConflictIgnoreWithTarget(t *testing.T) {
+	tbl := conflictTable()
+	body := map[string]any{"label": "x"}
+	q, err := BuildInsertWithOptions("app_events", "events", tbl, body, "", InsertOptions{OnConflict: "ignore", ConflictColumns: []string{"external_id"}})
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if !strings.Contains(q.SQL, "ON CONFLICT (external_id) DO NOTHING") {
+		t.Errorf("SQL deveria conter ON CONFLICT (external_id) DO NOTHING: %q", q.SQL)
+	}
+}
+
+func TestBuildInsert_OnConflictUpdateSetsNonTargetColumns(t *testing.T) {
+	tbl := conflictTable()
+	body := map[string]any{"label": "x", "external_id": "ext-1"}
+	q, err := BuildInsertWithOptions("app_events", "events", tbl, body, "", InsertOptions{OnConflict: "update", ConflictColumns: []string{"external_id"}})
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if !strings.Contains(q.SQL, "ON CONFLICT (external_id) DO UPDATE SET label = excluded.label, updated_at = now()") {
+		t.Errorf("SQL de update inesperado: %q", q.SQL)
+	}
+	if strings.Contains(q.SQL, "external_id = excluded.external_id") {
+		t.Errorf("SET não deveria incluir a própria coluna de conflito: %q", q.SQL)
+	}
+}
+
+// TestBuildInsert_OnConflictUpdateExcludesOwnerID proves owner_id is never
+// part of the ON CONFLICT DO UPDATE SET clause, even when ownerID is set —
+// upserting a conflicting row must not reassign its ownership. Uses a
+// non-empty ownerID specifically: every other on_conflict:"update" test
+// uses "" (no owner_id column at all), which can't distinguish "owner_id is
+// correctly excluded" from "owner_id is absent and therefore trivially not
+// in the SET list".
+func TestBuildInsert_OnConflictUpdateExcludesOwnerID(t *testing.T) {
+	tbl := conflictTable()
+	body := map[string]any{"label": "x", "external_id": "ext-1"}
+	q, err := BuildInsertWithOptions("app_events", "events", tbl, body, "owner-uuid-123", InsertOptions{OnConflict: "update", ConflictColumns: []string{"external_id"}})
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if strings.Contains(q.SQL, "owner_id = excluded.owner_id") {
+		t.Errorf("SET não deveria reatribuir owner_id no upsert: %q", q.SQL)
+	}
+	if !strings.Contains(q.SQL, "owner_id") {
+		t.Errorf("owner_id deveria continuar na lista de colunas do INSERT (só não no SET): %q", q.SQL)
+	}
+}
+
+// TestBuildInsert_OnConflictUpdateOwnerFilterAddsWhereGuard proves
+// ConflictOwnerFilter adds a WHERE owner_id = $n guard to the DO UPDATE —
+// second pre-release review finding: excluding owner_id from the SET clause
+// (proven above) only stops an upsert from reassigning ownership, it
+// doesn't stop the upsert from overwriting a row belonging to a different
+// owner. The guard is what actually closes that gap.
+func TestBuildInsert_OnConflictUpdateOwnerFilterAddsWhereGuard(t *testing.T) {
+	tbl := conflictTable()
+	body := map[string]any{"label": "x", "external_id": "ext-1"}
+	q, err := BuildInsertWithOptions("app_events", "events", tbl, body, "owner-uuid-123", InsertOptions{
+		OnConflict: "update", ConflictColumns: []string{"external_id"}, ConflictOwnerFilter: "owner-uuid-123",
+	})
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if !strings.Contains(q.SQL, "WHERE events.owner_id = $") {
+		t.Errorf("SQL deveria conter guarda WHERE por owner_id: %q", q.SQL)
+	}
+	if q.Args[len(q.Args)-1] != "owner-uuid-123" {
+		t.Errorf("último arg deveria ser o owner filter, obtido %v", q.Args[len(q.Args)-1])
+	}
+}
+
+// TestBuildInsert_OnConflictUpdateNoOwnerFilterNoWhereGuard proves the guard
+// is omitted entirely for "policy" RLS mode (ConflictOwnerFilter == "",
+// since filterOwner never auto-scopes that mode) — native Postgres policies
+// are the enforcement there, not an app-level WHERE.
+func TestBuildInsert_OnConflictUpdateNoOwnerFilterNoWhereGuard(t *testing.T) {
+	tbl := conflictTable()
+	body := map[string]any{"label": "x", "external_id": "ext-1"}
+	q, err := BuildInsertWithOptions("app_events", "events", tbl, body, "", InsertOptions{
+		OnConflict: "update", ConflictColumns: []string{"external_id"},
+	})
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if strings.Contains(q.SQL, "WHERE") {
+		t.Errorf("SQL não deveria conter guarda WHERE sem ConflictOwnerFilter: %q", q.SQL)
+	}
+}
+
+// TestBuildInsert_OnConflictUpdateReturningIncludesInsertMarker proves the
+// RETURNING clause for on_conflict:"update" carries the xmax-based
+// zeep_was_insert marker the handler uses to answer 201 vs 200 correctly —
+// without it, a fresh row (no real conflict) would misreport as 200
+// ("updated") to any client keying off status code.
+func TestBuildInsert_OnConflictUpdateReturningIncludesInsertMarker(t *testing.T) {
+	tbl := conflictTable()
+	body := map[string]any{"label": "x", "external_id": "ext-1"}
+	q, err := BuildInsertWithOptions("app_events", "events", tbl, body, "", InsertOptions{OnConflict: "update", ConflictColumns: []string{"external_id"}})
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if !strings.Contains(q.SQL, "RETURNING *, (xmax = 0) AS zeep_was_insert") {
+		t.Errorf("SQL deveria conter o marcador zeep_was_insert: %q", q.SQL)
+	}
+}
+
+// TestBuildInsert_OnConflictIgnoreReturningHasNoInsertMarker proves the
+// marker is scoped only to "update" — "ignore" and plain inserts don't need
+// it and shouldn't carry the extra column into every response.
+func TestBuildInsert_OnConflictIgnoreReturningHasNoInsertMarker(t *testing.T) {
+	tbl := conflictTable()
+	body := map[string]any{"label": "x", "external_id": "ext-1"}
+	q, err := BuildInsertWithOptions("app_events", "events", tbl, body, "", InsertOptions{OnConflict: "ignore"})
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if strings.Contains(q.SQL, "zeep_was_insert") {
+		t.Errorf("on_conflict:ignore não deveria carregar zeep_was_insert: %q", q.SQL)
+	}
+}
+
+func TestBuildInsert_OnConflictAbsentUnchanged(t *testing.T) {
+	tbl := conflictTable()
+	body := map[string]any{"label": "x"}
+	withOpts, err := BuildInsertWithOptions("app_events", "events", tbl, body, "", InsertOptions{})
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	plain, err := BuildInsert("app_events", "events", tbl, body, "")
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if withOpts.SQL != plain.SQL {
+		t.Errorf("SQL deveria ser idêntico sem on_conflict: %q vs %q", withOpts.SQL, plain.SQL)
+	}
+	if strings.Contains(plain.SQL, "ON CONFLICT") {
+		t.Errorf("SQL sem on_conflict não deveria conter ON CONFLICT: %q", plain.SQL)
+	}
+}
+
 // ── BuildUpdate ───────────────────────────────────────────────────────────────
 
 func TestBuildUpdate_Valid(t *testing.T) {
@@ -353,6 +690,36 @@ func TestBuildUpdate_Valid(t *testing.T) {
 	last := q.Args[len(q.Args)-1]
 	if last != "uuid-999" {
 		t.Errorf("último arg deveria ser o id 'uuid-999', got %v", last)
+	}
+}
+
+// TestBuildUpdate_EmptyStringNormalizesToNullForNullableTimestamptz proves
+// BuildUpdate applies the same "" -> NULL timestamptz normalization as
+// BuildInsert (asymmetry found in pre-release review: PATCH with "" on a
+// nullable timestamptz previously reached Postgres raw and 500'd).
+func TestBuildUpdate_EmptyStringNormalizesToNullForNullableTimestamptz(t *testing.T) {
+	tbl := timestamptzTable()
+	body := map[string]any{"closed_at": ""}
+	q, err := BuildUpdate("app_events", "events", tbl, "uuid-1", body, "")
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if q.Args[0] != nil {
+		t.Errorf("esperava nil para closed_at, got %v (%T)", q.Args[0], q.Args[0])
+	}
+}
+
+// TestBuildUpdate_InvalidTimestampNamesColumn mirrors
+// TestBuildInsert_InvalidTimestampNamesColumn for the UPDATE path.
+func TestBuildUpdate_InvalidTimestampNamesColumn(t *testing.T) {
+	tbl := timestamptzTable()
+	body := map[string]any{"opened_at": "not-a-timestamp"}
+	_, err := BuildUpdate("app_events", "events", tbl, "uuid-1", body, "")
+	if err == nil {
+		t.Fatal("esperava erro para timestamptz inválido, got nil")
+	}
+	if !strings.Contains(err.Error(), "opened_at") {
+		t.Errorf("mensagem de erro deveria citar 'opened_at': %v", err)
 	}
 }
 

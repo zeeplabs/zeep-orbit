@@ -244,6 +244,8 @@ After authentication, you receive a JWT token signed with the app's secret.
 
 Query params for list: `?limit=`, `?offset=`, `?field=eq.value`, `?order=field.asc`, `?deleted=true` (soft-deleted records when enabled).
 
+Body fields for create: `on_conflict` (`"ignore"` | `"update"`, omitted = error on conflict) and `conflict_columns` (array of column names, required for `"update"`) support idempotent inserts against a unique constraint — e.g. retried webhook deliveries. `"ignore"` no-ops on a conflict (200 with the existing row if `conflict_columns` was given, 204 otherwise); `"update"` upserts via `ON CONFLICT DO UPDATE` (201 if actually inserted, 200 if updated).
+
 ### Column types
 
 `text`, `integer`, `bigint`, `numeric`, `boolean`, `uuid`, `timestamptz`, `jsonb`, `enum`

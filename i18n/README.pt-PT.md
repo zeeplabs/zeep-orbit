@@ -242,6 +242,8 @@ Após a autenticação, recebe um token JWT assinado com o secret da aplicação
 
 Parâmetros de query para listagem: `?limit=`, `?offset=`, `?field=eq.value`, `?order=field.asc`, `?deleted=true` (registos com soft-delete, quando ativo).
 
+Campos do corpo para criação: `on_conflict` (`"ignore"` | `"update"`, omitido = erro em caso de conflito) e `conflict_columns` (array de nomes de coluna, obrigatório para `"update"`) permitem inserção idempotente contra uma unique constraint — por exemplo, retentativa de entrega de webhook. `"ignore"` não faz nada em caso de conflito (200 com a linha existente se `conflict_columns` foi indicado, 204 caso contrário); `"update"` faz upsert via `ON CONFLICT DO UPDATE` (201 se realmente inserido, 200 se atualizado).
+
 ### Tipos de coluna
 
 `text`, `integer`, `bigint`, `numeric`, `boolean`, `uuid`, `timestamptz`, `jsonb`, `enum`

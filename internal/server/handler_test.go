@@ -76,6 +76,25 @@ func TestMain(m *testing.M) {
 			created_at  TIMESTAMPTZ DEFAULT now(),
 			updated_at  TIMESTAMPTZ DEFAULT now()
 		)`,
+		// insert_diag exists only for insert-error-diagnostics tests: opened_at
+		// (required timestamptz) exercises the "required column still 400s"
+		// case, closed_at (nullable timestamptz) exercises "" -> NULL
+		// normalization, external_id (unique) exercises 409/on_conflict.
+		`CREATE TABLE ` + testSchema + `.insert_diag (
+			id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			label       TEXT NOT NULL,
+			opened_at   TIMESTAMPTZ NOT NULL,
+			closed_at   TIMESTAMPTZ,
+			external_id TEXT UNIQUE,
+			created_at  TIMESTAMPTZ DEFAULT now(),
+			updated_at  TIMESTAMPTZ DEFAULT now(),
+			-- deleted_at exists only for
+			-- TestHandlerCreateOnConflictUpdateCollidingWithSoftDeletedRowReturns409
+			-- (soft delete is a system-wide toggle, HandleDelete's UPDATE SET
+			-- deleted_at = now() needs the column to exist regardless of
+			-- whether any other insert_diag test enables it).
+			deleted_at  TIMESTAMPTZ
+		)`,
 		`GRANT USAGE ON SCHEMA ` + testSchema + ` TO zeep_app_enduser`,
 		`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ` + testSchema + ` TO zeep_app_enduser`,
 	}
@@ -100,12 +119,21 @@ func TestMain(m *testing.M) {
 			"created_at"         TIMESTAMPTZ NOT NULL DEFAULT now(),
 			"updated_at"         TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
+		// slug exists only for TestHandlerCreateOnConflictIgnoreDoesNotLeakOtherOwnersRow
+		// (insert-error-diagnostics cross-tenant fix): it's the unique column
+		// two different owners can collide on via on_conflict/conflict_columns.
 		`CREATE TABLE ` + rlsSchema + `.notes (
 			id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			title      TEXT NOT NULL,
+			slug       TEXT UNIQUE,
 			owner_id   UUID NOT NULL REFERENCES ` + rlsSchema + `."_auth_users"("id"),
 			created_at TIMESTAMPTZ DEFAULT now(),
-			updated_at TIMESTAMPTZ DEFAULT now()
+			updated_at TIMESTAMPTZ DEFAULT now(),
+			-- deleted_at exists only for
+			-- TestHandlerCreateOnConflictUpdateOwnerAndSoftDeleteComposition
+			-- (fourth pre-release review: owner-scoping + soft-delete +
+			-- on_conflict:"update" all together, previously untested).
+			deleted_at TIMESTAMPTZ
 		)`,
 		`GRANT USAGE ON SCHEMA ` + rlsSchema + ` TO zeep_app_enduser`,
 		`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ` + rlsSchema + ` TO zeep_app_enduser`,
@@ -129,6 +157,15 @@ func TestMain(m *testing.M) {
 					{Name: "status", Type: "enum", Required: false, AllowedValues: []string{"pending", "active", "closed"}},
 				},
 			},
+			"insert_diag": {
+				Name: "insert_diag",
+				Columns: []registry.Column{
+					{Name: "label", Type: "text", Required: true},
+					{Name: "opened_at", Type: "timestamptz", Required: true},
+					{Name: "closed_at", Type: "timestamptz", Required: false},
+					{Name: "external_id", Type: "text", Required: false, Unique: true},
+				},
+			},
 		},
 	})
 	testReg.Register(&registry.App{
@@ -146,6 +183,7 @@ func TestMain(m *testing.M) {
 				RLS:  "owner",
 				Columns: []registry.Column{
 					{Name: "title", Type: "text", Required: true},
+					{Name: "slug", Type: "text", Required: false, Unique: true},
 				},
 			},
 		},
@@ -853,5 +891,612 @@ func TestHandlerCreateOtherErrorStillGeneric500(t *testing.T) {
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("esperado 500 para erro não relacionado a enum (22021), obtido %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestHandlerCreateEmptyTimestampNormalizesToNull proves "" sent for a
+// nullable timestamptz column succeeds and stores NULL, end-to-end through
+// the HTTP handler (INSERTERR-06).
+func TestHandlerCreateEmptyTimestampNormalizesToNull(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{"label": "normalize-empty", "opened_at": "2026-01-01T00:00:00Z", "closed_at": ""}
+	req := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("esperado 201, obtido %d: %s", rec.Code, rec.Body.String())
+	}
+	var row map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&row); err != nil {
+		t.Fatalf("decode falhou: %v", err)
+	}
+	if row["closed_at"] != nil {
+		t.Errorf("esperado closed_at nulo, obtido %v", row["closed_at"])
+	}
+}
+
+// TestHandlerCreateEmptyTimestampOnRequiredColumnFails proves "" sent for a
+// required timestamptz column still 400s, naming the column, instead of
+// being silently normalized (INSERTERR-07).
+func TestHandlerCreateEmptyTimestampOnRequiredColumnFails(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{"label": "empty-required", "opened_at": ""}
+	req := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("esperado 400, obtido %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode falhou: %v", err)
+	}
+	msg, _ := resp["error"].(string)
+	if !strings.Contains(msg, "opened_at") {
+		t.Fatalf("esperada mensagem citando opened_at, obtido %q", msg)
+	}
+}
+
+// TestHandlerCreateOnConflictInvalidValue proves an unrecognized on_conflict
+// value 400s instead of silently falling back (INSERTERR-15).
+func TestHandlerCreateOnConflictInvalidValue(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{"label": "x", "opened_at": "2026-01-01T00:00:00Z", "on_conflict": "bogus"}
+	req := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("esperado 400 para on_conflict inválido, obtido %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestHandlerCreateOnConflictUpdateRequiresConflictColumns proves
+// on_conflict:"update" without conflict_columns 400s (INSERTERR-13).
+func TestHandlerCreateOnConflictUpdateRequiresConflictColumns(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{"label": "x", "opened_at": "2026-01-01T00:00:00Z", "on_conflict": "update"}
+	req := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("esperado 400 para on_conflict update sem conflict_columns, obtido %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestHandlerCreateOnConflictUnknownConflictColumn proves an unknown column
+// name in conflict_columns 400s naming it (INSERTERR-17).
+func TestHandlerCreateOnConflictUnknownConflictColumn(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{
+		"label": "x", "opened_at": "2026-01-01T00:00:00Z",
+		"on_conflict": "update", "conflict_columns": []string{"does_not_exist"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("esperado 400 para conflict_columns com coluna inexistente, obtido %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode falhou: %v", err)
+	}
+	msg, _ := resp["error"].(string)
+	if !strings.Contains(msg, "does_not_exist") {
+		t.Fatalf("esperada mensagem citando does_not_exist, obtido %q", msg)
+	}
+}
+
+// TestHandlerCreateOnConflictDuplicateConflictColumn proves parseOnConflict
+// rejects a repeated column name in conflict_columns as 400, instead of
+// letting it reach Postgres as ON CONFLICT (col, col), which raises 42P10
+// (invalid_column_reference) and would otherwise fall through to a raw 500.
+func TestHandlerCreateOnConflictDuplicateConflictColumn(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{
+		"label": "x", "opened_at": "2026-01-01T00:00:00Z",
+		"on_conflict": "update", "conflict_columns": []string{"external_id", "external_id"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("esperado 400 para conflict_columns duplicada, obtido %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode falhou: %v", err)
+	}
+	// Asserts the specific "duplicate" message, not just 400 — a duplicate
+	// column also raises Postgres 42P10 (invalid_column_reference), which
+	// the handler's 42P10 branch also maps to 400. Without this assertion,
+	// the test would still pass with the dedupe check in parseOnConflict
+	// reverted, since 42P10 classification alone produces the same status
+	// code.
+	msg, _ := resp["error"].(string)
+	if !strings.Contains(msg, "duplicate column in conflict_columns") {
+		t.Fatalf("esperada mensagem de coluna duplicada, obtido %q", msg)
+	}
+}
+
+// TestHandlerCreateOnConflictColumnAbsentFromBody proves a conflict_columns
+// name that's a real, unique-backed column but wasn't included in the
+// request body 400s naming the problem, instead of silently building an
+// always-false "col = NULL" match in fetchRowByColumns and misreporting it
+// as 409 "row already exists".
+func TestHandlerCreateOnConflictColumnAbsentFromBody(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{
+		"label": "x", "opened_at": "2026-01-01T00:00:00Z",
+		"on_conflict": "ignore", "conflict_columns": []string{"external_id"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("esperado 400 para conflict_columns ausente do body, obtido %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode falhou: %v", err)
+	}
+	msg, _ := resp["error"].(string)
+	if !strings.Contains(msg, "external_id") {
+		t.Fatalf("esperada mensagem citando external_id, obtido %q", msg)
+	}
+}
+
+// TestHandlerCreateOnConflictColumnWithoutUniqueConstraint proves a
+// conflict_columns target that passes schema validation (a real column) but
+// has no unique/exclusion constraint backing it in Postgres is classified as
+// 400, not left to fall through as a raw 500 from an unclassified 42P10.
+func TestHandlerCreateOnConflictColumnWithoutUniqueConstraint(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{
+		"label": "x", "opened_at": "2026-01-01T00:00:00Z",
+		"on_conflict": "update", "conflict_columns": []string{"label"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("esperado 400 para conflict_columns sem constraint unique, obtido %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestHandlerCreateOnConflictAbsentBehavesAsError proves omitting
+// on_conflict entirely doesn't change today's create behavior
+// (INSERTERR-16).
+func TestHandlerCreateOnConflictAbsentBehavesAsError(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{"label": "no-on-conflict", "opened_at": "2026-01-01T00:00:00Z"}
+	req := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("esperado 201, obtido %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestHandlerCreateOnConflictIgnoreWithTargetReturnsExistingRow proves a
+// retried insert with on_conflict:"ignore" and conflict_columns returns 200
+// with the pre-existing row on the second attempt (INSERTERR-10, INSERTERR-12).
+func TestHandlerCreateOnConflictIgnoreWithTargetReturnsExistingRow(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{
+		"label": "first", "opened_at": "2026-01-01T00:00:00Z",
+		"external_id": "ignore-target-id", "on_conflict": "ignore", "conflict_columns": []string{"external_id"},
+	}
+	firstReq := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	firstReq.Header.Set("Content-Type", "application/json")
+	firstRec := httptest.NewRecorder()
+	router.ServeHTTP(firstRec, firstReq)
+	if firstRec.Code != http.StatusCreated {
+		t.Fatalf("setup: esperado 201, obtido %d: %s", firstRec.Code, firstRec.Body.String())
+	}
+	var firstRow map[string]any
+	if err := json.NewDecoder(firstRec.Body).Decode(&firstRow); err != nil {
+		t.Fatalf("decode falhou: %v", err)
+	}
+
+	secondBody := map[string]any{
+		"label": "second-ignored", "opened_at": "2026-02-02T00:00:00Z",
+		"external_id": "ignore-target-id", "on_conflict": "ignore", "conflict_columns": []string{"external_id"},
+	}
+	secondReq := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(secondBody))
+	secondReq.Header.Set("Content-Type", "application/json")
+	secondRec := httptest.NewRecorder()
+	router.ServeHTTP(secondRec, secondReq)
+
+	if secondRec.Code != http.StatusOK {
+		t.Fatalf("esperado 200 na segunda tentativa (ignore com conflito), obtido %d: %s", secondRec.Code, secondRec.Body.String())
+	}
+	var secondRow map[string]any
+	if err := json.NewDecoder(secondRec.Body).Decode(&secondRow); err != nil {
+		t.Fatalf("decode falhou: %v", err)
+	}
+	if secondRow["id"] != firstRow["id"] {
+		t.Fatalf("esperado a mesma linha existente (id=%v), obtido id=%v", firstRow["id"], secondRow["id"])
+	}
+	if secondRow["label"] != "first" {
+		t.Fatalf("esperado label da linha original ('first'), obtido %v - segundo insert não deveria ter escrito nada", secondRow["label"])
+	}
+}
+
+// TestHandlerCreateOnConflictIgnoreWithoutTargetReturns204 proves a retried
+// insert with on_conflict:"ignore" and no conflict_columns returns 204 with
+// an empty body on the second attempt (INSERTERR-11).
+func TestHandlerCreateOnConflictIgnoreWithoutTargetReturns204(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{
+		"label": "first", "opened_at": "2026-01-01T00:00:00Z",
+		"external_id": "ignore-no-target-id", "on_conflict": "ignore",
+	}
+	firstReq := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	firstReq.Header.Set("Content-Type", "application/json")
+	firstRec := httptest.NewRecorder()
+	router.ServeHTTP(firstRec, firstReq)
+	if firstRec.Code != http.StatusCreated {
+		t.Fatalf("setup: esperado 201, obtido %d: %s", firstRec.Code, firstRec.Body.String())
+	}
+
+	secondReq := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	secondReq.Header.Set("Content-Type", "application/json")
+	secondRec := httptest.NewRecorder()
+	router.ServeHTTP(secondRec, secondReq)
+
+	if secondRec.Code != http.StatusNoContent {
+		t.Fatalf("esperado 204 na segunda tentativa (ignore sem alvo), obtido %d: %s", secondRec.Code, secondRec.Body.String())
+	}
+	if secondRec.Body.Len() != 0 {
+		t.Fatalf("esperado corpo vazio, obtido: %s", secondRec.Body.String())
+	}
+}
+
+// TestHandlerCreateOnConflictUpdateOverwritesRow proves a retried insert
+// with on_conflict:"update" returns 200 with the updated row and a newer
+// updated_at (INSERTERR-14 observable behavior, end-to-end).
+func TestHandlerCreateOnConflictUpdateOverwritesRow(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{
+		"label": "before-update", "opened_at": "2026-01-01T00:00:00Z",
+		"external_id": "update-target-id",
+	}
+	firstReq := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	firstReq.Header.Set("Content-Type", "application/json")
+	firstRec := httptest.NewRecorder()
+	router.ServeHTTP(firstRec, firstReq)
+	if firstRec.Code != http.StatusCreated {
+		t.Fatalf("setup: esperado 201, obtido %d: %s", firstRec.Code, firstRec.Body.String())
+	}
+	var firstRow map[string]any
+	if err := json.NewDecoder(firstRec.Body).Decode(&firstRow); err != nil {
+		t.Fatalf("decode falhou: %v", err)
+	}
+
+	updateBody := map[string]any{
+		"label": "after-update", "opened_at": "2026-01-01T00:00:00Z",
+		"external_id": "update-target-id", "on_conflict": "update", "conflict_columns": []string{"external_id"},
+	}
+	updateReq := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(updateBody))
+	updateReq.Header.Set("Content-Type", "application/json")
+	updateRec := httptest.NewRecorder()
+	router.ServeHTTP(updateRec, updateReq)
+
+	if updateRec.Code != http.StatusOK {
+		t.Fatalf("esperado 200 no upsert de update, obtido %d: %s", updateRec.Code, updateRec.Body.String())
+	}
+	var updatedRow map[string]any
+	if err := json.NewDecoder(updateRec.Body).Decode(&updatedRow); err != nil {
+		t.Fatalf("decode falhou: %v", err)
+	}
+	if updatedRow["id"] != firstRow["id"] {
+		t.Fatalf("esperado atualizar a mesma linha (id=%v), obtido id=%v", firstRow["id"], updatedRow["id"])
+	}
+	if updatedRow["label"] != "after-update" {
+		t.Fatalf("esperado label atualizado para 'after-update', obtido %v", updatedRow["label"])
+	}
+	if updatedRow["updated_at"] == firstRow["updated_at"] {
+		t.Fatalf("esperado updated_at mais recente após update, obtido igual ao original: %v", updatedRow["updated_at"])
+	}
+}
+
+// TestHandlerCreateOnConflictUpdateFreshRowReturns201 proves on_conflict:
+// "update" against a value that doesn't actually conflict with anything
+// still reports 201 (a real creation), not 200 — a client keying off status
+// code to detect "row created" must get a correct answer even on the
+// upsert path. Also proves the xmax-based zeep_was_insert marker never
+// leaks into the JSON response.
+func TestHandlerCreateOnConflictUpdateFreshRowReturns201(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{
+		"label": "no real conflict", "opened_at": "2026-01-01T00:00:00Z",
+		"external_id":      "fresh-row-no-conflict-id",
+		"on_conflict":      "update",
+		"conflict_columns": []string{"external_id"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("esperado 201 (linha nova, sem conflito real), obtido %d: %s", rec.Code, rec.Body.String())
+	}
+	var row map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&row); err != nil {
+		t.Fatalf("decode falhou: %v", err)
+	}
+	if _, present := row["zeep_was_insert"]; present {
+		t.Fatalf("zeep_was_insert vazou na resposta: %v", row)
+	}
+}
+
+// TestHandlerCreateOnConflictUpdateCollidingWithSoftDeletedRowReturns409 is
+// the regression test for the third pre-release review's soft-delete
+// finding: on_conflict:"update" colliding with the caller's own
+// soft-deleted row previously answered 200 and silently resurrected it
+// (updated it live, but deleted_at stayed set, so it never showed up again
+// in a plain list/get) — disagreeing with on_conflict:"ignore", which
+// already 409s on the identical situation via fetchRowByColumns' deleted_at
+// filter. query.InsertOptions.ConflictExcludeSoftDeleted now makes "update"
+// consistent with "ignore".
+func TestHandlerCreateOnConflictUpdateCollidingWithSoftDeletedRowReturns409(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	orig := testReg.SystemConfig()
+	t.Cleanup(func() { testReg.SetSystemConfig(orig) })
+	cfg := orig
+	cfg.SoftDeleteEnabled = true
+	testReg.SetSystemConfig(cfg)
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	createBody := map[string]any{
+		"label": "will be soft-deleted", "opened_at": "2026-01-01T00:00:00Z",
+		"external_id": "soft-deleted-update-conflict-id",
+	}
+	createReq := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(createBody))
+	createReq.Header.Set("Content-Type", "application/json")
+	createRec := httptest.NewRecorder()
+	router.ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("setup: esperado 201, obtido %d: %s", createRec.Code, createRec.Body.String())
+	}
+	var created map[string]any
+	if err := json.NewDecoder(createRec.Body).Decode(&created); err != nil {
+		t.Fatalf("decode falhou: %v", err)
+	}
+
+	deleteReq := httptest.NewRequest(http.MethodDelete, "/insert_diag/"+created["id"].(string), nil)
+	deleteRec := httptest.NewRecorder()
+	router.ServeHTTP(deleteRec, deleteReq)
+	if deleteRec.Code != http.StatusNoContent {
+		t.Fatalf("setup: esperado 204 no soft-delete, obtido %d: %s", deleteRec.Code, deleteRec.Body.String())
+	}
+
+	upsertBody := map[string]any{
+		"label": "resurrection attempt", "opened_at": "2026-01-01T00:00:00Z",
+		"external_id":      "soft-deleted-update-conflict-id",
+		"on_conflict":      "update",
+		"conflict_columns": []string{"external_id"},
+	}
+	upsertReq := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(upsertBody))
+	upsertReq.Header.Set("Content-Type", "application/json")
+	upsertRec := httptest.NewRecorder()
+	router.ServeHTTP(upsertRec, upsertReq)
+
+	if upsertRec.Code != http.StatusConflict {
+		t.Fatalf("esperado 409 (colisão com a própria linha soft-deleted, não deveria ressuscitar silenciosamente), obtido %d: %s", upsertRec.Code, upsertRec.Body.String())
+	}
+}
+
+// TestHandlerCreateOnConflictNonStringValueReturns400 proves a non-string
+// on_conflict (number, bool, object) 400s instead of being silently dropped
+// by the type assertion and treated as "" (today's default: plain error on
+// conflict) — a caller that sent the wrong type deserves a 400 naming the
+// mistake, not a request that quietly ran with different semantics than
+// intended.
+func TestHandlerCreateOnConflictNonStringValueReturns400(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{
+		"label": "x", "opened_at": "2026-01-01T00:00:00Z",
+		"on_conflict": 123,
+	}
+	req := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("esperado 400 para on_conflict não-string, obtido %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestHandlerCreateOnConflictErrorStillConflicts proves a plain retry (no
+// on_conflict field) against the same unique value still 409s, unaffected
+// by the on_conflict machinery (regression check for INSERTERR-16's "error"
+// default).
+func TestHandlerCreateOnConflictErrorStillConflicts(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{"label": "first", "opened_at": "2026-01-01T00:00:00Z", "external_id": "plain-conflict-id"}
+	firstReq := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	firstReq.Header.Set("Content-Type", "application/json")
+	firstRec := httptest.NewRecorder()
+	router.ServeHTTP(firstRec, firstReq)
+	if firstRec.Code != http.StatusCreated {
+		t.Fatalf("setup: esperado 201, obtido %d: %s", firstRec.Code, firstRec.Body.String())
+	}
+
+	secondReq := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	secondReq.Header.Set("Content-Type", "application/json")
+	secondRec := httptest.NewRecorder()
+	router.ServeHTTP(secondRec, secondReq)
+
+	if secondRec.Code != http.StatusConflict {
+		t.Fatalf("esperado 409 sem on_conflict, obtido %d: %s", secondRec.Code, secondRec.Body.String())
+	}
+}
+
+// TestHandlerCreateUniqueViolation proves a duplicate insert against a
+// unique column is classified 409 naming the constraint, not 500
+// (INSERTERR-02, INSERTERR-04, INSERTERR-05).
+func TestHandlerCreateUniqueViolation(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL não configurado")
+	}
+
+	h := NewHandler(testPool, testReg)
+	router := buildHandlerRouter(h)
+
+	body := map[string]any{"label": "first", "opened_at": "2026-01-01T00:00:00Z", "external_id": "dup-ext-id"}
+	createReq := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(body))
+	createReq.Header.Set("Content-Type", "application/json")
+	createRec := httptest.NewRecorder()
+	router.ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("setup: esperado 201, obtido %d: %s", createRec.Code, createRec.Body.String())
+	}
+
+	dupBody := map[string]any{"label": "second", "opened_at": "2026-01-01T00:00:00Z", "external_id": "dup-ext-id"}
+	dupReq := httptest.NewRequest(http.MethodPost, "/insert_diag", jsonBody(dupBody))
+	dupReq.Header.Set("Content-Type", "application/json")
+	dupRec := httptest.NewRecorder()
+	router.ServeHTTP(dupRec, dupReq)
+
+	if dupRec.Code != http.StatusConflict {
+		t.Fatalf("esperado 409 para violação de unique constraint, obtido %d: %s", dupRec.Code, dupRec.Body.String())
+	}
+	var resp map[string]any
+	if err := json.NewDecoder(dupRec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode falhou: %v", err)
+	}
+	msg, _ := resp["error"].(string)
+	if !strings.Contains(msg, "insert_diag_external_id_key") {
+		t.Fatalf("esperada mensagem citando a constraint, obtido %q", msg)
+	}
+	if strings.Contains(msg, "dup-ext-id") {
+		t.Fatalf("mensagem de erro não deve ecoar o valor tentado (raw Postgres detail leak): %q", msg)
 	}
 }
