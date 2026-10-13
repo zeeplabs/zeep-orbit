@@ -176,6 +176,7 @@ type orbitSetTableRLSModeInput struct {
 func mapWriteError(err error) error {
 	var valErr *dashboard.ValidationError
 	var typeErr *provisioner.TypeChangeError
+	var colErr *provisioner.ColumnConstraintError
 	var fkErr *provisioner.ForeignKeyViolationError
 	var policyValErr *provisioner.ValidationError
 	var enumInUseErr *provisioner.EnumValueInUseError
@@ -223,6 +224,8 @@ func mapWriteError(err error) error {
 		return valErr
 	case errors.As(err, &typeErr):
 		return typeErr
+	case errors.As(err, &colErr):
+		return colErr
 	case errors.As(err, &fkErr):
 		return fkErr
 	case errors.As(err, &enumInUseErr):

@@ -868,13 +868,14 @@ func TestHandlerUpdateEnumViolation(t *testing.T) {
 	}
 }
 
-// TestHandlerCreateOtherErrorStillGeneric500 proves the 23514 branch is
+// TestHandlerCreateDataExceptionReturns400 proves the 23514 branch is
 // narrowly scoped: a different Postgres-level write failure reaching the
 // same code path — here a NUL byte embedded in a text value, which
 // Postgres rejects with SQLSTATE 22021 (invalid_byte_sequence), not 23514
-// — must NOT be caught by the new check_violation branch and must still
-// fall through to the existing generic 500 path.
-func TestHandlerCreateOtherErrorStillGeneric500(t *testing.T) {
+// — is NOT reported as an enum/check violation. It used to fall through to
+// a generic 500; column-constraint-changes ERR-01 classifies every class 22
+// data exception as the caller's bad input (400), without echoing the value.
+func TestHandlerCreateDataExceptionReturns400(t *testing.T) {
 	if os.Getenv("TEST_DATABASE_URL") == "" {
 		t.Skip("TEST_DATABASE_URL não configurado")
 	}
@@ -889,8 +890,11 @@ func TestHandlerCreateOtherErrorStillGeneric500(t *testing.T) {
 
 	router.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("esperado 500 para erro não relacionado a enum (22021), obtido %d: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("esperado 400 para data exception (22021), obtido %d: %s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "not allowed for column") {
+		t.Fatalf("22021 não pode ser reportado como violação de enum/check: %s", rec.Body.String())
 	}
 }
 

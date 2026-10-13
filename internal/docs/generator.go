@@ -212,8 +212,9 @@ func generate(apps []*registry.App) *Spec {
 						"201": {Description: "Created", Content: jsonContent(schemaOrRef{Ref: "#/components/schemas/" + schemaName})},
 						"200": {Description: "OK (on_conflict:\"update\" upserted an existing row, or on_conflict:\"ignore\" no-opped and returned it)", Content: jsonContent(schemaOrRef{Ref: "#/components/schemas/" + schemaName})},
 						"204": {Description: "No Content (on_conflict:\"ignore\" no-opped with no conflict_columns to fetch the existing row by)"},
-						"400": {Description: "Bad Request"},
+						"400": {Description: "Bad Request: a required column is missing, a referenced row does not exist, or a value is invalid for its column type (the message names the column/constraint)"},
 						"401": {Description: "Unauthorized"},
+						"403": {Description: "Forbidden: a native row-level security policy denied the write"},
 						"409": {Description: "Conflict: a unique constraint was violated (on_conflict omitted or \"error\"), or the on_conflict target row belongs to another tenant, is soft-deleted, or is denied by a native row policy (on_conflict \"ignore\"/\"update\")"},
 					},
 				},
@@ -244,9 +245,11 @@ func generate(apps []*registry.App) *Spec {
 					},
 					Responses: map[string]response{
 						"200": {Description: "OK", Content: jsonContent(schemaOrRef{Ref: "#/components/schemas/" + schemaName})},
-						"400": {Description: "Bad Request"},
+						"400": {Description: "Bad Request: a required column is set to null, a referenced row does not exist, or a value is invalid for its column type (the message names the column/constraint)"},
 						"401": {Description: "Unauthorized"},
+						"403": {Description: "Forbidden: a native row-level security policy denied the write"},
 						"404": {Description: "Not Found"},
+						"409": {Description: "Conflict: a unique constraint was violated"},
 					},
 				},
 				Delete: &operation{
@@ -259,6 +262,7 @@ func generate(apps []*registry.App) *Spec {
 						"204": {Description: "No Content"},
 						"401": {Description: "Unauthorized"},
 						"404": {Description: "Not Found"},
+						"409": {Description: "Conflict: the row is still referenced by another table's foreign key"},
 					},
 				},
 			}

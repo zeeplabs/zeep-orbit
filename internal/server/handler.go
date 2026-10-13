@@ -114,6 +114,66 @@ func uniqueViolationMessage(pgErr *pgconn.PgError) string {
 	return "row already exists"
 }
 
+// writeOp identifies which data write failed, for errors whose meaning
+// depends on it (a foreign key violation is a bad reference on insert/update
+// but a still-referenced row on delete).
+type writeOp int
+
+const (
+	writeOpInsert writeOp = iota
+	writeOpUpdate
+	writeOpDelete
+)
+
+// classifyWriteError maps a Postgres error from a data write that the
+// caller's request caused to a client-safe status and message. ok is false
+// for anything else (connection loss, permission misconfiguration, bugs),
+// which the caller answers with its own fixed generic 500 after logging the
+// real error. Messages are built only from SQLSTATE plus column/constraint
+// names — never pgErr.Message/Detail, which can echo back the attempted
+// value. Branches that depend on request context (on_conflict's 409s) run
+// before this in HandleCreate.
+func classifyWriteError(err error, op writeOp) (status int, msg string, ok bool) {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return 0, "", false
+	}
+	switch {
+	case pgErr.Code == "23502": // not_null_violation
+		if pgErr.ColumnName != "" {
+			return http.StatusBadRequest, fmt.Sprintf("column %q is required", pgErr.ColumnName), true
+		}
+		return http.StatusBadRequest, "a required column is missing", true
+	case pgErr.Code == "23503": // foreign_key_violation
+		if op == writeOpDelete {
+			if pgErr.ConstraintName != "" {
+				return http.StatusConflict, fmt.Sprintf("row is still referenced by another table: foreign key constraint %q", pgErr.ConstraintName), true
+			}
+			return http.StatusConflict, "row is still referenced by another table", true
+		}
+		if pgErr.ConstraintName != "" {
+			return http.StatusBadRequest, fmt.Sprintf("referenced row does not exist: foreign key constraint %q", pgErr.ConstraintName), true
+		}
+		return http.StatusBadRequest, "referenced row does not exist", true
+	case pgErr.Code == "23505":
+		return http.StatusConflict, uniqueViolationMessage(pgErr), true
+	case pgErr.Code == "23514":
+		return http.StatusBadRequest, checkViolationMessage(pgErr), true
+	case pgErr.Code == "42501" && op != writeOpDelete:
+		// insufficient_privilege on a write here is a row-level security
+		// WITH CHECK rejection (native "policy"-mode tables). A denied
+		// DELETE never raises it — USING just filters the row out, which
+		// already answers 404 — so delete keeps the generic path.
+		return http.StatusForbidden, "row-level security policy denied this write", true
+	case strings.HasPrefix(pgErr.Code, "22"): // data_exception: value unfit for the column type
+		if pgErr.ColumnName != "" {
+			return http.StatusBadRequest, fmt.Sprintf("invalid value for column %q", pgErr.ColumnName), true
+		}
+		return http.StatusBadRequest, "invalid value for a column's type", true
+	}
+	return 0, "", false
+}
+
 // parseOnConflict extracts and validates the optional "on_conflict" /
 // "conflict_columns" request fields, removing both from body so BuildInsert
 // doesn't treat them as unknown table columns. onConflict defaults to
@@ -356,14 +416,6 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23514" {
-			writeError(w, http.StatusBadRequest, checkViolationMessage(pgErr))
-			return
-		}
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			writeError(w, http.StatusConflict, uniqueViolationMessage(pgErr))
-			return
-		}
 		if errors.As(err, &pgErr) && pgErr.Code == "42P10" {
 			writeError(w, http.StatusBadRequest, "conflict_columns does not match any unique or exclusion constraint on this table")
 			return
@@ -378,14 +430,17 @@ func (h *Handler) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		// INSERT rejected by a table's WITH CHECK policy — an unrelated,
 		// unconditional denial, not a conflict, where "row already exists"
 		// would be a factual lie (the row was never created). That case
-		// falls through to the generic 500 below instead, same as it
-		// always has (see TestWebhookActive_InsertRLSDeniedReturns500WriteErrorNoRawErrorLeaked).
+		// falls through to classifyWriteError below and answers 403.
 		if onConflict == "update" && errors.As(err, &pgErr) && pgErr.Code == "42501" {
 			writeError(w, http.StatusConflict, "row already exists")
 			return
 		}
 		if db.IsStatementTimeout(err) {
 			writeError(w, http.StatusServiceUnavailable, "query exceeded statement timeout")
+			return
+		}
+		if status, msg, ok := classifyWriteError(err, writeOpInsert); ok {
+			writeError(w, status, msg)
 			return
 		}
 		h.logger.Error("failed to insert row",
@@ -578,15 +633,16 @@ func (h *Handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "not found")
 			return
 		}
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23514" {
-			writeError(w, http.StatusBadRequest, checkViolationMessage(pgErr))
-			return
-		}
 		if db.IsStatementTimeout(err) {
 			writeError(w, http.StatusServiceUnavailable, "query exceeded statement timeout")
 			return
 		}
+		if status, msg, ok := classifyWriteError(err, writeOpUpdate); ok {
+			writeError(w, status, msg)
+			return
+		}
+		h.logger.Error("failed to update row",
+			zap.String("app", app.Config.Name), zap.String("table", tableName), zap.Error(err))
 		writeError(w, http.StatusInternalServerError, "failed to update row")
 		return
 	}
@@ -633,6 +689,12 @@ func (h *Handler) HandleDelete(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusServiceUnavailable, "query exceeded statement timeout")
 			return
 		}
+		if status, msg, ok := classifyWriteError(err, writeOpDelete); ok {
+			writeError(w, status, msg)
+			return
+		}
+		h.logger.Error("failed to delete row",
+			zap.String("app", app.Config.Name), zap.String("table", tableName), zap.Error(err))
 		writeError(w, http.StatusInternalServerError, "failed to delete row")
 		return
 	}
