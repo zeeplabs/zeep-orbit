@@ -54,7 +54,19 @@ Every table call runs under the requesting user's RLS claims. If a table's polic
 
 ### Errors
 
-All error bodies are `{"error": "<message>"}`, message always in English. A `23514` Postgres check-constraint violation (e.g. writing a disallowed value into an `enum` column) surfaces as 400 with the constraint name/message, not a generic 500.
+All error bodies are `{"error": "<message>"}`, message always in English. Write failures caused by the request are classified instead of collapsing into a generic 500 — messages name the column/constraint and never echo the value you sent:
+
+| Cause | Status | Example message |
+|---|---|---|
+| Required column missing / set to null | 400 | `column "serial" is required` |
+| Value not allowed by a check/enum constraint | 400 | `value not allowed for column "status"` |
+| Value invalid for the column type (out of range, not a whole number, bad timestamp, invalid bytes) | 400 | `invalid value for column "qty"` |
+| Foreign key points to a row that doesn't exist (insert/update) | 400 | `referenced row does not exist: foreign key constraint "children_parent_id_fkey"` |
+| Native row-level security policy denied the write | 403 | `row-level security policy denied this write` |
+| Unique constraint violated | 409 | `row already exists: unique constraint "assets_code_key"` |
+| Delete of a row another table still references | 409 | `row is still referenced by another table: foreign key constraint "..."` |
+
+A remaining 500 (`failed to insert row` / `failed to update row` / `failed to delete row`) is a server-side failure; the real cause is logged by Orbit.
 
 ## Health
 

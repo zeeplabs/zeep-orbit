@@ -782,3 +782,52 @@ func TestBuildDelete(t *testing.T) {
 		t.Errorf("Args deveria ser [uuid-del], got %v", q.Args)
 	}
 }
+
+// column-constraint-changes ERR-01: a JSON number that cannot fit an
+// integer/bigint column used to fail inside pgx's encoder (not Postgres), so
+// it never got a SQLSTATE and surfaced as a generic 500. It is now rejected
+// up front with an error naming the column.
+func TestNormalizeInteger(t *testing.T) {
+	intCol := registry.Column{Name: "qty", Type: "integer"}
+	bigCol := registry.Column{Name: "views", Type: "bigint"}
+	cases := []struct {
+		name    string
+		col     registry.Column
+		val     any
+		wantErr string
+	}{
+		{"whole float in range", intCol, float64(42), ""},
+		{"int32 max", intCol, float64(2147483647), ""},
+		{"int32 overflow", intCol, float64(2147483648), `query: invalid value for column "qty": out of range for integer`},
+		{"negative overflow", intCol, float64(-2147483649), `query: invalid value for column "qty": out of range for integer`},
+		{"fraction", intCol, 1.5, `query: invalid value for column "qty": not a whole number`},
+		{"bigint accepts beyond int32", bigCol, float64(99999999999), ""},
+		{"bigint overflow", bigCol, 1e19, `query: invalid value for column "views": out of range for bigint`},
+		{"non-number passes through to Postgres", intCol, "12", ""},
+		{"null passes through", intCol, nil, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := NormalizeInteger(c.col, c.val)
+			if c.wantErr == "" {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil || err.Error() != c.wantErr {
+				t.Fatalf("error = %v, want %q", err, c.wantErr)
+			}
+		})
+	}
+}
+
+func TestBuildInsertRejectsOutOfRangeInteger(t *testing.T) {
+	table := &registry.Table{Name: "items", Columns: []registry.Column{{Name: "qty", Type: "integer"}}}
+	if _, err := BuildInsert("s", "items", table, map[string]any{"qty": float64(99999999999)}, ""); err == nil {
+		t.Fatal("expected BuildInsert to reject an out-of-range integer")
+	}
+	if _, err := BuildUpdate("s", "items", table, "00000000-0000-4000-8000-000000000001", map[string]any{"qty": float64(99999999999)}, ""); err == nil {
+		t.Fatal("expected BuildUpdate to reject an out-of-range integer")
+	}
+}

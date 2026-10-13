@@ -706,10 +706,12 @@ func TestHandlerCreateOnConflictUpdatePolicyDenialReturns409(t *testing.T) {
 // on_conflict:"update" collision a policy denies (409 is correct there —
 // see the test above) AND for a plain INSERT a table's WITH CHECK policy
 // rejects outright, unrelated to any conflict. Gating the 42501->409
-// branch on onConflict == "update" keeps this second, unrelated case on the
-// pre-existing generic-500 path — answering 409 "row already exists" here
-// would be a factual lie (the row was never created, and never existed).
-func TestHandlerCreatePlainInsertDeniedByPolicyStaysGeneric500(t *testing.T) {
+// branch on onConflict == "update" keeps this second, unrelated case out of
+// the 409 path — answering 409 "row already exists" here would be a factual
+// lie (the row was never created, and never existed). It used to stay a
+// generic 500; column-constraint-changes ERR-01 answers it as what it is, a
+// 403 policy denial, without leaking the raw Postgres error.
+func TestHandlerCreatePlainInsertDeniedByPolicyReturns403(t *testing.T) {
 	if os.Getenv("TEST_DATABASE_URL") == "" {
 		t.Skip("TEST_DATABASE_URL não configurado")
 	}
@@ -791,14 +793,14 @@ func TestHandlerCreatePlainInsertDeniedByPolicyStaysGeneric500(t *testing.T) {
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("esperado 500 genérico (negado por WITH CHECK, não é conflito), obtido %d: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("esperado 403 (negado por WITH CHECK, não é conflito), obtido %d: %s", rec.Code, rec.Body.String())
 	}
 	var resp map[string]any
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode falhou: %v", err)
 	}
-	if resp["error"] != "failed to insert row" {
-		t.Fatalf("esperada mensagem genérica fixa, obtido %v", resp["error"])
+	if resp["error"] != "row-level security policy denied this write" {
+		t.Fatalf("esperada mensagem fixa de negação por policy, obtido %v", resp["error"])
 	}
 }

@@ -404,6 +404,7 @@ func (h *Handler) BuildChatConfirm(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) respondBuildChatConfirmError(w http.ResponseWriter, r *http.Request, err error) {
 	var valErr *ValidationError
 	var typeErr *provisioner.TypeChangeError
+	var colErr *provisioner.ColumnConstraintError
 	switch {
 	case errors.Is(err, ErrNotFound):
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -427,6 +428,8 @@ func (h *Handler) respondBuildChatConfirmError(w http.ResponseWriter, r *http.Re
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": valErr.Error()})
 	case errors.As(err, &typeErr):
 		h.writeError(w, r, http.StatusBadRequest, typeErr.Error(), err)
+	case errors.As(err, &colErr):
+		h.writeError(w, r, http.StatusBadRequest, colErr.Error(), err)
 	default:
 		h.writeError(w, r, http.StatusInternalServerError, genericAIChatError, err)
 	}

@@ -1014,11 +1014,14 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var valErr *ValidationError
 		var typeErr *provisioner.TypeChangeError
+		var colErr *provisioner.ColumnConstraintError
 		switch {
 		case errors.As(err, &valErr):
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": valErr.Error()})
 		case errors.As(err, &typeErr):
 			h.writeError(w, r, http.StatusBadRequest, typeErr.Error(), err)
+		case errors.As(err, &colErr):
+			h.writeError(w, r, http.StatusBadRequest, colErr.Error(), err)
 		case errors.Is(err, errAppCreateFailed):
 			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		case errors.Is(err, errSaveAuthProvidersFailed):
@@ -1314,6 +1317,7 @@ func (h *Handler) CreateAppTable(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var valErr *ValidationError
 		var typeErr *provisioner.TypeChangeError
+		var colErr *provisioner.ColumnConstraintError
 		switch {
 		case errors.Is(err, ErrNotFound):
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -1325,6 +1329,8 @@ func (h *Handler) CreateAppTable(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": valErr.Error()})
 		case errors.As(err, &typeErr):
 			h.writeError(w, r, http.StatusBadRequest, typeErr.Error(), err)
+		case errors.As(err, &colErr):
+			h.writeError(w, r, http.StatusBadRequest, colErr.Error(), err)
 		case errors.Is(err, errAppTableInternalFailed):
 			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		default:
@@ -1433,18 +1439,31 @@ func (h *Handler) UpdateAppTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// required/default/unique changes on columns that already existed:
+	// Apply is add-only for existing columns and would otherwise persist
+	// these as metadata the database never enforces (the asset-manager
+	// assets.serial incident). Pre-checked read-only before any DDL in this
+	// request, so a rejection leaves the table completely untouched.
+	schemaName := schemaNameForDB(app.Name)
+	constraintChanges := provisioner.DiffColumnConstraints(existingTable.Columns, body.Columns)
+	if err := h.prov.CheckColumnConstraintChanges(r.Context(), schemaName, table.Name, constraintChanges); err != nil {
+		h.writeProvisioningError(w, r, err)
+		return
+	}
+
 	// Provision the physical change before persisting metadata — if Apply
 	// fails, the stored columns/indexes must still match what's actually in
 	// Postgres, not a shape the physical table was never migrated to.
 	cfg := buildAppConfig(app)
 	cfg.Tables = []config.TableConfig{{Name: table.Name, RLS: table.RLS, Columns: table.Columns, Indexes: table.Indexes}}
 	if _, err := h.prov.Apply(r.Context(), &config.Config{Apps: []config.AppConfig{cfg}}); err != nil {
-		var typeErr *provisioner.TypeChangeError
-		if errors.As(err, &typeErr) {
-			h.writeError(w, r, http.StatusBadRequest, typeErr.Error(), err)
-		} else {
-			h.writeError(w, r, http.StatusInternalServerError, "provisioning failed — check server logs for details", err)
-		}
+		h.writeProvisioningError(w, r, err)
+		return
+	}
+	// After Apply, so a type change in the same request has already run
+	// before a default for the new type is set.
+	if _, err := h.prov.ApplyColumnConstraintChanges(r.Context(), schemaName, table.Name, constraintChanges); err != nil {
+		h.writeProvisioningError(w, r, err)
 		return
 	}
 
@@ -2571,6 +2590,23 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, status int,
 		zap.Error(err),
 	)
 	writeJSON(w, status, map[string]string{"error": publicMsg})
+}
+
+// writeProvisioningError answers a failed schema change: the provisioner's
+// typed errors (*TypeChangeError, *ColumnConstraintError) are caused by the
+// request meeting the existing data and are safe to expose as a 400;
+// anything else is logged and answered with a fixed generic 500.
+func (h *Handler) writeProvisioningError(w http.ResponseWriter, r *http.Request, err error) {
+	var typeErr *provisioner.TypeChangeError
+	var colErr *provisioner.ColumnConstraintError
+	switch {
+	case errors.As(err, &typeErr):
+		h.writeError(w, r, http.StatusBadRequest, typeErr.Error(), err)
+	case errors.As(err, &colErr):
+		h.writeError(w, r, http.StatusBadRequest, colErr.Error(), err)
+	default:
+		h.writeError(w, r, http.StatusInternalServerError, "provisioning failed — check server logs for details", err)
+	}
 }
 
 // decodeJSONBody decodes r.Body into v, logging and responding on failure.

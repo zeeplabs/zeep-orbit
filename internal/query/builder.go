@@ -2,6 +2,7 @@ package query
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -286,6 +287,37 @@ func NormalizeTimestamptz(col registry.Column, val any) (any, error) {
 	return nil, fmt.Errorf("query: invalid value for column %q: not a valid timestamp", col.Name)
 }
 
+// NormalizeInteger rejects a JSON number that cannot be stored in an
+// integer/bigint column: a fraction, or a value beyond the type's range.
+// encoding/json decodes every number as float64, and pgx refuses to encode
+// such a value into int4/int8 client-side — the query never reaches
+// Postgres, so there is no SQLSTATE to classify and the request used to end
+// as a generic 500. Checked here, like NormalizeTimestamptz, so the 400 can
+// name the column. Non-numeric values pass through unchanged for Postgres
+// to judge.
+func NormalizeInteger(col registry.Column, val any) (any, error) {
+	f, ok := val.(float64)
+	if !ok {
+		return val, nil
+	}
+	if f != math.Trunc(f) {
+		return nil, fmt.Errorf("query: invalid value for column %q: not a whole number", col.Name)
+	}
+	switch col.Type {
+	case "integer":
+		if f < math.MinInt32 || f > math.MaxInt32 {
+			return nil, fmt.Errorf("query: invalid value for column %q: out of range for integer", col.Name)
+		}
+	case "bigint":
+		// 2^63 is exactly representable as float64; MaxInt64 is not (it
+		// rounds up to 2^63), so compare against the power of two.
+		if f < -(1<<63) || f >= 1<<63 {
+			return nil, fmt.Errorf("query: invalid value for column %q: out of range for bigint", col.Name)
+		}
+	}
+	return val, nil
+}
+
 // InsertOptions controls ON CONFLICT behavior for BuildInsertWithOptions.
 // The zero value ("" OnConflict) is today's behavior: a conflict surfaces
 // as an unhandled unique_violation error.
@@ -365,6 +397,13 @@ func BuildInsertWithOptions(schemaName, tableName string, table *registry.Table,
 		if types[col.Name] == "timestamptz" {
 			var err error
 			val, err = NormalizeTimestamptz(col, val)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if t := types[col.Name]; t == "integer" || t == "bigint" {
+			var err error
+			val, err = NormalizeInteger(col, val)
 			if err != nil {
 				return nil, err
 			}
@@ -482,6 +521,13 @@ func BuildUpdate(schemaName, tableName string, table *registry.Table, id string,
 		if types[col.Name] == "timestamptz" {
 			var err error
 			val, err = NormalizeTimestamptz(col, val)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if t := types[col.Name]; t == "integer" || t == "bigint" {
+			var err error
+			val, err = NormalizeInteger(col, val)
 			if err != nil {
 				return nil, err
 			}

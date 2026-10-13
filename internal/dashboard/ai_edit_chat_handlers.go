@@ -450,6 +450,7 @@ func (h *Handler) applyEditOperation(ctx context.Context, user *DashboardUser, a
 func (h *Handler) respondEditChatConfirmError(w http.ResponseWriter, r *http.Request, err error) {
 	var valErr *ValidationError
 	var typeErr *provisioner.TypeChangeError
+	var colErr *provisioner.ColumnConstraintError
 	var fkErr *provisioner.ForeignKeyViolationError
 	switch {
 	case errors.Is(err, ErrNotFound):
@@ -476,6 +477,8 @@ func (h *Handler) respondEditChatConfirmError(w http.ResponseWriter, r *http.Req
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": valErr.Error()})
 	case errors.As(err, &typeErr):
 		h.writeError(w, r, http.StatusBadRequest, typeErr.Error(), err)
+	case errors.As(err, &colErr):
+		h.writeError(w, r, http.StatusBadRequest, colErr.Error(), err)
 	case errors.As(err, &fkErr):
 		h.writeError(w, r, http.StatusBadRequest, fkErr.Error(), err)
 	default:

@@ -95,12 +95,7 @@ func columnDDL(schemaName string, col config.ColumnConfig) string {
 		sb.WriteString(" NOT NULL")
 	}
 	if col.Default != "" {
-		if col.DefaultIsExpression {
-			sb.WriteString(fmt.Sprintf(" DEFAULT %s", col.Default))
-		} else {
-			escaped := strings.ReplaceAll(col.Default, "'", "''")
-			sb.WriteString(fmt.Sprintf(" DEFAULT '%s'", escaped))
-		}
+		sb.WriteString(" DEFAULT " + defaultSQL(col))
 	}
 	if col.Unique {
 		sb.WriteString(" UNIQUE")
@@ -113,6 +108,18 @@ func columnDDL(schemaName string, col config.ColumnConfig) string {
 	}
 
 	return sb.String()
+}
+
+// defaultSQL renders col.Default as the SQL that follows DEFAULT — the
+// expression verbatim when DefaultIsExpression (allowlisted upstream by
+// config.ValidateTables), otherwise a single-quoted literal with embedded
+// quotes doubled. Shared by columnDDL and ALTER COLUMN ... SET DEFAULT so
+// both paths render a default identically.
+func defaultSQL(col config.ColumnConfig) string {
+	if col.DefaultIsExpression {
+		return col.Default
+	}
+	return "'" + strings.ReplaceAll(col.Default, "'", "''") + "'"
 }
 
 // Returns true if the table was created (did not exist), false if it already existed.
@@ -299,6 +306,28 @@ func (p *Provisioner) addMissingColumns(ctx context.Context, schemaName, tableNa
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("table: iterate columns: %w", err)
+	}
+
+	// A NOT NULL column with no default can only be added to an empty table:
+	// Postgres has nothing to fill existing rows with and fails with a raw
+	// 23502. Checked up front, before any column in this call is added, so
+	// the caller gets a typed error naming the column instead of a
+	// half-applied request ending in a generic "provisioning failed".
+	for _, col := range cols {
+		if systemColumnNames[col.Name] || !col.Required || col.Default != "" {
+			continue
+		}
+		if _, found := existing[col.Name]; found {
+			continue
+		}
+		var rowCount int64
+		if err := p.pool.QueryRow(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM %q.%q`, schemaName, tableName)).Scan(&rowCount); err != nil {
+			return nil, fmt.Errorf("table: count rows in %q.%q: %w", schemaName, tableName, err)
+		}
+		if rowCount > 0 {
+			return nil, &ColumnConstraintError{Column: col.Name, Reason: ReasonRequiredWithoutDefault, Count: rowCount}
+		}
+		break
 	}
 
 	var added []string
