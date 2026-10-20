@@ -10,6 +10,7 @@
   "dataTable.loadFailed": "Falha ao carregar",
   "dataTable.empty": "Nada por aqui ainda",
   "nav.closeMenu": "Fechar menu",
+  "nav.skipToContent": "Ir para o conteúdo principal",
   "common.close": "Fechar",
   "appDetails.storageBucketPlaceholder": "meu-bucket",
   "appDetails.storageSecretKeyPlaceholder": "Chave secreta",

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -56,6 +56,7 @@ function UpdateAvailableBanner() {
 export default function DashboardShell({ user }: { user: User | null }) {
   const qc = useQueryClient();
   const { t, i18n } = useTranslation();
+  const mainRef = useRef<HTMLElement>(null);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
@@ -146,9 +147,27 @@ export default function DashboardShell({ user }: { user: User | null }) {
       className="grid min-h-screen max-md:grid-cols-1 md:grid-cols-[72px_1fr] lg:grid-cols-[264px_1fr]"
       style={{ background: "var(--bg-page)" }}
     >
+      {/* Skip link: primeiro foco da página; só aparece com foco de teclado. Fica fora do
+          fluxo do grid (sr-only = absolute, e fixed ao focar). preventDefault evita o #hash na URL. */}
+      <a
+        href="#main-content"
+        onClick={(e) => {
+          e.preventDefault();
+          mainRef.current?.focus();
+        }}
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded-[8px] focus:bg-[var(--surface-raised)] focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-[var(--text-primary)] focus:shadow-[var(--shadow-md)] focus:outline-none focus:ring-2 focus:ring-ring"
+      >
+        {t("nav.skipToContent")}
+      </a>
+
       <Sidebar companyName={companyName} banner={<UpdateAvailableBanner />} footer={footer} />
 
-      <main className="flex min-h-screen min-w-0 justify-center max-md:pb-[65px]">
+      <main
+        id="main-content"
+        ref={mainRef}
+        tabIndex={-1}
+        className="flex min-h-screen min-w-0 justify-center focus:outline-none max-md:pb-[65px]"
+      >
         <div className="mx-auto w-full min-w-0 max-w-[1920px] p-10 max-md:px-4 max-md:py-4">
           <Outlet />
         </div>
