@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import ChangePasswordModal from "./ChangePasswordModal";
 import { setLanguage } from "../lib/i18n";
+import { useBrandConfig } from "../lib/api";
 import { Icon } from "@/components/ui/icon";
 import { ConfirmDialog } from "@/components/patterns/ConfirmDialog";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -59,16 +60,10 @@ export default function DashboardShell({ user }: { user: User | null }) {
   const [loggingOut, setLoggingOut] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
 
-  const { data: brandConfig } = useQuery({
-    queryKey: ["brand-config"],
-    queryFn: async () => {
-      const res = await fetch("/dashboard/api/config");
-      return res.json() as Promise<{ company_name: string }>;
-    },
-    staleTime: 30000,
-  });
+  // Mesma query/endpoint de BrandSettingsPage (useBrandConfig) — um fetch só, cache compartilhado.
+  const { data: brandConfig, isPending: brandConfigPending } = useBrandConfig();
 
-  const { data: brandAssets } = useQuery({
+  const { data: brandAssets, isPending: brandAssetsPending } = useQuery({
     queryKey: ["brand-assets"],
     queryFn: async () => {
       const res = await fetch("/dashboard/api/brand/config");
@@ -78,8 +73,11 @@ export default function DashboardShell({ user }: { user: User | null }) {
     staleTime: 60000,
   });
 
+  // Enquanto a config da marca carrega, não mostra o nome padrão: ele piscava e
+  // era trocado pelo nome da empresa assim que a resposta chegava.
+  const brandLoading = brandConfigPending || (!brandConfig?.company_name && brandAssetsPending);
   const companyName =
-    brandConfig?.company_name || brandAssets?.company_name || t("app.title");
+    brandConfig?.company_name || brandAssets?.company_name || (brandLoading ? "" : t("app.title"));
 
   useEffect(() => {
     if (user?.language && user.language !== i18n.language) {
@@ -94,9 +92,8 @@ export default function DashboardShell({ user }: { user: User | null }) {
     (it) => pathname === it.path || pathname.startsWith(`${it.path}/`),
   )?.labelKey;
   useEffect(() => {
-    document.title = currentNavLabelKey
-      ? `${t(currentNavLabelKey)} · ${companyName}`
-      : companyName;
+    const section = currentNavLabelKey ? t(currentNavLabelKey) : "";
+    document.title = [section, companyName].filter(Boolean).join(" · ");
   }, [currentNavLabelKey, companyName, i18n.language]);
 
   async function saveLanguage(lang: string) {
