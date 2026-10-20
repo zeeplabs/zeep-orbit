@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuditLog, AuditEntry } from "../lib/api";
 import { Input } from "@/components/ui/input";
@@ -68,10 +69,21 @@ function useDebounced(value: string, delayMs: number) {
 
 export default function AuditLogPage() {
   const { t } = useTranslation();
-  const [category, setCategory] = useState("");
-  const [emailFilter, setEmailFilter] = useState("");
+  // Categoria, e-mail e página ficam na URL (?category=&email=&page=) — reload, voltar e link preservam a visão.
+  const [params, setParams] = useSearchParams();
+  const category = params.get("category") ?? "";
+  const emailFilter = params.get("email") ?? "";
+  const page = Math.max(0, (parseInt(params.get("page") ?? "1", 10) || 1) - 1);
   const debouncedEmail = useDebounced(emailFilter, 300);
-  const [page, setPage] = useState(0);
+  // `replace` ao digitar o e-mail para não criar uma entrada de histórico por tecla.
+  const updateParams = (changes: Record<string, string | null>, replace = false) => {
+    const next = new URLSearchParams(params);
+    for (const [k, v] of Object.entries(changes)) {
+      if (v) next.set(k, v);
+      else next.delete(k);
+    }
+    setParams(next, { replace });
+  };
   const limit = 50;
   const { data, isLoading, error } = useAuditLog(
     limit,
@@ -156,7 +168,7 @@ export default function AuditLogPage() {
           {CATEGORIES.map((c) => (
             <button
               key={c.value}
-              onClick={() => { setCategory(c.value); setPage(0); }}
+              onClick={() => updateParams({ category: c.value, page: null })}
               className={cn(
                 "cursor-pointer rounded-[8px] px-3.5 py-1.5 text-[13px] font-semibold transition-colors",
                 category === c.value
@@ -170,7 +182,7 @@ export default function AuditLogPage() {
         </div>
         <Input
           value={emailFilter}
-          onChange={(e) => { setEmailFilter(e.target.value); setPage(0); }}
+          onChange={(e) => updateParams({ email: e.target.value, page: null }, true)}
           placeholder={t("audit.filterUserPlaceholder")}
           className="h-9 w-[240px] text-[12.5px]"
         />
@@ -196,7 +208,7 @@ export default function AuditLogPage() {
             ? {
                 page: page + 1,
                 pageCount: totalPages,
-                onPageChange: (p) => setPage(p - 1),
+                onPageChange: (p) => updateParams({ page: p > 1 ? String(p) : null }),
                 prevLabel: t("common.previous"),
                 nextLabel: t("common.next"),
                 label: data ? t("audit.total", { count: data.total }) : undefined,

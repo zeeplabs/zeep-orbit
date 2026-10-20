@@ -1,4 +1,5 @@
 import { useState, useEffect, ReactNode } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useLogs, useLogMetrics, useApps, LogEntry } from "../lib/api";
 import { Icon } from "@/components/ui/icon";
@@ -91,7 +92,15 @@ function DetailField({ label, children }: { label: string; children: ReactNode }
 
 export default function LogsPage() {
   const { t } = useTranslation();
-  const [appFilter, setAppFilter] = useState("");
+  // Filtro de app na URL (?app=) — reload, voltar e link preservam a visão.
+  const [params, setParams] = useSearchParams();
+  const appFilter = params.get("app") ?? "";
+  const setAppFilter = (app: string) => {
+    const next = new URLSearchParams(params);
+    if (app) next.set("app", app);
+    else next.delete("app");
+    setParams(next);
+  };
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [countdown, setCountdown] = useState(10);
