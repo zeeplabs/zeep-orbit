@@ -20,6 +20,7 @@ import {
 } from "@/components/patterns";
 import type { StatusTone } from "@/components/patterns";
 import { useBrandConfig, useUpdateBrandConfig, useSystemConfig } from "../lib/api";
+import { useUnsavedChangesGuard } from "../lib/useUnsavedChangesGuard";
 import { useQueryClient } from "@tanstack/react-query";
 
 const TABS = [
@@ -133,6 +134,8 @@ function BrandingTab() {
   useEffect(() => {
     if (data) setCompanyName(data.company_name);
   }, [data]);
+
+  useUnsavedChangesGuard(Boolean(data) && companyName !== data?.company_name);
 
   const handleSave = () => {
     if (!data) return;
