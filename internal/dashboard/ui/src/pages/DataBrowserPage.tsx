@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   useDataBrowserApps,
@@ -57,21 +58,42 @@ const nativeInputCls =
 
 type Row = Record<string, unknown>;
 
+type FilterRule = { col: string; op: string; value: string };
+
+// Um param `f` por regra: "coluna|operador|valor". Só os dois primeiros `|` separam,
+// então o valor pode conter `|`.
+function parseFilterRules(raw: string[]): FilterRule[] {
+  const rules: FilterRule[] = [];
+  for (const entry of raw) {
+    const i = entry.indexOf("|");
+    const j = entry.indexOf("|", i + 1);
+    if (i <= 0 || j <= i + 1) continue;
+    rules.push({ col: entry.slice(0, i), op: entry.slice(i + 1, j), value: entry.slice(j + 1) });
+  }
+  return rules;
+}
+
+function writeFilterRules(next: URLSearchParams, rules: FilterRule[]) {
+  next.delete("f");
+  for (const r of rules) next.append("f", `${r.col}|${r.op}|${r.value}`);
+}
+
 export default function DataBrowserPage() {
   const { t } = useTranslation();
   const filterOps = filterOperators(t);
   const [expandedApps, setExpandedApps] = useState<Set<string>>(new Set());
-  const [selectedTable, setSelectedTable] = useState<{
-    app: string;
-    table: string;
-    columns: DataBrowserTable["columns"];
-  } | null>(null);
-  const [pageOffset, setPageOffset] = useState(0);
-  const [sortOrder, setSortOrder] = useState<string | undefined>(undefined);
+  // Tabela, página, ordenação e filtros vivem na URL (?app=&table=&page=&sort=&f=col|op|valor),
+  // então recarregar, voltar e compartilhar o link preservam a visão.
+  const [params, setParams] = useSearchParams();
   const [limit] = useState(50);
+  const appName = params.get("app");
+  const tableName = params.get("table");
+  const pageNumber = Math.max(1, parseInt(params.get("page") ?? "1", 10) || 1);
+  const pageOffset = (pageNumber - 1) * limit;
+  const sortOrder = params.get("sort") || undefined;
+  const filterRules = parseFilterRules(params.getAll("f"));
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-  const [filterRules, setFilterRules] = useState<Array<{ col: string; op: string; value: string }>>([]);
   const [draftCol, setDraftCol] = useState("");
   const [draftOp, setDraftOp] = useState("eq");
   const [draftValue, setDraftValue] = useState("");
@@ -90,6 +112,26 @@ export default function DataBrowserPage() {
   const activeFilterCount = filterRules.length;
 
   const { data: apps, isLoading: appsLoading } = useDataBrowserApps();
+
+  // Colunas vêm do schema carregado; app/tabela inexistentes na URL viram "nenhuma selecionada".
+  const selectedTable = useMemo(() => {
+    if (!appName || !tableName || !apps) return null;
+    const table = apps.find((a) => a.name === appName)?.tables.find((tb) => tb.name === tableName);
+    return table ? { app: appName, table: tableName, columns: table.columns } : null;
+  }, [apps, appName, tableName]);
+
+  // Abre o app da tabela selecionada (link direto / reload).
+  useEffect(() => {
+    if (appName) setExpandedApps((prev) => (prev.has(appName) ? prev : new Set(prev).add(appName)));
+  }, [appName]);
+
+  // Atualiza a URL; mudar filtro/ordem volta para a página 1.
+  const updateParams = (mutate: (next: URLSearchParams) => void, resetPage = true) => {
+    const next = new URLSearchParams(params);
+    mutate(next);
+    if (resetPage) next.delete("page");
+    setParams(next);
+  };
   const {
     data: queryResult,
     isLoading: queryLoading,
@@ -117,32 +159,27 @@ export default function DataBrowserPage() {
   };
 
   const selectTable = (app: DataBrowserApp, table: DataBrowserTable) => {
-    setSelectedTable({ app: app.name, table: table.name, columns: table.columns });
-    setPageOffset(0);
-    setSortOrder(undefined);
-    setFilterRules([]);
+    setParams(new URLSearchParams({ app: app.name, table: table.name }));
     setDraftCol("");
     setDraftValue("");
   };
 
   const addFilterRule = () => {
     if (!draftCol || !draftValue.trim()) return;
-    setFilterRules((prev) => [
-      ...prev.filter((r) => r.col !== draftCol),
+    const rules = [
+      ...filterRules.filter((r) => r.col !== draftCol),
       { col: draftCol, op: draftOp, value: draftValue.trim() },
-    ]);
+    ];
+    updateParams((next) => writeFilterRules(next, rules));
     setDraftValue("");
-    setPageOffset(0);
   };
 
   const removeFilterRule = (col: string) => {
-    setFilterRules((prev) => prev.filter((r) => r.col !== col));
-    setPageOffset(0);
+    updateParams((next) => writeFilterRules(next, filterRules.filter((r) => r.col !== col)));
   };
 
   const clearFilters = () => {
-    setFilterRules([]);
-    setPageOffset(0);
+    updateParams((next) => writeFilterRules(next, []));
   };
 
   const handleExport = async () => {
@@ -160,12 +197,8 @@ export default function DataBrowserPage() {
   };
 
   const handleSort = (col: string) => {
-    setSortOrder((prev) => {
-      if (!prev || prev !== `${col}.asc`) return `${col}.asc`;
-      if (prev === `${col}.asc`) return `${col}.desc`;
-      return undefined;
-    });
-    setPageOffset(0);
+    const nextSort = sortOrder !== `${col}.asc` ? `${col}.asc` : `${col}.desc`;
+    updateParams((next) => next.set("sort", nextSort));
   };
 
   const handleRefresh = async () => {
@@ -473,7 +506,8 @@ export default function DataBrowserPage() {
               pagination={{
                 page: currentPage,
                 pageCount: totalPages,
-                onPageChange: (p) => setPageOffset((p - 1) * limit),
+                onPageChange: (p) =>
+                  updateParams((next) => (p > 1 ? next.set("page", String(p)) : next.delete("page")), false),
                 prevLabel: t("dataBrowser.previous"),
                 nextLabel: t("dataBrowser.next"),
                 label: t("dataBrowser.pageRange", {
