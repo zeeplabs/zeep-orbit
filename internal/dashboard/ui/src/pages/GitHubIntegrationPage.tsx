@@ -422,7 +422,7 @@ function GitHubConfigTab() {
                 type={showSecret ? 'text' : 'password'}
                 value={clientSecret}
                 onChange={(e) => setClientSecret(e.target.value)}
-                placeholder={status?.configured ? '•••••••• (empty = keep current)' : t('github.clientSecret')}
+                placeholder={status?.configured ? t('github.keepCurrentSecret') : t('github.clientSecret')}
                 className="pr-10"
               />
               <button
@@ -445,7 +445,7 @@ function GitHubConfigTab() {
                 id="gh-private-key"
                 value={privateKey}
                 onChange={(e) => setPrivateKey(e.target.value)}
-                placeholder={status?.configured ? '•••••••• (empty = keep current)' : t('github.privateKey')}
+                placeholder={status?.configured ? t('github.keepCurrentSecret') : t('github.privateKey')}
                 rows={4}
                 className="w-full resize-none rounded-[10px] border px-3 py-2 font-mono text-[12px] outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 style={{
@@ -1156,7 +1156,7 @@ function DeployTab() {
             <Input
               value={baseDomain}
               onChange={(e) => setBaseDomain(e.target.value)}
-              placeholder="meusite.com"
+              placeholder={t('github.domainPlaceholder')}
             />
             <p className="mt-1 text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
               {t('deploy.baseDomainHint')}

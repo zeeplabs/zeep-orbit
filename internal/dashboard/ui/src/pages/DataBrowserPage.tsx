@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { formatTimestamp } from "@/lib/format";
 
 function filterOperators(t: (key: string) => string) {
   return [
@@ -595,7 +596,7 @@ function formatCellValue(value: unknown, type: string): string {
 
   if (type === "timestamptz" && typeof value === "string") {
     try {
-      return new Date(value).toLocaleString("pt-BR");
+      return formatTimestamp(value);
     } catch {
       return value;
     }

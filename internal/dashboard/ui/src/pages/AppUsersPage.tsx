@@ -30,6 +30,7 @@ import {
 import { EmptyState, DataTable, StatusPill, PhoneInput } from '@/components/patterns'
 import type { Column } from '@/components/patterns'
 import { cn } from '@/lib/utils'
+import { formatDate } from '@/lib/format'
 
 interface AppUser {
   id: string
@@ -127,14 +128,6 @@ function EditUserDrawer({
 interface ProviderCount {
   provider: string
   count: number
-}
-
-function formatDate(iso: string, lang: string) {
-  return new Date(iso).toLocaleDateString(lang, {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  })
 }
 
 function formatRelativeTime(iso: string | null, t: (k: string, opts?: Record<string, unknown>) => string): string {
@@ -289,7 +282,7 @@ export function AppUsersTab({ appId }: { appId: string }) {
       header: t('appUsers.table.createdAt'),
       render: (u) => (
         <span className="text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
-          {formatDate(u.created_at, i18n.language)}
+          {formatDate(u.created_at)}
         </span>
       ),
     },

@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/select";
 import { FormDrawer } from "@/components/patterns/FormDrawer";
 import WebhookMappingEditor from "@/components/WebhookMappingEditor";
+import { formatDateTime } from "@/lib/format";
 
 // Every HTTP method the dashboard's create form offers matches exactly what
 // the backend's CreateWebhook handler accepts (internal/dashboard/webhooks_handler.go).
@@ -405,7 +406,7 @@ function WebhookDeliveryLog({ appId, webhookId }: WebhookDeliveryLogProps) {
             onClick={() => setExpandedId(expandedId === d.id ? null : d.id)}
             className="flex items-center justify-between gap-2 rounded-md px-2 py-1 text-left text-[12px] hover:bg-[var(--hover-surface)]"
           >
-            <span className="text-[var(--text-tertiary)]">{new Date(d.received_at).toLocaleString()}</span>
+            <span className="text-[var(--text-tertiary)]">{formatDateTime(d.received_at)}</span>
             <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${outcomeBadgeClass(d.outcome)}`}>
               {t(`webhooks.outcome.${d.outcome}`)}
             </span>

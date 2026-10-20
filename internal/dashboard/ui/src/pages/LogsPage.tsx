@@ -16,18 +16,11 @@ import {
   type Column,
   type StatusTone,
 } from "@/components/patterns";
+import { formatTime } from "@/lib/format";
 
 const ALL = "__all__";
 
 type LogRow = LogEntry & { _id: string };
-
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("pt-BR", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
 
 function formatBodyInline(body: string): string {
   try {

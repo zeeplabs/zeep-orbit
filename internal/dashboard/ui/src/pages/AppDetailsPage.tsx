@@ -55,6 +55,7 @@ import {
   ErrorState,
   type StatusTone,
 } from "@/components/patterns";
+import { formatDate } from "@/lib/format";
 
 const TABS = ["database", "auth", "users", "storage", "api", "webhooks", "tokens", "members", "observability"] as const;
 
@@ -605,7 +606,7 @@ function StorageTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"
                   <Input value={app.name} readOnly className="cursor-not-allowed opacity-60" />
                 </>
               ) : (
-                <Input value={storageBucket} onChange={(e) => setStorageBucket(e.target.value)} placeholder="meu-bucket" />
+                <Input value={storageBucket} onChange={(e) => setStorageBucket(e.target.value)} placeholder={t("appDetails.storageBucketPlaceholder")} />
               )}
             </div>
             {!globalStorage && (
@@ -629,7 +630,7 @@ function StorageTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"
                       type={showStorageSecret ? "text" : "password"}
                       value={storageSecretKey}
                       onChange={(e) => setStorageSecretKey(e.target.value)}
-                      placeholder="Secret Key"
+                      placeholder={t("appDetails.storageSecretKeyPlaceholder")}
                       className="pr-10"
                     />
                     <button
@@ -828,9 +829,9 @@ function TokensTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]
                   <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{tok.name}</p>
                   <p className="text-[11px] text-[var(--text-tertiary)]">
                     {tok.expires_at
-                      ? t("appDetails.tokenExpires", { date: new Date(tok.expires_at).toLocaleDateString() })
+                      ? t("appDetails.tokenExpires", { date: formatDate(tok.expires_at) })
                       : t("appDetails.tokenNeverExpires")}
-                    {tok.last_used_at && ` ${t("appDetails.tokenLastUsed", { date: new Date(tok.last_used_at).toLocaleDateString() })}`}
+                    {tok.last_used_at && ` ${t("appDetails.tokenLastUsed", { date: formatDate(tok.last_used_at) })}`}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">

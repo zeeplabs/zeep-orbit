@@ -728,7 +728,7 @@ AFTER CLONE
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="fe-subdomain">{t("frontendApps.formSubdomain")}</Label>
               <Input id="fe-subdomain" value={newFeSubdomain} onChange={(e) => setNewFeSubdomain(e.target.value)}
-                placeholder="meuapp" />
+                placeholder={t("apps.slugPlaceholder")} />
             </div>
             {feCreateError && <p className="text-[12px] text-[var(--danger)]">{feCreateError}</p>}
           </div>
@@ -881,7 +881,7 @@ AFTER CLONE
                       const val = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "");
                       setDomainSub(val);
                     }}
-                    placeholder="meuapp"
+                    placeholder={t("apps.slugPlaceholder")}
                     className="font-mono"
                   />
                 </div>

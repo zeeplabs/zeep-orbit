@@ -9,6 +9,7 @@ import {
   type StatusTone,
 } from "@/components/patterns";
 import { cn } from "@/lib/utils";
+import { formatDateTime } from "@/lib/format";
 
 const ACTION_TONE_COLOR: Record<StatusTone, { fg: string; bg: string }> = {
   success: { fg: "var(--success)", bg: "var(--success-tint)" },
@@ -47,17 +48,6 @@ function resourceTypeLabel(type: string): string {
     .split("_")
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
-}
-
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleString("en-US", {
-    month: "short",
-    day: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
 }
 
 function actionTone(action: string): StatusTone {
@@ -101,7 +91,7 @@ export default function AuditLogPage() {
       width: 160,
       render: (e) => (
         <span className="text-[12.5px] tabular-nums text-[var(--text-tertiary)]">
-          {formatTime(e.created_at)}
+          {formatDateTime(e.created_at)}
         </span>
       ),
     },

@@ -17,14 +17,7 @@ import {
   type Column,
   type StatusTone,
 } from "@/components/patterns";
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
+import { formatDate } from "@/lib/format";
 
 const ROLE_TONE: Record<string, StatusTone> = {
   superadmin: "primary",

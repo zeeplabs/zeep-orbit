@@ -19,6 +19,7 @@ import { Icon } from "@/components/ui/icon";
 import { EmptyState, LoadingState } from "@/components/patterns/states";
 import { ConfirmDialog } from "@/components/patterns/ConfirmDialog";
 import { highlight, type SdkLang } from "@/lib/prism";
+import { formatDate } from "@/lib/format";
 
 function endpointUrl(): string {
   const base = typeof window !== "undefined" ? window.location.origin : "";
@@ -315,7 +316,7 @@ function PersonalAccessTokensSection() {
                       <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{pat.name}</p>
                       <p className="text-[11px] text-[var(--text-tertiary)]">
                         {pat.last_used_at
-                          ? t("pats.lastUsed", { date: new Date(pat.last_used_at).toLocaleDateString() })
+                          ? t("pats.lastUsed", { date: formatDate(pat.last_used_at) })
                           : t("pats.neverUsed")}
                       </p>
                     </div>

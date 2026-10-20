@@ -30,18 +30,11 @@ import {
   type Column,
 } from "@/components/patterns";
 import { cn } from "@/lib/utils";
+import { formatDate } from "@/lib/format";
 
 interface AppMembersListProps {
   appId: string;
   axis: AppAxis;
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
 }
 
 /**
