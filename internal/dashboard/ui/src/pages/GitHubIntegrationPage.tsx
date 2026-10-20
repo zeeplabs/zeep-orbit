@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { PageHeader, EmptyState, LoadingState, StatusPill, DataTable, ProviderTabs, AboutPanel } from '@/components/patterns'
+import { PageHeader, EmptyState, LoadingState, StatusPill, DataTable, ProviderTabs, AboutPanel, ConfirmDialog } from '@/components/patterns'
 import type { Column } from '@/components/patterns'
 import { cn } from '@/lib/utils'
 
@@ -447,7 +447,7 @@ function GitHubConfigTab() {
                 onChange={(e) => setPrivateKey(e.target.value)}
                 placeholder={status?.configured ? '•••••••• (empty = keep current)' : t('github.privateKey')}
                 rows={4}
-                className="w-full resize-none rounded-[10px] border px-3 py-2 font-mono text-[12px] outline-none"
+                className="w-full resize-none rounded-[10px] border px-3 py-2 font-mono text-[12px] outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 style={{
                   background: 'var(--bg-page)',
                   borderColor: 'var(--border-strong)',
@@ -567,6 +567,8 @@ function GitHubTemplatesTab() {
   const [error, setError] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<GitHubTemplate | null>(null)
+  const [deactivateTarget, setDeactivateTarget] = useState<GitHubTemplate | null>(null)
+  const [deactivating, setDeactivating] = useState(false)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
@@ -687,15 +689,27 @@ function GitHubTemplatesTab() {
     }
   }
 
-  const handleDelete = async (tpl: GitHubTemplate) => {
+  const handleDeactivate = async (tpl: GitHubTemplate) => {
+    setDeactivating(true)
     try {
-      await fetch(`/dashboard/api/github/templates/${tpl.id}`, {
+      const res = await fetch(`/dashboard/api/github/templates/${tpl.id}`, {
         method: 'DELETE',
         credentials: 'include',
       })
-      setTemplates((prev) => prev.filter((x) => x.id !== tpl.id))
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        toast.error(data.error || t('github.deactivateErr'))
+        return
+      }
+      // The API soft-deactivates (active=false) and keeps the row, so mirror that
+      // instead of removing it: a reload would bring it back as inactive.
+      setTemplates((prev) => prev.map((x) => (x.id === tpl.id ? { ...x, active: false } : x)))
+      toast.success(t('github.deactivated'))
     } catch {
-      // non-critical
+      toast.error(t('common.connectionError'))
+    } finally {
+      setDeactivating(false)
+      setDeactivateTarget(null)
     }
   }
 
@@ -773,12 +787,13 @@ function GitHubTemplatesTab() {
           <Button
             variant="outline"
             size="icon"
-            onClick={() => handleDelete(tpl)}
-            title={t('github.deleteTemplate')}
+            onClick={() => setDeactivateTarget(tpl)}
+            title={t('github.deactivateTemplate')}
+            aria-label={t('github.deactivateTemplate')}
             className="size-7 rounded-[8px]"
             style={{ color: 'var(--danger)' }}
           >
-            <Icon name="delete" size={12} />
+            <Icon name="block" size={12} />
           </Button>
         </div>
       ),
@@ -809,6 +824,19 @@ function GitHubTemplatesTab() {
         loading={loading}
         error={!!error}
         empty={{ title: t('github.noTemplates'), icon: 'code' }}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deactivateTarget)}
+        title={t('github.deactivateTitle')}
+        message={t('github.deactivateDesc', { name: deactivateTarget?.name })}
+        confirmLabel={deactivating ? t('github.deactivating') : t('github.deactivateConfirm')}
+        cancelLabel={t('github.cancel')}
+        destructive
+        icon="block"
+        loading={deactivating}
+        onConfirm={() => deactivateTarget && handleDeactivate(deactivateTarget)}
+        onCancel={() => setDeactivateTarget(null)}
       />
 
       <Dialog open={showModal} onOpenChange={setShowModal}>

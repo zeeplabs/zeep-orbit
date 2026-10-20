@@ -42,6 +42,8 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const tone = destructive ? 'var(--danger)' : 'var(--primary)'
   const tint = destructive ? 'var(--danger-tint)' : 'var(--primary-tint)'
+  // Confirm button is white text on a fill, so it needs the solid shade, not the text-tuned `--danger`.
+  const fill = destructive ? 'var(--danger-solid)' : 'var(--primary)'
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onCancel() }}>
       <DialogContent className="max-w-[420px] gap-0 p-6">
@@ -63,7 +65,7 @@ export function ConfirmDialog({
           </Button>
           <Button
             className="flex-1 text-white"
-            style={{ background: tone }}
+            style={{ background: fill }}
             onClick={onConfirm}
             disabled={loading}
           >

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Navigate, Outlet } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import ChangePasswordModal from "./ChangePasswordModal";
@@ -9,6 +9,7 @@ import { ConfirmDialog } from "@/components/patterns/ConfirmDialog";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { SidebarFooter } from "@/components/layout/SidebarFooter";
 import { MobileNav } from "@/components/layout/MobileNav";
+import { NAV_SECTIONS } from "@/components/layout/nav";
 import pkg from "../../package.json";
 
 interface User {
@@ -85,6 +86,18 @@ export default function DashboardShell({ user }: { user: User | null }) {
       setLanguage(user.language);
     }
   }, [user?.language]);
+
+  // SPA route changes don't reload the page, so keep document.title in step with the
+  // current section (screen readers announce it, and tabs/history become distinguishable).
+  const { pathname } = useLocation();
+  const currentNavLabelKey = NAV_SECTIONS.flatMap((s) => s.items).find(
+    (it) => pathname === it.path || pathname.startsWith(`${it.path}/`),
+  )?.labelKey;
+  useEffect(() => {
+    document.title = currentNavLabelKey
+      ? `${t(currentNavLabelKey)} · ${companyName}`
+      : companyName;
+  }, [currentNavLabelKey, companyName, i18n.language]);
 
   async function saveLanguage(lang: string) {
     setLanguage(lang);

@@ -740,7 +740,7 @@ function LicenseTab() {
             value={licenseKey}
             onChange={(e) => setLicenseKey(e.target.value)}
             placeholder={t("settings.licenseKeyPlaceholder")}
-            className="mb-2.5 w-full resize-none rounded-[9px] border border-[var(--border-strong)] bg-[var(--bg-page)] p-3 font-mono text-[12px] text-[var(--text-primary)] outline-none"
+            className="mb-2.5 w-full resize-none rounded-[9px] border border-[var(--border-strong)] bg-[var(--bg-page)] p-3 font-mono text-[12px] text-[var(--text-primary)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
           <div className="flex items-center gap-2.5">
             <Button onClick={previewOnly} disabled={!licenseKey}>

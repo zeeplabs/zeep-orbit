@@ -100,6 +100,16 @@ button:not(:disabled),
   cursor: pointer;
 }
 
+/* Decorative motion off for users who ask for it. `animate-spin` is left alone on
+ * purpose: it's the only "loading" signal on buttons, so removing it would hide state. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse,
+  .animate-bounce,
+  [class*="animate-accordion"] {
+    animation: none;
+  }
+}
+
 /* Brand-aware utility classes */
 .brand-focus {
   outline: none;

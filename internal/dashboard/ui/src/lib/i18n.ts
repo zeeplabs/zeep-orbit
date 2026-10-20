@@ -5,6 +5,12 @@ import en from '../locales/en.json'
 
 const saved = localStorage.getItem('orbit-lang')
 
+// Keep <html lang> in sync so screen readers pick the right voice/pronunciation.
+// Registered before init so it also fires for the initial language.
+i18n.on('languageChanged', (lng) => {
+  document.documentElement.lang = lng
+})
+
 i18n.use(initReactI18next).init({
   resources: {
     'pt-BR': { translation: ptBR },

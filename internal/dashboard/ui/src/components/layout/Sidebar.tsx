@@ -35,6 +35,9 @@ export function NavRow({
       to={item.path}
       end={item.path === '/apps'}
       onClick={onNavigate}
+      // The label span is `hidden` (display:none) on the tablet icon rail and the
+      // icon is aria-hidden, so without this the link has no accessible name there.
+      aria-label={itemLabel}
       // Active tint/color/weight is expressed as static Tailwind
       // classes keyed off `aria-current`, not NavLink's `style`
       // function prop: Radix's Tooltip.Trigger asChild clones this
