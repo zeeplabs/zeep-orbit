@@ -57,7 +57,7 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
       return;
     }
     if (!isSuperAdminAction && !currentPassword) {
-      setError("Current password is required");
+      setError(t("changePassword.currentRequired"));
       return;
     }
 
@@ -126,11 +126,11 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
                 >
                   <Icon name="check_circle" size={40} style={{ color: "var(--success)" }} />
                   <p style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>
-                    {t("changePassword.title")}
+                    {t("changePassword.success")}
                   </p>
                 </div>
                 <Button onClick={handleClose} className="w-full">
-                  Fechar
+                  {t("common.close")}
                 </Button>
               </div>
             ) : (
@@ -250,7 +250,7 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
                     disabled={isPending}
                     className="flex-1 rounded-[10px] border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--hover-surface)] hover:text-[var(--text-primary)] font-medium"
                   >
-                    Cancelar
+                    {t("changePassword.cancel")}
                   </Button>
                   <Button
                     size="sm"
@@ -261,10 +261,10 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
                     {isPending ? (
                       <>
                         <Icon name="progress_activity" size={14} style={{ marginRight: 6 }} className="animate-spin" />
-                        Alterando...
+                        {t("changePassword.submitting")}
                       </>
                     ) : (
-                      "Alterar senha"
+                      t("changePassword.submit")
                     )}
                   </Button>
                 </div>
