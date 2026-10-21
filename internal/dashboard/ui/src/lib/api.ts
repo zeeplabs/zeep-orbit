@@ -92,8 +92,24 @@ export function useSystemConfig(): UseQueryResult<SystemConfig> {
   })
 }
 
+let redirectingToLogin = false
+
+// An expired or revoked session answers 401 on every API call, but nothing told the
+// user: pages just showed a generic error. Send them to /login and bring them back to
+// the same screen afterwards. A full navigation (not the router) is deliberate: it
+// drops the query cache with the dead session, and it cannot be held back by the
+// unsaved-changes blocker, which would otherwise trap a user whose edits can't be saved.
+export function redirectToLoginOnUnauthorized(): void {
+  const { pathname, search } = window.location
+  if (redirectingToLogin || pathname.startsWith('/dashboard/login')) return
+  redirectingToLogin = true
+  const returnTo = encodeURIComponent(pathname + search)
+  window.location.assign(`/dashboard/login?return_to=${returnTo}`)
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, { credentials: 'include', ...init })
+  if (res.status === 401) redirectToLoginOnUnauthorized()
   if (!res.ok) {
     let message = `HTTP ${res.status}`
     try {
@@ -670,6 +686,7 @@ export async function exportDataBrowserCSV(
   const res = await fetch(`/dashboard/api/data-browser/export?${params}`, {
     credentials: 'include',
   })
+  if (res.status === 401) redirectToLoginOnUnauthorized()
   if (!res.ok) throw new Error('Export failed')
   const blob = await res.blob()
   const url = URL.createObjectURL(blob)
