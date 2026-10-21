@@ -181,7 +181,7 @@ export function PolicyTemplatePicker({
               <span className="text-[13px] font-semibold text-[var(--text-primary)]">
                 {t(`tablePolicies.templates.${def.id}.title`)}
               </span>
-              <span className="text-[11px] text-[var(--text-secondary)]">
+              <span className="text-[12px] text-[var(--text-secondary)]">
                 {t(`tablePolicies.templates.${def.id}.description`)}
               </span>
             </div>
@@ -200,7 +200,7 @@ export function PolicyTemplatePicker({
           {activeTemplate === def.id && def.id === "owner_only" && (
             <div className="flex flex-col gap-2.5">
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+                <span className="text-[12px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
                   {t("tablePolicies.templates.actionsLabel")}
                 </span>
                 {OWNER_ONLY_ACTIONS.map((action) => {
@@ -317,7 +317,7 @@ export function PolicyTemplatePicker({
                 {t("tablePolicies.templates.apply")}
               </Button>
               {compositeStatus && (
-                <div className="flex flex-col gap-0.5 font-mono text-[11px] text-[var(--text-secondary)]">
+                <div className="flex flex-col gap-0.5 font-mono text-[12px] text-[var(--text-secondary)]">
                   {COMPOSITE_ACTIONS.map((action) => {
                     const entry = compositeStatus[action];
                     if (!entry) return null;

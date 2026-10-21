@@ -216,7 +216,7 @@ export function AppUsersTab({ appId }: { appId: string }) {
             <img src={u.avatar_url} alt="" className="size-7 rounded-full object-cover" />
           ) : (
             <div
-              className="flex size-7 items-center justify-center rounded-full text-[11px] font-bold"
+              className="flex size-7 items-center justify-center rounded-full text-[12px] font-bold"
               style={{
                 background: 'linear-gradient(135deg, var(--primary), var(--accent))',
                 color: '#fff',
@@ -227,7 +227,7 @@ export function AppUsersTab({ appId }: { appId: string }) {
           )}
           <div className="min-w-0">
             <div className="truncate text-[13px] font-bold">{u.name || '—'}</div>
-            <div className="truncate text-[11.5px]" style={{ color: 'var(--text-tertiary)' }}>
+            <div className="truncate text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
               {u.email}
             </div>
           </div>

@@ -108,7 +108,7 @@ export function Sidebar({ companyName, banner, footer }: SidebarProps) {
       <div className="mb-4 hidden items-center gap-2.5 px-2 lg:flex">
         <div className="flex items-start min-w-0 flex-col">
           <img src={orbitWordmark} alt="Orbit" className="mb-0.5 h-[20px] w-auto object-contain" />
-          <span className="text-[11px] text-[var(--text-tertiary)]">{t('app.subtitle')}</span>
+          <span className="text-[12px] text-[var(--text-tertiary)]">{t('app.subtitle')}</span>
         </div>
       </div>
 
@@ -133,7 +133,7 @@ export function Sidebar({ companyName, banner, footer }: SidebarProps) {
               {index > 0 && (
                 <Separator decorative={false} className="mb-1.5 md:block lg:hidden" />
               )}
-              <span className="mb-1 hidden px-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-tertiary)] lg:block">
+              <span className="mb-1 hidden px-3 text-[12px] font-semibold uppercase tracking-wider text-[var(--text-tertiary)] lg:block">
                 {t(section.titleKey)}
               </span>
               {visible.map((item) => (

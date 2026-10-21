@@ -333,7 +333,7 @@ function GitHubConfigTab() {
     <div className="flex flex-wrap items-start gap-6">
       <div className="flex min-w-0 flex-1 flex-col gap-6">
       <div className="flex flex-col gap-3">
-        <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
+        <div className="text-[12px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
           {t('integrations.codeHostSectionTitle')}
         </div>
         <ProviderTabs
@@ -533,7 +533,7 @@ function GitHubConfigTab() {
           className="flex flex-col gap-1 rounded-[14px] border p-2"
           style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
         >
-          <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
+          <div className="px-3 py-2 text-[12px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
             {t('integrations.linkedTemplatesTitle')}
           </div>
           {linkedTemplates.map((tpl) => (
@@ -722,7 +722,7 @@ function GitHubTemplatesTab() {
           <div className="text-[13px] font-bold">{tpl.name}</div>
           {tpl.description && (
             <div
-              className="mt-0.5 line-clamp-1 text-[11.5px]"
+              className="mt-0.5 line-clamp-1 text-[12px]"
               style={{ color: 'var(--text-tertiary)' }}
             >
               {tpl.description}
@@ -737,7 +737,7 @@ function GitHubTemplatesTab() {
       render: (tpl) =>
         tpl.framework ? (
           <span
-            className="rounded px-2 py-0.5 text-[11.5px]"
+            className="rounded px-2 py-0.5 text-[12px]"
             style={{ background: 'var(--bg-sunken)', color: 'var(--text-secondary)' }}
           >
             {tpl.framework}
@@ -762,7 +762,7 @@ function GitHubTemplatesTab() {
       render: (tpl) => (
         <div className="flex items-center gap-2">
           <Switch checked={tpl.active} onCheckedChange={() => handleToggleActive(tpl)} />
-          <span className="text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
+          <span className="text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
             {tpl.active ? t('github.active') : t('github.inactive')}
           </span>
         </div>
@@ -898,7 +898,7 @@ function GitHubTemplatesTab() {
               style={{ borderColor: 'var(--border)' }}
             >
               <p
-                className="text-[11px] font-semibold uppercase tracking-wider"
+                className="text-[12px] font-semibold uppercase tracking-wider"
                 style={{ color: 'var(--text-tertiary)' }}
               >
                 {t('github.deployConfig')}
@@ -1064,7 +1064,7 @@ function DeployTab() {
     <div className="flex flex-wrap items-start gap-6">
       <div className="flex min-w-0 flex-1 flex-col gap-6">
       <div className="flex flex-col gap-3">
-        <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
+        <div className="text-[12px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
           {t('integrations.deployProviderSectionTitle')}
         </div>
         <ProviderTabs
@@ -1125,7 +1125,7 @@ function DeployTab() {
                 if (e.key === 'Enter') handleSave()
               }}
             />
-            <p className="mt-1 text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
+            <p className="mt-1 text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
               {t('deploy.apiKeyHint')}
             </p>
           </div>
@@ -1136,7 +1136,7 @@ function DeployTab() {
               onChange={(e) => setRenderProjectId(e.target.value)}
               placeholder="prj-..."
             />
-            <p className="mt-1 text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
+            <p className="mt-1 text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
               {t('deploy.projectIdHint')}
             </p>
           </div>
@@ -1147,7 +1147,7 @@ function DeployTab() {
               onChange={(e) => setRenderEnvironmentId(e.target.value)}
               placeholder="evm-..."
             />
-            <p className="mt-1 text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
+            <p className="mt-1 text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
               {t('deploy.environmentIdHint')}
             </p>
           </div>
@@ -1158,10 +1158,10 @@ function DeployTab() {
               onChange={(e) => setBaseDomain(e.target.value)}
               placeholder={t('github.domainPlaceholder')}
             />
-            <p className="mt-1 text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
+            <p className="mt-1 text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
               {t('deploy.baseDomainHint')}
             </p>
-            <p className="mt-1 text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
+            <p className="mt-1 text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
               {t('deploy.dnsHint')}
             </p>
           </div>
@@ -1191,7 +1191,7 @@ function DeployTab() {
         className="flex flex-col gap-1 rounded-[14px] border p-2"
         style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
       >
-        <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
+        <div className="px-3 py-2 text-[12px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
           {t('integrations.recentDeploysTitle')}
         </div>
         {recentDeploys.length === 0 ? (
@@ -1319,7 +1319,7 @@ function AIProviderTab() {
     <div className="flex flex-wrap items-start gap-6">
       <div className="flex min-w-0 flex-1 flex-col gap-6">
         <div className="flex flex-col gap-3">
-          <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
+          <div className="text-[12px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
             {t('aiProvider.sectionTitle')}
           </div>
           <ProviderTabs
@@ -1412,7 +1412,7 @@ function AIProviderTab() {
                   <Icon name={showKey ? 'visibility_off' : 'visibility'} size={16} />
                 </button>
               </div>
-              <p className="mt-1 text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
+              <p className="mt-1 text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
                 {hasKey ? t('aiProvider.apiKeyHintConfigured') : t('aiProvider.apiKeyHint')}
               </p>
             </div>

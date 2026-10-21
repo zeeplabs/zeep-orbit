@@ -55,7 +55,7 @@ export function ProviderCard({
         <div className="flex items-center gap-2">
           <span className="truncate text-sm font-medium text-[var(--text-primary)]">{name}</span>
           {badge && (
-            <span className="rounded-full bg-[var(--hover-surface)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+            <span className="rounded-full bg-[var(--hover-surface)] px-1.5 py-0.5 text-[12px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
               {badge}
             </span>
           )}

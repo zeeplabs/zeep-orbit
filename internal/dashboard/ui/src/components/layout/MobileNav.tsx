@@ -80,7 +80,7 @@ export function MobileNav({
       {({ isActive }) => (
         <>
           <Icon name={icon} size={22} fill={isActive ? 1 : 0} />
-          <span className="text-[10px] leading-none">{label(labelKey, t)}</span>
+          <span className="text-[12px] leading-none">{label(labelKey, t)}</span>
         </>
       )}
     </NavLink>
@@ -100,7 +100,7 @@ export function MobileNav({
             style={{ color: 'var(--text-tertiary)' }}
           >
             <Icon name="menu" size={22} />
-            <span className="text-[10px] leading-none">{t('nav.more')}</span>
+            <span className="text-[12px] leading-none">{t('nav.more')}</span>
           </button>
         </DialogTrigger>
       </nav>
@@ -135,7 +135,7 @@ export function MobileNav({
               if (visible.length === 0) return null
               return (
                 <div key={section.titleKey} className="flex flex-col gap-0.5">
-                  <span className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
+                  <span className="mb-1 px-3 text-[12px] font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
                     {t(section.titleKey)}
                   </span>
                   {visible.map((it) => (

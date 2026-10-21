@@ -324,7 +324,7 @@ export default function DataBrowserPage() {
   return (
     <div className="grid h-full min-h-full items-stretch grid-cols-[240px_1fr] gap-4 max-lg:flex max-lg:flex-col">
       <div className="h-full overflow-hidden rounded-[14px] bg-[var(--surface)] py-4 max-lg:h-auto max-lg:max-h-[220px] max-lg:overflow-y-auto">
-        <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+        <div className="px-3 py-2 text-[12px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
           {t("dataBrowser.appsLabel")}
         </div>
         {appsLoading ? (
@@ -361,7 +361,7 @@ export default function DataBrowserPage() {
                           >
                             <Icon name="table_chart" size={14} />
                             <span className="flex-1 truncate">{table.name}</span>
-                            <span className="rounded-full bg-[var(--sunken)] px-1.5 py-0.5 text-[10px] text-[var(--text-tertiary)]">
+                            <span className="rounded-full bg-[var(--sunken)] px-1.5 py-0.5 text-[12px] text-[var(--text-tertiary)]">
                               {table.count}
                             </span>
                           </button>
@@ -407,7 +407,7 @@ export default function DataBrowserPage() {
                   <Icon name="filter_list" size={15} />
                   {t("dataBrowser.filters")}
                   {activeFilterCount > 0 && (
-                    <span className="ml-0.5 rounded-full bg-[var(--primary)] px-1.5 text-[10px] leading-4 text-white">
+                    <span className="ml-0.5 rounded-full bg-[var(--primary)] px-1.5 text-[12px] leading-4 text-white">
                       {activeFilterCount}
                     </span>
                   )}
@@ -486,7 +486,7 @@ export default function DataBrowserPage() {
                     ))}
                     <button
                       onClick={clearFilters}
-                      className="cursor-pointer border-none bg-transparent px-1.5 py-0.5 text-[11px] text-[var(--danger)]"
+                      className="cursor-pointer border-none bg-transparent px-1.5 py-0.5 text-[12px] text-[var(--danger)]"
                     >
                       {t("dataBrowser.clearFilters")}
                     </button>
@@ -549,7 +549,7 @@ export default function DataBrowserPage() {
                 <div key={col.name} className="flex flex-col gap-1.5">
                   <Label className="flex items-center gap-1.5">
                     {col.name}
-                    <span className="font-mono text-[10px] font-normal opacity-50">{col.type}</span>
+                    <span className="font-mono text-[12px] font-normal opacity-50">{col.type}</span>
                   </Label>
                   {col.type === "boolean" ? (
                     <select

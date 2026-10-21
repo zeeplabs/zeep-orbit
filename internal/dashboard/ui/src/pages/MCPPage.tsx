@@ -182,14 +182,14 @@ function ClientTutorials({ t }: { t: (key: string) => string }) {
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
                   <p className="truncate text-[13.5px] font-bold text-[var(--text-primary)]">{client.name}</p>
-                  <p className="truncate font-mono text-[11px] text-[var(--text-tertiary)]">{client.file}</p>
+                  <p className="truncate font-mono text-[12px] text-[var(--text-tertiary)]">{client.file}</p>
                 </div>
               </div>
               <div className="relative">
                 <pre
                   data-testid={`mcp-client-snippet-${client.name}`}
                   data-snippet={snippet}
-                  className="m-0 overflow-x-auto rounded-[10px] border p-3 text-[11px] leading-[1.5]"
+                  className="m-0 overflow-x-auto rounded-[10px] border p-3 text-[12px] leading-[1.5]"
                   style={{
                     background: "var(--bg-sunken)",
                     borderColor: "var(--border)",
@@ -314,7 +314,7 @@ function PersonalAccessTokensSection() {
                   >
                     <div className="flex min-w-0 flex-col gap-0.5">
                       <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{pat.name}</p>
-                      <p className="text-[11px] text-[var(--text-tertiary)]">
+                      <p className="text-[12px] text-[var(--text-tertiary)]">
                         {pat.last_used_at
                           ? t("pats.lastUsed", { date: formatDate(pat.last_used_at) })
                           : t("pats.neverUsed")}
@@ -405,7 +405,7 @@ function RegisteredOAuthClientsSection() {
             >
               <div className="flex min-w-0 flex-col gap-0.5">
                 <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{client.name}</p>
-                <p className="truncate text-[11px] text-[var(--text-tertiary)]">
+                <p className="truncate text-[12px] text-[var(--text-tertiary)]">
                   {client.redirect_uris.join(", ")}
                 </p>
               </div>

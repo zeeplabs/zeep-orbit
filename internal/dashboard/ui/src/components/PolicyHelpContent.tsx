@@ -89,7 +89,7 @@ export function PolicyHelpContent() {
           >
             <p className="text-[13px] font-semibold text-[var(--text-primary)]">{t(example.titleKey)}</p>
             <p className="text-[12px] text-[var(--text-secondary)]">{t(example.descKey)}</p>
-            <div className="flex flex-col gap-0.5 pl-1 font-mono text-[11px] text-[var(--text-secondary)]">
+            <div className="flex flex-col gap-0.5 pl-1 font-mono text-[12px] text-[var(--text-secondary)]">
               {example.clauses.map((clause, i) => (
                 <span key={i}>{clauseText(clause)}</span>
               ))}

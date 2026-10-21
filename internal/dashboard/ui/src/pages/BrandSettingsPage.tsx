@@ -41,7 +41,7 @@ function SoonRow({ label, description }: { label: string; description: string })
           <span className="flex items-center gap-2">
             {label}
             <span
-              className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
+              className="rounded-full px-2 py-0.5 text-[12px] font-bold uppercase tracking-wider"
               style={{ background: "var(--accent-tint)", color: "var(--accent)" }}
             >
               {t("apps.soon")}
@@ -88,7 +88,7 @@ export default function BrandSettingsPage() {
               <Icon name={tb.icon} size={14} /> {t(tb.labelKey)}
               {tb.value === "license" && (
                 <span
-                  className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                  className="rounded-full px-1.5 py-0.5 text-[12px] font-semibold uppercase tracking-wide"
                   style={{ background: "var(--hover-surface)", color: "var(--text-tertiary)" }}
                 >
                   {t("apps.soon")}
@@ -268,7 +268,7 @@ function SoftDeleteCard() {
           onChange={(e) => setMaxCsvRows(Math.max(1, Number(e.target.value) || 1))}
           className="mt-2 max-w-[200px]"
         />
-        <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">{t("settings.maxCsvExportRowsHint")}</p>
+        <p className="mt-1 text-[12px] text-[var(--text-tertiary)]">{t("settings.maxCsvExportRowsHint")}</p>
       </div>
       <div className="mt-4 border-t border-[var(--border)] pt-4">
         <Label className="text-[13px] font-semibold text-[var(--text-secondary)]">
@@ -281,7 +281,7 @@ function SoftDeleteCard() {
           onChange={(e) => setStatementTimeoutMs(Math.max(0, Number(e.target.value) || 0))}
           className="mt-2 max-w-[200px]"
         />
-        <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">{t("settings.statementTimeoutMsHint")}</p>
+        <p className="mt-1 text-[12px] text-[var(--text-tertiary)]">{t("settings.statementTimeoutMsHint")}</p>
       </div>
       <div className="mt-4 border-t border-[var(--border)] pt-4">
         <Label className="text-[13px] font-semibold text-[var(--text-secondary)]">
@@ -294,7 +294,7 @@ function SoftDeleteCard() {
           onChange={(e) => setRetentionDays(Math.max(0, Number(e.target.value) || 0))}
           className="mt-2 max-w-[200px]"
         />
-        <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">{t("settings.retentionDaysHint")}</p>
+        <p className="mt-1 text-[12px] text-[var(--text-tertiary)]">{t("settings.retentionDaysHint")}</p>
       </div>
       <div className="mt-4 border-t border-[var(--border)] pt-4">
         <Button onClick={handleSave} disabled={saving} className="gap-2">
@@ -457,7 +457,7 @@ function GoogleAuthProviderCard() {
                 {t("settings.allowedDomains")}
               </Label>
               <Input value={allowedDomains} onChange={(e) => setAllowedDomains(e.target.value)} placeholder="zeeplabs.com, zeepfly.com" />
-              <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">{t("settings.domainsHint")}</p>
+              <p className="mt-1 text-[12px] text-[var(--text-tertiary)]">{t("settings.domainsHint")}</p>
             </div>
           </div>
         )}
@@ -663,7 +663,7 @@ function LicenseTab() {
     <div className="flex flex-wrap items-start gap-6">
       <div className="flex min-w-0 flex-1 flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="mr-1 text-[11.5px] text-[var(--text-tertiary)]">
+          <span className="mr-1 text-[12px] text-[var(--text-tertiary)]">
             {t("settings.licensePreviewLabel")}
           </span>
           {LICENSE_PREVIEW_STATES.map((state) => (
@@ -682,7 +682,7 @@ function LicenseTab() {
             </button>
           ))}
         </div>
-        <p className="text-[11.5px] text-[var(--text-tertiary)]">{t("settings.licensePreviewHint")}</p>
+        <p className="text-[12px] text-[var(--text-tertiary)]">{t("settings.licensePreviewHint")}</p>
 
         <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-5">
           <div className="mb-1.5 flex items-center gap-2">
@@ -759,7 +759,7 @@ function LicenseTab() {
           </div>
           <div className="flex flex-wrap items-center gap-6">
             <div>
-              <div className="mb-2 text-[11.5px] text-[var(--text-tertiary)]">
+              <div className="mb-2 text-[12px] text-[var(--text-tertiary)]">
                 {t("settings.enterpriseBadgeInlineLabel")}
               </div>
               <div className="flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]">
@@ -768,7 +768,7 @@ function LicenseTab() {
               </div>
             </div>
             <div>
-              <div className="mb-2 text-[11.5px] text-[var(--text-tertiary)]">
+              <div className="mb-2 text-[12px] text-[var(--text-tertiary)]">
                 {t("settings.enterpriseBadgeLockedActionLabel")}
               </div>
               <Button variant="outline" onClick={() => setUpgradeOpen(true)} className="gap-2">

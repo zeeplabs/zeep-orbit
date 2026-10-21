@@ -82,7 +82,7 @@ function StatCard({ icon, label, value, fg }: StatCardProps) {
 function DetailField({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
-      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
+      <p className="mb-1 text-[12px] font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
         {label}
       </p>
       {children}
@@ -165,10 +165,10 @@ export default function LogsPage() {
     {
       key: "time",
       header: t("logs.colTime"),
-      width: 100,
+      width: 120,
       align: "right",
       render: (e) => (
-        <span className="text-[12px] tabular-nums text-[var(--text-tertiary)]">
+        <span className="whitespace-nowrap text-[12px] tabular-nums text-[var(--text-tertiary)]">
           {formatTime(e.timestamp)}
         </span>
       ),
@@ -188,7 +188,7 @@ export default function LogsPage() {
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--success)] opacity-75" />
                   <span className="relative inline-flex size-2 rounded-full bg-[var(--success)]" />
                 </span>
-                <span className="text-[11px] font-medium text-[var(--success)] tabular-nums">
+                <span className="text-[12px] font-medium text-[var(--success)] tabular-nums">
                   {t("logs.autoRefreshing", { s: countdown })}
                 </span>
               </span>

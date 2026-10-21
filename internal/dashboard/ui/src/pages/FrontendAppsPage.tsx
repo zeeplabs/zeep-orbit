@@ -332,7 +332,7 @@ AFTER CLONE
       render: (app) => (
         <div>
           <div className="text-[13px] font-bold">{app.name}</div>
-          <div className="text-[11.5px]" style={{ color: 'var(--text-tertiary)' }}>
+          <div className="text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
             {app.created_by}
           </div>
         </div>
@@ -343,7 +343,7 @@ AFTER CLONE
       header: t('frontendApps.slug'),
       render: (app) => (
         <code
-          className="rounded px-1.5 py-0.5 text-[11.5px] font-mono"
+          className="rounded px-1.5 py-0.5 text-[12px] font-mono"
           style={{
             background: 'var(--bg-sunken)',
             color: 'var(--text-secondary)',
@@ -508,7 +508,7 @@ AFTER CLONE
                     <SelectItem key={tmpl.id} value={tmpl.id}>
                       <span>{tmpl.name}</span>
                       <span
-                        className="ml-2 text-[11.5px]"
+                        className="ml-2 text-[12px]"
                         style={{ color: 'var(--text-tertiary)' }}
                       >
                         {tmpl.framework}
@@ -625,7 +625,7 @@ AFTER CLONE
                 </Label>
                 <div className="flex items-center gap-2">
                   <code
-                    className="flex-1 rounded border px-3 py-2 font-mono text-[11.5px] break-all"
+                    className="flex-1 rounded border px-3 py-2 font-mono text-[12px] break-all"
                     style={{
                       background: 'var(--bg-page)',
                       borderColor: 'var(--border)',
@@ -660,7 +660,7 @@ AFTER CLONE
                     </Label>
                     <div className="relative overflow-hidden rounded border">
                       <code
-                        className="block max-h-32 overflow-auto whitespace-pre-wrap break-all p-3 pr-10 font-mono text-[11.5px]"
+                        className="block max-h-32 overflow-auto whitespace-pre-wrap break-all p-3 pr-10 font-mono text-[12px]"
                         style={{
                           background: 'var(--bg-page)',
                           color: 'var(--text-primary)',
@@ -683,7 +683,7 @@ AFTER CLONE
                     </Label>
                     <div className="relative overflow-hidden rounded border">
                       <code
-                        className="block max-h-48 overflow-auto whitespace-pre-wrap break-all p-3 pr-10 font-mono text-[11.5px]"
+                        className="block max-h-48 overflow-auto whitespace-pre-wrap break-all p-3 pr-10 font-mono text-[12px]"
                         style={{
                           background: 'var(--bg-page)',
                           color: 'var(--text-secondary)',

@@ -16,7 +16,7 @@ export function RoleChipPicker({ availableRoles, selected, onToggle, label, plac
 
   return (
     <div className="flex flex-wrap items-center gap-1.5" title={hint}>
-      <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+      <span className="text-[12px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
         {label}
       </span>
       {chipRoles.length === 0 ? (

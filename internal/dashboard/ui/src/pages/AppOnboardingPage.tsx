@@ -65,7 +65,7 @@ export default function AppOnboardingPage() {
               className={nameError ? "border-[var(--danger)]" : undefined}
             />
             {nameError && <p className="text-xs text-[var(--danger)]">{nameError}</p>}
-            <p className="text-[11px] text-[var(--text-tertiary)]">{t("appOnboarding.nameHint")}</p>
+            <p className="text-[12px] text-[var(--text-tertiary)]">{t("appOnboarding.nameHint")}</p>
           </div>
 
           <div className="border-t border-[var(--border)]" />

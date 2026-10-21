@@ -112,7 +112,7 @@ export default function AppDetailsPage() {
 
       <div className="mb-7 flex items-start justify-between gap-4">
         <div>
-          <span className="mb-3 inline-block rounded-full bg-[var(--primary-tint)] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-[var(--primary)]">
+          <span className="mb-3 inline-block rounded-full bg-[var(--primary-tint)] px-2.5 py-1 text-[12px] font-bold uppercase tracking-wider text-[var(--primary)]">
             {t("appDetails.backendBadge")}
           </span>
           <h1 className="text-[26px] font-bold leading-tight text-[var(--text-primary)]" style={{ fontFamily: "var(--font-display)" }}>
@@ -151,7 +151,7 @@ export default function AppDetailsPage() {
             >
               {label}
               {badge && (
-                <span className="rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide"
+                <span className="rounded-full px-1.5 py-0.5 text-[12px] font-bold uppercase tracking-wide"
                   style={{ background: "var(--accent-tint)", color: "var(--accent)" }}>
                   {badge === "new" ? t("appDetails.badgeNew") : t("appDetails.badgeSoon")}
                 </span>
@@ -421,7 +421,7 @@ function LoginTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]>
                 onChange={(e) => setGoogleRedirectUrl(e.target.value)}
                 placeholder={`https://seu-dominio.com/${app.name}/auth/google/callback`}
               />
-              <p className="text-[11px] text-[var(--text-tertiary)]">{t("appForm.googleRedirectHint")}</p>
+              <p className="text-[12px] text-[var(--text-tertiary)]">{t("appForm.googleRedirectHint")}</p>
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>{t("appForm.googleDomains")}</Label>
@@ -430,7 +430,7 @@ function LoginTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]>
                 onChange={(e) => setGoogleAllowedDomains(e.target.value)}
                 placeholder="zeeplabs.com, zeepfy.com"
               />
-              <p className="text-[11px] text-[var(--text-tertiary)]">{t("appForm.googleDomainsHint")}</p>
+              <p className="text-[12px] text-[var(--text-tertiary)]">{t("appForm.googleDomainsHint")}</p>
             </div>
           </div>
         )}
@@ -480,7 +480,7 @@ function EnduserRolesSection({ app }: { app: NonNullable<ReturnType<typeof useAp
 
   return (
     <Panel title={t("appDetails.enduserRolesTitle")}>
-      <p className="text-[11px] text-[var(--text-secondary)]">{t("appDetails.enduserRolesDesc")}</p>
+      <p className="text-[12px] text-[var(--text-secondary)]">{t("appDetails.enduserRolesDesc")}</p>
       <div className="flex flex-wrap gap-2">
         {roles.map((role) => (
           <Badge key={role} variant="outline" className="gap-1.5 py-1">
@@ -602,7 +602,7 @@ function StorageTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"
               <Label>{t("appForm.storageBucket")}</Label>
               {globalStorage ? (
                 <>
-                  <p className="text-[11px] text-[var(--text-secondary)]">{t("appForm.storageGlobalHint")}</p>
+                  <p className="text-[12px] text-[var(--text-secondary)]">{t("appForm.storageGlobalHint")}</p>
                   <Input value={app.name} readOnly className="cursor-not-allowed opacity-60" />
                 </>
               ) : (
@@ -645,7 +645,7 @@ function StorageTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"
                 </div>
               </>
             )}
-            <p className="text-[11px] text-[var(--text-secondary)]">
+            <p className="text-[12px] text-[var(--text-secondary)]">
               <Trans
                 i18nKey="appForm.storageHint"
                 values={{ path: `/${app.name}/files/*` }}
@@ -730,7 +730,7 @@ function ApiTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]> }
               onChange={(e) => setRateLimitRPM(parseInt(e.target.value) || 60)}
               className="w-32"
             />
-            <p className="text-[11px] text-[var(--text-secondary)]">{t("appDetails.rateLimitHint")}</p>
+            <p className="text-[12px] text-[var(--text-secondary)]">{t("appDetails.rateLimitHint")}</p>
           </div>
         )}
       </Panel>
@@ -796,7 +796,7 @@ function TokensTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]
                 setRevealedSecret(null);
               }
             }}
-            className="flex cursor-pointer items-center gap-1 border-none bg-transparent text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            className="flex cursor-pointer items-center gap-1 border-none bg-transparent text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
           >
             <Icon name={revealedSecret ? "visibility_off" : "visibility"} size={14} />
             {revealedSecret ? t("appDetails.hide") : t("appDetails.reveal")}
@@ -827,7 +827,7 @@ function TokensTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]
               <div key={tok.id} className="flex items-center justify-between rounded-[10px] border border-[var(--border)] bg-[var(--sunken)] px-4 py-3">
                 <div className="flex min-w-0 flex-col gap-0.5">
                   <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{tok.name}</p>
-                  <p className="text-[11px] text-[var(--text-tertiary)]">
+                  <p className="text-[12px] text-[var(--text-tertiary)]">
                     {tok.expires_at
                       ? t("appDetails.tokenExpires", { date: formatDate(tok.expires_at) })
                       : t("appDetails.tokenNeverExpires")}
@@ -960,7 +960,7 @@ function TokenRevealModal({ jwt, onClose }: { jwt: string; onClose: () => void }
             <Icon name="content_copy" size={16} />
           </Button>
         </div>
-        {copied && <p className="text-[11px] text-[var(--success)]">{t("appDetails.copied")}</p>}
+        {copied && <p className="text-[12px] text-[var(--success)]">{t("appDetails.copied")}</p>}
         <DialogFooter>
           <Button onClick={onClose}>{t("appDetails.close")}</Button>
         </DialogFooter>

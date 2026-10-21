@@ -201,7 +201,7 @@ function CreateUserDrawer({ open, onClose, currentUserRole }: CreateUserDrawerPr
             ))}
           </div>
           <div
-            className="mt-1 flex items-start gap-2 rounded-[10px] border p-3 text-[11.5px] leading-relaxed text-[var(--text-tertiary)]"
+            className="mt-1 flex items-start gap-2 rounded-[10px] border p-3 text-[12px] leading-relaxed text-[var(--text-tertiary)]"
             style={{ borderColor: "var(--border)", background: "var(--bg-sunken)" }}
           >
             <Icon name="info" size={14} className="mt-0.5 shrink-0" />

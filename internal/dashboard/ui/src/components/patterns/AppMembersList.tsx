@@ -351,7 +351,7 @@ export function AppMembersList({ appId, axis }: AppMembersListProps) {
             <div className="flex min-w-0 flex-col">
               <span className="truncate text-[13px] font-medium text-[var(--text-primary)]">{name}</span>
               {email && (
-                <span className="flex items-center gap-1 truncate text-[11px] text-[var(--text-tertiary)]">
+                <span className="flex items-center gap-1 truncate text-[12px] text-[var(--text-tertiary)]">
                   <Icon name="mail" size={11} />
                   {email}
                 </span>

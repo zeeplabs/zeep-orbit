@@ -102,7 +102,7 @@ export default function AuditLogPage() {
       header: t("audit.date"),
       width: 160,
       render: (e) => (
-        <span className="text-[12.5px] tabular-nums text-[var(--text-tertiary)]">
+        <span className="whitespace-nowrap text-[12.5px] tabular-nums text-[var(--text-tertiary)]">
           {formatDateTime(e.created_at)}
         </span>
       ),
@@ -123,7 +123,7 @@ export default function AuditLogPage() {
         }
         return (
           <span
-            className="inline-block rounded-[6px] border px-2 py-1 font-mono text-[11.5px] font-bold"
+            className="inline-block rounded-[6px] border px-2 py-1 font-mono text-[12px] font-bold"
             style={{ color: fg, background: bg, borderColor: fg }}
           >
             {e.action}
