@@ -3,10 +3,10 @@ import { cn } from '@/lib/utils'
 export type StatusTone = 'success' | 'warning' | 'danger' | 'neutral' | 'primary'
 
 const TONE: Record<StatusTone, { fg: string; bg: string }> = {
-  success: { fg: 'var(--success)', bg: 'var(--success-tint)' },
-  warning: { fg: 'var(--warning)', bg: 'var(--warning-tint)' },
-  danger: { fg: 'var(--danger)', bg: 'var(--danger-tint)' },
-  primary: { fg: 'var(--primary)', bg: 'var(--primary-tint)' },
+  success: { fg: 'var(--success-text)', bg: 'var(--success-tint)' },
+  warning: { fg: 'var(--warning-text)', bg: 'var(--warning-tint)' },
+  danger: { fg: 'var(--danger-text)', bg: 'var(--danger-tint)' },
+  primary: { fg: 'var(--primary-text)', bg: 'var(--primary-tint)' },
   neutral: { fg: 'var(--text-secondary)', bg: 'var(--hover-surface)' },
 }
 

@@ -49,6 +49,13 @@
   /* Solid fill for destructive buttons (white text 4.83:1). `--danger` is a text/icon
    * color tuned for the dark surface; as a fill, white on it is only 2.77:1. */
   --danger-solid: #DC2626;
+  /* Text shades for status pills (AA on the matching -tint). The base status colors are
+   * tuned as fills/icons/dots; as 12px text on the light tints they are only ~2.9-4.1:1,
+   * and dark --primary on --primary-tint is 3.75:1. */
+  --success-text: #34D399;
+  --warning-text: #FBBF24;
+  --danger-text: #F87171;
+  --primary-text: #8593FA;
 
   /* Elevation */
   --overlay: rgba(6, 9, 16, 0.7);
@@ -95,6 +102,10 @@
   --danger: #DC2626;
   --danger-tint: #FCE9E9;
   --danger-solid: #DC2626;
+  --success-text: #157A3B;
+  --warning-text: #A8540A;
+  --danger-text: #C81E1E;
+  --primary-text: #4753E0;
 
   /* Elevation */
   --overlay: rgba(20, 24, 40, 0.45);
