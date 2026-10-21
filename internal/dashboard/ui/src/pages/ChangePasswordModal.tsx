@@ -108,8 +108,8 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
               </DialogTitle>
               <DialogDescription style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 20px", lineHeight: 1.4 }}>
                 {isSuperAdminAction
-                  ? t("changePassword.title")
-                  : t("changePassword.title")}
+                  ? t("changePassword.descriptionAdmin")
+                  : t("changePassword.description")}
               </DialogDescription>
             </div>
 

@@ -261,6 +261,8 @@
   "changePassword.submit": "Alterar senha",
   "changePassword.submitting": "Alterando...",
   "changePassword.success": "Senha alterada.",
+  "changePassword.description": "Informe a senha atual e escolha uma nova.",
+  "changePassword.descriptionAdmin": "Defina uma nova senha para este usuário.",
   "appUsers.search": "Buscar por email...",
   "appUsers.deactivate": "Desativar",
   "appUsers.activate": "Reativar",
