@@ -56,6 +56,7 @@ import {
   type StatusTone,
 } from "@/components/patterns";
 import { formatDate } from "@/lib/format";
+import { useFormDirtyGuard } from "@/lib/useUnsavedChangesGuard";
 
 const TABS = ["database", "auth", "users", "storage", "api", "webhooks", "tokens", "members", "observability"] as const;
 
@@ -310,6 +311,26 @@ function LoginTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]>
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
+  const googleSaved = (app as any).auth_providers?.google;
+  const { markSaved } = useFormDirtyGuard(
+    {
+      authEmail: app.auth_email_enabled,
+      googleEnabled: Boolean(googleSaved?.enabled),
+      clientId: googleSaved?.enabled ? googleSaved.client_id || "" : "",
+      clientSecret: "",
+      redirectUrl: googleSaved?.enabled ? googleSaved.redirect_url || "" : "",
+      allowedDomains: googleSaved?.enabled ? (googleSaved.allowed_domains || []).join(", ") : "",
+    },
+    {
+      authEmail,
+      googleEnabled,
+      clientId: googleClientId,
+      clientSecret: googleClientSecret,
+      redirectUrl: googleRedirectUrl,
+      allowedDomains: googleAllowedDomains,
+    },
+  );
+
   useEffect(() => {
     setAuthEmail(app.auth_email_enabled);
     const providers = (app as any).auth_providers;
@@ -346,6 +367,7 @@ function LoginTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]>
     try {
       await updateApp.mutateAsync(payload as any);
       setSaved(true);
+      markSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("common.errorSaving"));
     }
@@ -532,6 +554,26 @@ function StorageTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
+  const storageSaved = (app as any).storage_config;
+  const { markSaved } = useFormDirtyGuard(
+    {
+      enabled: Boolean(storageSaved?.bucket),
+      bucket: storageSaved?.bucket || "",
+      region: storageSaved?.bucket ? storageSaved.region || "" : "",
+      endpoint: storageSaved?.bucket ? storageSaved.endpoint || "" : "",
+      accessKey: storageSaved?.bucket ? storageSaved.access_key_id || "" : "",
+      secretKey: "",
+    },
+    {
+      enabled: storageEnabled,
+      bucket: storageBucket,
+      region: storageRegion,
+      endpoint: storageEndpoint,
+      accessKey: storageAccessKey,
+      secretKey: storageSecretKey,
+    },
+  );
+
   useEffect(() => {
     fetch("/dashboard/api/config", { cache: "no-cache" })
       .then((r) => r.json())
@@ -574,6 +616,7 @@ function StorageTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"
     try {
       await updateApp.mutateAsync(payload as any);
       setSaved(true);
+      markSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("common.errorSaving"));
     }
@@ -670,6 +713,15 @@ function ApiTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]> }
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
+  const rateLimitSaved = (app as any).rate_limit;
+  const { markSaved } = useFormDirtyGuard(
+    {
+      enabled: Boolean(rateLimitSaved?.enabled),
+      rpm: rateLimitSaved?.enabled ? rateLimitSaved.requests_per_minute || 60 : 60,
+    },
+    { enabled: rateLimitEnabled, rpm: rateLimitRPM },
+  );
+
   useEffect(() => {
     const rl = (app as any).rate_limit;
     if (rl?.enabled) {
@@ -689,6 +741,7 @@ function ApiTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]> }
         rate_limit: { enabled: rateLimitEnabled, requests_per_minute: rateLimitRPM },
       } as any);
       setSaved(true);
+      markSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("common.errorSaving"));
     }

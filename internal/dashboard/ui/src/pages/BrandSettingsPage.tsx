@@ -199,6 +199,16 @@ function SoftDeleteCard() {
     hydratedRetentionDays.current = sysCfg.retention_days ?? 0;
   }, [sysCfg]);
 
+  // Baseline = o que o servidor devolveu (sysCfg é refeito após salvar).
+  useUnsavedChangesGuard(
+    Boolean(sysCfg) &&
+      (enabled !== sysCfg!.soft_delete_enabled ||
+        maxCsvRows !== (sysCfg!.max_csv_export_rows ?? 10000) ||
+        statementTimeoutMs !== (sysCfg!.statement_timeout_ms ?? 30000) ||
+        requireRlsDefault !== (sysCfg!.require_rls_default ?? false) ||
+        retentionDays !== (sysCfg!.retention_days ?? 0)),
+  );
+
   const handleSave = async () => {
     if (retentionDays > 0 && retentionDays !== hydratedRetentionDays.current) {
       setConfirmingRetention(true);
@@ -332,6 +342,10 @@ function GoogleAuthProviderCard() {
   const [allowedDomains, setAllowedDomains] = useState("");
   const [enabled, setEnabled] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
+  // Foto dos campos no último load/save bem-sucedido; null enquanto não carregou.
+  const [baseline, setBaseline] = useState<string | null>(null);
+  const snapshot = JSON.stringify({ enabled, clientId, clientSecret, redirectUrl, allowedDomains });
+  useUnsavedChangesGuard(baseline !== null && snapshot !== baseline);
 
   useEffect(() => {
     fetch("/dashboard/api/config/auth/providers/google?reveal=true", { credentials: "include" })
@@ -346,6 +360,15 @@ function GoogleAuthProviderCard() {
         setClientSecret("");
         setRedirectUrl(d.config?.redirect_url || "");
         setAllowedDomains((d.config?.allowed_domains || []).join(", "));
+        setBaseline(
+          JSON.stringify({
+            enabled: d.enabled,
+            clientId: d.config?.client_id || "",
+            clientSecret: "",
+            redirectUrl: d.config?.redirect_url || "",
+            allowedDomains: (d.config?.allowed_domains || []).join(", "),
+          }),
+        );
       })
       .catch(() => toast.error(t("settings.loadConfigError")))
       .finally(() => setLoading(false));
@@ -378,6 +401,7 @@ function GoogleAuthProviderCard() {
       const result = await res.json();
       setConfigSet(Boolean(result.config_set));
       setClientSecret("");
+      setBaseline(JSON.stringify({ enabled, clientId, clientSecret: "", redirectUrl, allowedDomains }));
       toast.success(t("settings.savedSuccess"));
     } catch (err) {
       toast.error((err as Error).message);
@@ -496,6 +520,9 @@ function GlobalStorageCard() {
   const [accessKeyId, setAccessKeyId] = useState("");
   const [secretAccessKey, setSecretAccessKey] = useState("");
   const [currentSoftDelete, setCurrentSoftDelete] = useState(false);
+  const [baseline, setBaseline] = useState<string | null>(null);
+  const snapshot = JSON.stringify({ enabled, endpoint, region, bucket, accessKeyId, secretAccessKey });
+  useUnsavedChangesGuard(baseline !== null && snapshot !== baseline);
 
   useEffect(() => {
     fetch("/dashboard/api/config/system", { credentials: "include" })
@@ -513,6 +540,17 @@ function GlobalStorageCard() {
           setAccessKeyId(d.storage_config.access_key_id || "");
           setSecretAccessKey("");
         }
+        const sc = d.storage_config;
+        setBaseline(
+          JSON.stringify({
+            enabled: Boolean(sc),
+            endpoint: sc?.endpoint || "",
+            region: sc?.region || "",
+            bucket: sc?.bucket || "",
+            accessKeyId: sc?.access_key_id || "",
+            secretAccessKey: "",
+          }),
+        );
       })
       .catch(() => toast.error(t("settings.loadConfigError")))
       .finally(() => setLoading(false));
@@ -534,6 +572,7 @@ function GlobalStorageCard() {
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error(t("settings.errorSaving"));
+      setBaseline(snapshot);
       toast.success(t("settings.savedSuccess"));
     } catch (err) {
       toast.error((err as Error).message);
