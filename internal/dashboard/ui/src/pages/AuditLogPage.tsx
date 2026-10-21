@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuditLog, AuditEntry } from "../lib/api";
@@ -72,9 +72,8 @@ export default function AuditLogPage() {
   // Categoria, e-mail e página ficam na URL (?category=&email=&page=) — reload, voltar e link preservam a visão.
   const [params, setParams] = useSearchParams();
   const category = params.get("category") ?? "";
-  const emailFilter = params.get("email") ?? "";
+  const emailParam = params.get("email") ?? "";
   const page = Math.max(0, (parseInt(params.get("page") ?? "1", 10) || 1) - 1);
-  const debouncedEmail = useDebounced(emailFilter, 300);
   // `replace` ao digitar o e-mail para não criar uma entrada de histórico por tecla.
   const updateParams = (changes: Record<string, string | null>, replace = false) => {
     const next = new URLSearchParams(params);
@@ -84,13 +83,33 @@ export default function AuditLogPage() {
     }
     setParams(next, { replace });
   };
+
+  // O input é controlado por estado local, não pela URL: o Router atualiza a URL de forma
+  // assíncrona (transition), e um input ligado direto a ela perdia/duplicava teclas ao
+  // digitar rápido. A URL é escrita depois do debounce; mudança externa da URL (voltar/avançar)
+  // volta para o input.
+  const [emailFilter, setEmailFilter] = useState(emailParam);
+  const lastWrittenEmail = useRef(emailParam);
+  const debouncedEmail = useDebounced(emailFilter, 300);
+  useEffect(() => {
+    if (emailParam !== lastWrittenEmail.current) {
+      lastWrittenEmail.current = emailParam;
+      setEmailFilter(emailParam);
+    }
+  }, [emailParam]);
+  useEffect(() => {
+    if (debouncedEmail !== lastWrittenEmail.current) {
+      lastWrittenEmail.current = debouncedEmail;
+      updateParams({ email: debouncedEmail || null, page: null }, true);
+    }
+  }, [debouncedEmail]);
   const limit = 50;
   const { data, isLoading, error } = useAuditLog(
     limit,
     page * limit,
     undefined,
     category || undefined,
-    debouncedEmail || undefined,
+    emailParam || undefined,
   );
 
   const totalPages = data ? Math.ceil(data.total / limit) : 0;
@@ -182,7 +201,7 @@ export default function AuditLogPage() {
         </div>
         <Input
           value={emailFilter}
-          onChange={(e) => updateParams({ email: e.target.value, page: null }, true)}
+          onChange={(e) => setEmailFilter(e.target.value)}
           placeholder={t("audit.filterUserPlaceholder")}
           className="h-9 w-[240px] text-[12.5px]"
         />
