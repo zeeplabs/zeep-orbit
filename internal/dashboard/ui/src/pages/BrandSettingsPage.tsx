@@ -19,6 +19,7 @@ import {
   ConfirmDialog,
 } from "@/components/patterns";
 import type { StatusTone } from "@/components/patterns";
+import { ErrorState } from "@/components/patterns/states";
 import { useBrandConfig, useUpdateBrandConfig, useSystemConfig } from "../lib/api";
 import { useUnsavedChangesGuard } from "../lib/useUnsavedChangesGuard";
 import { useQueryClient } from "@tanstack/react-query";
@@ -176,9 +177,22 @@ function BrandingTab() {
   );
 }
 
+// A settings form whose values failed to load must not render: its defaults are
+// not the stored config, and Save would overwrite the real values with them.
+function ConfigLoadError({ onRetry }: { onRetry: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <ErrorState
+      title={t("settings.loadConfigError")}
+      description={t("settings.loadConfigErrorDesc")}
+      action={{ label: t("settings.loadConfigRetry"), onClick: onRetry }}
+    />
+  );
+}
+
 function SoftDeleteCard() {
   const { t } = useTranslation();
-  const { data: sysCfg, isLoading: loading } = useSystemConfig();
+  const { data: sysCfg, isLoading: loading, isError: loadFailed, refetch } = useSystemConfig();
   const queryClient = useQueryClient();
   const [enabled, setEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -248,6 +262,7 @@ function SoftDeleteCard() {
   };
 
   if (loading) return <p className="text-[13px] text-[var(--text-secondary)]">{t("app.loading")}</p>;
+  if (loadFailed || !sysCfg) return <ConfigLoadError onRetry={() => refetch()} />;
 
   return (
     <div className="flex flex-wrap items-start gap-6">
@@ -335,6 +350,8 @@ function GoogleAuthProviderCard() {
   const { t } = useTranslation();
   const [configSet, setConfigSet] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [saving, setSaving] = useState(false);
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
@@ -348,6 +365,8 @@ function GoogleAuthProviderCard() {
   useUnsavedChangesGuard(baseline !== null && snapshot !== baseline);
 
   useEffect(() => {
+    setLoading(true);
+    setLoadFailed(false);
     fetch("/dashboard/api/config/auth/providers/google?reveal=true", { credentials: "include" })
       .then((r) => {
         if (!r.ok) throw new Error("load failed");
@@ -370,9 +389,12 @@ function GoogleAuthProviderCard() {
           }),
         );
       })
-      .catch(() => toast.error(t("settings.loadConfigError")))
+      .catch(() => {
+        setLoadFailed(true);
+        toast.error(t("settings.loadConfigError"));
+      })
       .finally(() => setLoading(false));
-  }, []);
+  }, [reloadKey]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -411,6 +433,7 @@ function GoogleAuthProviderCard() {
   };
 
   if (loading) return <p className="text-[13px] text-[var(--text-secondary)]">{t("app.loading")}</p>;
+  if (loadFailed) return <ConfigLoadError onRetry={() => setReloadKey((k) => k + 1)} />;
 
   return (
     <div className="flex flex-wrap items-start gap-6">
@@ -512,6 +535,8 @@ function GoogleAuthProviderCard() {
 function GlobalStorageCard() {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [saving, setSaving] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [endpoint, setEndpoint] = useState("");
@@ -525,6 +550,8 @@ function GlobalStorageCard() {
   useUnsavedChangesGuard(baseline !== null && snapshot !== baseline);
 
   useEffect(() => {
+    setLoading(true);
+    setLoadFailed(false);
     fetch("/dashboard/api/config/system", { credentials: "include" })
       .then((r) => {
         if (!r.ok) throw new Error("load failed");
@@ -552,9 +579,12 @@ function GlobalStorageCard() {
           }),
         );
       })
-      .catch(() => toast.error(t("settings.loadConfigError")))
+      .catch(() => {
+        setLoadFailed(true);
+        toast.error(t("settings.loadConfigError"));
+      })
       .finally(() => setLoading(false));
-  }, []);
+  }, [reloadKey]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -582,6 +612,7 @@ function GlobalStorageCard() {
   };
 
   if (loading) return <p className="text-[13px] text-[var(--text-secondary)]">{t("app.loading")}</p>;
+  if (loadFailed) return <ConfigLoadError onRetry={() => setReloadKey((k) => k + 1)} />;
 
   return (
     <div className="flex flex-wrap items-start gap-6">

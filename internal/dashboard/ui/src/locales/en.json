@@ -443,6 +443,8 @@
   "settings.uploading": "Uploading...",
   "settings.uploadFailed": "Upload failed",
   "settings.loadConfigError": "Error loading config",
+  "settings.loadConfigErrorDesc": "The saved values could not be loaded, so this form is hidden to avoid overwriting them with empty defaults. Try again.",
+  "settings.loadConfigRetry": "Try again",
   "settings.googleClientSecretPlaceholder": "•••••••• (empty = keep current)",
   "settings.googleClientSecretPlaceholderNew": "Client Secret",
   "googleSetup.title": "Complete your account",
