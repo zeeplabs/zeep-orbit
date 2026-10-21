@@ -1095,5 +1095,9 @@
   "oauthClients.emptyDesc": "A client registers itself the first time it connects via OAuth.",
   "oauthClients.delete": "Delete",
   "oauthClients.deleteTitle": "Delete this OAuth client?",
-  "oauthClients.deleteConfirm": "\"{{name}}\" and every access/refresh token it was ever issued will stop working immediately. This can't be undone."
+  "oauthClients.deleteConfirm": "\"{{name}}\" and every access/refresh token it was ever issued will stop working immediately. This can't be undone.",
+  "unsaved.title": "Leave without saving?",
+  "unsaved.message": "You have changes that haven't been saved. If you leave this page, they will be lost.",
+  "unsaved.leave": "Leave page",
+  "unsaved.stay": "Stay"
 }

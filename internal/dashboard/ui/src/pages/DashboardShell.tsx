@@ -8,6 +8,7 @@ import { useBrandConfig } from "../lib/api";
 import { toast } from "sonner";
 import { Icon } from "@/components/ui/icon";
 import { ConfirmDialog } from "@/components/patterns/ConfirmDialog";
+import { UnsavedChangesBlocker } from "@/components/patterns/UnsavedChangesBlocker";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { SidebarFooter } from "@/components/layout/SidebarFooter";
 import { MobileNav } from "@/components/layout/MobileNav";
@@ -164,6 +165,8 @@ export default function DashboardShell({ user }: { user: User | null }) {
       >
         {t("nav.skipToContent")}
       </a>
+
+      <UnsavedChangesBlocker />
 
       <Sidebar companyName={companyName} banner={<UpdateAvailableBanner />} footer={footer} />
 

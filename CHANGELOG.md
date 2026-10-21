@@ -9,6 +9,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Dashboard: leaving a screen with unsaved edits now asks first, not only on tab close.** The router moved from `<BrowserRouter>` to a data router (`createBrowserRouter` + `RouterProvider`, same `/dashboard` basename) so `useBlocker` can intercept in-app navigation: sidebar and mobile links, browser back/forward and switching the app detail tab. A "Leave without saving?" dialog offers Stay or Leave page. Forms keep using `useUnsavedChangesGuard`/`useFormDirtyGuard` unchanged; a single `UnsavedChangesBlocker` in the shell handles the prompt. Covered by `e2e/keyboard-a11y.spec.ts`.
+
 ### Fixed
 
 - **Dashboard: app detail page scrolled sideways on phones.** At 390px the webhook card header (name, badge, method and five buttons) and the table schema editor (a fixed seven-column header and a non-wrapping row of type, switches and default) were wider than the viewport, and a long app name pushed the "Edit with AI" button off-screen. Webhook headers, schema rows and the page title now wrap, the desktop-only column header row is hidden on small screens, and the Required/Unique switches carry visible labels there plus an accessible name everywhere. Guarded by `e2e/mobile-overflow.spec.ts`.

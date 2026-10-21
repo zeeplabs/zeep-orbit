@@ -1095,5 +1095,9 @@
   "oauthClients.emptyDesc": "Um cliente se registra sozinho na primeira conexão via OAuth.",
   "oauthClients.delete": "Excluir",
   "oauthClients.deleteTitle": "Excluir este cliente OAuth?",
-  "oauthClients.deleteConfirm": "\"{{name}}\" e todo token de acesso/atualização já emitido a ele deixarão de funcionar imediatamente. Essa ação não pode ser desfeita."
+  "oauthClients.deleteConfirm": "\"{{name}}\" e todo token de acesso/atualização já emitido a ele deixarão de funcionar imediatamente. Essa ação não pode ser desfeita.",
+  "unsaved.title": "Sair sem salvar?",
+  "unsaved.message": "Você tem alterações que não foram salvas. Se sair desta página, elas serão perdidas.",
+  "unsaved.leave": "Sair da página",
+  "unsaved.stay": "Continuar editando"
 }
