@@ -42,8 +42,7 @@ test('a 401 that is not an expired session (wrong current password) stays on the
   await dialog.locator('input[type="password"]').nth(0).fill('wrong-current')
   await dialog.locator('input[type="password"]').nth(1).fill('newpass123')
   await dialog.locator('input[type="password"]').nth(2).fill('newpass123')
-  // The modal's submit label is hardcoded Portuguese today (not i18n'd).
-  await dialog.getByRole('button', { name: 'Alterar senha' }).click()
+  await dialog.getByRole('button', { name: 'Change password' }).click()
 
   await expect(dialog.getByText('current password is incorrect')).toBeVisible()
   expect(page.url()).not.toContain('/login')
