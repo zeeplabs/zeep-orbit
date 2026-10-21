@@ -293,7 +293,7 @@ function FrontendCard({ app, onSync, onDelete, onDeployRetry, onSetDomain, loadi
       <div className="mt-auto flex items-center gap-1.5 border-t border-[var(--border)] pt-3">
         <button
           type="button"
-          className={cn(cardFooterBtn, "flex-1", !repoReady && "text-[var(--warning)]")}
+          className={cn(cardFooterBtn, "flex-1", !repoReady && "text-[var(--warning-text)]")}
           onClick={() => onSync(app)}
         >
           <Icon name={repoReady ? "key" : "refresh"} size={16} />
@@ -815,12 +815,12 @@ AFTER CLONE
 
               <div className="flex gap-2">
                 {(syncInfo.sync_status === "pending" || syncInfo.sync_status === "failed") && (
-                  <Button size="sm" variant="outline" className="gap-1.5 text-[var(--warning)]" onClick={handleSyncRetry}>
+                  <Button size="sm" variant="outline" className="gap-1.5 text-[var(--warning-text)]" onClick={handleSyncRetry}>
                     <Icon name="refresh" size={15} />{t("frontendApps.syncRetry")}
                   </Button>
                 )}
                 {syncInfo.sync_status === "ready" && (
-                  <Button size="sm" variant="outline" className="gap-1.5 text-[var(--warning)]" onClick={handleSyncRegenerate}>
+                  <Button size="sm" variant="outline" className="gap-1.5 text-[var(--warning-text)]" onClick={handleSyncRegenerate}>
                     <Icon name="refresh" size={15} />{t("frontendApps.syncRegenerate")}
                   </Button>
                 )}

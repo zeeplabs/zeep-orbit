@@ -269,7 +269,7 @@ export default function WebhookMappingEditor({ appId, webhook, tables }: Webhook
             value={eventTypeValue}
             onChange={(e) => setEventTypeValue(e.target.value)}
             placeholder={t("webhookMapping.eventTypeValuePlaceholder")}
-            className="h-8 w-[200px] px-2.5 text-[13px] bg-[var(--surface)] border-[var(--border)] rounded-md brand-focus"
+            className="h-8 w-[280px] max-w-full px-2.5 text-[13px] bg-[var(--surface)] border-[var(--border)] rounded-md brand-focus"
           />
           <Select value={action} onValueChange={(v) => setAction(v as (typeof ACTIONS)[number])}>
             <SelectTrigger className="h-8 w-[110px] text-[12px] bg-[var(--surface)] border-[var(--border)] rounded-md px-2 brand-focus">
@@ -314,7 +314,7 @@ export default function WebhookMappingEditor({ appId, webhook, tables }: Webhook
           <p className="text-[12px] text-[var(--danger)]">{t("webhookMapping.policyCheckFailed")}</p>
         ) : (
           webhookRoleMissingPolicy && (
-            <p className="text-[12px] text-[var(--warning)]">
+            <p className="text-[12px] text-[var(--warning-text)]">
               {t("webhookMapping.policyWarning", { table: targetTable, action: missingPolicyActions.join(", ") })}
             </p>
           )

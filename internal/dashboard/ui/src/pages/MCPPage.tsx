@@ -252,7 +252,7 @@ function PersonalAccessTokensSection() {
 
       {createdToken ? (
         <div className="flex flex-col gap-3">
-          <p className="text-[12px] font-semibold text-[var(--warning)]">{t("pats.createdWarning")}</p>
+          <p className="text-[12px] font-semibold text-[var(--warning-text)]">{t("pats.createdWarning")}</p>
           <div className="flex items-center gap-2 rounded-[10px] border border-[var(--border)] bg-[var(--sunken)] px-4 py-3">
             <code
               data-testid="revealed-pat-token"
