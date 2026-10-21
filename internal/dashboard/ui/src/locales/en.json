@@ -261,6 +261,8 @@
   "changePassword.submit": "Change password",
   "changePassword.submitting": "Changing...",
   "changePassword.success": "Password changed.",
+  "changePassword.description": "Enter your current password and choose a new one.",
+  "changePassword.descriptionAdmin": "Set a new password for this user.",
   "appUsers.search": "Search by email...",
   "appUsers.deactivate": "Deactivate",
   "appUsers.activate": "Reactivate",
