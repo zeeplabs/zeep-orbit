@@ -29,3 +29,22 @@ test('a 401 on the login page itself does not loop', async ({ browser }) => {
   expect(page.url()).not.toContain('return_to=')
   await ctx.close()
 })
+
+test('a 401 that is not an expired session (wrong current password) stays on the page', async ({ page }) => {
+  await page.goto('/dashboard/apps')
+  await expect(page.getByRole('heading', { name: 'Your apps' })).toBeVisible()
+  await page.route(/\/dashboard\/api\/me\/password$/, (route) =>
+    route.fulfill({ status: 401, contentType: 'application/json', body: '{"error":"current password is incorrect"}' }),
+  )
+
+  await page.getByRole('button', { name: 'Change Password' }).first().click()
+  const dialog = page.getByRole('dialog')
+  await dialog.locator('input[type="password"]').nth(0).fill('wrong-current')
+  await dialog.locator('input[type="password"]').nth(1).fill('newpass123')
+  await dialog.locator('input[type="password"]').nth(2).fill('newpass123')
+  // The modal's submit label is hardcoded Portuguese today (not i18n'd).
+  await dialog.getByRole('button', { name: 'Alterar senha' }).click()
+
+  await expect(dialog.getByText('current password is incorrect')).toBeVisible()
+  expect(page.url()).not.toContain('/login')
+})

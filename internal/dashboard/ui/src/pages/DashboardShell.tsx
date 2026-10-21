@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import ChangePasswordModal from "./ChangePasswordModal";
 import { setLanguage } from "../lib/i18n";
-import { useBrandConfig } from "../lib/api";
+import { useBrandConfig, authFetch } from "../lib/api";
 import { toast } from "sonner";
 import { Icon } from "@/components/ui/icon";
 import { ConfirmDialog } from "@/components/patterns/ConfirmDialog";
@@ -28,7 +28,7 @@ function UpdateAvailableBanner() {
   const { data } = useQuery({
     queryKey: ["version-check"],
     queryFn: () =>
-      fetch("/dashboard/api/version-check", { credentials: "include" }).then(
+      authFetch("/dashboard/api/version-check", { credentials: "include" }).then(
         (r) => r.json(),
       ) as Promise<{ tag_name: string; html_url: string }>,
     staleTime: 60 * 60 * 1000,
@@ -102,7 +102,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
   async function saveLanguage(lang: string) {
     setLanguage(lang);
     try {
-      await fetch("/dashboard/api/me/language", {
+      await authFetch("/dashboard/api/me/language", {
         method: "PUT",
         credentials: "include",
         headers: { "Content-Type": "application/json" },

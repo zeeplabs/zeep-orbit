@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { PageHeader, EmptyState, LoadingState } from '@/components/patterns'
 import { Button } from '@/components/ui/button'
+import { authFetch } from '@/lib/api'
 
 const PAGE_SIZE = 10
 
@@ -157,7 +158,7 @@ export default function ChangelogPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['changelog'],
     queryFn: async () => {
-      const res = await fetch('/dashboard/api/changelog', { credentials: 'include' })
+      const res = await authFetch('/dashboard/api/changelog', { credentials: 'include' })
       if (!res.ok) throw new Error('Failed to load')
       return res.json() as Promise<{ entries: ChangelogEntry[] }>
     },

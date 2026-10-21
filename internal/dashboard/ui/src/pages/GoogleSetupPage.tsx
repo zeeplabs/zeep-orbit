@@ -9,6 +9,7 @@ import { Icon } from '@/components/ui/icon'
 import { cn } from '@/lib/utils'
 import { safeReturnTo } from '@/lib/returnTo'
 import logo from '@/assets/images/logo/logo.svg'
+import { authFetch } from '@/lib/api'
 
 export default function GoogleSetupPage() {
   const { t } = useTranslation()
@@ -33,7 +34,7 @@ export default function GoogleSetupPage() {
 
     setLoading(true)
     try {
-      const res = await fetch('/dashboard/api/me/google-setup', {
+      const res = await authFetch('/dashboard/api/me/google-setup', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

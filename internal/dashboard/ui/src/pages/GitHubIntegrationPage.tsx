@@ -32,6 +32,7 @@ import {
 import { PageHeader, EmptyState, LoadingState, StatusPill, DataTable, ProviderTabs, AboutPanel, ConfirmDialog } from '@/components/patterns'
 import type { Column } from '@/components/patterns'
 import { cn } from '@/lib/utils'
+import { authFetch } from '@/lib/api'
 
 interface GitHubStatus {
   connected: boolean
@@ -92,7 +93,7 @@ export default function GitHubIntegrationPage() {
   const { data: me, isLoading: meLoading } = useQuery({
     queryKey: ['me'],
     queryFn: async () => {
-      const res = await fetch('/dashboard/api/me', { credentials: 'include' })
+      const res = await authFetch('/dashboard/api/me', { credentials: 'include' })
       if (!res.ok) return null
       return res.json() as Promise<{ id: string; email: string; name: string; role: string; language: string }>
     },
@@ -209,7 +210,7 @@ function GitHubConfigTab() {
 
   useEffect(() => {
     fetchStatus()
-    fetch('/dashboard/api/github/templates', { credentials: 'include' })
+    authFetch('/dashboard/api/github/templates', { credentials: 'include' })
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => setLinkedTemplates(data))
       .catch(() => {
@@ -220,7 +221,7 @@ function GitHubConfigTab() {
 
   const fetchStatus = async () => {
     try {
-      const res = await fetch('/dashboard/api/github/status', { credentials: 'include' })
+      const res = await authFetch('/dashboard/api/github/status', { credentials: 'include' })
       if (!res.ok) throw new Error('status failed')
       const data = await res.json()
       setStatus(data)
@@ -236,7 +237,7 @@ function GitHubConfigTab() {
 
   const fetchConfig = async () => {
     try {
-      const res = await fetch('/dashboard/api/github/config', { credentials: 'include' })
+      const res = await authFetch('/dashboard/api/github/config', { credentials: 'include' })
       if (!res.ok) throw new Error('config failed')
       const data = await res.json()
       setAppId(data.app_id || '')
@@ -251,7 +252,7 @@ function GitHubConfigTab() {
     setSaving(true)
     setMessage(null)
     try {
-      const res = await fetch('/dashboard/api/github/config', {
+      const res = await authFetch('/dashboard/api/github/config', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -285,7 +286,7 @@ function GitHubConfigTab() {
   const handleInstall = async () => {
     setInstalling(true)
     try {
-      const res = await fetch('/dashboard/api/github/install/start', { credentials: 'include' })
+      const res = await authFetch('/dashboard/api/github/install/start', { credentials: 'include' })
       const data = await res.json()
       if (!res.ok || !data.install_url) {
         toast.error(data.error || t('github.installError'))
@@ -302,7 +303,7 @@ function GitHubConfigTab() {
   const handleDisconnect = async () => {
     setDisconnecting(true)
     try {
-      const res = await fetch('/dashboard/api/github/config', {
+      const res = await authFetch('/dashboard/api/github/config', {
         method: 'DELETE',
         credentials: 'include',
       })
@@ -597,7 +598,7 @@ function GitHubTemplatesTab() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/dashboard/api/github/templates', { credentials: 'include' })
+      const res = await authFetch('/dashboard/api/github/templates', { credentials: 'include' })
       if (!res.ok) {
         const data = await res.json()
         throw new Error(data.error || t('common.connectionError'))
@@ -660,7 +661,7 @@ function GitHubTemplatesTab() {
         ? `/dashboard/api/github/templates/${editingTemplate.id}`
         : '/dashboard/api/github/templates'
       const method = editingTemplate ? 'PUT' : 'POST'
-      const res = await fetch(url, {
+      const res = await authFetch(url, {
         method,
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -681,7 +682,7 @@ function GitHubTemplatesTab() {
 
   const handleToggleActive = async (tpl: GitHubTemplate) => {
     try {
-      const res = await fetch(`/dashboard/api/github/templates/${tpl.id}/active`, {
+      const res = await authFetch(`/dashboard/api/github/templates/${tpl.id}/active`, {
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -703,7 +704,7 @@ function GitHubTemplatesTab() {
   const handleDeactivate = async (tpl: GitHubTemplate) => {
     setDeactivating(true)
     try {
-      const res = await fetch(`/dashboard/api/github/templates/${tpl.id}`, {
+      const res = await authFetch(`/dashboard/api/github/templates/${tpl.id}`, {
         method: 'DELETE',
         credentials: 'include',
       })
@@ -1014,7 +1015,7 @@ function DeployTab() {
 
   const fetchStatus = async () => {
     try {
-      const res = await fetch('/dashboard/api/deploy-provider/status', { credentials: 'include' })
+      const res = await authFetch('/dashboard/api/deploy-provider/status', { credentials: 'include' })
       if (res.ok) {
         const data = await res.json()
         setStatus(data)
@@ -1029,7 +1030,7 @@ function DeployTab() {
 
   const fetchRecentDeploys = async () => {
     try {
-      const res = await fetch('/dashboard/api/deploy-provider/recent-deploys', { credentials: 'include' })
+      const res = await authFetch('/dashboard/api/deploy-provider/recent-deploys', { credentials: 'include' })
       if (res.ok) {
         const data = await res.json()
         setRecentDeploys(data.deploys || [])
@@ -1043,7 +1044,7 @@ function DeployTab() {
     setSaving(true)
     setMessage(null)
     try {
-      const res = await fetch('/dashboard/api/deploy-provider/config', {
+      const res = await authFetch('/dashboard/api/deploy-provider/config', {
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -1279,7 +1280,7 @@ function AIProviderTab() {
   const fetchStatus = async () => {
     setLoading(true)
     try {
-      const res = await fetch('/dashboard/api/ai-providers/openai', { credentials: 'include' })
+      const res = await authFetch('/dashboard/api/ai-providers/openai', { credentials: 'include' })
       if (res.ok) {
         const data = (await res.json()) as AIProviderStatus
         const savedModel = data.model || ''
@@ -1301,7 +1302,7 @@ function AIProviderTab() {
     setSaving(true)
     setMessage(null)
     try {
-      const res = await fetch('/dashboard/api/ai-providers/openai', {
+      const res = await authFetch('/dashboard/api/ai-providers/openai', {
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
