@@ -137,7 +137,7 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
               <div style={{ padding: "0 24px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
                 {!isSuperAdminAction && (
                   <div>
-                    <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 6 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 6 }}>
                       {t("changePassword.current")}
                     </label>
                     <div style={{ position: "relative" }}>
@@ -171,7 +171,7 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
                 )}
 
                 <div>
-                  <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 6 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 6 }}>
                     {t("changePassword.new")}
                   </label>
                   <div style={{ position: "relative" }}>
@@ -204,7 +204,7 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
                 </div>
 
                 <div>
-                  <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 6 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 6 }}>
                     {t("changePassword.confirm")}
                   </label>
                   <div style={{ position: "relative" }}>

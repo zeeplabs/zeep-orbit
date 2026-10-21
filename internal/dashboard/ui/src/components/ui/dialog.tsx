@@ -3,6 +3,13 @@ import * as DialogPrimitive from "@radix-ui/react-dialog"
 
 import { cn } from "@/lib/utils"
 import { Icon } from "@/components/ui/icon"
+import { useTranslation } from "react-i18next"
+
+/** Texto `sr-only` do botão de fechar (compartilhado com o Drawer), traduzido. */
+export function CloseLabel() {
+  const { t } = useTranslation()
+  return <span className="sr-only">{t("common.close")}</span>
+}
 
 const Dialog = DialogPrimitive.Root
 
@@ -44,7 +51,7 @@ const DialogContent = React.forwardRef<
       {children}
       <DialogPrimitive.Close className="absolute right-4 top-4 rounded-[8px] p-1 opacity-70 ring-offset-background transition-opacity hover:opacity-100 hover:bg-[var(--hover-surface)] focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
         <Icon name="close" size={18} />
-        <span className="sr-only">Close</span>
+        <CloseLabel />
       </DialogPrimitive.Close>
     </DialogPrimitive.Content>
   </DialogPortal>

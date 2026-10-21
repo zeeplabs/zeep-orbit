@@ -55,6 +55,8 @@ import {
   ErrorState,
   type StatusTone,
 } from "@/components/patterns";
+import { formatDate } from "@/lib/format";
+import { useFormDirtyGuard } from "@/lib/useUnsavedChangesGuard";
 
 const TABS = ["database", "auth", "users", "storage", "api", "webhooks", "tokens", "members", "observability"] as const;
 
@@ -111,7 +113,7 @@ export default function AppDetailsPage() {
 
       <div className="mb-7 flex items-start justify-between gap-4">
         <div>
-          <span className="mb-3 inline-block rounded-full bg-[var(--primary-tint)] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-[var(--primary)]">
+          <span className="mb-3 inline-block rounded-full bg-[var(--primary-tint)] px-2.5 py-1 text-[12px] font-bold uppercase tracking-wider text-[var(--primary)]">
             {t("appDetails.backendBadge")}
           </span>
           <h1 className="text-[26px] font-bold leading-tight text-[var(--text-primary)]" style={{ fontFamily: "var(--font-display)" }}>
@@ -150,7 +152,7 @@ export default function AppDetailsPage() {
             >
               {label}
               {badge && (
-                <span className="rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide"
+                <span className="rounded-full px-1.5 py-0.5 text-[12px] font-bold uppercase tracking-wide"
                   style={{ background: "var(--accent-tint)", color: "var(--accent)" }}>
                   {badge === "new" ? t("appDetails.badgeNew") : t("appDetails.badgeSoon")}
                 </span>
@@ -309,6 +311,26 @@ function LoginTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]>
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
+  const googleSaved = (app as any).auth_providers?.google;
+  const { markSaved } = useFormDirtyGuard(
+    {
+      authEmail: app.auth_email_enabled,
+      googleEnabled: Boolean(googleSaved?.enabled),
+      clientId: googleSaved?.enabled ? googleSaved.client_id || "" : "",
+      clientSecret: "",
+      redirectUrl: googleSaved?.enabled ? googleSaved.redirect_url || "" : "",
+      allowedDomains: googleSaved?.enabled ? (googleSaved.allowed_domains || []).join(", ") : "",
+    },
+    {
+      authEmail,
+      googleEnabled,
+      clientId: googleClientId,
+      clientSecret: googleClientSecret,
+      redirectUrl: googleRedirectUrl,
+      allowedDomains: googleAllowedDomains,
+    },
+  );
+
   useEffect(() => {
     setAuthEmail(app.auth_email_enabled);
     const providers = (app as any).auth_providers;
@@ -345,6 +367,7 @@ function LoginTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]>
     try {
       await updateApp.mutateAsync(payload as any);
       setSaved(true);
+      markSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("common.errorSaving"));
     }
@@ -420,7 +443,7 @@ function LoginTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]>
                 onChange={(e) => setGoogleRedirectUrl(e.target.value)}
                 placeholder={`https://seu-dominio.com/${app.name}/auth/google/callback`}
               />
-              <p className="text-[11px] text-[var(--text-tertiary)]">{t("appForm.googleRedirectHint")}</p>
+              <p className="text-[12px] text-[var(--text-tertiary)]">{t("appForm.googleRedirectHint")}</p>
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>{t("appForm.googleDomains")}</Label>
@@ -429,7 +452,7 @@ function LoginTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]>
                 onChange={(e) => setGoogleAllowedDomains(e.target.value)}
                 placeholder="zeeplabs.com, zeepfy.com"
               />
-              <p className="text-[11px] text-[var(--text-tertiary)]">{t("appForm.googleDomainsHint")}</p>
+              <p className="text-[12px] text-[var(--text-tertiary)]">{t("appForm.googleDomainsHint")}</p>
             </div>
           </div>
         )}
@@ -479,7 +502,7 @@ function EnduserRolesSection({ app }: { app: NonNullable<ReturnType<typeof useAp
 
   return (
     <Panel title={t("appDetails.enduserRolesTitle")}>
-      <p className="text-[11px] text-[var(--text-secondary)]">{t("appDetails.enduserRolesDesc")}</p>
+      <p className="text-[12px] text-[var(--text-secondary)]">{t("appDetails.enduserRolesDesc")}</p>
       <div className="flex flex-wrap gap-2">
         {roles.map((role) => (
           <Badge key={role} variant="outline" className="gap-1.5 py-1">
@@ -531,6 +554,26 @@ function StorageTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
+  const storageSaved = (app as any).storage_config;
+  const { markSaved } = useFormDirtyGuard(
+    {
+      enabled: Boolean(storageSaved?.bucket),
+      bucket: storageSaved?.bucket || "",
+      region: storageSaved?.bucket ? storageSaved.region || "" : "",
+      endpoint: storageSaved?.bucket ? storageSaved.endpoint || "" : "",
+      accessKey: storageSaved?.bucket ? storageSaved.access_key_id || "" : "",
+      secretKey: "",
+    },
+    {
+      enabled: storageEnabled,
+      bucket: storageBucket,
+      region: storageRegion,
+      endpoint: storageEndpoint,
+      accessKey: storageAccessKey,
+      secretKey: storageSecretKey,
+    },
+  );
+
   useEffect(() => {
     fetch("/dashboard/api/config", { cache: "no-cache" })
       .then((r) => r.json())
@@ -573,6 +616,7 @@ function StorageTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"
     try {
       await updateApp.mutateAsync(payload as any);
       setSaved(true);
+      markSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("common.errorSaving"));
     }
@@ -601,11 +645,11 @@ function StorageTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"
               <Label>{t("appForm.storageBucket")}</Label>
               {globalStorage ? (
                 <>
-                  <p className="text-[11px] text-[var(--text-secondary)]">{t("appForm.storageGlobalHint")}</p>
+                  <p className="text-[12px] text-[var(--text-secondary)]">{t("appForm.storageGlobalHint")}</p>
                   <Input value={app.name} readOnly className="cursor-not-allowed opacity-60" />
                 </>
               ) : (
-                <Input value={storageBucket} onChange={(e) => setStorageBucket(e.target.value)} placeholder="meu-bucket" />
+                <Input value={storageBucket} onChange={(e) => setStorageBucket(e.target.value)} placeholder={t("appDetails.storageBucketPlaceholder")} />
               )}
             </div>
             {!globalStorage && (
@@ -629,7 +673,7 @@ function StorageTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"
                       type={showStorageSecret ? "text" : "password"}
                       value={storageSecretKey}
                       onChange={(e) => setStorageSecretKey(e.target.value)}
-                      placeholder="Secret Key"
+                      placeholder={t("appDetails.storageSecretKeyPlaceholder")}
                       className="pr-10"
                     />
                     <button
@@ -644,7 +688,7 @@ function StorageTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"
                 </div>
               </>
             )}
-            <p className="text-[11px] text-[var(--text-secondary)]">
+            <p className="text-[12px] text-[var(--text-secondary)]">
               <Trans
                 i18nKey="appForm.storageHint"
                 values={{ path: `/${app.name}/files/*` }}
@@ -669,6 +713,15 @@ function ApiTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]> }
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
+  const rateLimitSaved = (app as any).rate_limit;
+  const { markSaved } = useFormDirtyGuard(
+    {
+      enabled: Boolean(rateLimitSaved?.enabled),
+      rpm: rateLimitSaved?.enabled ? rateLimitSaved.requests_per_minute || 60 : 60,
+    },
+    { enabled: rateLimitEnabled, rpm: rateLimitRPM },
+  );
+
   useEffect(() => {
     const rl = (app as any).rate_limit;
     if (rl?.enabled) {
@@ -688,6 +741,7 @@ function ApiTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]> }
         rate_limit: { enabled: rateLimitEnabled, requests_per_minute: rateLimitRPM },
       } as any);
       setSaved(true);
+      markSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : t("common.errorSaving"));
     }
@@ -729,7 +783,7 @@ function ApiTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]> }
               onChange={(e) => setRateLimitRPM(parseInt(e.target.value) || 60)}
               className="w-32"
             />
-            <p className="text-[11px] text-[var(--text-secondary)]">{t("appDetails.rateLimitHint")}</p>
+            <p className="text-[12px] text-[var(--text-secondary)]">{t("appDetails.rateLimitHint")}</p>
           </div>
         )}
       </Panel>
@@ -789,13 +843,19 @@ function TokensTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]
                 try {
                   const res = await fetch(`/dashboard/api/apps/${app.id}/secret`, { credentials: "include" });
                   const data = await res.json();
+                  if (!res.ok || !data.jwt_secret) {
+                    toast.error(data.error || t("appDetails.revealSecretError"));
+                    return;
+                  }
                   setRevealedSecret(data.jwt_secret);
-                } catch {}
+                } catch {
+                  toast.error(t("common.connectionError"));
+                }
               } else {
                 setRevealedSecret(null);
               }
             }}
-            className="flex cursor-pointer items-center gap-1 border-none bg-transparent text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            className="flex cursor-pointer items-center gap-1 border-none bg-transparent text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
           >
             <Icon name={revealedSecret ? "visibility_off" : "visibility"} size={14} />
             {revealedSecret ? t("appDetails.hide") : t("appDetails.reveal")}
@@ -826,11 +886,11 @@ function TokensTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]
               <div key={tok.id} className="flex items-center justify-between rounded-[10px] border border-[var(--border)] bg-[var(--sunken)] px-4 py-3">
                 <div className="flex min-w-0 flex-col gap-0.5">
                   <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{tok.name}</p>
-                  <p className="text-[11px] text-[var(--text-tertiary)]">
+                  <p className="text-[12px] text-[var(--text-tertiary)]">
                     {tok.expires_at
-                      ? t("appDetails.tokenExpires", { date: new Date(tok.expires_at).toLocaleDateString() })
+                      ? t("appDetails.tokenExpires", { date: formatDate(tok.expires_at) })
                       : t("appDetails.tokenNeverExpires")}
-                    {tok.last_used_at && ` ${t("appDetails.tokenLastUsed", { date: new Date(tok.last_used_at).toLocaleDateString() })}`}
+                    {tok.last_used_at && ` ${t("appDetails.tokenLastUsed", { date: formatDate(tok.last_used_at) })}`}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
@@ -959,7 +1019,7 @@ function TokenRevealModal({ jwt, onClose }: { jwt: string; onClose: () => void }
             <Icon name="content_copy" size={16} />
           </Button>
         </div>
-        {copied && <p className="text-[11px] text-[var(--success)]">{t("appDetails.copied")}</p>}
+        {copied && <p className="text-[12px] text-[var(--success)]">{t("appDetails.copied")}</p>}
         <DialogFooter>
           <Button onClick={onClose}>{t("appDetails.close")}</Button>
         </DialogFooter>

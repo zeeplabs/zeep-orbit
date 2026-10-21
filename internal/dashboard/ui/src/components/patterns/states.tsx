@@ -10,12 +10,14 @@ interface StateShellProps {
   title: string
   description?: ReactNode
   action?: { label: string; onClick: () => void }
+  /** Papel ARIA do bloco (ErrorState usa `alert` para o leitor de tela anunciar a falha). */
+  role?: 'alert' | 'status'
   className?: string
 }
 
-function StateShell({ icon, iconTone, title, description, action, className }: StateShellProps) {
+function StateShell({ icon, iconTone, title, description, action, role, className }: StateShellProps) {
   return (
-    <div className={cn('flex flex-col items-center justify-center gap-3 px-6 py-16 text-center', className)}>
+    <div role={role} className={cn('flex flex-col items-center justify-center gap-3 px-6 py-16 text-center', className)}>
       {icon && (
         <div
           className="flex h-12 w-12 items-center justify-center rounded-[14px]"
@@ -40,7 +42,7 @@ export function EmptyState(props: Omit<StateShellProps, 'iconTone'>) {
 }
 
 export function ErrorState(props: Omit<StateShellProps, 'iconTone'>) {
-  return <StateShell icon={props.icon ?? 'error'} iconTone="var(--danger)" {...props} />
+  return <StateShell icon={props.icon ?? 'error'} iconTone="var(--danger)" role="alert" {...props} />
 }
 
 export function LoadingState({ rows = 5, className }: { rows?: number; className?: string }) {

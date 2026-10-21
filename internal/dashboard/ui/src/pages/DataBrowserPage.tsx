@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   useDataBrowserApps,
@@ -35,6 +36,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { formatTimestamp } from "@/lib/format";
 
 function filterOperators(t: (key: string) => string) {
   return [
@@ -52,25 +54,46 @@ function filterOperators(t: (key: string) => string) {
 const systemDisplayColumns = new Set(["id", "created_at", "updated_at", "owner_id"]);
 
 const nativeInputCls =
-  "w-full rounded-[10px] border border-[var(--border)] bg-[var(--sunken)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--primary)]";
+  "w-full rounded-[10px] border border-[var(--border)] bg-[var(--sunken)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--primary)] focus-visible:ring-2 focus-visible:ring-ring";
 
 type Row = Record<string, unknown>;
+
+type FilterRule = { col: string; op: string; value: string };
+
+// Um param `f` por regra: "coluna|operador|valor". Só os dois primeiros `|` separam,
+// então o valor pode conter `|`.
+function parseFilterRules(raw: string[]): FilterRule[] {
+  const rules: FilterRule[] = [];
+  for (const entry of raw) {
+    const i = entry.indexOf("|");
+    const j = entry.indexOf("|", i + 1);
+    if (i <= 0 || j <= i + 1) continue;
+    rules.push({ col: entry.slice(0, i), op: entry.slice(i + 1, j), value: entry.slice(j + 1) });
+  }
+  return rules;
+}
+
+function writeFilterRules(next: URLSearchParams, rules: FilterRule[]) {
+  next.delete("f");
+  for (const r of rules) next.append("f", `${r.col}|${r.op}|${r.value}`);
+}
 
 export default function DataBrowserPage() {
   const { t } = useTranslation();
   const filterOps = filterOperators(t);
   const [expandedApps, setExpandedApps] = useState<Set<string>>(new Set());
-  const [selectedTable, setSelectedTable] = useState<{
-    app: string;
-    table: string;
-    columns: DataBrowserTable["columns"];
-  } | null>(null);
-  const [pageOffset, setPageOffset] = useState(0);
-  const [sortOrder, setSortOrder] = useState<string | undefined>(undefined);
+  // Tabela, página, ordenação e filtros vivem na URL (?app=&table=&page=&sort=&f=col|op|valor),
+  // então recarregar, voltar e compartilhar o link preservam a visão.
+  const [params, setParams] = useSearchParams();
   const [limit] = useState(50);
+  const appName = params.get("app");
+  const tableName = params.get("table");
+  const pageNumber = Math.max(1, parseInt(params.get("page") ?? "1", 10) || 1);
+  const pageOffset = (pageNumber - 1) * limit;
+  const sortOrder = params.get("sort") || undefined;
+  const filterRules = parseFilterRules(params.getAll("f"));
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-  const [filterRules, setFilterRules] = useState<Array<{ col: string; op: string; value: string }>>([]);
   const [draftCol, setDraftCol] = useState("");
   const [draftOp, setDraftOp] = useState("eq");
   const [draftValue, setDraftValue] = useState("");
@@ -89,6 +112,26 @@ export default function DataBrowserPage() {
   const activeFilterCount = filterRules.length;
 
   const { data: apps, isLoading: appsLoading } = useDataBrowserApps();
+
+  // Colunas vêm do schema carregado; app/tabela inexistentes na URL viram "nenhuma selecionada".
+  const selectedTable = useMemo(() => {
+    if (!appName || !tableName || !apps) return null;
+    const table = apps.find((a) => a.name === appName)?.tables.find((tb) => tb.name === tableName);
+    return table ? { app: appName, table: tableName, columns: table.columns } : null;
+  }, [apps, appName, tableName]);
+
+  // Abre o app da tabela selecionada (link direto / reload).
+  useEffect(() => {
+    if (appName) setExpandedApps((prev) => (prev.has(appName) ? prev : new Set(prev).add(appName)));
+  }, [appName]);
+
+  // Atualiza a URL; mudar filtro/ordem volta para a página 1.
+  const updateParams = (mutate: (next: URLSearchParams) => void, resetPage = true) => {
+    const next = new URLSearchParams(params);
+    mutate(next);
+    if (resetPage) next.delete("page");
+    setParams(next);
+  };
   const {
     data: queryResult,
     isLoading: queryLoading,
@@ -116,32 +159,27 @@ export default function DataBrowserPage() {
   };
 
   const selectTable = (app: DataBrowserApp, table: DataBrowserTable) => {
-    setSelectedTable({ app: app.name, table: table.name, columns: table.columns });
-    setPageOffset(0);
-    setSortOrder(undefined);
-    setFilterRules([]);
+    setParams(new URLSearchParams({ app: app.name, table: table.name }));
     setDraftCol("");
     setDraftValue("");
   };
 
   const addFilterRule = () => {
     if (!draftCol || !draftValue.trim()) return;
-    setFilterRules((prev) => [
-      ...prev.filter((r) => r.col !== draftCol),
+    const rules = [
+      ...filterRules.filter((r) => r.col !== draftCol),
       { col: draftCol, op: draftOp, value: draftValue.trim() },
-    ]);
+    ];
+    updateParams((next) => writeFilterRules(next, rules));
     setDraftValue("");
-    setPageOffset(0);
   };
 
   const removeFilterRule = (col: string) => {
-    setFilterRules((prev) => prev.filter((r) => r.col !== col));
-    setPageOffset(0);
+    updateParams((next) => writeFilterRules(next, filterRules.filter((r) => r.col !== col)));
   };
 
   const clearFilters = () => {
-    setFilterRules([]);
-    setPageOffset(0);
+    updateParams((next) => writeFilterRules(next, []));
   };
 
   const handleExport = async () => {
@@ -159,12 +197,8 @@ export default function DataBrowserPage() {
   };
 
   const handleSort = (col: string) => {
-    setSortOrder((prev) => {
-      if (!prev || prev !== `${col}.asc`) return `${col}.asc`;
-      if (prev === `${col}.asc`) return `${col}.desc`;
-      return undefined;
-    });
-    setPageOffset(0);
+    const nextSort = sortOrder !== `${col}.asc` ? `${col}.asc` : `${col}.desc`;
+    updateParams((next) => next.set("sort", nextSort));
   };
 
   const handleRefresh = async () => {
@@ -290,7 +324,7 @@ export default function DataBrowserPage() {
   return (
     <div className="grid h-full min-h-full items-stretch grid-cols-[240px_1fr] gap-4 max-lg:flex max-lg:flex-col">
       <div className="h-full overflow-hidden rounded-[14px] bg-[var(--surface)] py-4 max-lg:h-auto max-lg:max-h-[220px] max-lg:overflow-y-auto">
-        <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+        <div className="px-3 py-2 text-[12px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
           {t("dataBrowser.appsLabel")}
         </div>
         {appsLoading ? (
@@ -327,7 +361,7 @@ export default function DataBrowserPage() {
                           >
                             <Icon name="table_chart" size={14} />
                             <span className="flex-1 truncate">{table.name}</span>
-                            <span className="rounded-full bg-[var(--sunken)] px-1.5 py-0.5 text-[10px] text-[var(--text-tertiary)]">
+                            <span className="rounded-full bg-[var(--sunken)] px-1.5 py-0.5 text-[12px] text-[var(--text-tertiary)]">
                               {table.count}
                             </span>
                           </button>
@@ -373,7 +407,7 @@ export default function DataBrowserPage() {
                   <Icon name="filter_list" size={15} />
                   {t("dataBrowser.filters")}
                   {activeFilterCount > 0 && (
-                    <span className="ml-0.5 rounded-full bg-[var(--primary)] px-1.5 text-[10px] leading-4 text-white">
+                    <span className="ml-0.5 rounded-full bg-[var(--primary)] px-1.5 text-[12px] leading-4 text-white">
                       {activeFilterCount}
                     </span>
                   )}
@@ -452,7 +486,7 @@ export default function DataBrowserPage() {
                     ))}
                     <button
                       onClick={clearFilters}
-                      className="cursor-pointer border-none bg-transparent px-1.5 py-0.5 text-[11px] text-[var(--danger)]"
+                      className="cursor-pointer border-none bg-transparent px-1.5 py-0.5 text-[12px] text-[var(--danger)]"
                     >
                       {t("dataBrowser.clearFilters")}
                     </button>
@@ -463,6 +497,7 @@ export default function DataBrowserPage() {
 
             <DataTable<Row>
               columns={tableColumns}
+              caption={selectedTable.table}
               rows={data}
               getRowId={(row) => String(row["id"])}
               loading={queryLoading}
@@ -472,7 +507,8 @@ export default function DataBrowserPage() {
               pagination={{
                 page: currentPage,
                 pageCount: totalPages,
-                onPageChange: (p) => setPageOffset((p - 1) * limit),
+                onPageChange: (p) =>
+                  updateParams((next) => (p > 1 ? next.set("page", String(p)) : next.delete("page")), false),
                 prevLabel: t("dataBrowser.previous"),
                 nextLabel: t("dataBrowser.next"),
                 label: t("dataBrowser.pageRange", {
@@ -514,7 +550,7 @@ export default function DataBrowserPage() {
                 <div key={col.name} className="flex flex-col gap-1.5">
                   <Label className="flex items-center gap-1.5">
                     {col.name}
-                    <span className="font-mono text-[10px] font-normal opacity-50">{col.type}</span>
+                    <span className="font-mono text-[12px] font-normal opacity-50">{col.type}</span>
                   </Label>
                   {col.type === "boolean" ? (
                     <select
@@ -595,7 +631,7 @@ function formatCellValue(value: unknown, type: string): string {
 
   if (type === "timestamptz" && typeof value === "string") {
     try {
-      return new Date(value).toLocaleString("pt-BR");
+      return formatTimestamp(value);
     } catch {
       return value;
     }

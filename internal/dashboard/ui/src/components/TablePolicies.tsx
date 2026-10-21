@@ -213,7 +213,7 @@ export default function TablePoliciesTab({ appId, tableName, columns, rls }: Tab
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] text-[var(--text-secondary)]">{t("tablePolicies.explainer")}</p>
+        <p className="text-[12px] text-[var(--text-secondary)]">{t("tablePolicies.explainer")}</p>
         <div className="flex shrink-0 items-center gap-3">
           <button
             type="button"
@@ -224,7 +224,7 @@ export default function TablePoliciesTab({ appId, tableName, columns, rls }: Tab
             {t("tablePolicies.helpButton")}
           </button>
           <div className="flex items-center gap-1.5">
-            <span className="text-[11px] font-medium text-[var(--text-secondary)]">
+            <span className="text-[12px] font-medium text-[var(--text-secondary)]">
               {t("tablePolicies.advancedModeLabel")}
             </span>
             <Switch
@@ -455,14 +455,14 @@ export default function TablePoliciesTab({ appId, tableName, columns, rls }: Tab
               <span className="text-[13px] font-semibold text-[var(--text-primary)]">
                 {policy.pg_policy_name}
               </span>
-              <span className="rounded-full border border-[var(--border)] px-2 py-0.5 text-[11px] uppercase text-[var(--text-secondary)]">
+              <span className="rounded-full border border-[var(--border)] px-2 py-0.5 text-[12px] uppercase text-[var(--text-secondary)]">
                 {policy.action}
               </span>
               <span className="ml-auto flex gap-1">
                 {policy.roles.map((r) => (
                   <span
                     key={r}
-                    className="rounded-full bg-[var(--primary)]/10 px-2 py-0.5 text-[11px] text-[var(--primary)]"
+                    className="rounded-full bg-[var(--primary)]/10 px-2 py-0.5 text-[12px] text-[var(--primary)]"
                   >
                     {r}
                   </span>
@@ -486,7 +486,7 @@ export default function TablePoliciesTab({ appId, tableName, columns, rls }: Tab
                 <Icon name="delete" size={12} />
               </button>
             </div>
-            <div className="flex flex-col gap-0.5 pl-[19px] font-mono text-[11px] text-[var(--text-secondary)]">
+            <div className="flex flex-col gap-0.5 pl-[19px] font-mono text-[12px] text-[var(--text-secondary)]">
               {policy.clauses.map((clause, i) => (
                 <span key={i}>{clauseSummary(clause)}</span>
               ))}

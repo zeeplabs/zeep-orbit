@@ -3,6 +3,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog"
 
 import { cn } from "@/lib/utils"
 import { Icon } from "@/components/ui/icon"
+import { CloseLabel } from "@/components/ui/dialog"
 
 /**
  * Drawer lateral (right-side), sobre Radix Dialog. Base do chat "Create with AI"
@@ -50,7 +51,7 @@ const DrawerContent = React.forwardRef<
       {!hideClose && (
         <DialogPrimitive.Close className="absolute right-4 top-4 rounded-[8px] p-1 opacity-70 transition-opacity hover:opacity-100 hover:bg-[var(--hover-surface)] focus:outline-none focus:ring-2 focus:ring-ring">
           <Icon name="close" size={18} />
-          <span className="sr-only">Close</span>
+          <CloseLabel />
         </DialogPrimitive.Close>
       )}
     </DialogPrimitive.Content>

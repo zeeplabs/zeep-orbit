@@ -22,7 +22,7 @@ export function EnterpriseBadge({ className, onClick }: { className?: string; on
       type="button"
       onClick={onClick}
       className={cn(
-        'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+        'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[12px] font-semibold uppercase tracking-wide',
         onClick && 'cursor-pointer hover:opacity-90',
         className
       )}

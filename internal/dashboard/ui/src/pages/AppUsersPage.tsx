@@ -30,6 +30,7 @@ import {
 import { EmptyState, DataTable, StatusPill, PhoneInput } from '@/components/patterns'
 import type { Column } from '@/components/patterns'
 import { cn } from '@/lib/utils'
+import { formatDate } from '@/lib/format'
 
 interface AppUser {
   id: string
@@ -129,14 +130,6 @@ interface ProviderCount {
   count: number
 }
 
-function formatDate(iso: string, lang: string) {
-  return new Date(iso).toLocaleDateString(lang, {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  })
-}
-
 function formatRelativeTime(iso: string | null, t: (k: string, opts?: Record<string, unknown>) => string): string {
   if (!iso) return '—'
   const diffMs = Date.now() - new Date(iso).getTime()
@@ -223,7 +216,7 @@ export function AppUsersTab({ appId }: { appId: string }) {
             <img src={u.avatar_url} alt="" className="size-7 rounded-full object-cover" />
           ) : (
             <div
-              className="flex size-7 items-center justify-center rounded-full text-[11px] font-bold"
+              className="flex size-7 items-center justify-center rounded-full text-[12px] font-bold"
               style={{
                 background: 'linear-gradient(135deg, var(--primary), var(--accent))',
                 color: '#fff',
@@ -234,7 +227,7 @@ export function AppUsersTab({ appId }: { appId: string }) {
           )}
           <div className="min-w-0">
             <div className="truncate text-[13px] font-bold">{u.name || '—'}</div>
-            <div className="truncate text-[11.5px]" style={{ color: 'var(--text-tertiary)' }}>
+            <div className="truncate text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
               {u.email}
             </div>
           </div>
@@ -289,7 +282,7 @@ export function AppUsersTab({ appId }: { appId: string }) {
       header: t('appUsers.table.createdAt'),
       render: (u) => (
         <span className="text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
-          {formatDate(u.created_at, i18n.language)}
+          {formatDate(u.created_at)}
         </span>
       ),
     },
@@ -443,6 +436,7 @@ export function AppUsersTab({ appId }: { appId: string }) {
 
       <DataTable<AppUser>
         columns={columns}
+        caption={t("appUsers.caption")}
         rows={users}
         getRowId={(u) => u.id}
         loading={isLoading}

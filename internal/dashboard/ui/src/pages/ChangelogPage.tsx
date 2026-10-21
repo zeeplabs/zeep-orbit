@@ -86,7 +86,7 @@ function ChangelogEntryView({ entry }: { entry: ChangelogEntry }) {
           {entry.version}
         </div>
         <div
-          className="mt-0.5 text-[11.5px]"
+          className="mt-0.5 text-[12px]"
           style={{ color: 'var(--text-tertiary)' }}
         >
           {dateLabel}
@@ -124,7 +124,7 @@ function ChangelogEntryView({ entry }: { entry: ChangelogEntry }) {
                     className="flex items-start gap-2.5 text-[12.5px]"
                   >
                     <span
-                      className="mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold leading-none text-white opacity-90"
+                      className="mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[12px] font-bold leading-none text-white opacity-90"
                       style={{ background: color }}
                     >
                       {t(`changelog.sectionType.${section.type}`)}

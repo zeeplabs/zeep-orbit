@@ -20,6 +20,7 @@ import {
 } from "@/components/patterns";
 import type { StatusTone } from "@/components/patterns";
 import { useBrandConfig, useUpdateBrandConfig, useSystemConfig } from "../lib/api";
+import { useUnsavedChangesGuard } from "../lib/useUnsavedChangesGuard";
 import { useQueryClient } from "@tanstack/react-query";
 
 const TABS = [
@@ -40,7 +41,7 @@ function SoonRow({ label, description }: { label: string; description: string })
           <span className="flex items-center gap-2">
             {label}
             <span
-              className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
+              className="rounded-full px-2 py-0.5 text-[12px] font-bold uppercase tracking-wider"
               style={{ background: "var(--accent-tint)", color: "var(--accent)" }}
             >
               {t("apps.soon")}
@@ -87,7 +88,7 @@ export default function BrandSettingsPage() {
               <Icon name={tb.icon} size={14} /> {t(tb.labelKey)}
               {tb.value === "license" && (
                 <span
-                  className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                  className="rounded-full px-1.5 py-0.5 text-[12px] font-semibold uppercase tracking-wide"
                   style={{ background: "var(--hover-surface)", color: "var(--text-tertiary)" }}
                 >
                   {t("apps.soon")}
@@ -133,6 +134,8 @@ function BrandingTab() {
   useEffect(() => {
     if (data) setCompanyName(data.company_name);
   }, [data]);
+
+  useUnsavedChangesGuard(Boolean(data) && companyName !== data?.company_name);
 
   const handleSave = () => {
     if (!data) return;
@@ -195,6 +198,16 @@ function SoftDeleteCard() {
     setRetentionDays(sysCfg.retention_days ?? 0);
     hydratedRetentionDays.current = sysCfg.retention_days ?? 0;
   }, [sysCfg]);
+
+  // Baseline = o que o servidor devolveu (sysCfg é refeito após salvar).
+  useUnsavedChangesGuard(
+    Boolean(sysCfg) &&
+      (enabled !== sysCfg!.soft_delete_enabled ||
+        maxCsvRows !== (sysCfg!.max_csv_export_rows ?? 10000) ||
+        statementTimeoutMs !== (sysCfg!.statement_timeout_ms ?? 30000) ||
+        requireRlsDefault !== (sysCfg!.require_rls_default ?? false) ||
+        retentionDays !== (sysCfg!.retention_days ?? 0)),
+  );
 
   const handleSave = async () => {
     if (retentionDays > 0 && retentionDays !== hydratedRetentionDays.current) {
@@ -265,7 +278,7 @@ function SoftDeleteCard() {
           onChange={(e) => setMaxCsvRows(Math.max(1, Number(e.target.value) || 1))}
           className="mt-2 max-w-[200px]"
         />
-        <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">{t("settings.maxCsvExportRowsHint")}</p>
+        <p className="mt-1 text-[12px] text-[var(--text-tertiary)]">{t("settings.maxCsvExportRowsHint")}</p>
       </div>
       <div className="mt-4 border-t border-[var(--border)] pt-4">
         <Label className="text-[13px] font-semibold text-[var(--text-secondary)]">
@@ -278,7 +291,7 @@ function SoftDeleteCard() {
           onChange={(e) => setStatementTimeoutMs(Math.max(0, Number(e.target.value) || 0))}
           className="mt-2 max-w-[200px]"
         />
-        <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">{t("settings.statementTimeoutMsHint")}</p>
+        <p className="mt-1 text-[12px] text-[var(--text-tertiary)]">{t("settings.statementTimeoutMsHint")}</p>
       </div>
       <div className="mt-4 border-t border-[var(--border)] pt-4">
         <Label className="text-[13px] font-semibold text-[var(--text-secondary)]">
@@ -291,7 +304,7 @@ function SoftDeleteCard() {
           onChange={(e) => setRetentionDays(Math.max(0, Number(e.target.value) || 0))}
           className="mt-2 max-w-[200px]"
         />
-        <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">{t("settings.retentionDaysHint")}</p>
+        <p className="mt-1 text-[12px] text-[var(--text-tertiary)]">{t("settings.retentionDaysHint")}</p>
       </div>
       <div className="mt-4 border-t border-[var(--border)] pt-4">
         <Button onClick={handleSave} disabled={saving} className="gap-2">
@@ -329,10 +342,17 @@ function GoogleAuthProviderCard() {
   const [allowedDomains, setAllowedDomains] = useState("");
   const [enabled, setEnabled] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
+  // Foto dos campos no último load/save bem-sucedido; null enquanto não carregou.
+  const [baseline, setBaseline] = useState<string | null>(null);
+  const snapshot = JSON.stringify({ enabled, clientId, clientSecret, redirectUrl, allowedDomains });
+  useUnsavedChangesGuard(baseline !== null && snapshot !== baseline);
 
   useEffect(() => {
     fetch("/dashboard/api/config/auth/providers/google?reveal=true", { credentials: "include" })
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error("load failed");
+        return r.json();
+      })
       .then((d) => {
         setConfigSet(Boolean(d.config_set));
         setEnabled(d.enabled);
@@ -340,6 +360,15 @@ function GoogleAuthProviderCard() {
         setClientSecret("");
         setRedirectUrl(d.config?.redirect_url || "");
         setAllowedDomains((d.config?.allowed_domains || []).join(", "));
+        setBaseline(
+          JSON.stringify({
+            enabled: d.enabled,
+            clientId: d.config?.client_id || "",
+            clientSecret: "",
+            redirectUrl: d.config?.redirect_url || "",
+            allowedDomains: (d.config?.allowed_domains || []).join(", "),
+          }),
+        );
       })
       .catch(() => toast.error(t("settings.loadConfigError")))
       .finally(() => setLoading(false));
@@ -372,6 +401,7 @@ function GoogleAuthProviderCard() {
       const result = await res.json();
       setConfigSet(Boolean(result.config_set));
       setClientSecret("");
+      setBaseline(JSON.stringify({ enabled, clientId, clientSecret: "", redirectUrl, allowedDomains }));
       toast.success(t("settings.savedSuccess"));
     } catch (err) {
       toast.error((err as Error).message);
@@ -454,7 +484,7 @@ function GoogleAuthProviderCard() {
                 {t("settings.allowedDomains")}
               </Label>
               <Input value={allowedDomains} onChange={(e) => setAllowedDomains(e.target.value)} placeholder="zeeplabs.com, zeepfly.com" />
-              <p className="mt-1 text-[11px] text-[var(--text-tertiary)]">{t("settings.domainsHint")}</p>
+              <p className="mt-1 text-[12px] text-[var(--text-tertiary)]">{t("settings.domainsHint")}</p>
             </div>
           </div>
         )}
@@ -490,10 +520,16 @@ function GlobalStorageCard() {
   const [accessKeyId, setAccessKeyId] = useState("");
   const [secretAccessKey, setSecretAccessKey] = useState("");
   const [currentSoftDelete, setCurrentSoftDelete] = useState(false);
+  const [baseline, setBaseline] = useState<string | null>(null);
+  const snapshot = JSON.stringify({ enabled, endpoint, region, bucket, accessKeyId, secretAccessKey });
+  useUnsavedChangesGuard(baseline !== null && snapshot !== baseline);
 
   useEffect(() => {
     fetch("/dashboard/api/config/system", { credentials: "include" })
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error("load failed");
+        return r.json();
+      })
       .then((d) => {
         setCurrentSoftDelete(d.soft_delete_enabled || false);
         if (d.storage_config) {
@@ -504,8 +540,19 @@ function GlobalStorageCard() {
           setAccessKeyId(d.storage_config.access_key_id || "");
           setSecretAccessKey("");
         }
+        const sc = d.storage_config;
+        setBaseline(
+          JSON.stringify({
+            enabled: Boolean(sc),
+            endpoint: sc?.endpoint || "",
+            region: sc?.region || "",
+            bucket: sc?.bucket || "",
+            accessKeyId: sc?.access_key_id || "",
+            secretAccessKey: "",
+          }),
+        );
       })
-      .catch(() => {})
+      .catch(() => toast.error(t("settings.loadConfigError")))
       .finally(() => setLoading(false));
   }, []);
 
@@ -525,6 +572,7 @@ function GlobalStorageCard() {
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error(t("settings.errorSaving"));
+      setBaseline(snapshot);
       toast.success(t("settings.savedSuccess"));
     } catch (err) {
       toast.error((err as Error).message);
@@ -660,7 +708,7 @@ function LicenseTab() {
     <div className="flex flex-wrap items-start gap-6">
       <div className="flex min-w-0 flex-1 flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="mr-1 text-[11.5px] text-[var(--text-tertiary)]">
+          <span className="mr-1 text-[12px] text-[var(--text-tertiary)]">
             {t("settings.licensePreviewLabel")}
           </span>
           {LICENSE_PREVIEW_STATES.map((state) => (
@@ -679,7 +727,7 @@ function LicenseTab() {
             </button>
           ))}
         </div>
-        <p className="text-[11.5px] text-[var(--text-tertiary)]">{t("settings.licensePreviewHint")}</p>
+        <p className="text-[12px] text-[var(--text-tertiary)]">{t("settings.licensePreviewHint")}</p>
 
         <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-5">
           <div className="mb-1.5 flex items-center gap-2">
@@ -740,7 +788,7 @@ function LicenseTab() {
             value={licenseKey}
             onChange={(e) => setLicenseKey(e.target.value)}
             placeholder={t("settings.licenseKeyPlaceholder")}
-            className="mb-2.5 w-full resize-none rounded-[9px] border border-[var(--border-strong)] bg-[var(--bg-page)] p-3 font-mono text-[12px] text-[var(--text-primary)] outline-none"
+            className="mb-2.5 w-full resize-none rounded-[9px] border border-[var(--border-strong)] bg-[var(--bg-page)] p-3 font-mono text-[12px] text-[var(--text-primary)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
           <div className="flex items-center gap-2.5">
             <Button onClick={previewOnly} disabled={!licenseKey}>
@@ -756,7 +804,7 @@ function LicenseTab() {
           </div>
           <div className="flex flex-wrap items-center gap-6">
             <div>
-              <div className="mb-2 text-[11.5px] text-[var(--text-tertiary)]">
+              <div className="mb-2 text-[12px] text-[var(--text-tertiary)]">
                 {t("settings.enterpriseBadgeInlineLabel")}
               </div>
               <div className="flex items-center gap-2 text-[13px] font-semibold text-[var(--text-primary)]">
@@ -765,7 +813,7 @@ function LicenseTab() {
               </div>
             </div>
             <div>
-              <div className="mb-2 text-[11.5px] text-[var(--text-tertiary)]">
+              <div className="mb-2 text-[12px] text-[var(--text-tertiary)]">
                 {t("settings.enterpriseBadgeLockedActionLabel")}
               </div>
               <Button variant="outline" onClick={() => setUpgradeOpen(true)} className="gap-2">

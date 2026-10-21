@@ -1,14 +1,17 @@
-import { useState, useEffect } from "react";
-import { Navigate, Outlet } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import ChangePasswordModal from "./ChangePasswordModal";
 import { setLanguage } from "../lib/i18n";
+import { useBrandConfig } from "../lib/api";
+import { toast } from "sonner";
 import { Icon } from "@/components/ui/icon";
 import { ConfirmDialog } from "@/components/patterns/ConfirmDialog";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { SidebarFooter } from "@/components/layout/SidebarFooter";
 import { MobileNav } from "@/components/layout/MobileNav";
+import { NAV_SECTIONS } from "@/components/layout/nav";
 import pkg from "../../package.json";
 
 interface User {
@@ -54,20 +57,15 @@ function UpdateAvailableBanner() {
 export default function DashboardShell({ user }: { user: User | null }) {
   const qc = useQueryClient();
   const { t, i18n } = useTranslation();
+  const mainRef = useRef<HTMLElement>(null);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
 
-  const { data: brandConfig } = useQuery({
-    queryKey: ["brand-config"],
-    queryFn: async () => {
-      const res = await fetch("/dashboard/api/config");
-      return res.json() as Promise<{ company_name: string }>;
-    },
-    staleTime: 30000,
-  });
+  // Mesma query/endpoint de BrandSettingsPage (useBrandConfig) — um fetch só, cache compartilhado.
+  const { data: brandConfig, isPending: brandConfigPending } = useBrandConfig();
 
-  const { data: brandAssets } = useQuery({
+  const { data: brandAssets, isPending: brandAssetsPending } = useQuery({
     queryKey: ["brand-assets"],
     queryFn: async () => {
       const res = await fetch("/dashboard/api/brand/config");
@@ -77,14 +75,28 @@ export default function DashboardShell({ user }: { user: User | null }) {
     staleTime: 60000,
   });
 
+  // Enquanto a config da marca carrega, não mostra o nome padrão: ele piscava e
+  // era trocado pelo nome da empresa assim que a resposta chegava.
+  const brandLoading = brandConfigPending || (!brandConfig?.company_name && brandAssetsPending);
   const companyName =
-    brandConfig?.company_name || brandAssets?.company_name || t("app.title");
+    brandConfig?.company_name || brandAssets?.company_name || (brandLoading ? "" : t("app.title"));
 
   useEffect(() => {
     if (user?.language && user.language !== i18n.language) {
       setLanguage(user.language);
     }
   }, [user?.language]);
+
+  // SPA route changes don't reload the page, so keep document.title in step with the
+  // current section (screen readers announce it, and tabs/history become distinguishable).
+  const { pathname } = useLocation();
+  const currentNavLabelKey = NAV_SECTIONS.flatMap((s) => s.items).find(
+    (it) => pathname === it.path || pathname.startsWith(`${it.path}/`),
+  )?.labelKey;
+  useEffect(() => {
+    const section = currentNavLabelKey ? t(currentNavLabelKey) : "";
+    document.title = [section, companyName].filter(Boolean).join(" · ");
+  }, [currentNavLabelKey, companyName, i18n.language]);
 
   async function saveLanguage(lang: string) {
     setLanguage(lang);
@@ -105,12 +117,16 @@ export default function DashboardShell({ user }: { user: User | null }) {
   const handleLogout = async () => {
     setLoggingOut(true);
     try {
-      await fetch("/dashboard/api/logout", {
+      const res = await fetch("/dashboard/api/logout", {
         method: "POST",
         credentials: "include",
       });
+      // Sem isso o usuário ia para /login com a sessão ainda viva e voltava direto ao app.
+      if (!res.ok) throw new Error("logout failed");
       qc.clear();
       window.location.href = "/dashboard/login";
+    } catch {
+      toast.error(t("nav.logoutError"));
     } finally {
       setLoggingOut(false);
     }
@@ -136,9 +152,27 @@ export default function DashboardShell({ user }: { user: User | null }) {
       className="grid min-h-screen max-md:grid-cols-1 md:grid-cols-[72px_1fr] lg:grid-cols-[264px_1fr]"
       style={{ background: "var(--bg-page)" }}
     >
+      {/* Skip link: primeiro foco da página; só aparece com foco de teclado. Fica fora do
+          fluxo do grid (sr-only = absolute, e fixed ao focar). preventDefault evita o #hash na URL. */}
+      <a
+        href="#main-content"
+        onClick={(e) => {
+          e.preventDefault();
+          mainRef.current?.focus();
+        }}
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded-[8px] focus:bg-[var(--surface-raised)] focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-[var(--text-primary)] focus:shadow-[var(--shadow-md)] focus:outline-none focus:ring-2 focus:ring-ring"
+      >
+        {t("nav.skipToContent")}
+      </a>
+
       <Sidebar companyName={companyName} banner={<UpdateAvailableBanner />} footer={footer} />
 
-      <main className="flex min-h-screen min-w-0 justify-center max-md:pb-[65px]">
+      <main
+        id="main-content"
+        ref={mainRef}
+        tabIndex={-1}
+        className="flex min-h-screen min-w-0 justify-center focus:outline-none max-md:pb-[65px]"
+      >
         <div className="mx-auto w-full min-w-0 max-w-[1920px] p-10 max-md:px-4 max-md:py-4">
           <Outlet />
         </div>

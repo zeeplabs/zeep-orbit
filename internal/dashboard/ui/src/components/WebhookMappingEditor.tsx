@@ -203,7 +203,7 @@ export default function WebhookMappingEditor({ appId, webhook, tables }: Webhook
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] text-[var(--text-secondary)]">{t("webhookMapping.explainer")}</p>
+        <p className="text-[12px] text-[var(--text-secondary)]">{t("webhookMapping.explainer")}</p>
         <Button
           size="sm"
           disabled={!hasMappings || webhook.status === "active" || activateWebhook.isPending}
@@ -222,7 +222,7 @@ export default function WebhookMappingEditor({ appId, webhook, tables }: Webhook
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="flex flex-col gap-1 rounded-[10px] border border-[var(--border)] bg-[var(--sunken)] p-2">
-            <p className="text-[11px] font-medium text-[var(--text-secondary)]">{t("webhookMapping.sampleFields")}</p>
+            <p className="text-[12px] font-medium text-[var(--text-secondary)]">{t("webhookMapping.sampleFields")}</p>
             {fields.map((f) => (
               <button
                 key={f.path}
@@ -239,7 +239,7 @@ export default function WebhookMappingEditor({ appId, webhook, tables }: Webhook
             ))}
           </div>
           <div className="flex flex-col gap-1 rounded-[10px] border border-[var(--border)] bg-[var(--sunken)] p-2">
-            <p className="text-[11px] font-medium text-[var(--text-secondary)]">{t("webhookMapping.tableColumns")}</p>
+            <p className="text-[12px] font-medium text-[var(--text-secondary)]">{t("webhookMapping.tableColumns")}</p>
             {(selectedTable?.columns ?? []).map((c) => {
               const link = links.find((l) => l.column === c.name);
               return (
@@ -345,12 +345,12 @@ export default function WebhookMappingEditor({ appId, webhook, tables }: Webhook
               </div>
               <div className="flex flex-col gap-1 rounded-md border border-[var(--border)] bg-[var(--sunken)] p-2">
                 {m.field_mappings.map((fm) => (
-                  <div key={fm.column} className="flex items-center gap-1.5 font-mono text-[11px]">
+                  <div key={fm.column} className="flex items-center gap-1.5 font-mono text-[12px]">
                     <span className="truncate text-[var(--text-secondary)]">{fm.source_path}</span>
                     <Icon name="arrow_forward" size={12} className="shrink-0 text-[var(--text-tertiary)]" />
                     <span className="truncate text-[var(--brand)]">{fm.column}</span>
                     {m.match_key_column === fm.column && (
-                      <span className="shrink-0 rounded-full bg-[var(--accent-tint)] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[var(--accent)]">
+                      <span className="shrink-0 rounded-full bg-[var(--accent-tint)] px-1.5 py-0.5 text-[12px] font-bold uppercase tracking-wide text-[var(--accent)]">
                         {t("webhookMapping.matchKeyBadge")}
                       </span>
                     )}

@@ -17,14 +17,7 @@ import {
   type Column,
   type StatusTone,
 } from "@/components/patterns";
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
+import { formatDate } from "@/lib/format";
 
 const ROLE_TONE: Record<string, StatusTone> = {
   superadmin: "primary",
@@ -208,7 +201,7 @@ function CreateUserDrawer({ open, onClose, currentUserRole }: CreateUserDrawerPr
             ))}
           </div>
           <div
-            className="mt-1 flex items-start gap-2 rounded-[10px] border p-3 text-[11.5px] leading-relaxed text-[var(--text-tertiary)]"
+            className="mt-1 flex items-start gap-2 rounded-[10px] border p-3 text-[12px] leading-relaxed text-[var(--text-tertiary)]"
             style={{ borderColor: "var(--border)", background: "var(--bg-sunken)" }}
           >
             <Icon name="info" size={14} className="mt-0.5 shrink-0" />
@@ -343,6 +336,7 @@ export default function UsersPage() {
 
       <DataTable
         columns={columns}
+        caption={t("users.title")}
         rows={users ?? []}
         getRowId={(u) => u.id}
         loading={isLoading}
