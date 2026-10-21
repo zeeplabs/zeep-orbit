@@ -77,3 +77,48 @@ test('table schema editor and webhook cards fit a 390px viewport', async ({ page
 
   await page.request.delete(`${api}/apps/${app.id}`)
 })
+
+test('policy rows keep their edit and delete buttons on screen at 390px', async ({ page }) => {
+  const name = `policy_overflow_${Date.now()}`
+  const api = `${BASE}/dashboard/api`
+
+  // RLS ("enabled") needs email auth on the app.
+  const appRes = await page.request.post(`${api}/apps`, { data: { name, auth_email_enabled: true } })
+  expect(appRes.ok(), await appRes.text()).toBeTruthy()
+  const app = await appRes.json()
+
+  const tableRes = await page.request.post(`${api}/apps/${app.id}/tables`, {
+    data: {
+      name: 'orders',
+      rls: 'enabled',
+      columns: [{ name: 'customer_email', type: 'text', required: true, unique: false, default: '' }],
+    },
+  })
+  expect(tableRes.ok(), await tableRes.text()).toBeTruthy()
+
+  // Policy names are identifiers with no spaces, so a long one used to push the row wider than
+  // the card and the edit/delete buttons off the right edge.
+  const policyRes = await page.request.post(`${api}/apps/${app.id}/tables/orders/policies`, {
+    data: {
+      name: 'very_long_policy_name_for_regional_managers_select',
+      action: 'select',
+      roles: ['member', 'admin'],
+      clauses: [{ column: 'customer_email', operator: 'IS NOT NULL' }],
+    },
+  })
+  expect(policyRes.ok(), await policyRes.text()).toBeTruthy()
+
+  await page.goto(`/dashboard/apps/${app.id}`)
+  await page.getByRole('tab', { name: 'Database' }).click()
+  await page.getByText('orders', { exact: true }).first().click()
+  await page.getByRole('tab', { name: 'Policies' }).click()
+  await expect(page.getByText('very_long_policy_name_for_regional_managers_select')).toBeVisible()
+
+  for (const title of ['Edit policy', 'Delete policy']) {
+    const box = await page.locator(`button[title="${title}"]`).first().boundingBox()
+    expect(box, `${title} button not rendered`).not.toBeNull()
+    expect(box!.x + box!.width, `${title} button is off screen`).toBeLessThanOrEqual(390)
+  }
+
+  await page.request.delete(`${api}/apps/${app.id}`)
+})
