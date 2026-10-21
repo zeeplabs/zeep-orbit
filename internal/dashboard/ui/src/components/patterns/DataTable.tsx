@@ -48,6 +48,8 @@ export interface DataTableProps<T> {
     nextLabel: string
     label?: ReactNode
   }
+  /** Nome da tabela para leitor de tela (`<caption>` visualmente oculto). */
+  caption?: string
   className?: string
 }
 
@@ -75,6 +77,7 @@ export function DataTable<T>({
   expandedRowId,
   onToggleExpand,
   pagination,
+  caption,
   className,
 }: DataTableProps<T>) {
   const { t } = useTranslation()
@@ -104,9 +107,14 @@ export function DataTable<T>({
       >
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-sm">
+          {caption && <caption className="sr-only">{caption}</caption>}
           <thead>
             <tr className="border-b border-[var(--border)]">
-              {expandable && <th className="w-8 px-2 py-3" />}
+              {expandable && (
+                <th className="w-8 px-2 py-3">
+                  <span className="sr-only">{t('dataTable.expandColumn')}</span>
+                </th>
+              )}
               {columns.map((col) => {
                 const active = sort?.key === col.key
                 const interactive = Boolean(col.sortable && onSort)
@@ -156,7 +164,11 @@ export function DataTable<T>({
                   </th>
                 )
               })}
-              {rowActions && <th className="w-px px-4 py-3" />}
+              {rowActions && (
+                <th className="w-px px-4 py-3">
+                  <span className="sr-only">{t('dataTable.actionsColumn')}</span>
+                </th>
+              )}
             </tr>
           </thead>
           {!loading && !error && rows.length > 0 && (

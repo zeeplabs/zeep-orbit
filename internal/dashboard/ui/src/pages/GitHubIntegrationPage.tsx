@@ -830,6 +830,7 @@ function GitHubTemplatesTab() {
 
       <DataTable<GitHubTemplate>
         columns={columns}
+        caption={t("github.templatesCaption")}
         rows={templates}
         getRowId={(tpl) => tpl.id}
         loading={loading}

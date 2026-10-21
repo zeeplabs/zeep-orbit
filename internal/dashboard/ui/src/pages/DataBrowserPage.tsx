@@ -497,6 +497,7 @@ export default function DataBrowserPage() {
 
             <DataTable<Row>
               columns={tableColumns}
+              caption={selectedTable.table}
               rows={data}
               getRowId={(row) => String(row["id"])}
               loading={queryLoading}

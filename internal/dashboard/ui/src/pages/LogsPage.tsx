@@ -266,6 +266,7 @@ export default function LogsPage() {
 
       <DataTable
         columns={columns}
+        caption={t("logs.title")}
         rows={rows}
         getRowId={(e) => e._id}
         loading={isLoading}

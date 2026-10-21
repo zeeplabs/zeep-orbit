@@ -393,6 +393,7 @@ export function AppMembersList({ appId, axis }: AppMembersListProps) {
 
       <DataTable
         columns={columns}
+        caption={t("appMembers.title")}
         rows={members}
         getRowId={(m) => m.user_id}
         loading={isLoading}

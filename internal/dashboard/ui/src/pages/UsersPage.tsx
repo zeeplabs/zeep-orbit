@@ -336,6 +336,7 @@ export default function UsersPage() {
 
       <DataTable
         columns={columns}
+        caption={t("users.title")}
         rows={users ?? []}
         getRowId={(u) => u.id}
         loading={isLoading}

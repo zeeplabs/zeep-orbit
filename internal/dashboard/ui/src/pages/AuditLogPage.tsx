@@ -190,6 +190,7 @@ export default function AuditLogPage() {
 
       <DataTable
         columns={columns}
+        caption={t("audit.title")}
         rows={rows}
         getRowId={(e) => e.id}
         loading={isLoading}

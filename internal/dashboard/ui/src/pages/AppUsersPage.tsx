@@ -436,6 +436,7 @@ export function AppUsersTab({ appId }: { appId: string }) {
 
       <DataTable<AppUser>
         columns={columns}
+        caption={t("appUsers.caption")}
         rows={users}
         getRowId={(u) => u.id}
         loading={isLoading}
