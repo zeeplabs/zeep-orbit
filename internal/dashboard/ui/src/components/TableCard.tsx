@@ -545,7 +545,7 @@ function SchemaEditor({
             {t("tableCard.relationshipsInfoBtn")}
           </button>
         </div>
-        <div className="grid gap-3 mb-1" style={{ gridTemplateColumns: "1fr 140px 80px 80px 140px 32px 40px" }}>
+        <div className="grid gap-3 mb-1 max-md:hidden" style={{ gridTemplateColumns: "1fr 140px 80px 80px 140px 32px 40px" }}>
           <span className="text-[12px] text-[var(--text-secondary)] font-semibold">{t("appForm.columnName")}</span>
           <span className="text-[12px] text-[var(--text-secondary)] font-semibold">{t("appForm.columnType")}</span>
           <span className="text-[12px] text-[var(--text-secondary)] font-semibold text-center">{t("appForm.columnReq")}</span>
@@ -566,15 +566,17 @@ function SchemaEditor({
                 <Icon name="lock" size={10} className="shrink-0" />
                 {auto.name}
               </div>
-              <div className="contents max-md:flex max-md:items-center max-md:gap-2">
+              <div className="contents max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-2">
                 <div className="h-8 w-[130px] max-md:flex-1 flex items-center px-2 text-[12px] bg-[var(--sunken)] border border-[var(--border)] rounded-md text-[var(--text-secondary)]">
                   {auto.type}
                 </div>
-                <div className="flex justify-center">
-                  <Switch checked={auto.required} disabled className="h-5 w-9 opacity-40" />
+                <div className="flex items-center justify-center gap-1.5">
+                  <Switch checked={auto.required} disabled aria-label={t("appForm.columnReq")} className="h-5 w-9 opacity-40" />
+                  <span className="text-[12px] text-[var(--text-secondary)] md:hidden">{t("appForm.columnReq")}</span>
                 </div>
-                <div className="flex justify-center">
-                  <Switch checked={auto.unique} disabled className="h-5 w-9 opacity-40" />
+                <div className="flex items-center justify-center gap-1.5">
+                  <Switch checked={auto.unique} disabled aria-label={t("appForm.columnUnique")} className="h-5 w-9 opacity-40" />
+                  <span className="text-[12px] text-[var(--text-secondary)] md:hidden">{t("appForm.columnUnique")}</span>
                 </div>
                 <span />
                 <span />
@@ -610,7 +612,7 @@ function SchemaEditor({
                   placeholder={t("tableCard.columnNamePlaceholder")}
                   className="h-8 px-2.5 py-1.5 text-[13px] bg-[var(--sunken)] border-[var(--border)] rounded-md text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] brand-focus"
                 />
-                <div className="contents max-md:flex max-md:items-center max-md:gap-2">
+                <div className="contents max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-2">
                   <Select
                     value={col.type}
                     onValueChange={(val) =>
@@ -642,19 +644,23 @@ function SchemaEditor({
                       ))}
                     </SelectContent>
                   </Select>
-                  <div className="flex justify-center">
+                  <div className="flex items-center justify-center gap-1.5">
                     <Switch
                       checked={col.required}
                       onCheckedChange={(val) => updateColumn(ci, { required: val })}
+                      aria-label={t("appForm.columnReq")}
                       className="h-5 w-9"
                     />
+                    <span className="text-[12px] text-[var(--text-secondary)] md:hidden">{t("appForm.columnReq")}</span>
                   </div>
-                  <div className="flex justify-center">
+                  <div className="flex items-center justify-center gap-1.5">
                     <Switch
                       checked={col.unique}
                       onCheckedChange={(val) => updateColumn(ci, { unique: val })}
+                      aria-label={t("appForm.columnUnique")}
                       className="h-5 w-9"
                     />
+                    <span className="text-[12px] text-[var(--text-secondary)] md:hidden">{t("appForm.columnUnique")}</span>
                   </div>
                   <div className="flex items-center max-md:w-full">
                     {col.type === "boolean" ? (

@@ -111,12 +111,12 @@ export default function AppDetailsPage() {
         {t("appForm.back")}
       </button>
 
-      <div className="mb-7 flex items-start justify-between gap-4">
-        <div>
+      <div className="mb-7 flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
           <span className="mb-3 inline-block rounded-full bg-[var(--primary-tint)] px-2.5 py-1 text-[12px] font-bold uppercase tracking-wider text-[var(--primary)]">
             {t("appDetails.backendBadge")}
           </span>
-          <h1 className="text-[26px] font-bold leading-tight text-[var(--text-primary)]" style={{ fontFamily: "var(--font-display)" }}>
+          <h1 className="text-[26px] font-bold leading-tight text-[var(--text-primary)] [overflow-wrap:anywhere]" style={{ fontFamily: "var(--font-display)" }}>
             {app.name}
           </h1>
           <p className="mt-1.5 text-sm text-[var(--text-secondary)]">{t("appDetails.subtitle")}</p>
