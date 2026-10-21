@@ -1,14 +1,36 @@
 import { useEffect, useState } from 'react'
 
+// Formulários sujos registram-se aqui para que um único <UnsavedChangesBlocker />
+// (no shell, dentro do data router) intercepte a navegação interna sem que cada
+// formulário precise renderizar o próprio diálogo.
+const dirtyGuards = new Set<symbol>()
+const listeners = new Set<() => void>()
+
+function emit() {
+  listeners.forEach((l) => l())
+}
+
+export function hasUnsavedChanges(): boolean {
+  return dirtyGuards.size > 0
+}
+
+export function subscribeUnsavedChanges(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
+  }
+}
+
 /**
- * Pede confirmação do navegador ao fechar/recarregar a aba enquanto há edição não salva.
- *
- * Só cobre saída da página (fechar, recarregar, digitar outra URL). Navegação
- * interna do app NÃO é interceptada: o app usa `BrowserRouter`, e `useBlocker`
- * só existe em data routers (`createBrowserRouter`). O texto do aviso é do
- * navegador e não pode ser customizado.
+ * Protege edição não salva enquanto `dirty` for true:
+ * - fechar/recarregar a aba ou digitar outra URL: confirmação do navegador (`beforeunload`;
+ *   o texto é do navegador e não pode ser customizado);
+ * - navegação interna (links, voltar/avançar, troca de aba `?tab=`): bloqueada por
+ *   <UnsavedChangesBlocker />, que usa `useBlocker` e por isso exige data router
+ *   (`createBrowserRouter` em main.tsx).
  */
 export function useUnsavedChangesGuard(dirty: boolean) {
+  const [id] = useState(() => Symbol('unsaved-guard'))
   useEffect(() => {
     if (!dirty) return
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -16,8 +38,14 @@ export function useUnsavedChangesGuard(dirty: boolean) {
       e.returnValue = ''
     }
     window.addEventListener('beforeunload', onBeforeUnload)
-    return () => window.removeEventListener('beforeunload', onBeforeUnload)
-  }, [dirty])
+    dirtyGuards.add(id)
+    emit()
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload)
+      dirtyGuards.delete(id)
+      emit()
+    }
+  }, [dirty, id])
 }
 
 /**

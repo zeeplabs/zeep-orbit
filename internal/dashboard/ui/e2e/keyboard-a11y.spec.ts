@@ -197,4 +197,36 @@ test.describe('Unsaved changes guard', () => {
     await input.fill(original)
     expect(await beforeUnloadPrevented(page)).toBe(false)
   })
+  test('in-app navigation asks first: stay keeps the edit, leave navigates, a clean form never asks', async ({ page }) => {
+    await page.goto('/dashboard/configuracoes')
+    const input = page.locator('input[placeholder="Zeep Tecnologia"]')
+    await expect(input).toBeVisible()
+    const nav = page.locator('aside').getByRole('link', { name: 'Apps' })
+    const dialog = page.getByRole('dialog', { name: 'Leave without saving?' })
+
+    // clean form: no prompt
+    await nav.click()
+    await expect(page).toHaveURL(/\/dashboard\/apps$/)
+    await expect(dialog).toHaveCount(0)
+
+    // dirty form: link click is blocked and the edit survives "Stay". Reach the page
+    // through the SPA (not page.goto) so "back" below is a same-document popstate.
+    await page.locator('aside').getByRole('link', { name: 'Settings' }).click()
+    await expect(input).toBeVisible()
+    const original = await input.inputValue()
+    await input.fill(`${original} edited`)
+    await nav.click()
+    await expect(dialog).toBeVisible()
+    await dialog.getByRole('button', { name: 'Stay' }).click()
+    await expect(dialog).toHaveCount(0)
+    await expect(page).toHaveURL(/\/configuracoes$/)
+    await expect(input).toHaveValue(`${original} edited`)
+
+    // browser back is blocked too; "Leave page" goes through
+    await page.goBack()
+    await expect(dialog).toBeVisible()
+    await dialog.getByRole('button', { name: 'Leave page' }).click()
+    await expect(page).not.toHaveURL(/\/configuracoes$/)
+    await expect(dialog).toHaveCount(0)
+  })
 })
