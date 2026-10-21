@@ -443,6 +443,8 @@
   "settings.uploading": "Enviando...",
   "settings.uploadFailed": "Falha no upload",
   "settings.loadConfigError": "Erro ao carregar config",
+  "settings.loadConfigErrorDesc": "Não foi possível carregar os valores salvos. O formulário fica oculto para não sobrescrevê-los com valores vazios. Tente novamente.",
+  "settings.loadConfigRetry": "Tentar novamente",
   "settings.googleClientSecretPlaceholder": "•••••••• (vazio = mantém atual)",
   "settings.googleClientSecretPlaceholderNew": "Client Secret",
   "googleSetup.title": "Complete sua conta",
