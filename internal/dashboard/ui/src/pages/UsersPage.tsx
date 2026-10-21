@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation, Trans } from "react-i18next";
 import { toast } from "sonner";
 import ChangePasswordModal from "./ChangePasswordModal";
-import { useUsers, useCreateUser, useDeleteUser, UserDef } from "../lib/api";
+import { useUsers, useCreateUser, useDeleteUser, UserDef, authFetch } from "../lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -238,7 +238,7 @@ export default function UsersPage() {
   const { data: currentUser } = useQuery({
     queryKey: ["me"],
     queryFn: async () => {
-      const res = await fetch("/dashboard/api/me", { credentials: "include" });
+      const res = await authFetch("/dashboard/api/me", { credentials: "include" });
       if (!res.ok) return null;
       return res.json() as Promise<{ id: string; email: string; name: string; role: string; language: string }>;
     },

@@ -20,7 +20,7 @@ import {
 } from "@/components/patterns";
 import type { StatusTone } from "@/components/patterns";
 import { ErrorState } from "@/components/patterns/states";
-import { useBrandConfig, useUpdateBrandConfig, useSystemConfig } from "../lib/api";
+import { useBrandConfig, useUpdateBrandConfig, useSystemConfig, authFetch } from "../lib/api";
 import { useUnsavedChangesGuard } from "../lib/useUnsavedChangesGuard";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -234,7 +234,7 @@ function SoftDeleteCard() {
   const doSave = async () => {
     setSaving(true);
     try {
-      const res = await fetch("/dashboard/api/config/system", {
+      const res = await authFetch("/dashboard/api/config/system", {
         method: "PUT",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -367,7 +367,7 @@ function GoogleAuthProviderCard() {
   useEffect(() => {
     setLoading(true);
     setLoadFailed(false);
-    fetch("/dashboard/api/config/auth/providers/google?reveal=true", { credentials: "include" })
+    authFetch("/dashboard/api/config/auth/providers/google?reveal=true", { credentials: "include" })
       .then((r) => {
         if (!r.ok) throw new Error("load failed");
         return r.json();
@@ -407,7 +407,7 @@ function GoogleAuthProviderCard() {
         ? allowedDomains.split(",").map((d) => d.trim()).filter(Boolean)
         : [];
 
-      const res = await fetch("/dashboard/api/config/auth/providers/google", {
+      const res = await authFetch("/dashboard/api/config/auth/providers/google", {
         method: "PUT",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -552,7 +552,7 @@ function GlobalStorageCard() {
   useEffect(() => {
     setLoading(true);
     setLoadFailed(false);
-    fetch("/dashboard/api/config/system", { credentials: "include" })
+    authFetch("/dashboard/api/config/system", { credentials: "include" })
       .then((r) => {
         if (!r.ok) throw new Error("load failed");
         return r.json();
@@ -595,7 +595,7 @@ function GlobalStorageCard() {
       } else {
         body.storage_config = { bucket: "" };
       }
-      const res = await fetch("/dashboard/api/config/system", {
+      const res = await authFetch("/dashboard/api/config/system", {
         method: "PUT",
         credentials: "include",
         headers: { "Content-Type": "application/json" },

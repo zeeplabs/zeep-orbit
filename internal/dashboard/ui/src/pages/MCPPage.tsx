@@ -9,8 +9,7 @@ import {
   useDeleteOAuthClient,
   useOAuthClients,
   usePATs,
-  useRevokePAT,
-} from "../lib/api";
+  useRevokePAT, authFetch } from "../lib/api";
 import { PageHeader } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -367,7 +366,7 @@ function RegisteredOAuthClientsSection() {
   const { data: me, isLoading: meLoading } = useQuery({
     queryKey: ["me"],
     queryFn: async () => {
-      const res = await fetch("/dashboard/api/me", { credentials: "include" });
+      const res = await authFetch("/dashboard/api/me", { credentials: "include" });
       if (!res.ok) return null;
       return res.json() as Promise<{ role: string }>;
     },

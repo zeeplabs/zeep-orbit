@@ -107,9 +107,28 @@ export function redirectToLoginOnUnauthorized(): void {
   window.location.assign(`/dashboard/login?return_to=${returnTo}`)
 }
 
+// Drop-in `fetch` that sends the session on 401 to the login screen. For call sites that
+// need the raw Response (custom error handling); everything else should use apiFetch.
+export async function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const res = await fetch(input, init)
+  if (res.status === 401 && (await isSessionExpired(res))) redirectToLoginOnUnauthorized()
+  return res
+}
+
+// Not every 401 means the session is gone: changing a password with a wrong current
+// password also answers 401 ("current password is incorrect"). Only the auth middleware's
+// body, {"error":"unauthorized"}, is a dead session.
+async function isSessionExpired(res: Response): Promise<boolean> {
+  try {
+    const body = await res.clone().json()
+    return body?.error === 'unauthorized'
+  } catch {
+    return false
+  }
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, { credentials: 'include', ...init })
-  if (res.status === 401) redirectToLoginOnUnauthorized()
+  const res = await authFetch(path, { credentials: 'include', ...init })
   if (!res.ok) {
     let message = `HTTP ${res.status}`
     try {
@@ -683,10 +702,9 @@ export async function exportDataBrowserCSV(
       if (val) params.set(col, val)
     }
   }
-  const res = await fetch(`/dashboard/api/data-browser/export?${params}`, {
+  const res = await authFetch(`/dashboard/api/data-browser/export?${params}`, {
     credentials: 'include',
   })
-  if (res.status === 401) redirectToLoginOnUnauthorized()
   if (!res.ok) throw new Error('Export failed')
   const blob = await res.blob()
   const url = URL.createObjectURL(blob)

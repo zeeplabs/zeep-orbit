@@ -16,8 +16,7 @@ import {
   useSystemConfig,
   useAIProviderStatus,
   AppToken,
-  TableDef,
-} from "../lib/api";
+  TableDef, authFetch } from "../lib/api";
 import { EditWithAIDrawer } from "@/components/patterns/EditWithAIDrawer";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -575,7 +574,7 @@ function StorageTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"
   );
 
   useEffect(() => {
-    fetch("/dashboard/api/config", { cache: "no-cache" })
+    authFetch("/dashboard/api/config", { cache: "no-cache" })
       .then((r) => r.json())
       .then((d) => setGlobalStorage(d.storage_configured === true))
       .catch(() => {});
@@ -841,7 +840,7 @@ function TokensTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]
             onClick={async () => {
               if (!revealedSecret) {
                 try {
-                  const res = await fetch(`/dashboard/api/apps/${app.id}/secret`, { credentials: "include" });
+                  const res = await authFetch(`/dashboard/api/apps/${app.id}/secret`, { credentials: "include" });
                   const data = await res.json();
                   if (!res.ok || !data.jwt_secret) {
                     toast.error(data.error || t("appDetails.revealSecretError"));
