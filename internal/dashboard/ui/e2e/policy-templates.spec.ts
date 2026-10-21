@@ -232,7 +232,10 @@ test.describe('Policy Templates & Help Drawer', () => {
 
     // --- T8 AC: the toggle round-trips back to the template list. ---
     await page.getByRole('switch').click() // off
-    await expect(page.getByText('Blocked by default', { exact: true })).toBeVisible()
+    // The table already has policies here, so the "Blocked by default" note (which says the
+    // table has none) is gone, while the actionable templates are back.
+    await expect(page.getByText('Blocked by default', { exact: true })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Use this template' })).toHaveCount(5)
     await expect(page.locator('input[placeholder="Policy name"]')).toHaveCount(0)
 
     // --- P2 AC1 (PTPL-06) happy path: the composite creates all 3 policies

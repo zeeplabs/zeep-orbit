@@ -167,7 +167,11 @@ export function PolicyTemplatePicker({
     }
   };
 
-  const visibleTemplates = TEMPLATE_DEFINITIONS.filter((def) => !def.requiresOwnerColumn || hasOwnerColumn(rls));
+  // "Blocked by default" describes a table with no policy at all; once one exists the text would be false.
+  const visibleTemplates = TEMPLATE_DEFINITIONS.filter(
+    (def) =>
+      (!def.requiresOwnerColumn || hasOwnerColumn(rls)) && !(def.kind === "info" && existingPolicies.length > 0),
+  );
 
   return (
     <div className="flex flex-col gap-2.5">

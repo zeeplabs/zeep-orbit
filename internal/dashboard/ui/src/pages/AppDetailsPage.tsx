@@ -805,7 +805,7 @@ function TokensTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]
 
   if (app.auth_email_enabled) {
     return (
-      <div className="rounded-[10px] border border-[var(--warning)]/20 bg-[var(--warning-tint)] px-6 py-5 text-sm text-[var(--warning)]">
+      <div className="rounded-[10px] border border-[var(--warning)]/20 bg-[var(--warning-tint)] px-6 py-5 text-sm text-[var(--warning-text)]">
         {t("appDetails.tokensAuthWarning")}
       </div>
     );
@@ -1009,7 +1009,7 @@ function TokenRevealModal({ jwt, onClose }: { jwt: string; onClose: () => void }
             <Icon name="key" size={20} />
           </div>
           <DialogTitle>{t("appDetails.tokenCreatedTitle")}</DialogTitle>
-          <DialogDescription className="text-[var(--warning)]">{t("appDetails.tokenCreatedWarning")}</DialogDescription>
+          <DialogDescription className="text-[var(--warning-text)]">{t("appDetails.tokenCreatedWarning")}</DialogDescription>
         </DialogHeader>
         <div className="flex items-center gap-2 rounded-[10px] border border-[var(--border)] bg-[var(--sunken)] px-4 py-3">
           <code className="max-h-32 flex-1 overflow-y-auto break-all font-mono text-sm text-[var(--primary)]">{jwt}</code>
