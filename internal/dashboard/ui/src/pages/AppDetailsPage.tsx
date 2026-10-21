@@ -790,8 +790,14 @@ function TokensTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]
                 try {
                   const res = await fetch(`/dashboard/api/apps/${app.id}/secret`, { credentials: "include" });
                   const data = await res.json();
+                  if (!res.ok || !data.jwt_secret) {
+                    toast.error(data.error || t("appDetails.revealSecretError"));
+                    return;
+                  }
                   setRevealedSecret(data.jwt_secret);
-                } catch {}
+                } catch {
+                  toast.error(t("common.connectionError"));
+                }
               } else {
                 setRevealedSecret(null);
               }

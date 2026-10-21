@@ -221,6 +221,7 @@ function GitHubConfigTab() {
   const fetchStatus = async () => {
     try {
       const res = await fetch('/dashboard/api/github/status', { credentials: 'include' })
+      if (!res.ok) throw new Error('status failed')
       const data = await res.json()
       setStatus(data)
       if (data.configured) {
@@ -236,6 +237,7 @@ function GitHubConfigTab() {
   const fetchConfig = async () => {
     try {
       const res = await fetch('/dashboard/api/github/config', { credentials: 'include' })
+      if (!res.ok) throw new Error('config failed')
       const data = await res.json()
       setAppId(data.app_id || '')
       setAppSlug(data.app_slug || '')
@@ -285,10 +287,14 @@ function GitHubConfigTab() {
     try {
       const res = await fetch('/dashboard/api/github/install/start', { credentials: 'include' })
       const data = await res.json()
-      if (data.install_url) {
-        window.location.href = data.install_url
+      if (!res.ok || !data.install_url) {
+        toast.error(data.error || t('github.installError'))
+        setInstalling(false)
+        return
       }
+      window.location.href = data.install_url
     } catch {
+      toast.error(t('common.connectionError'))
       setInstalling(false)
     }
   }
@@ -675,17 +681,22 @@ function GitHubTemplatesTab() {
 
   const handleToggleActive = async (tpl: GitHubTemplate) => {
     try {
-      await fetch(`/dashboard/api/github/templates/${tpl.id}/active`, {
+      const res = await fetch(`/dashboard/api/github/templates/${tpl.id}/active`, {
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ active: !tpl.active }),
       })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        toast.error(data.error || t('github.toggleError'))
+        return
+      }
       setTemplates((prev) =>
         prev.map((x) => (x.id === tpl.id ? { ...x, active: !x.active } : x)),
       )
     } catch {
-      // non-critical
+      toast.error(t('common.connectionError'))
     }
   }
 

@@ -335,7 +335,10 @@ function GoogleAuthProviderCard() {
 
   useEffect(() => {
     fetch("/dashboard/api/config/auth/providers/google?reveal=true", { credentials: "include" })
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error("load failed");
+        return r.json();
+      })
       .then((d) => {
         setConfigSet(Boolean(d.config_set));
         setEnabled(d.enabled);
@@ -496,7 +499,10 @@ function GlobalStorageCard() {
 
   useEffect(() => {
     fetch("/dashboard/api/config/system", { credentials: "include" })
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error("load failed");
+        return r.json();
+      })
       .then((d) => {
         setCurrentSoftDelete(d.soft_delete_enabled || false);
         if (d.storage_config) {
@@ -508,7 +514,7 @@ function GlobalStorageCard() {
           setSecretAccessKey("");
         }
       })
-      .catch(() => {})
+      .catch(() => toast.error(t("settings.loadConfigError")))
       .finally(() => setLoading(false));
   }, []);
 

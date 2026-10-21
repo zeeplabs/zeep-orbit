@@ -5,6 +5,7 @@ import { useQueryClient, useQuery } from "@tanstack/react-query";
 import ChangePasswordModal from "./ChangePasswordModal";
 import { setLanguage } from "../lib/i18n";
 import { useBrandConfig } from "../lib/api";
+import { toast } from "sonner";
 import { Icon } from "@/components/ui/icon";
 import { ConfirmDialog } from "@/components/patterns/ConfirmDialog";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -116,12 +117,16 @@ export default function DashboardShell({ user }: { user: User | null }) {
   const handleLogout = async () => {
     setLoggingOut(true);
     try {
-      await fetch("/dashboard/api/logout", {
+      const res = await fetch("/dashboard/api/logout", {
         method: "POST",
         credentials: "include",
       });
+      // Sem isso o usuário ia para /login com a sessão ainda viva e voltava direto ao app.
+      if (!res.ok) throw new Error("logout failed");
       qc.clear();
       window.location.href = "/dashboard/login";
+    } catch {
+      toast.error(t("nav.logoutError"));
     } finally {
       setLoggingOut(false);
     }
