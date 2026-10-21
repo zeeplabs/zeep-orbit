@@ -259,11 +259,11 @@ export default function Webhooks({ appId, tables }: WebhooksProps) {
           {webhooks.map((webhook) => (
             <div
               key={webhook.id}
-              className="flex flex-col gap-1 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-3"
+              className="flex min-w-0 flex-col gap-1 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-3"
             >
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-[13px] font-medium text-[var(--text-primary)]">{webhook.name}</span>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="min-w-0 break-words text-[13px] font-medium text-[var(--text-primary)]">{webhook.name}</span>
                   <span
                     className={
                       webhook.status === "active"
@@ -275,7 +275,7 @@ export default function Webhooks({ appId, tables }: WebhooksProps) {
                   </span>
                   <span className="text-[12px] text-[var(--text-tertiary)]">{webhook.method}</span>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex flex-wrap items-center gap-1">
                   <Button
                     variant="ghost"
                     size="sm"
@@ -306,7 +306,7 @@ export default function Webhooks({ appId, tables }: WebhooksProps) {
               <p className="text-[12px] text-[var(--text-tertiary)]">{t("webhooks.eventTypePathLabel")}: {webhook.event_type_path}</p>
               {webhook.token ? (
                 <div className="mt-1 flex items-center gap-2">
-                  <code className="flex-1 overflow-x-auto rounded-md border border-[var(--border)] bg-[var(--sunken)] px-2.5 py-1.5 text-[12px]">
+                  <code className="min-w-0 flex-1 overflow-x-auto rounded-md border border-[var(--border)] bg-[var(--sunken)] px-2.5 py-1.5 text-[12px]">
                     {webhookUrl(webhook.id, webhook.token)}
                   </code>
                   <Button
