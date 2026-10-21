@@ -1,4 +1,5 @@
 import { test, expect, Route } from '@playwright/test'
+import { login } from './helpers'
 
 /**
  * Keyboard / screen-reader behavior of shared dashboard pieces: DataTable, the skip
@@ -228,5 +229,62 @@ test.describe('Unsaved changes guard', () => {
     await dialog.getByRole('button', { name: 'Leave page' }).click()
     await expect(page).not.toHaveURL(/\/configuracoes$/)
     await expect(dialog).toHaveCount(0)
+  })
+
+  test('switching the Settings tab with a dirty form asks first; stay keeps the edit, leave switches', async ({ page }) => {
+    await page.goto('/dashboard/configuracoes')
+    const input = page.locator('input[placeholder="Zeep Tecnologia"]')
+    await expect(input).toBeVisible()
+    const dialog = page.getByRole('dialog', { name: 'Leave without saving?' })
+    const databaseTab = page.getByRole('tab', { name: 'Database' })
+
+    // clean form: the tab switches without a prompt, then back
+    await databaseTab.click()
+    await expect(page).toHaveURL(/tab=database/)
+    await expect(dialog).toHaveCount(0)
+    await page.getByRole('tab', { name: 'Branding' }).click()
+    await expect(input).toBeVisible()
+
+    // dirty form: unmounting it would lose the edit, so the switch is held back
+    const original = await input.inputValue()
+    await input.fill(`${original} edited`)
+    await databaseTab.click()
+    await expect(dialog).toBeVisible()
+    await dialog.getByRole('button', { name: 'Stay' }).click()
+    await expect(dialog).toHaveCount(0)
+    await expect(page).not.toHaveURL(/tab=database/)
+    await expect(input).toHaveValue(`${original} edited`)
+
+    await databaseTab.click()
+    await dialog.getByRole('button', { name: 'Leave page' }).click()
+    await expect(page).toHaveURL(/tab=database/)
+    await expect(dialog).toHaveCount(0)
+  })
+})
+
+test.describe('Unsaved changes guard on logout', () => {
+  // Logout revokes the session server-side, which would kill the shared storageState the
+  // other specs reuse, so this one signs in on its own.
+  test.use({ storageState: { cookies: [], origins: [] } })
+
+  test('logging out with a dirty form still reaches login (native leave prompt, not the in-app dialog)', async ({ page }) => {
+    await login(page)
+    await page.goto('/dashboard/configuracoes')
+    const input = page.locator('input[placeholder="Zeep Tecnologia"]')
+    await expect(input).toBeVisible()
+    await input.fill(`${await input.inputValue()} edited`)
+
+    // Logout is a full navigation, so the in-app blocker stays out of it and the browser's
+    // own beforeunload prompt is the only guard. Accept it to let the logout finish.
+    const nativePrompts: string[] = []
+    page.on('dialog', (d) => {
+      nativePrompts.push(d.type())
+      void d.accept()
+    })
+    await page.getByRole('button', { name: 'Log Out' }).first().click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Log Out' }).click()
+    await page.waitForURL('**/login')
+    expect(nativePrompts).toContain('beforeunload')
+    await expect(page.getByRole('dialog', { name: 'Leave without saving?' })).toHaveCount(0)
   })
 })
