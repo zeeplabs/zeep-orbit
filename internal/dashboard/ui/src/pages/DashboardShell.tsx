@@ -9,6 +9,11 @@ import { toast } from "sonner";
 import { Icon } from "@/components/ui/icon";
 import { ConfirmDialog } from "@/components/patterns/ConfirmDialog";
 import { UnsavedChangesBlocker } from "@/components/patterns/UnsavedChangesBlocker";
+import {
+  confirmLeavingWithUnsavedChanges,
+  hasUnsavedChanges,
+  resetLeavingConfirmation,
+} from "@/lib/useUnsavedChangesGuard";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { SidebarFooter } from "@/components/layout/SidebarFooter";
 import { MobileNav } from "@/components/layout/MobileNav";
@@ -117,6 +122,10 @@ export default function DashboardShell({ user }: { user: User | null }) {
 
   const handleLogout = async () => {
     setLoggingOut(true);
+    // The dialog already warned about unsaved edits (logoutDescUnsaved). Without this the
+    // browser's own prompt would show after the session is revoked, and "Stay" would leave
+    // the user on a page whose saves can only fail.
+    confirmLeavingWithUnsavedChanges();
     try {
       const res = await fetch("/dashboard/api/logout", {
         method: "POST",
@@ -127,6 +136,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
       qc.clear();
       window.location.href = "/dashboard/login";
     } catch {
+      resetLeavingConfirmation();
       toast.error(t("nav.logoutError"));
     } finally {
       setLoggingOut(false);
@@ -193,7 +203,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
       <ConfirmDialog
         open={showLogoutDialog}
         title={t("nav.logoutConfirm")}
-        message={t("nav.logoutDesc")}
+        message={showLogoutDialog && hasUnsavedChanges() ? t("nav.logoutDescUnsaved") : t("nav.logoutDesc")}
         confirmLabel={loggingOut ? t("nav.loggingOut") : t("nav.logoutConfirmBtn")}
         cancelLabel={t("nav.logoutCancel")}
         icon="logout"

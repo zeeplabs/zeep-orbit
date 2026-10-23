@@ -72,6 +72,18 @@ test.describe('Data Browser URL state', () => {
     await expect(page).toHaveURL(/page=3/)
   })
 
+  test('a sort on a column the table does not have is ignored instead of breaking the query', async ({ page }) => {
+    const queries = await mockDataBrowser(page)
+    await page.goto('/dashboard/data-browser?app=shop&table=orders&sort=dropped_column.desc')
+    await expect(page.locator('tbody tr').first()).toContainText('n0')
+    expect(queries.at(-1)!.searchParams.get('order')).toBeNull()
+
+    // A valid sort still goes through.
+    await page.goto('/dashboard/data-browser?app=shop&table=orders&sort=status.asc')
+    await expect(page.locator('tbody tr').first()).toBeVisible()
+    await expect.poll(() => queries.at(-1)!.searchParams.get('order')).toBe('status.asc')
+  })
+
   test('picking another table clears page, sort and filters', async ({ page }) => {
     await mockDataBrowser(page)
     await page.goto('/dashboard/data-browser?app=shop&table=orders&page=2&sort=name.desc&f=status%7Ceq%7Cok')

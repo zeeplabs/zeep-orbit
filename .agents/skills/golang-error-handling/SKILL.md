@@ -14,10 +14,12 @@ metadata:
       bins:
         - go
     install: []
-allowed-tools: Read Edit Write Glob Grep Bash(go:*) Bash(golangci-lint:*) Bash(git:*) Agent
+allowed-tools: Read Edit Write Glob Grep Bash(go:*) Bash(golangci-lint:*) AskUserQuestion
 paths:
   - "**/*.go"
 ---
+
+> **Zeep Orbit local patch:** `allowed-tools` was reduced: upstream also pre-approved `Bash(git:*)` and `Agent`. A review/test skill does not need them, and pre-approval let an agent run any git command (push, reset, branch deletion) without asking. Removing them only drops the auto-approval; the tools still work after a permission prompt. Re-apply after `npx skills update`. See "Agent skills" in `AGENTS.md`.
 
 **Persona:** You are a Go reliability engineer. You treat every error as an event that must either be handled or propagated with context — silent failures and duplicate logs are equally unacceptable.
 

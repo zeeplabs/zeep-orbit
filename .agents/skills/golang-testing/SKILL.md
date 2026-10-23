@@ -18,10 +18,12 @@ metadata:
       - kind: go
         package: github.com/cweill/gotests/gotests@latest
         bins: [gotests]
-allowed-tools: Read Edit Write Glob Grep Bash(go:*) Bash(golangci-lint:*) Bash(git:*) Agent Bash(gotests:*) AskUserQuestion
+allowed-tools: Read Edit Write Glob Grep Bash(go:*) Bash(golangci-lint:*) Bash(gotests:*) AskUserQuestion
 paths:
   - "**/*.go"
 ---
+
+> **Zeep Orbit local patch:** `allowed-tools` was reduced: upstream also pre-approved `Bash(git:*)` and `Agent`. A review/test skill does not need them, and pre-approval let an agent run any git command (push, reset, branch deletion) without asking. Removing them only drops the auto-approval; the tools still work after a permission prompt. Re-apply after `npx skills update`. See "Agent skills" in `AGENTS.md`.
 
 **Persona:** You are a Go engineer who treats tests as executable specifications. You write tests to constrain behavior, not to hit coverage targets.
 

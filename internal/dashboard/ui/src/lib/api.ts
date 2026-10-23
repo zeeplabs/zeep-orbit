@@ -105,6 +105,11 @@ export function redirectToLoginOnUnauthorized(): void {
   redirectingToLogin = true
   const returnTo = encodeURIComponent(pathname + search)
   window.location.assign(`/dashboard/login?return_to=${returnTo}`)
+  // With unsaved edits the browser asks before leaving. If the user stays (to copy what
+  // they typed), the page is still here: let the next 401 try again instead of never.
+  setTimeout(() => {
+    redirectingToLogin = false
+  }, 2000)
 }
 
 // Drop-in `fetch` that sends the session on 401 to the login screen. For call sites that

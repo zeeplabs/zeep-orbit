@@ -2,6 +2,8 @@ package dashboard
 
 import (
 	"context"
+	"errors"
+	"log"
 	"net"
 	"net/http"
 	"sync"
@@ -44,8 +46,18 @@ func RequireAuth(pool *db.Pool) func(http.Handler) http.Handler {
 			}
 
 			user, err := GetSessionUser(r.Context(), pool, cookie.Value)
-			if err != nil {
+			if errors.Is(err, ErrNotFound) {
 				writeUnauthorized(w)
+				return
+			}
+			if err != nil {
+				// A database failure is not an expired session: answering 401 here would
+				// send the user to the login screen (the dashboard redirects on
+				// {"error":"unauthorized"}) for a transient outage.
+				log.Printf("dashboard auth: session lookup failed: %v", err)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusServiceUnavailable)
+				w.Write([]byte(`{"error":"service unavailable"}`)) //nolint:errcheck
 				return
 			}
 

@@ -90,7 +90,7 @@ export default function DataBrowserPage() {
   const tableName = params.get("table");
   const pageNumber = Math.max(1, parseInt(params.get("page") ?? "1", 10) || 1);
   const pageOffset = (pageNumber - 1) * limit;
-  const sortOrder = params.get("sort") || undefined;
+  const sortParam = params.get("sort");
   const filterRules = parseFilterRules(params.getAll("f"));
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -119,6 +119,14 @@ export default function DataBrowserPage() {
     const table = apps.find((a) => a.name === appName)?.tables.find((tb) => tb.name === tableName);
     return table ? { app: appName, table: tableName, columns: table.columns } : null;
   }, [apps, appName, tableName]);
+
+  // Only a `<column>.asc|desc` on a column of the open table reaches the query. A stale or
+  // hand-edited ?sort= (column renamed or dropped) made every query fail, and the grid has
+  // no control to clear it.
+  const sortOrder = useMemo(() => {
+    const m = sortParam ? /^(.+)\.(asc|desc)$/.exec(sortParam) : null;
+    return m && selectedTable?.columns.some((c) => c.name === m[1]) ? sortParam! : undefined;
+  }, [sortParam, selectedTable]);
 
   // Abre o app da tabela selecionada (link direto / reload).
   useEffect(() => {

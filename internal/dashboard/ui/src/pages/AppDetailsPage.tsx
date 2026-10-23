@@ -311,6 +311,14 @@ function LoginTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]>
   const [saved, setSaved] = useState(false);
 
   const googleSaved = (app as any).auth_providers?.google;
+  const loginValues = {
+    authEmail,
+    googleEnabled,
+    clientId: googleClientId,
+    clientSecret: googleClientSecret,
+    redirectUrl: googleRedirectUrl,
+    allowedDomains: googleAllowedDomains,
+  };
   const { markSaved } = useFormDirtyGuard(
     {
       authEmail: app.auth_email_enabled,
@@ -320,14 +328,7 @@ function LoginTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]>
       redirectUrl: googleSaved?.enabled ? googleSaved.redirect_url || "" : "",
       allowedDomains: googleSaved?.enabled ? (googleSaved.allowed_domains || []).join(", ") : "",
     },
-    {
-      authEmail,
-      googleEnabled,
-      clientId: googleClientId,
-      clientSecret: googleClientSecret,
-      redirectUrl: googleRedirectUrl,
-      allowedDomains: googleAllowedDomains,
-    },
+    loginValues,
   );
 
   useEffect(() => {
@@ -366,7 +367,10 @@ function LoginTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"]>
     try {
       await updateApp.mutateAsync(payload as any);
       setSaved(true);
-      markSaved();
+      // The secret is never sent back by the server, so keep the field empty after a save
+      // (as after a reload); an empty secret on the next save keeps the stored one.
+      setGoogleClientSecret("");
+      markSaved({ ...loginValues, clientSecret: "" });
     } catch (err) {
       setError(err instanceof Error ? err.message : t("common.errorSaving"));
     }
@@ -554,6 +558,14 @@ function StorageTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"
   const [saved, setSaved] = useState(false);
 
   const storageSaved = (app as any).storage_config;
+  const storageValues = {
+    enabled: storageEnabled,
+    bucket: storageBucket,
+    region: storageRegion,
+    endpoint: storageEndpoint,
+    accessKey: storageAccessKey,
+    secretKey: storageSecretKey,
+  };
   const { markSaved } = useFormDirtyGuard(
     {
       enabled: Boolean(storageSaved?.bucket),
@@ -563,14 +575,7 @@ function StorageTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"
       accessKey: storageSaved?.bucket ? storageSaved.access_key_id || "" : "",
       secretKey: "",
     },
-    {
-      enabled: storageEnabled,
-      bucket: storageBucket,
-      region: storageRegion,
-      endpoint: storageEndpoint,
-      accessKey: storageAccessKey,
-      secretKey: storageSecretKey,
-    },
+    storageValues,
   );
 
   useEffect(() => {
@@ -615,7 +620,9 @@ function StorageTab({ app }: { app: NonNullable<ReturnType<typeof useApp>["data"
     try {
       await updateApp.mutateAsync(payload as any);
       setSaved(true);
-      markSaved();
+      // Same as the Google secret: never returned by the server, so clear it after a save.
+      setStorageSecretKey("");
+      markSaved({ ...storageValues, secretKey: "" });
     } catch (err) {
       setError(err instanceof Error ? err.message : t("common.errorSaving"));
     }

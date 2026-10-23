@@ -59,7 +59,7 @@ Follow `RELEASE.md` exactly, in order. Do not skip steps or reorder them. In sho
 3. Move `[Unreleased]` entries in `CHANGELOG.md` into a new dated version section.
 4. Add an entry to `internal/dashboard/changelog.json` (renders on the dashboard's `/changelog` page). Every `title`/`summary`/`description` field is bilingual — `{"en": "...", "pt-BR": "..."}` — not an i18n key; the frontend (`ChangelogPage.tsx`) picks the field matching `i18n.language` at render time, falling back to `en`. Never add an entry with only one language.
 5. Write `.github/release-notes-vX.Y.Z.md` — this becomes the actual GitHub Release body (`docker-publish.yml` reads it via `body_path`); if it's missing, CI silently falls back to GitHub's generic auto-generated notes.
-6. Open a PR `release-vX.Y.Z` → `main`. Wait for CI green + review, then merge via "Rebase and merge."
+6. Open a PR `release-vX.Y.Z` → `main`. Wait for CI green + review, then merge via "Squash and merge" (see section 2 and `RELEASE.md` for why not rebase).
 7. Tag `vX.Y.Z` on `main`, push the tag — CI (`docker-publish.yml`) builds the image, publishes GHCR + GitHub Release + Helm chart package; `docs.yml` publishes the Helm chart repo from the `Chart.yaml` bump (triggered when the PR lands on `main`, not by the tag).
 8. Publish SDK clients only if they actually changed (TS/Go/Python/Rust/Java/PHP — see `RELEASE.md` for per-client commands).
 
@@ -103,6 +103,9 @@ These skills do **not** override this file. When a skill conflicts with a rule h
 | `shadcn` | Removed the `` !`npx shadcn@latest info --json` `` auto-run and the `allowed-tools` pre-approval; added a note to run from `internal/dashboard/ui` | Unpinned npm fetch on every skill load, and pre-approved `apply`/`init --force`/`add --all` overwrite component source without a prompt. The repo root has no `components.json`. |
 | `web-design-guidelines` | Vendored upstream rules as `command.md` pinned to commit `434b7f9` (2026-10-05, sha256 in `SKILL.md`); `SKILL.md` reads the local file instead of using WebFetch on `main`; added Orbit i18n notes | Remote `main` content became agent instructions with no review and no reproducibility. |
 | `golang-security` | `allowed-tools` reduced to `Read Edit Write Glob Grep Bash(go:*) Bash(golangci-lint:*) Bash(govulncheck:*) AskUserQuestion` (dropped `Agent`, `WebFetch`, `WebSearch`, `Bash(git:*)`, worktree tools) | Pre-approval was broader than a review skill needs. Note: this only removes the auto-approval, it does not block the tool. |
+| `golang-error-handling` | `allowed-tools` reduced to `Read Edit Write Glob Grep Bash(go:*) Bash(golangci-lint:*) AskUserQuestion` (dropped `Bash(git:*)`, `Agent`) | Same as `golang-security`: `Bash(git:*)` pre-approved any git command, including push and reset. |
+| `golang-testing` | `allowed-tools` reduced to `Read Edit Write Glob Grep Bash(go:*) Bash(golangci-lint:*) Bash(gotests:*) AskUserQuestion` (dropped `Bash(git:*)`, `Agent`) | Same as above. |
+| `ui-ux-pro-max` | Script commands use `.agents/skills/ui-ux-pro-max/scripts/search.py` (run from the repo root) instead of `${CLAUDE_PLUGIN_ROOT}/.claude/skills/...` | The variable is only set for plugin skills; in a project skill it is empty and the path resolved to `/.claude/skills/...`. |
 
 Each patched `SKILL.md` carries a `Zeep Orbit local patch` note — keep it.
 
