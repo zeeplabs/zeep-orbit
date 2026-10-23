@@ -1,7 +1,7 @@
 # Multi-Replica Consistency Tasks
 
 **Design**: `.specs/features/multi-replica-consistency/design.md`
-**Status**: Draft
+**Status**: In progress (T1 done)
 
 There is no `.specs/codebase/TESTING.md`. The test types and gates come from AGENTS.md §3 and the existing suites:
 - **unit**: plain `go test` with no DB.
@@ -61,13 +61,14 @@ T9, T11, T12, T14, T15 ──→ T16 (docs + CHANGELOG) ──→ T17 (full gate
 **Requirement**: MREP-09, MREP-10
 
 **Done when**:
-- [ ] Integration test: session A holds the same per-app advisory lock. Session B's `LockAppDDL` with `DDLLockTimeout = 300ms` fails within about 300ms + margin, and `IsLockTimeout(err) == true`. **This proves `lock_timeout` covers advisory waits (design assumption).** If it fails, stop and report: the design falls back to a try-lock loop.
-- [ ] Integration test: a different schema name does not wait.
-- [ ] The `SET LOCAL` does not leak. After commit, `SHOW lock_timeout` on the released connection returns the server default.
-- [ ] Quick gate passes.
+- [x] Integration test: session A holds the same per-app advisory lock. Session B's `LockAppDDL` with `DDLLockTimeout = 300ms` fails within about 300ms + margin, and `IsLockTimeout(err) == true`. **This proves `lock_timeout` covers advisory waits (design assumption).** If it fails, stop and report: the design falls back to a try-lock loop.
+- [x] Integration test: a different schema name does not wait.
+- [x] The `SET LOCAL` does not leak. After commit, `SHOW lock_timeout` on the released connection returns the server default.
+- [x] Quick gate passes.
 
 **Tests**: integration
 **Gate**: quick (`go test ./internal/db/...`)
+**Status**: Done (2026-10-23). The advisory wait aborted at ~350ms with 55P03, so the design assumption holds.
 
 ---
 
