@@ -69,7 +69,10 @@ func PurgeExpiredSoftDeletes(ctx context.Context, pool *db.Pool, reg *registry.R
 				`DELETE FROM %s WHERE deleted_at IS NOT NULL AND deleted_at < now() - $1::interval`,
 				ident,
 			)
-			tag, err := pool.Exec(ctx, sql, fmt.Sprintf("%d days", retentionDays))
+			// The DELETEs and the audit insert run on the held connection: with
+			// a small pool (DB_MAX_CONNS=1) asking the pool for another one
+			// would wait forever behind the connection this purge holds.
+			tag, err := conn.Exec(ctx, sql, fmt.Sprintf("%d days", retentionDays))
 			if err != nil {
 				runErr = fmt.Errorf("purge %s.%s: %w", app.SchemaName, table.Name, err)
 				break
@@ -87,7 +90,7 @@ func PurgeExpiredSoftDeletes(ctx context.Context, pool *db.Pool, reg *registry.R
 		"completed":      runErr == nil,
 		"error":          errString(runErr),
 	})
-	_ = InsertAuditLog(ctx, pool, "", "system", "system.purge.run", "system_config", "", "retention purge", meta, "")
+	_ = InsertAuditLog(ctx, conn, "", "system", "system.purge.run", "system_config", "", "retention purge", meta, "")
 
 	return total, runErr
 }

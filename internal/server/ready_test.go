@@ -50,3 +50,38 @@ func TestHandleReady(t *testing.T) {
 		}
 	})
 }
+
+// TestHandleReady_SaturatedMainPool: with every main-pool connection busy,
+// /ready still answers 200 through its own pool, instead of timing out while
+// waiting for a main-pool connection and pulling a healthy pod out.
+func TestHandleReady_SaturatedMainPool(t *testing.T) {
+	if testPool == nil {
+		t.Skip("TEST_DATABASE_URL not set")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	main, err := db.NewWithMaxConns(ctx, os.Getenv("TEST_DATABASE_URL"), 1)
+	if err != nil {
+		t.Fatalf("NewWithMaxConns: %v", err)
+	}
+	defer main.Close()
+	busy, err := main.Acquire(ctx)
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	defer busy.Release()
+
+	readyPool, err := main.NewLockPool(ctx, 1)
+	if err != nil {
+		t.Fatalf("NewLockPool: %v", err)
+	}
+	defer readyPool.Close()
+
+	h := NewHandler(main, testReg)
+	h.SetReadyPool(readyPool)
+	rec := httptest.NewRecorder()
+	h.HandleReady(rec, httptest.NewRequest(http.MethodGet, "/ready", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("got %d %s, want 200 with a saturated main pool", rec.Code, rec.Body.String())
+	}
+}

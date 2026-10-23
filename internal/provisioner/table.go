@@ -204,7 +204,23 @@ func (p *Provisioner) createTable(ctx context.Context, schemaName, tableName str
 // so callers may invoke it unconditionally whenever a table needs the
 // fail-closed guarantee (RLS enabled + zero policies denies every row to
 // zeep_app_enduser natively, with no application-level check).
+//
+// It reads pg_class first and skips the ALTER when RLS is already on: the
+// ALTER takes an ACCESS EXCLUSIVE lock even as a no-op, so every metadata
+// edit on a "policy" table would otherwise wait behind any open read on it.
 func EnsureRowLevelSecurity(ctx context.Context, pool db.Querier, schemaName, tableName string) error {
+	var enabled bool
+	err := pool.QueryRow(ctx,
+		`SELECT relrowsecurity FROM pg_class
+		 WHERE oid = format('%I.%I', $1::text, $2::text)::regclass`,
+		schemaName, tableName,
+	).Scan(&enabled)
+	if err != nil {
+		return fmt.Errorf("table: read row level security of %q.%q: %w", schemaName, tableName, err)
+	}
+	if enabled {
+		return nil
+	}
 	sql := fmt.Sprintf(`ALTER TABLE %q.%q ENABLE ROW LEVEL SECURITY`, schemaName, tableName)
 	if _, err := pool.Exec(ctx, sql); err != nil {
 		return fmt.Errorf("table: enable row level security on %q.%q: %w", schemaName, tableName, err)

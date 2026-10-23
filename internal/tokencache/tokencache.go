@@ -19,6 +19,10 @@ type entry struct {
 var (
 	mu    sync.RWMutex
 	cache = make(map[string]entry)
+	// gen moves on every Invalidate and Clear. A fill that read the database
+	// before the move may hold a state the revoke already replaced, so
+	// SetIfGeneration drops it.
+	gen uint64
 )
 
 // IsActive returns the cached active state for jti and whether the entry is still fresh.
@@ -39,10 +43,30 @@ func Set(jti string, active bool) {
 	mu.Unlock()
 }
 
+// Generation returns the current cache generation. Read it before the
+// database lookup and pass it to SetIfGeneration.
+func Generation() uint64 {
+	mu.RLock()
+	defer mu.RUnlock()
+	return gen
+}
+
+// SetIfGeneration stores the active state for jti only if no Invalidate or
+// Clear ran since g was read. Otherwise a lookup that read "active" just
+// before a revoke would cache the revoked token as active for the full TTL.
+func SetIfGeneration(jti string, active bool, g uint64) {
+	mu.Lock()
+	if gen == g {
+		cache[jti] = entry{active: active, at: time.Now()}
+	}
+	mu.Unlock()
+}
+
 // Invalidate drops any cached entry for jti, forcing the next check to hit the DB.
 func Invalidate(jti string) {
 	mu.Lock()
 	delete(cache, jti)
+	gen++
 	mu.Unlock()
 }
 
@@ -53,5 +77,6 @@ func Invalidate(jti string) {
 func Clear() {
 	mu.Lock()
 	cache = make(map[string]entry)
+	gen++
 	mu.Unlock()
 }

@@ -375,7 +375,7 @@ func UpdateTablePolicy(ctx context.Context, pool *db.Pool, appID, schemaName, ta
 // ("o DROP TABLE já remove as policies nativas do Postgres; a limpeza é do
 // metadado próprio do Orbit"). Native policies are already gone once DROP
 // TABLE runs; this only removes the now-orphaned Orbit-side metadata rows.
-func deleteTablePoliciesForTable(ctx context.Context, pool *db.Pool, appID, tableName string) error {
+func deleteTablePoliciesForTable(ctx context.Context, pool db.Querier, appID, tableName string) error {
 	if _, err := pool.Exec(ctx,
 		`DELETE FROM zeep_system.table_policies WHERE app_id = $1 AND table_name = $2`,
 		appID, tableName,

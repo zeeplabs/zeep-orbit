@@ -129,8 +129,22 @@ func (p *Provisioner) ApplyColumnConstraintChanges(ctx context.Context, schemaNa
 // must be removed first (own apply or prior apply), rather than silently
 // leaving a dangling reference or failing with a raw Postgres error.
 func (p *Provisioner) DropTable(ctx context.Context, schemaName, tableName string) error {
+	return p.DropTableWith(ctx, schemaName, tableName, nil)
+}
+
+// DropTableWith drops the table and then runs after in the same locked
+// transaction, so the caller's metadata delete commits only together with
+// the DROP. A lock timeout or any error from after rolls both back, instead
+// of leaving the physical table behind with its metadata already gone.
+func (p *Provisioner) DropTableWith(ctx context.Context, schemaName, tableName string, after func(q db.Querier) error) error {
 	return p.withAppLock(ctx, schemaName, func(tp *Provisioner) error {
-		return tp.dropTable(ctx, schemaName, tableName)
+		if err := tp.dropTable(ctx, schemaName, tableName); err != nil {
+			return err
+		}
+		if after == nil {
+			return nil
+		}
+		return after(tp.q)
 	})
 }
 

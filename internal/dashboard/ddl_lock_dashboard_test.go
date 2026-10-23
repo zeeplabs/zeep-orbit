@@ -13,10 +13,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
@@ -219,5 +221,161 @@ func TestUpdateAppTableHandler_LockTimeoutReturns409(t *testing.T) {
 		if strings.Contains(string(logged), forbidden) {
 			t.Fatalf("holders log must not contain %q: %s", forbidden, logged)
 		}
+	}
+}
+
+func callDeleteAppTable(t *testing.T, h *Handler, actor *DashboardUser, appID, tableID string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/dashboard/api/apps/%s/tables/%s", appID, tableID), nil)
+	req = withUser(req, actor)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", appID)
+	rctx.URLParams.Add("tableId", tableID)
+	req = req.WithContext(withCtx(req, rctx))
+	w := httptest.NewRecorder()
+	h.DeleteAppTable(w, req)
+	return w
+}
+
+// TestDeleteAppTableHandler_LockTimeoutKeepsTable: a DELETE whose DROP times
+// out behind a long reader answers 409 and leaves both the metadata row and
+// the physical table in place, so the retry (after the reader is gone)
+// succeeds. Before the fix the metadata was committed away first, the retry
+// got 404 and the physical table was orphaned.
+func TestDeleteAppTableHandler_LockTimeoutKeepsTable(t *testing.T) {
+	pool, _, actors, _, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+	h := NewHandler(pool, registry.New(), zap.NewNop())
+
+	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{Name: uniqueAppName(t, "del409")}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppForUser: %v", err)
+	}
+	tbl, err := h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
+		Name: "items", Columns: []config.ColumnConfig{{Name: "title", Type: "text"}},
+	}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppTableForUser: %v", err)
+	}
+	schema := schemaNameForDB(app.Name)
+	shortDashboardDDLLockTimeout(t)
+
+	reader, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("reader begin: %v", err)
+	}
+	defer reader.Rollback(ctx)
+	if _, err := reader.Exec(ctx, fmt.Sprintf(`SELECT * FROM %q.items`, schema)); err != nil {
+		t.Fatalf("reader select: %v", err)
+	}
+
+	if w := callDeleteAppTable(t, h, actors["loner"], app.ID, tbl.ID); w.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409; body %s", w.Code, w.Body.String())
+	}
+	if err := reader.Rollback(ctx); err != nil {
+		t.Fatalf("reader rollback: %v", err)
+	}
+
+	var metaRows int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM zeep_system.app_tables WHERE id = $1`, tbl.ID).Scan(&metaRows); err != nil {
+		t.Fatalf("count metadata: %v", err)
+	}
+	if metaRows != 1 {
+		t.Fatalf("metadata row was deleted although the DROP timed out")
+	}
+	if !physicalTableExists(t, pool, schema, "items") {
+		t.Fatal("physical table should still exist after a 409")
+	}
+
+	if w := callDeleteAppTable(t, h, actors["loner"], app.ID, tbl.ID); w.Code != http.StatusOK {
+		t.Fatalf("retry status = %d, want 200; body %s", w.Code, w.Body.String())
+	}
+	if physicalTableExists(t, pool, schema, "items") {
+		t.Fatal("physical table should be gone after the retry")
+	}
+}
+
+func physicalTableExists(t *testing.T, pool *db.Pool, schema, table string) bool {
+	t.Helper()
+	var exists bool
+	if err := pool.QueryRow(context.Background(),
+		`SELECT to_regclass(format('%I.%I', $1::text, $2::text)) IS NOT NULL`, schema, table,
+	).Scan(&exists); err != nil {
+		t.Fatalf("check table: %v", err)
+	}
+	return exists
+}
+
+// TestUpdateTableRLSModeForUser_LockTimeoutKeepsSentinel: the *ForUser layer
+// wraps store errors with errAppTableInternalFailed. The lock timeout must
+// stay in the chain, or REST answers 500 and MCP a generic error instead of
+// the busy message.
+func TestUpdateTableRLSModeForUser_LockTimeoutKeepsSentinel(t *testing.T) {
+	pool, _, actors, _, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+	h := NewHandler(pool, registry.New(), zap.NewNop())
+
+	app, err := h.CreateAppForUser(ctx, actors["loner"], AppRequestBody{Name: uniqueAppName(t, "rls409"), AuthEmailEnabled: true}, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("CreateAppForUser: %v", err)
+	}
+	if _, err := h.CreateAppTableForUser(ctx, actors["loner"], app.ID, TableRequestBody{
+		Name: "items", Columns: []config.ColumnConfig{{Name: "title", Type: "text"}},
+	}, "127.0.0.1"); err != nil {
+		t.Fatalf("CreateAppTableForUser: %v", err)
+	}
+	shortDashboardDDLLockTimeout(t)
+
+	// Hold the state_version row: Apply (DDL only) goes through, and the
+	// metadata UPDATE in UpdateAppTable times out in its trigger, past the
+	// point where the *ForUser layer wraps the error.
+	holder, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("holder begin: %v", err)
+	}
+	defer holder.Rollback(ctx)
+	if _, err := holder.Exec(ctx, `UPDATE zeep_system.state_version SET changed_at = now() WHERE id = 1`); err != nil {
+		t.Fatalf("holder update: %v", err)
+	}
+
+	_, err = h.UpdateTableRLSModeForUser(ctx, actors["loner"], app.ID, "items", "policy", "127.0.0.1")
+	if !errors.Is(err, provisioner.ErrDDLLockTimeout) {
+		t.Fatalf("expected ErrDDLLockTimeout in the chain, got: %v", err)
+	}
+	if !errors.Is(err, errAppTableInternalFailed) {
+		t.Fatalf("the internal-failure sentinel should still match, got: %v", err)
+	}
+}
+
+// TestUpdateAppTable_PolicyTableWithRLSOnSkipsLock: once RLS is on, a
+// metadata edit on a "policy" table runs no ALTER, so it doesn't wait behind
+// an open reader on that table.
+func TestUpdateAppTable_PolicyTableWithRLSOnSkipsLock(t *testing.T) {
+	pool := tablePoliciesTestPool(t)
+	appID, _ := tablePoliciesTestApp(t, pool)
+	ctx := context.Background()
+
+	tbl, err := InsertAppTable(ctx, pool, appID, AppTableRow{Name: "requests", Columns: requestsColumns()})
+	if err != nil {
+		t.Fatalf("InsertAppTable: %v", err)
+	}
+	if _, err := UpdateAppTable(ctx, pool, appID, tbl.ID, "tp_test", "policy", requestsColumns(), nil); err != nil {
+		t.Fatalf("first UpdateAppTable: %v", err)
+	}
+	shortDashboardDDLLockTimeout(t)
+
+	holder, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("holder begin: %v", err)
+	}
+	defer holder.Rollback(ctx)
+	if _, err := holder.Exec(ctx, `SELECT * FROM tp_test.requests`); err != nil {
+		t.Fatalf("holder select: %v", err)
+	}
+
+	if _, err := UpdateAppTable(ctx, pool, appID, tbl.ID, "tp_test", "policy", requestsColumns(), nil); err != nil {
+		t.Fatalf("UpdateAppTable on a policy table with RLS already on should not wait for a table lock: %v", err)
 	}
 }

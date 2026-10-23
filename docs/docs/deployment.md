@@ -95,7 +95,7 @@ O chart e `k8s/deployment.yaml` já usam `/ready` na readiness.
 
 ### Conexões
 
-Cada pod abre até `DB_MAX_CONNS` conexões (padrão 10; no chart, `database.maxConns`). Mantenha `réplicas × DB_MAX_CONNS`, contando o máximo do HPA, abaixo do `max_connections` do Postgres, descontando o que outros clientes usam.
+Cada pod abre até `DB_MAX_CONNS` conexões (padrão 10; no chart, `database.maxConns`), mais uma dedicada ao readiness probe. Mantenha `réplicas × (DB_MAX_CONNS + 1)`, contando o máximo do HPA, abaixo do `max_connections` do Postgres, descontando o que outros clientes usam.
 
 ### Mudanças de schema (DDL)
 
