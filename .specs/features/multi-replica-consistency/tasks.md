@@ -1,7 +1,7 @@
 # Multi-Replica Consistency Tasks
 
 **Design**: `.specs/features/multi-replica-consistency/design.md`
-**Status**: In progress (T1–T4 done)
+**Status**: In progress (T1–T4, T6 done)
 
 There is no `.specs/codebase/TESTING.md`. The test types and gates come from AGENTS.md §3 and the existing suites:
 - **unit**: plain `go test` with no DB.
@@ -161,16 +161,17 @@ T9, T11, T12, T14, T15 ──→ T16 (docs + CHANGELOG) ──→ T17 (full gate
 **Requirement**: MREP-04, MREP-06
 
 **Done when**:
-- [ ] Unit tests:
+- [x] Unit tests:
   - `Replace` swaps apps and system config atomically. A concurrent reader under `-race` never sees mixed state.
   - On a miss, the hook is called exactly once per lookup.
   - A hit never calls the hook.
   - The hook can `Replace` and the retry then finds the app.
   - With no hook set, a miss behaves as today.
-- [ ] `go test -race ./internal/registry/...` passes.
+- [x] `go test -race ./internal/registry/...` passes.
 
 **Tests**: unit
 **Gate**: quick
+**Status**: Done (2026-10-23). `LoadFromDB` was kept so `main.go` still builds; it is deleted in T8 together with the `registry_test.go` comments.
 
 ---
 

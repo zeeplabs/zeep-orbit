@@ -14,9 +14,17 @@ import (
 
 // All read and write operations are protected by RWMutex.
 type Registry struct {
-	mu     sync.RWMutex
-	apps   map[string]*App
-	sysCfg SystemConfig
+	mu       sync.RWMutex
+	apps     map[string]*App
+	sysCfg   SystemConfig
+	missHook func()
+}
+
+// Snapshot is the full registry state loaded from the database: every app
+// plus the global system config, swapped in together by Replace.
+type Snapshot struct {
+	Apps   map[string]*App
+	System SystemConfig
 }
 
 // App represents an application with its schema and tables.
@@ -58,25 +66,80 @@ func New() *Registry {
 }
 
 // O segundo valor indica se o app foi encontrado.
+// On a miss, the miss hook (if set) runs and the lookup is retried once, so
+// an app created on another replica is found without waiting for the next
+// poll.
 func (r *Registry) Get(appName string) (*App, bool) {
+	if app, ok := r.lookupApp(appName); ok {
+		return app, true
+	}
+	if !r.runMissHook() {
+		return nil, false
+	}
+	return r.lookupApp(appName)
+}
+
+// Returns (nil, false) if the app or table does not exist. A miss on either
+// runs the miss hook and retries once, like Get.
+func (r *Registry) GetTable(appName, tableName string) (*Table, bool) {
+	if tbl, ok := r.lookupTable(appName, tableName); ok {
+		return tbl, true
+	}
+	if !r.runMissHook() {
+		return nil, false
+	}
+	return r.lookupTable(appName, tableName)
+}
+
+func (r *Registry) lookupApp(appName string) (*App, bool) {
 	r.mu.RLock()
 	app, ok := r.apps[appName]
 	r.mu.RUnlock()
 	return app, ok
 }
 
-// Returns (nil, false) if the app or table does not exist.
-func (r *Registry) GetTable(appName, tableName string) (*Table, bool) {
-	r.mu.RLock()
-	app, ok := r.apps[appName]
-	r.mu.RUnlock()
-
+func (r *Registry) lookupTable(appName, tableName string) (*Table, bool) {
+	app, ok := r.lookupApp(appName)
 	if !ok {
 		return nil, false
 	}
-
 	tbl, ok := app.Tables[tableName]
 	return tbl, ok
+}
+
+// runMissHook calls the miss hook outside the lock (it may call Replace)
+// and reports whether one was set.
+func (r *Registry) runMissHook() bool {
+	r.mu.RLock()
+	hook := r.missHook
+	r.mu.RUnlock()
+	if hook == nil {
+		return false
+	}
+	hook()
+	return true
+}
+
+// SetMissHook sets the function Get and GetTable call on a miss before
+// retrying the lookup once. The hook must rate-limit itself: it runs on the
+// request path. nil disables it.
+func (r *Registry) SetMissHook(fn func()) {
+	r.mu.Lock()
+	r.missHook = fn
+	r.mu.Unlock()
+}
+
+// Replace swaps every app and the system config in one step, so a reader
+// never sees apps from one load next to the system config of another. The
+// registry takes ownership of apps.
+func (r *Registry) Replace(apps map[string]*App, sys SystemConfig) {
+	if apps == nil {
+		apps = make(map[string]*App)
+	}
+	r.mu.Lock()
+	r.apps = apps
+	r.sysCfg = sys
+	r.mu.Unlock()
 }
 
 // Returns a copy of the slice without exposing the internal map.
