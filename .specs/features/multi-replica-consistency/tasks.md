@@ -1,7 +1,7 @@
 # Multi-Replica Consistency Tasks
 
 **Design**: `.specs/features/multi-replica-consistency/design.md`
-**Status**: In progress (T1–T4, T6 done)
+**Status**: In progress (T1–T4, T6, T7 done)
 
 There is no `.specs/codebase/TESTING.md`. The test types and gates come from AGENTS.md §3 and the existing suites:
 - **unit**: plain `go test` with no DB.
@@ -184,7 +184,7 @@ T9, T11, T12, T14, T15 ──→ T16 (docs + CHANGELOG) ──→ T17 (full gate
 **Requirement**: MREP-04..06, MREP-15
 
 **Done when**:
-- [ ] Unit tests with fake `Version`/`Load`:
+- [x] Unit tests with fake `Version`/`Load`:
   - unchanged version means no load;
   - a changed version means one load plus a `Replace` and the `OnChange` hooks;
   - a load error keeps the previous registry, and the next call reloads even with the same version;
@@ -192,11 +192,12 @@ T9, T11, T12, T14, T15 ──→ T16 (docs + CHANGELOG) ──→ T17 (full gate
   - 50 concurrent `SyncNow` calls perform 1 load;
   - 100 misses within 1s perform ≤ 1 sync;
   - `Run` stops on ctx cancel without leaking a goroutine.
-- [ ] Logging: debug on reload, warn on failure.
-- [ ] `go test -race ./internal/registry/...` passes.
+- [x] Logging: debug on reload, warn on failure.
+- [x] `go test -race ./internal/registry/...` passes.
 
 **Tests**: unit
 **Gate**: quick
+**Status**: Done (2026-10-23). Deviation: the miss hook is exported as `OnMiss`, because `main` sets it from another package.
 
 ---
 
