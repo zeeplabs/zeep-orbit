@@ -17,7 +17,7 @@ sidebar_position: 3
 | `BRAND_THEME` | ❌ | Default theme (`azure`, `emerald`, `ruby`, `amber`, `orange`) |
 | `BRAND_COMPANY_NAME` | ❌ | Company name for white-label |
 | `LOG_LEVEL` | ❌ | Set `debug` for development output |
-| `DB_MAX_CONNS` | ❌ | Max Postgres connections per pod (default: 10), plus one for the readiness probe. Keep replicas × this value under the server's `max_connections`; an invalid value stops boot |
+| `DB_MAX_CONNS` | ❌ | Max Postgres connections per pod (default: 10). Each pod also opens 1 for the readiness probe and up to 4 for webhook deduplication: keep replicas × (this value + 5) under the server's `max_connections`; an invalid value stops boot |
 
 ## App Names
 
