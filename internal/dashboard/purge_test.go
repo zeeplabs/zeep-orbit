@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
@@ -270,4 +271,32 @@ func TestPurgeExpiredSoftDeletesReleasesLock(t *testing.T) {
 		t.Fatal("a second replica could not take the purge lock after the run")
 	}
 	_, _ = conn.Exec(ctx, `SELECT pg_advisory_unlock(hashtext($1))`, purgeAdvisoryLockKey)
+}
+
+// TestPurgeExpiredSoftDeletesWithOneConnectionPool: the purge holds one
+// connection for its advisory lock. With DB_MAX_CONNS=1, asking the pool for
+// a second one (DELETEs, audit insert) waited forever.
+func TestPurgeExpiredSoftDeletesWithOneConnectionPool(t *testing.T) {
+	_, reg := purgeTestPool(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	small, err := db.NewWithMaxConns(ctx, os.Getenv("TEST_DATABASE_URL"), 1)
+	if err != nil {
+		t.Fatalf("NewWithMaxConns(1): %v", err)
+	}
+	defer small.Close()
+
+	if _, err := small.Exec(ctx,
+		`INSERT INTO purge_test_app.items (name, deleted_at) VALUES ('old-deleted', now() - interval '10 days')`,
+	); err != nil {
+		t.Fatalf("seed row: %v", err)
+	}
+	n, err := PurgeExpiredSoftDeletes(ctx, small, reg, 5)
+	if err != nil {
+		t.Fatalf("purge on a one-connection pool: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("rows deleted = %d, want 1", n)
+	}
 }

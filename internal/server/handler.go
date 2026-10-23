@@ -25,6 +25,9 @@ type Handler struct {
 	pool   *db.Pool
 	reg    *registry.Registry
 	logger *zap.Logger
+	// readyPool is a one-connection pool for /ready only; nil falls back
+	// to pool. See SetReadyPool.
+	readyPool *db.Pool
 }
 
 // NewHandler creates a Handler with injected pool and registry. Defaults to
@@ -33,6 +36,14 @@ type Handler struct {
 // about log output are unaffected).
 func NewHandler(pool *db.Pool, reg *registry.Registry) *Handler {
 	return &Handler{pool: pool, reg: reg, logger: zap.NewNop()}
+}
+
+// SetReadyPool makes /ready ping through p instead of the main pool. Pinging
+// the main pool first waits for a free connection, so a pod whose pool is
+// saturated by slow queries failed readiness although Postgres was fine; the
+// load then moved to the remaining pods and saturated them too.
+func (h *Handler) SetReadyPool(p *db.Pool) {
+	h.readyPool = p
 }
 
 // SetLogger wires a real logger in place of the no-op default.
@@ -724,7 +735,11 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) HandleReady(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
-	if err := h.pool.Ping(ctx); err != nil {
+	pool := h.readyPool
+	if pool == nil {
+		pool = h.pool
+	}
+	if err := pool.Ping(ctx); err != nil {
 		h.logger.Warn("readiness check failed: database unreachable", zap.Error(err))
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "unavailable"})
 		return

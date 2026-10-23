@@ -180,6 +180,19 @@ func cmdServe() *cobra.Command {
 				os.Exit(1)
 			}
 
+			// /ready pings through its own one-connection pool, so a main
+			// pool saturated by slow queries doesn't fail readiness while
+			// Postgres itself is fine. Falls back to the main pool.
+			readyCtx, readyCancel := context.WithTimeout(context.Background(), 10*time.Second)
+			readyPool, err := pool.NewLockPool(readyCtx, 1)
+			readyCancel()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "WARNING: readiness pool: %v (using the main pool)\n", err)
+			} else {
+				defer readyPool.Close()
+				srv.SetReadyPool(readyPool)
+			}
+
 			return srv.Start()
 		},
 	}

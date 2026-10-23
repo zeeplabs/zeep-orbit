@@ -660,9 +660,31 @@ func UpdateAppTable(ctx context.Context, pool *db.Pool, appID, tableID, schemaNa
 		return AppTableRow{}, fmt.Errorf("dashboard: update app table %s begin tx: %w", tableID, err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
+
+	// DDL first, metadata UPDATE last: the UPDATE fires the state_version
+	// trigger, which row-locks the single version row until commit. Taking
+	// it before a table-lock wait of up to DDLLockTimeout would stall every
+	// other app's metadata write behind this one.
 	if rls == "policy" {
 		if err := db.LockAppDDL(ctx, tx, schemaName); err != nil {
 			return AppTableRow{}, provisioner.WrapLockTimeout(schemaName, err)
+		}
+		var name string
+		err := tx.QueryRow(ctx,
+			`SELECT name FROM zeep_system.app_tables WHERE id = $1 AND app_id = $2`,
+			tableID, appID,
+		).Scan(&name)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return AppTableRow{}, ErrNotFound
+			}
+			return AppTableRow{}, fmt.Errorf("dashboard: get table name for %s: %w", tableID, err)
+		}
+		if err := provisioner.EnsureRowLevelSecurity(ctx, tx, schemaName, name); err != nil {
+			return AppTableRow{}, provisioner.WrapLockTimeout(schemaName, fmt.Errorf("dashboard: enable row level security for table %s: %w", tableID, err))
+		}
+		if err := provisioner.RelaxOwnerColumn(ctx, tx, schemaName, name); err != nil {
+			return AppTableRow{}, provisioner.WrapLockTimeout(schemaName, fmt.Errorf("dashboard: relax owner_id for table %s: %w", tableID, err))
 		}
 	}
 
@@ -678,22 +700,15 @@ func UpdateAppTable(ctx context.Context, pool *db.Pool, appID, tableID, schemaNa
 		if errors.Is(err, pgx.ErrNoRows) {
 			return AppTableRow{}, ErrNotFound
 		}
-		return AppTableRow{}, fmt.Errorf("dashboard: update app table %s: %w", tableID, err)
+		// The state_version trigger can time out waiting for the version
+		// row under this transaction's lock_timeout.
+		return AppTableRow{}, provisioner.WrapLockTimeout(schemaName, fmt.Errorf("dashboard: update app table %s: %w", tableID, err))
 	}
 	if err := json.Unmarshal(colsJSON, &row.Columns); err != nil {
 		return AppTableRow{}, fmt.Errorf("dashboard: unmarshal columns for table %s: %w", tableID, err)
 	}
 	if err := json.Unmarshal(idxJSON, &row.Indexes); err != nil {
 		return AppTableRow{}, fmt.Errorf("dashboard: unmarshal indexes for table %s: %w", tableID, err)
-	}
-
-	if rls == "policy" {
-		if err := provisioner.EnsureRowLevelSecurity(ctx, tx, schemaName, row.Name); err != nil {
-			return AppTableRow{}, provisioner.WrapLockTimeout(schemaName, fmt.Errorf("dashboard: enable row level security for table %s: %w", tableID, err))
-		}
-		if err := provisioner.RelaxOwnerColumn(ctx, tx, schemaName, row.Name); err != nil {
-			return AppTableRow{}, provisioner.WrapLockTimeout(schemaName, fmt.Errorf("dashboard: relax owner_id for table %s: %w", tableID, err))
-		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -707,8 +722,9 @@ func UpdateAppTable(ctx context.Context, pool *db.Pool, appID, tableID, schemaNa
 // rows registered for this table (end-user-row-policies spec edge case: the
 // physical DROP TABLE already removes the native Postgres policies, this
 // only cleans up Orbit's own policy metadata, which has no DB-level FK to
-// app_tables to cascade on its own).
-func DeleteAppTable(ctx context.Context, pool *db.Pool, appID, tableID string) (string, error) {
+// app_tables to cascade on its own). The handler runs it inside
+// Provisioner.DropTableWith's transaction, so it commits with the DROP.
+func DeleteAppTable(ctx context.Context, pool db.Querier, appID, tableID string) (string, error) {
 	var name string
 	err := pool.QueryRow(ctx,
 		`DELETE FROM zeep_system.app_tables WHERE id = $1 AND app_id = $2 RETURNING name`,

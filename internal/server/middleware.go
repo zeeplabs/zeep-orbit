@@ -112,9 +112,10 @@ func JWTMiddleware(reg *registry.Registry, pool *db.Pool) func(http.Handler) htt
 
 						active, cached := tokencache.IsActive(jti)
 						if !cached {
+							gen := tokencache.Generation()
 							tokenRow, err := dashboard.GetAppTokenByJTI(r.Context(), pool, jti)
 							if err != nil || tokenRow == nil {
-								tokencache.Set(jti, false)
+								tokencache.SetIfGeneration(jti, false, gen)
 								writeError(w, http.StatusUnauthorized, "unauthorized")
 								return
 							}
@@ -122,7 +123,7 @@ func JWTMiddleware(reg *registry.Registry, pool *db.Pool) func(http.Handler) htt
 							if active && tokenRow.ExpiresAt != nil && time.Now().After(*tokenRow.ExpiresAt) {
 								active = false
 							}
-							tokencache.Set(jti, active)
+							tokencache.SetIfGeneration(jti, active, gen)
 						}
 
 						if !active {

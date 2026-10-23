@@ -22,9 +22,12 @@ type SyncerConfig struct {
 	// MissMinInterval is the shortest gap between two miss-triggered syncs
 	// on one pod. Default 1s.
 	MissMinInterval time.Duration
-	// MissTimeout bounds a miss-triggered sync, which runs on the request
-	// path. Default 2s.
+	// MissTimeout bounds how long a request waits on a miss-triggered sync.
+	// Default 2s.
 	MissTimeout time.Duration
+	// SyncTimeout bounds one poll sync, so a hung connection can't stall
+	// the poller (and every miss that joins its in-flight sync). Default 10s.
+	SyncTimeout time.Duration
 	// OnChange hooks run after every successful swap (e.g. clear a cache
 	// derived from the registry).
 	OnChange []func()
@@ -56,6 +59,9 @@ func NewSyncer(reg *Registry, cfg SyncerConfig) *Syncer {
 	}
 	if cfg.MissTimeout <= 0 {
 		cfg.MissTimeout = 2 * time.Second
+	}
+	if cfg.SyncTimeout <= 0 {
+		cfg.SyncTimeout = 10 * time.Second
 	}
 	if cfg.Logf == nil {
 		cfg.Logf = func(string, string, ...any) {}
@@ -133,7 +139,9 @@ func (s *Syncer) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			_ = s.SyncNow(ctx)
+			syncCtx, cancel := context.WithTimeout(ctx, s.cfg.SyncTimeout)
+			_ = s.SyncNow(syncCtx)
+			cancel()
 		}
 	}
 }
@@ -152,7 +160,19 @@ func (s *Syncer) OnMiss() {
 	s.lastMiss = now
 	s.mu.Unlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), s.cfg.MissTimeout)
-	defer cancel()
-	_ = s.SyncNow(ctx)
+	// The sync itself is bounded by SyncTimeout; the request only waits
+	// MissTimeout for it. singleflight.Do would block until a shared flight
+	// started by the poller finished, whatever this caller's deadline.
+	ctx, cancel := context.WithTimeout(context.Background(), s.cfg.SyncTimeout)
+	ch := s.group.DoChan("sync", func() (any, error) {
+		defer cancel()
+		return nil, s.sync(ctx)
+	})
+	select {
+	case <-ch:
+		cancel()
+	case <-time.After(s.cfg.MissTimeout):
+		// Leave the sync running for the next caller; its ctx expires at
+		// SyncTimeout (or is cancelled by the closure when it finishes).
+	}
 }

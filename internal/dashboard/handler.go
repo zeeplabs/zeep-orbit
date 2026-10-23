@@ -1237,7 +1237,9 @@ func (h *Handler) DeleteApp(w http.ResponseWriter, r *http.Request) {
 // errLoadSystemConfigFailed / errAppTableInternalFailed distinguish
 // CreateAppTableForUser's internal (500-class) failure points, so the HTTP
 // handler keeps returning the same distinct public message each point
-// returned before the extraction.
+// returned before the extraction. Both sides are wrapped with %w: a lock
+// timeout underneath must stay visible to writeError and the MCP mapper,
+// which turn it into 409 / "table is busy" instead of a 500.
 var (
 	errLoadSystemConfigFailed = errors.New("dashboard: load system config failed")
 	errAppTableInternalFailed = errors.New("dashboard: app table internal failure")
@@ -1282,12 +1284,12 @@ func (h *Handler) CreateAppTableForUser(ctx context.Context, user *DashboardUser
 
 	row, err := InsertAppTable(ctx, h.pool, appID, table)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+		return nil, fmt.Errorf("%w: %w", errAppTableInternalFailed, err)
 	}
 
 	updated, _, err := GetApp(ctx, h.pool, appID, user)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+		return nil, fmt.Errorf("%w: %w", errAppTableInternalFailed, err)
 	}
 	h.reg.Register(appRowToRegistryApp(updated))
 
@@ -1539,12 +1541,12 @@ func (h *Handler) UpdateTableRLSModeForUser(ctx context.Context, user *Dashboard
 		if errors.Is(err, ErrNotFound) {
 			return nil, ErrNotFound
 		}
-		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+		return nil, fmt.Errorf("%w: %w", errAppTableInternalFailed, err)
 	}
 
 	updated, _, err := GetApp(ctx, h.pool, appID, user)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+		return nil, fmt.Errorf("%w: %w", errAppTableInternalFailed, err)
 	}
 	h.reg.Register(appRowToRegistryApp(updated))
 
@@ -1676,12 +1678,12 @@ func (h *Handler) AddTableColumnForUser(ctx context.Context, user *DashboardUser
 		if errors.Is(err, ErrNotFound) {
 			return nil, ErrNotFound
 		}
-		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+		return nil, fmt.Errorf("%w: %w", errAppTableInternalFailed, err)
 	}
 
 	updated, _, err := GetApp(ctx, h.pool, appID, user)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+		return nil, fmt.Errorf("%w: %w", errAppTableInternalFailed, err)
 	}
 	h.reg.Register(appRowToRegistryApp(updated))
 
@@ -1747,12 +1749,12 @@ func (h *Handler) AddTableIndexForUser(ctx context.Context, user *DashboardUser,
 		if errors.Is(err, ErrNotFound) {
 			return nil, ErrNotFound
 		}
-		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+		return nil, fmt.Errorf("%w: %w", errAppTableInternalFailed, err)
 	}
 
 	updated, _, err := GetApp(ctx, h.pool, appID, user)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+		return nil, fmt.Errorf("%w: %w", errAppTableInternalFailed, err)
 	}
 	h.reg.Register(appRowToRegistryApp(updated))
 
@@ -1834,12 +1836,12 @@ func (h *Handler) AddColumnForeignKeyForUser(ctx context.Context, user *Dashboar
 		if errors.Is(err, ErrNotFound) {
 			return nil, ErrNotFound
 		}
-		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+		return nil, fmt.Errorf("%w: %w", errAppTableInternalFailed, err)
 	}
 
 	updated, _, err := GetApp(ctx, h.pool, appID, user)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+		return nil, fmt.Errorf("%w: %w", errAppTableInternalFailed, err)
 	}
 	h.reg.Register(appRowToRegistryApp(updated))
 
@@ -1902,12 +1904,12 @@ func (h *Handler) RemoveColumnForeignKeyForUser(ctx context.Context, user *Dashb
 		if errors.Is(err, ErrNotFound) {
 			return nil, ErrNotFound
 		}
-		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+		return nil, fmt.Errorf("%w: %w", errAppTableInternalFailed, err)
 	}
 
 	updated, _, err := GetApp(ctx, h.pool, appID, user)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+		return nil, fmt.Errorf("%w: %w", errAppTableInternalFailed, err)
 	}
 	h.reg.Register(appRowToRegistryApp(updated))
 
@@ -1987,12 +1989,12 @@ func (h *Handler) UpdateColumnEnumValuesForUser(ctx context.Context, user *Dashb
 		if errors.Is(err, ErrNotFound) {
 			return nil, ErrNotFound
 		}
-		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+		return nil, fmt.Errorf("%w: %w", errAppTableInternalFailed, err)
 	}
 
 	updated, _, err := GetApp(ctx, h.pool, appID, user)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", errAppTableInternalFailed, err)
+		return nil, fmt.Errorf("%w: %w", errAppTableInternalFailed, err)
 	}
 	h.reg.Register(appRowToRegistryApp(updated))
 
@@ -2090,7 +2092,7 @@ func (h *Handler) DeleteAppTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tableName, err := DeleteAppTable(r.Context(), h.pool, appID, tableID)
+	tableName, err := GetAppTableName(r.Context(), h.pool, appID, tableID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
@@ -2100,7 +2102,24 @@ func (h *Handler) DeleteAppTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.prov.DropTable(r.Context(), schemaNameForDB(app.Name), tableName); err != nil {
+	// The DROP and the metadata delete commit together: a DROP that times
+	// out on a busy table (409) leaves the table listed, so a retry works.
+	err = h.prov.DropTableWith(r.Context(), schemaNameForDB(app.Name), tableName, func(q db.Querier) error {
+		deleted, err := DeleteAppTable(r.Context(), q, appID, tableID)
+		if err != nil {
+			return err
+		}
+		if deleted != tableName {
+			// Renamed between the lookup and the DROP: roll back.
+			return ErrNotFound
+		}
+		return nil
+	})
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "table not found"})
+			return
+		}
 		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
 		return
 	}

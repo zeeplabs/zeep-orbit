@@ -22,7 +22,7 @@ type AuditEntry struct {
 	CreatedAt    time.Time       `json:"created_at"`
 }
 
-func InsertAuditLog(ctx context.Context, pool *db.Pool, userID, userEmail, action, resourceType, resourceID, resourceName string, metadata json.RawMessage, ip string) error {
+func InsertAuditLog(ctx context.Context, pool db.Querier, userID, userEmail, action, resourceType, resourceID, resourceName string, metadata json.RawMessage, ip string) error {
 	if metadata == nil {
 		metadata = json.RawMessage("{}")
 	}

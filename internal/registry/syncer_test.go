@@ -349,3 +349,54 @@ func TestSyncNow_LogsWarnOnFailureAndDebugOnReload(t *testing.T) {
 		t.Fatalf("log levels = %v, want one debug and one warn", levels)
 	}
 }
+
+// TestOnMiss_DoesNotWaitPastMissTimeout: a miss that joins a slow in-flight
+// sync (started by the poller) returns after MissTimeout instead of waiting
+// for that sync to finish.
+func TestOnMiss_DoesNotWaitPastMissTimeout(t *testing.T) {
+	reg := New()
+	src := &fakeSource{loadDelay: 500 * time.Millisecond}
+	src.set(1, "a")
+	s := NewSyncer(reg, SyncerConfig{
+		Version:     src.Version,
+		Load:        src.Load,
+		MissTimeout: 50 * time.Millisecond,
+	})
+
+	go func() { _ = s.SyncNow(context.Background()) }()
+	time.Sleep(20 * time.Millisecond) // let the slow sync start
+
+	start := time.Now()
+	s.OnMiss()
+	if elapsed := time.Since(start); elapsed > 300*time.Millisecond {
+		t.Fatalf("OnMiss waited %s, want about MissTimeout (50ms)", elapsed)
+	}
+}
+
+// TestRun_BoundsEachSync: a hung source doesn't stall the poller forever;
+// each tick's sync is cancelled at SyncTimeout.
+func TestRun_BoundsEachSync(t *testing.T) {
+	reg := New()
+	var calls atomic.Int32
+	s := NewSyncer(reg, SyncerConfig{
+		Version: func(ctx context.Context) (int64, error) {
+			calls.Add(1)
+			<-ctx.Done()
+			return 0, ctx.Err()
+		},
+		Load:        func(context.Context) (Snapshot, error) { return Snapshot{}, nil },
+		Interval:    10 * time.Millisecond,
+		SyncTimeout: 30 * time.Millisecond,
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go s.Run(ctx)
+
+	deadline := time.Now().Add(time.Second)
+	for calls.Load() < 3 {
+		if time.Now().After(deadline) {
+			t.Fatalf("poller stalled on a hung sync: %d calls in 1s", calls.Load())
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}

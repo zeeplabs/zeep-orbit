@@ -218,8 +218,16 @@ func provisionZeepSystemOnce(ctx context.Context, pool *db.Pool) error {
 		`ALTER TABLE zeep_system.system_config ADD COLUMN IF NOT EXISTS retention_days INT NOT NULL DEFAULT 0`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_system_config_singleton
 		 ON zeep_system.system_config ((TRUE))`,
-		`INSERT INTO zeep_system.system_config (soft_delete_enabled)
-		 SELECT false WHERE NOT EXISTS (SELECT 1 FROM zeep_system.system_config)`,
+		// An IF, not INSERT ... WHERE NOT EXISTS: the state_version trigger on
+		// system_config is statement-level and fires on a zero-row INSERT
+		// too, which made every pod boot reload the registry on every pod.
+		`DO $do$
+		 BEGIN
+		   IF NOT EXISTS (SELECT 1 FROM zeep_system.system_config) THEN
+		     INSERT INTO zeep_system.system_config (soft_delete_enabled) VALUES (false);
+		   END IF;
+		 END
+		 $do$`,
 		`CREATE TABLE IF NOT EXISTS zeep_system.github_app_config (
 			app_id           TEXT NOT NULL,
 			client_id        TEXT NOT NULL,
