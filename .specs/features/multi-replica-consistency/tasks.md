@@ -1,7 +1,7 @@
 # Multi-Replica Consistency Tasks
 
 **Design**: `.specs/features/multi-replica-consistency/design.md`
-**Status**: In progress (T1, T2 done)
+**Status**: In progress (T1–T3 done)
 
 There is no `.specs/codebase/TESTING.md`. The test types and gates come from AGENTS.md §3 and the existing suites:
 - **unit**: plain `go test` with no DB.
@@ -98,18 +98,19 @@ T9, T11, T12, T14, T15 ──→ T16 (docs + CHANGELOG) ──→ T17 (full gate
 **Requirement**: MREP-01..03, MREP-07, MREP-18
 
 **Done when**:
-- [ ] Running `ProvisionZeepSystem` twice is a no-op the second time: no error, and one trigger per table.
-- [ ] Integration test: each of the following bumps `version` by ≥ 1:
+- [x] Running `ProvisionZeepSystem` twice is a no-op the second time: no error, and one trigger per table.
+- [x] Integration test: each of the following bumps `version` by ≥ 1:
   - INSERT, UPDATE and DELETE on `apps`;
   - INSERT, UPDATE and DELETE on `app_tables`;
   - an UPDATE on `system_config`;
   - `UPDATE app_tokens SET revoked_at`.
-- [ ] Integration test: `UPDATE app_tokens SET last_used_at = now()`, `UPDATE app_tokens SET expires_at = ...` and `INSERT INTO app_tokens` do **not** bump it.
-- [ ] Integration test: a rolled-back transaction that wrote to `apps` leaves `version` unchanged.
-- [ ] Full gate passes for `./internal/dashboard/...`.
+- [x] Integration test: `UPDATE app_tokens SET last_used_at = now()`, `UPDATE app_tokens SET expires_at = ...` and `INSERT INTO app_tokens` do **not** bump it.
+- [x] Integration test: a rolled-back transaction that wrote to `apps` leaves `version` unchanged.
+- [x] Full gate passes for `./internal/dashboard/...`.
 
 **Tests**: integration
 **Gate**: quick (`go test -p 1 ./internal/dashboard/...`)
+**Status**: Done (2026-10-23). The full `internal/dashboard` suite passes.
 
 ---
 

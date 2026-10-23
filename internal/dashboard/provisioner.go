@@ -634,6 +634,54 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 		`CREATE UNIQUE INDEX IF NOT EXISTS ai_build_sessions_edit_in_progress_uidx
 		 ON zeep_system.ai_build_sessions (owner_user_id, target_app_id)
 		 WHERE mode = 'edit' AND status = 'in_progress'`,
+		// Cross-replica state version (multi-replica-consistency). Every pod
+		// keeps apps, tables and system config in memory; each one polls this
+		// single row and reloads when `version` moves. Bumped by triggers, not
+		// Go call sites, so every writer (dashboard, MCP, AI chat, a manual
+		// SQL fix) is covered. A row, not a sequence: nextval is not
+		// transactional, so a pod could reload before the writer commits and
+		// miss the change; the row update becomes visible with the commit.
+		`CREATE TABLE IF NOT EXISTS zeep_system.state_version (
+			id         SMALLINT    PRIMARY KEY CHECK (id = 1),
+			version    BIGINT      NOT NULL DEFAULT 0,
+			changed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`INSERT INTO zeep_system.state_version (id) VALUES (1) ON CONFLICT (id) DO NOTHING`,
+		`CREATE OR REPLACE FUNCTION zeep_system.bump_state_version() RETURNS trigger
+		 LANGUAGE plpgsql AS $fn$
+		 BEGIN
+		   UPDATE zeep_system.state_version SET version = version + 1, changed_at = now() WHERE id = 1;
+		   RETURN NULL;
+		 END
+		 $fn$`,
+		// Statement-level, so a bulk write bumps once. app_tokens only fires
+		// on revocation (UPDATE OF revoked_at) and DELETE: last_used_at is
+		// written on every API request and expires_at on login, and neither
+		// changes what a pod caches. Guarded by pg_trigger because CREATE OR
+		// REPLACE TRIGGER needs PG 14.
+		`DO $do$
+		 DECLARE
+		   t RECORD;
+		 BEGIN
+		   FOR t IN SELECT * FROM (VALUES
+		     ('apps',          'INSERT OR UPDATE OR DELETE'),
+		     ('app_tables',    'INSERT OR UPDATE OR DELETE'),
+		     ('system_config', 'INSERT OR UPDATE OR DELETE'),
+		     ('app_tokens',    'UPDATE OF revoked_at OR DELETE')
+		   ) AS v(tbl, events)
+		   LOOP
+		     IF NOT EXISTS (
+		       SELECT 1 FROM pg_trigger
+		       WHERE tgname = 'bump_state_version'
+		         AND tgrelid = format('zeep_system.%I', t.tbl)::regclass
+		     ) THEN
+		       EXECUTE format(
+		         'CREATE TRIGGER bump_state_version AFTER %s ON zeep_system.%I FOR EACH STATEMENT EXECUTE FUNCTION zeep_system.bump_state_version()',
+		         t.events, t.tbl);
+		     END IF;
+		   END LOOP;
+		 END
+		 $do$`,
 	}
 
 	for _, stmt := range stmts {
