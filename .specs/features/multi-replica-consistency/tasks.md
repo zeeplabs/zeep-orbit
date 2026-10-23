@@ -1,7 +1,7 @@
 # Multi-Replica Consistency Tasks
 
 **Design**: `.specs/features/multi-replica-consistency/design.md`
-**Status**: In progress (T1–T3 done)
+**Status**: In progress (T1–T4 done)
 
 There is no `.specs/codebase/TESTING.md`. The test types and gates come from AGENTS.md §3 and the existing suites:
 - **unit**: plain `go test` with no DB.
@@ -122,11 +122,12 @@ T9, T11, T12, T14, T15 ──→ T16 (docs + CHANGELOG) ──→ T17 (full gate
 **Requirement**: MREP-13
 
 **Done when**:
-- [ ] Integration test: another session holds `LOCK TABLE zeep_system.apps IN ACCESS EXCLUSIVE MODE`, and the timeout and backoff are shortened through package vars. `ProvisionZeepSystem` returns an error after exactly 3 attempts and does not hang.
-- [ ] Normal boot is unchanged; the existing tests stay green.
+- [x] Integration test: another session holds `LOCK TABLE zeep_system.apps IN ACCESS EXCLUSIVE MODE`, and the timeout and backoff are shortened through package vars. `ProvisionZeepSystem` returns an error after exactly 3 attempts and does not hang.
+- [x] Normal boot is unchanged; the existing tests stay green.
 
 **Tests**: integration
 **Gate**: quick (`./internal/dashboard/...`)
+**Status**: Done (2026-10-23). The attempt count is checked through the error text (`after 3 attempts`), not a hook.
 
 ---
 

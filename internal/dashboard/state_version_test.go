@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -142,6 +143,53 @@ func TestStateVersion_NotBumpedByHotPathTokenWrites(t *testing.T) {
 	}
 	if after := readStateVersion(t, pool); after != before {
 		t.Fatalf("token insert, last_used_at and expires_at writes must not bump state_version (before %d, after %d)", before, after)
+	}
+}
+
+// TestProvisionZeepSystem_BoundedByLockTimeout covers T4: a session holding
+// ACCESS EXCLUSIVE on a zeep_system table must make boot provisioning fail
+// after its retries, not hang.
+func TestProvisionZeepSystem_BoundedByLockTimeout(t *testing.T) {
+	pool := stateVersionTestPool(t)
+	ctx := context.Background()
+
+	prevTimeout, prevBackoff := provisionLockTimeout, provisionBackoff
+	provisionLockTimeout = 200 * time.Millisecond
+	provisionBackoff = []time.Duration{50 * time.Millisecond, 50 * time.Millisecond}
+	t.Cleanup(func() { provisionLockTimeout, provisionBackoff = prevTimeout, prevBackoff })
+
+	holder, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("holder begin: %v", err)
+	}
+	defer holder.Rollback(ctx)
+	if _, err := holder.Exec(ctx, `LOCK TABLE zeep_system.apps IN ACCESS EXCLUSIVE MODE`); err != nil {
+		t.Fatalf("lock apps: %v", err)
+	}
+
+	start := time.Now()
+	err = ProvisionZeepSystem(ctx, pool)
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("ProvisionZeepSystem should fail while zeep_system.apps is locked")
+	}
+	if !db.IsLockTimeout(err) {
+		t.Fatalf("expected a wrapped lock timeout, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "after 3 attempts") {
+		t.Fatalf("expected 3 attempts, got: %v", err)
+	}
+	// 3 × 200ms waits + 2 × 50ms backoff ≈ 700ms; allow slack, but not a hang.
+	if elapsed > 5*time.Second {
+		t.Fatalf("ProvisionZeepSystem took %s, expected a bounded failure", elapsed)
+	}
+
+	if err := holder.Rollback(ctx); err != nil {
+		t.Fatalf("holder rollback: %v", err)
+	}
+	if err := ProvisionZeepSystem(ctx, pool); err != nil {
+		t.Fatalf("ProvisionZeepSystem after the lock is released: %v", err)
 	}
 }
 

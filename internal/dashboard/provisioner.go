@@ -3,13 +3,45 @@ package dashboard
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
 
+// provisionLockTimeout bounds how long each boot-provisioning ALTER waits
+// for a table lock. Without it, a long-lived reader on a zeep_system table
+// makes the ALTER wait forever, and every later query on that table queues
+// behind it. Vars so tests can shorten them.
+var (
+	provisionLockTimeout = 5 * time.Second
+	provisionBackoff     = []time.Duration{1 * time.Second, 2 * time.Second}
+)
+
 // Idempotent — safe to call on every startup.
 // Uses pg_advisory_xact_lock to serialize provisioning across concurrent pods.
+// A lock wait longer than provisionLockTimeout rolls the whole transaction
+// back and retries, up to len(provisionBackoff)+1 attempts (~18s with the
+// defaults, under the liveness probe budget), then returns the lock-timeout
+// error so boot fails visibly instead of hanging.
 func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
+	attempts := len(provisionBackoff) + 1
+	var err error
+	for i := 0; i < attempts; i++ {
+		if err = provisionZeepSystemOnce(ctx, pool); err == nil || !db.IsLockTimeout(err) {
+			return err
+		}
+		if i < len(provisionBackoff) {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(provisionBackoff[i]):
+			}
+		}
+	}
+	return fmt.Errorf("dashboard: provision gave up after %d attempts waiting for a table lock: %w", attempts, err)
+}
+
+func provisionZeepSystemOnce(ctx context.Context, pool *db.Pool) error {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("dashboard: provision begin tx: %w", err)
@@ -18,6 +50,12 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('zeep-orbit-provision'))`); err != nil {
 		return fmt.Errorf("dashboard: provision acquire lock: %w", err)
+	}
+	// Set after the advisory lock: waiting for another pod's provisioning is
+	// expected, and that pod's own ALTERs are bounded by this same limit.
+	// provisionLockTimeout is a trusted package var — safe to format.
+	if _, err := tx.Exec(ctx, fmt.Sprintf("SET LOCAL lock_timeout = '%dms'", provisionLockTimeout.Milliseconds())); err != nil {
+		return fmt.Errorf("dashboard: provision set lock_timeout: %w", err)
 	}
 
 	stmts := []string{
