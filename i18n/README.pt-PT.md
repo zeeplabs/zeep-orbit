@@ -560,6 +560,7 @@ Em produção, fixe `image.tag` ou `image.digest` no `values.yaml` em vez de dep
 | `BRAND_COMPANY_NAME`           | Não         | Nome da empresa para white-label                        |
 | `LOG_LEVEL`                    | Não         | Defina `debug` para output de desenvolvimento           |
 | `DASHBOARD_LOG_BUFFER_SIZE`    | Não         | Tamanho do ring buffer do visualizador de logs (padrão: 2000) |
+| `DB_MAX_CONNS`                 | Não         | Máximo de ligações Postgres por pod (padrão: 10). Mantenha réplicas × este valor abaixo do `max_connections` do servidor; um valor inválido impede o arranque |
 | `ORBIT_PUBLIC_URL`             | Não         | URL base visível externamente (ex: `https://orbit.example.com`) para o documento de metadados OAuth 2.1 (`/.well-known/oauth-authorization-server`). Sem ela, a URL é derivada dos cabeçalhos `Host`/`X-Forwarded-Proto` do pedido — defina quando o Orbit não estiver atrás de um proxy que valide esses cabeçalhos, para que um cliente MCP não possa ser apontado para um endpoint de token falsificado. |
 
 ---

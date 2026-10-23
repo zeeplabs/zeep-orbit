@@ -32,7 +32,7 @@ func (p *Provisioner) ensureIndexes(ctx context.Context, schemaName, tableName s
 			uniqueClause, idx.Name, schemaName, tableName, strings.Join(quotedCols, ", "),
 		)
 
-		if _, err := p.pool.Exec(ctx, sql); err != nil {
+		if _, err := p.q.Exec(ctx, sql); err != nil {
 			return nil, fmt.Errorf("index: create %q on %q.%q: %w", idx.Name, schemaName, tableName, err)
 		}
 

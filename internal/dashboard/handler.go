@@ -2582,7 +2582,25 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 // writeError logs the real err (with request context) at Error level, then
 // sends only publicMsg to the client so internals never leak over the wire.
+//
+// A DDL lock timeout that would otherwise surface as a 500 becomes a 409
+// with provisioner.ErrDDLLockTimeout's message (nothing was changed, the
+// caller can retry) — handled here, not per handler, so every path that
+// runs DDL gets it. The lock holders are logged for the operator.
 func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, status int, publicMsg string, err error) {
+	if status >= http.StatusInternalServerError && (errors.Is(err, provisioner.ErrDDLLockTimeout) || db.IsLockTimeout(err)) {
+		var lockErr *provisioner.DDLLockTimeoutError
+		if errors.As(err, &lockErr) {
+			h.logDDLLockHolders(r.Context(), lockErr.Schema, lockErr.Err)
+		}
+		h.logger.Warn("dashboard request hit a DDL lock timeout",
+			zap.String("method", r.Method),
+			zap.String("path", r.URL.Path),
+			zap.Error(err),
+		)
+		writeJSON(w, http.StatusConflict, map[string]string{"error": provisioner.ErrDDLLockTimeout.Error()})
+		return
+	}
 	h.logger.Error("dashboard request failed",
 		zap.String("method", r.Method),
 		zap.String("path", r.URL.Path),

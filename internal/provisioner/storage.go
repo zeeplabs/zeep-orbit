@@ -19,7 +19,7 @@ func (p *Provisioner) provisionStorageTables(ctx context.Context, schema string)
 	)`, schema)
 
 	var exists bool
-	err := p.pool.QueryRow(ctx,
+	err := p.q.QueryRow(ctx,
 		`SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = '_files')`,
 		schema,
 	).Scan(&exists)
@@ -28,7 +28,7 @@ func (p *Provisioner) provisionStorageTables(ctx context.Context, schema string)
 	}
 
 	if !exists {
-		if _, err := p.pool.Exec(ctx, ddl); err != nil {
+		if _, err := p.q.Exec(ctx, ddl); err != nil {
 			return nil, fmt.Errorf("storage: create _files in %q: %w", schema, err)
 		}
 		created = append(created, schema+"._files")

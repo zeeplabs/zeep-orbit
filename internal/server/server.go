@@ -149,6 +149,7 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		http.Redirect(w, r, "/dashboard", http.StatusFound)
 	})
 	r.Get("/health", h.HandleHealth)
+	r.Get("/ready", h.HandleReady)
 	r.Handle("/metrics", promhttp.Handler())
 
 	// Public, unauthenticated inbound webhook route: no dashboard session,

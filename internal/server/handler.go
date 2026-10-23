@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
@@ -714,6 +715,21 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		"status": "ok",
 		"apps":   len(apps),
 	})
+}
+
+// HandleReady implements GET /ready, the readiness probe: 200 when this pod
+// can reach Postgres, 503 otherwise. /health stays a liveness check that
+// never touches the database, so a database outage takes pods out of the
+// load balancer instead of restarting them all.
+func (h *Handler) HandleReady(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+	if err := h.pool.Ping(ctx); err != nil {
+		h.logger.Warn("readiness check failed: database unreachable", zap.Error(err))
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "unavailable"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 }
 
 func (h *Handler) HandleAppHealth(w http.ResponseWriter, r *http.Request) {

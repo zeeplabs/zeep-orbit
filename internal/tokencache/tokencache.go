@@ -45,3 +45,13 @@ func Invalidate(jti string) {
 	delete(cache, jti)
 	mu.Unlock()
 }
+
+// Clear drops every cached entry. Invalidate only reaches the pod that
+// handled the revoke; the registry syncer calls Clear on every pod when the
+// shared state version moves (a revocation bumps it), so a revoked token
+// stops working everywhere within one poll instead of up to the 30s TTL.
+func Clear() {
+	mu.Lock()
+	cache = make(map[string]entry)
+	mu.Unlock()
+}

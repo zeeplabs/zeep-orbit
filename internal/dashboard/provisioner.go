@@ -3,13 +3,45 @@ package dashboard
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
 
+// provisionLockTimeout bounds how long each boot-provisioning ALTER waits
+// for a table lock. Without it, a long-lived reader on a zeep_system table
+// makes the ALTER wait forever, and every later query on that table queues
+// behind it. Vars so tests can shorten them.
+var (
+	provisionLockTimeout = 5 * time.Second
+	provisionBackoff     = []time.Duration{1 * time.Second, 2 * time.Second}
+)
+
 // Idempotent — safe to call on every startup.
 // Uses pg_advisory_xact_lock to serialize provisioning across concurrent pods.
+// A lock wait longer than provisionLockTimeout rolls the whole transaction
+// back and retries, up to len(provisionBackoff)+1 attempts (~18s with the
+// defaults, under the liveness probe budget), then returns the lock-timeout
+// error so boot fails visibly instead of hanging.
 func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
+	attempts := len(provisionBackoff) + 1
+	var err error
+	for i := 0; i < attempts; i++ {
+		if err = provisionZeepSystemOnce(ctx, pool); err == nil || !db.IsLockTimeout(err) {
+			return err
+		}
+		if i < len(provisionBackoff) {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(provisionBackoff[i]):
+			}
+		}
+	}
+	return fmt.Errorf("dashboard: provision gave up after %d attempts waiting for a table lock: %w", attempts, err)
+}
+
+func provisionZeepSystemOnce(ctx context.Context, pool *db.Pool) error {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("dashboard: provision begin tx: %w", err)
@@ -18,6 +50,12 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('zeep-orbit-provision'))`); err != nil {
 		return fmt.Errorf("dashboard: provision acquire lock: %w", err)
+	}
+	// Set after the advisory lock: waiting for another pod's provisioning is
+	// expected, and that pod's own ALTERs are bounded by this same limit.
+	// provisionLockTimeout is a trusted package var — safe to format.
+	if _, err := tx.Exec(ctx, fmt.Sprintf("SET LOCAL lock_timeout = '%dms'", provisionLockTimeout.Milliseconds())); err != nil {
+		return fmt.Errorf("dashboard: provision set lock_timeout: %w", err)
 	}
 
 	stmts := []string{
@@ -634,6 +672,54 @@ func ProvisionZeepSystem(ctx context.Context, pool *db.Pool) error {
 		`CREATE UNIQUE INDEX IF NOT EXISTS ai_build_sessions_edit_in_progress_uidx
 		 ON zeep_system.ai_build_sessions (owner_user_id, target_app_id)
 		 WHERE mode = 'edit' AND status = 'in_progress'`,
+		// Cross-replica state version (multi-replica-consistency). Every pod
+		// keeps apps, tables and system config in memory; each one polls this
+		// single row and reloads when `version` moves. Bumped by triggers, not
+		// Go call sites, so every writer (dashboard, MCP, AI chat, a manual
+		// SQL fix) is covered. A row, not a sequence: nextval is not
+		// transactional, so a pod could reload before the writer commits and
+		// miss the change; the row update becomes visible with the commit.
+		`CREATE TABLE IF NOT EXISTS zeep_system.state_version (
+			id         SMALLINT    PRIMARY KEY CHECK (id = 1),
+			version    BIGINT      NOT NULL DEFAULT 0,
+			changed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`INSERT INTO zeep_system.state_version (id) VALUES (1) ON CONFLICT (id) DO NOTHING`,
+		`CREATE OR REPLACE FUNCTION zeep_system.bump_state_version() RETURNS trigger
+		 LANGUAGE plpgsql AS $fn$
+		 BEGIN
+		   UPDATE zeep_system.state_version SET version = version + 1, changed_at = now() WHERE id = 1;
+		   RETURN NULL;
+		 END
+		 $fn$`,
+		// Statement-level, so a bulk write bumps once. app_tokens only fires
+		// on revocation (UPDATE OF revoked_at) and DELETE: last_used_at is
+		// written on every API request and expires_at on login, and neither
+		// changes what a pod caches. Guarded by pg_trigger because CREATE OR
+		// REPLACE TRIGGER needs PG 14.
+		`DO $do$
+		 DECLARE
+		   t RECORD;
+		 BEGIN
+		   FOR t IN SELECT * FROM (VALUES
+		     ('apps',          'INSERT OR UPDATE OR DELETE'),
+		     ('app_tables',    'INSERT OR UPDATE OR DELETE'),
+		     ('system_config', 'INSERT OR UPDATE OR DELETE'),
+		     ('app_tokens',    'UPDATE OF revoked_at OR DELETE')
+		   ) AS v(tbl, events)
+		   LOOP
+		     IF NOT EXISTS (
+		       SELECT 1 FROM pg_trigger
+		       WHERE tgname = 'bump_state_version'
+		         AND tgrelid = format('zeep_system.%I', t.tbl)::regclass
+		     ) THEN
+		       EXECUTE format(
+		         'CREATE TRIGGER bump_state_version AFTER %s ON zeep_system.%I FOR EACH STATEMENT EXECUTE FUNCTION zeep_system.bump_state_version()',
+		         t.events, t.tbl);
+		     END IF;
+		   END LOOP;
+		 END
+		 $do$`,
 	}
 
 	for _, stmt := range stmts {

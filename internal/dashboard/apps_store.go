@@ -191,6 +191,26 @@ func decodeEnduserRolesConfig(raw []byte) []string {
 	return roles
 }
 
+// decodeAppJSONColumns fills the JSONB-backed fields of an AppRow from the
+// raw column bytes. Shared by every query that reads a full apps row, so the
+// dashboard, the registry snapshot and the API never decode them differently:
+// an empty "{}" or a config without a bucket/enabled flag decodes to nil.
+func decodeAppJSONColumns(a *AppRow, storageJSON, rateLimitJSON, enduserRolesJSON []byte) {
+	if len(storageJSON) > 0 && string(storageJSON) != "{}" {
+		var sc storage.StorageConfig
+		if json.Unmarshal(storageJSON, &sc) == nil && sc.Bucket != "" {
+			a.StorageConfig = &sc
+		}
+	}
+	if len(rateLimitJSON) > 0 && string(rateLimitJSON) != "{}" {
+		var rc config.RateLimitConfig
+		if json.Unmarshal(rateLimitJSON, &rc) == nil && rc.Enabled {
+			a.RateLimit = &rc
+		}
+	}
+	a.EnduserRolesConfig = decodeEnduserRolesConfig(enduserRolesJSON)
+}
+
 // AppTableRow represents a row from zeep_system.app_tables.
 type AppTableRow struct {
 	ID      string                `json:"id"`
@@ -245,19 +265,7 @@ func ListApps(ctx context.Context, pool *db.Pool, user *DashboardUser) ([]*AppRo
 		if len(providersJSON) > 0 {
 			a.AuthProviders = providersJSON
 		}
-		if len(storageJSON) > 0 && string(storageJSON) != "{}" {
-			var sc storage.StorageConfig
-			if err := json.Unmarshal(storageJSON, &sc); err == nil && sc.Bucket != "" {
-				a.StorageConfig = &sc
-			}
-		}
-		if len(rateLimitJSON) > 0 && string(rateLimitJSON) != "{}" {
-			var rc config.RateLimitConfig
-			if json.Unmarshal(rateLimitJSON, &rc) == nil && rc.Enabled {
-				a.RateLimit = &rc
-			}
-		}
-		a.EnduserRolesConfig = decodeEnduserRolesConfig(enduserRolesJSON)
+		decodeAppJSONColumns(&a, storageJSON, rateLimitJSON, enduserRolesJSON)
 		apps = append(apps, &a)
 	}
 	if err := rows.Err(); err != nil {
@@ -292,19 +300,7 @@ func CreateApp(ctx context.Context, pool *db.Pool, name, ownerID string, authEma
 		 RETURNING id, name, jwt_secret, auth_email_enabled, COALESCE(auth_providers, '{}'), COALESCE(storage_config, '{}'), COALESCE(rate_limit_config, '{}'), COALESCE(enduser_roles_config, '["member"]'), owner_id, created_at`,
 		name, ownerID, authEmail,
 	).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.AuthProviders, &storageJSON, &rateLimitJSONCreate, &enduserRolesJSONCreate, &app.OwnerID, &app.CreatedAt)
-	if len(storageJSON) > 0 && string(storageJSON) != "{}" {
-		var sc storage.StorageConfig
-		if json.Unmarshal(storageJSON, &sc) == nil && sc.Bucket != "" {
-			app.StorageConfig = &sc
-		}
-	}
-	if len(rateLimitJSONCreate) > 0 && string(rateLimitJSONCreate) != "{}" {
-		var rc config.RateLimitConfig
-		if json.Unmarshal(rateLimitJSONCreate, &rc) == nil && rc.Enabled {
-			app.RateLimit = &rc
-		}
-	}
-	app.EnduserRolesConfig = decodeEnduserRolesConfig(enduserRolesJSONCreate)
+	decodeAppJSONColumns(&app, storageJSON, rateLimitJSONCreate, enduserRolesJSONCreate)
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: create app insert: %w", err)
 	}
@@ -353,19 +349,7 @@ func GetApp(ctx context.Context, pool *db.Pool, appID string, user *DashboardUse
 		 FROM zeep_system.apps WHERE id = $1`,
 		appID,
 	).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.AuthProviders, &storageJSON, &rateLimitJSONGet, &enduserRolesJSONGet, &app.OwnerID, &app.CreatedAt)
-	if len(storageJSON) > 0 && string(storageJSON) != "{}" {
-		var sc storage.StorageConfig
-		if json.Unmarshal(storageJSON, &sc) == nil && sc.Bucket != "" {
-			app.StorageConfig = &sc
-		}
-	}
-	if len(rateLimitJSONGet) > 0 && string(rateLimitJSONGet) != "{}" {
-		var rc config.RateLimitConfig
-		if json.Unmarshal(rateLimitJSONGet, &rc) == nil && rc.Enabled {
-			app.RateLimit = &rc
-		}
-	}
-	app.EnduserRolesConfig = decodeEnduserRolesConfig(enduserRolesJSONGet)
+	decodeAppJSONColumns(&app, storageJSON, rateLimitJSONGet, enduserRolesJSONGet)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, "", ErrNotFound
@@ -403,19 +387,7 @@ func UpdateApp(ctx context.Context, pool *db.Pool, appID string, user *Dashboard
 		 RETURNING id, name, jwt_secret, auth_email_enabled, COALESCE(auth_providers, '{}'), COALESCE(storage_config, '{}'), COALESCE(rate_limit_config, '{}'), COALESCE(enduser_roles_config, '["member"]'), owner_id, created_at`,
 		appID, authEmail,
 	).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.AuthProviders, &storageJSON, &rateLimitJSONUpd, &enduserRolesJSONUpd, &app.OwnerID, &app.CreatedAt)
-	if len(storageJSON) > 0 && string(storageJSON) != "{}" {
-		var sc storage.StorageConfig
-		if json.Unmarshal(storageJSON, &sc) == nil && sc.Bucket != "" {
-			app.StorageConfig = &sc
-		}
-	}
-	if len(rateLimitJSONUpd) > 0 && string(rateLimitJSONUpd) != "{}" {
-		var rc config.RateLimitConfig
-		if json.Unmarshal(rateLimitJSONUpd, &rc) == nil && rc.Enabled {
-			app.RateLimit = &rc
-		}
-	}
-	app.EnduserRolesConfig = decodeEnduserRolesConfig(enduserRolesJSONUpd)
+	decodeAppJSONColumns(&app, storageJSON, rateLimitJSONUpd, enduserRolesJSONUpd)
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: update app: %w", err)
 	}
@@ -680,8 +652,22 @@ func UpdateAppTable(ctx context.Context, pool *db.Pool, appID, tableID, schemaNa
 	if err != nil {
 		return AppTableRow{}, fmt.Errorf("dashboard: marshal indexes for table %s: %w", tableID, err)
 	}
+	// The metadata write and the RLS DDL share one transaction under the
+	// per-app DDL lock: a lock timeout on the DDL rolls the metadata back
+	// too, instead of leaving a table marked "policy" without RLS enabled.
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return AppTableRow{}, fmt.Errorf("dashboard: update app table %s begin tx: %w", tableID, err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	if rls == "policy" {
+		if err := db.LockAppDDL(ctx, tx, schemaName); err != nil {
+			return AppTableRow{}, provisioner.WrapLockTimeout(schemaName, err)
+		}
+	}
+
 	var row AppTableRow
-	err = pool.QueryRow(ctx,
+	err = tx.QueryRow(ctx,
 		`UPDATE zeep_system.app_tables
 		 SET rls = $3, columns = $4, indexes = $5
 		 WHERE id = $1 AND app_id = $2
@@ -702,14 +688,17 @@ func UpdateAppTable(ctx context.Context, pool *db.Pool, appID, tableID, schemaNa
 	}
 
 	if rls == "policy" {
-		if err := provisioner.EnsureRowLevelSecurity(ctx, pool, schemaName, row.Name); err != nil {
-			return AppTableRow{}, fmt.Errorf("dashboard: enable row level security for table %s: %w", tableID, err)
+		if err := provisioner.EnsureRowLevelSecurity(ctx, tx, schemaName, row.Name); err != nil {
+			return AppTableRow{}, provisioner.WrapLockTimeout(schemaName, fmt.Errorf("dashboard: enable row level security for table %s: %w", tableID, err))
 		}
-		if err := provisioner.RelaxOwnerColumn(ctx, pool, schemaName, row.Name); err != nil {
-			return AppTableRow{}, fmt.Errorf("dashboard: relax owner_id for table %s: %w", tableID, err)
+		if err := provisioner.RelaxOwnerColumn(ctx, tx, schemaName, row.Name); err != nil {
+			return AppTableRow{}, provisioner.WrapLockTimeout(schemaName, fmt.Errorf("dashboard: relax owner_id for table %s: %w", tableID, err))
 		}
 	}
 
+	if err := tx.Commit(ctx); err != nil {
+		return AppTableRow{}, provisioner.WrapLockTimeout(schemaName, fmt.Errorf("dashboard: update app table %s commit: %w", tableID, err))
+	}
 	return row, nil
 }
 
