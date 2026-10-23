@@ -1,10 +1,16 @@
 package dashboard
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
 
 // TestRateLimiter_AllowsUpToMaxThenBlocks: F3 (Opus pre-release review,
@@ -63,5 +69,53 @@ func TestRateLimiter_SeparateIPsHaveIndependentBudgets(t *testing.T) {
 	handler.ServeHTTP(w2, req2)
 	if w2.Code != http.StatusOK {
 		t.Fatalf("IP2 first request: status = %d, want 200 (independent budget from IP1)", w2.Code)
+	}
+}
+
+// TestRequireAuth_DatabaseErrorIsNotUnauthorized: the dashboard sends the user to the
+// login screen on {"error":"unauthorized"}, so a failing session lookup (database down)
+// must not answer that body. Uses a pool pointed at a closed port: no database needed.
+func TestRequireAuth_DatabaseErrorIsNotUnauthorized(t *testing.T) {
+	cfg, err := pgxpool.ParseConfig("postgres://orbit@127.0.0.1:1/orbit?connect_timeout=1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := pgxpool.NewWithConfig(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+
+	called := false
+	handler := RequireAuth(&db.Pool{Pool: p})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/apps", nil)
+	req.AddCookie(&http.Cookie{Name: cookieName, Value: "some-session-token"})
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if called {
+		t.Fatal("next handler ran although the session could not be checked")
+	}
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", w.Code)
+	}
+	if strings.Contains(w.Body.String(), "unauthorized") {
+		t.Fatalf("body = %s, must not be the expired-session body", w.Body.String())
+	}
+}
+
+// TestRequireAuth_NoCookieIsUnauthorized: without a session cookie the answer stays the
+// 401 body the dashboard treats as an expired session.
+func TestRequireAuth_NoCookieIsUnauthorized(t *testing.T) {
+	handler := RequireAuth(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("next handler ran without a session")
+	}))
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/dashboard/api/apps", nil))
+	if w.Code != http.StatusUnauthorized || !strings.Contains(w.Body.String(), `"unauthorized"`) {
+		t.Fatalf("got %d %s, want 401 unauthorized", w.Code, w.Body.String())
 	}
 }

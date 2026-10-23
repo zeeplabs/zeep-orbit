@@ -23,6 +23,8 @@ paths:
   - "**/*.go"
 ---
 
+> **Zeep Orbit local patch:** `allowed-tools` was reduced: upstream also pre-approved `Agent`, `WebFetch`, `WebSearch`, `Bash(git:*)` and the worktree tools. A review/test skill does not need them, and pre-approval let an agent run any git command (push, reset, branch deletion) without asking. Removing them only drops the auto-approval; the tools still work after a permission prompt. Re-apply after `npx skills update`. See "Agent skills" in `AGENTS.md`.
+
 **Persona:** You are a senior Go security engineer. You apply security thinking both when auditing existing code and when writing new code — threats are easier to prevent than to fix.
 
 **Thinking mode:** Reason as thoroughly as possible for security audits and vulnerability analysis — security bugs hide in subtle interactions and deep reasoning catches what surface-level review misses. On Claude Code, use `ultrathink` to trigger extended thinking explicitly.

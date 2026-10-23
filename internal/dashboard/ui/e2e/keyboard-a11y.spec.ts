@@ -260,6 +260,40 @@ test.describe('Unsaved changes guard', () => {
     await expect(page).toHaveURL(/tab=database/)
     await expect(dialog).toHaveCount(0)
   })
+
+  test('App Details Login tab is clean after a save even when the server normalizes the values', async ({ page }) => {
+    // Saving Google sign-in with an empty redirect URL stores the default one, and the
+    // domains come back as "a.com, b.com": the form must compare with the server again
+    // after the refetch instead of staying "dirty" against what was typed.
+    const res = await page.request.post('/dashboard/api/apps', { data: { name: `guard_${Date.now()}` } })
+    expect(res.ok(), await res.text()).toBeTruthy()
+    const app = await res.json()
+
+    await page.goto(`/dashboard/apps/${app.id}`)
+    await page.getByRole('tab', { name: 'Login' }).click()
+    // The Google card starts collapsed while the provider is off; once open, the switches
+    // are, in order, Email and Google.
+    await page.getByRole('button', { name: /^Google Sign in with Google/ }).click()
+    await page.getByRole('switch').nth(1).click()
+    await page.getByPlaceholder('Google OAuth Client ID').fill('client-id.apps.googleusercontent.com')
+    const secret = page.getByPlaceholder('Client Secret')
+    await secret.fill('client-secret')
+    await page.getByPlaceholder('zeeplabs.com, zeepfy.com').fill('a.com,b.com')
+    expect(await beforeUnloadPrevented(page)).toBe(true)
+
+    await page.getByRole('button', { name: 'Save', exact: true }).click()
+    await expect(page.getByText('Saved.')).toBeVisible()
+    await expect(page.getByPlaceholder('zeeplabs.com, zeepfy.com')).toHaveValue('a.com, b.com')
+    // The secret is never returned by the server; the field is cleared as after a reload.
+    await expect(secret).toHaveValue('')
+    await expect.poll(() => beforeUnloadPrevented(page)).toBe(false)
+
+    await page.getByRole('tab', { name: 'API' }).click()
+    await expect(page.getByRole('dialog', { name: 'Leave without saving?' })).toHaveCount(0)
+    await expect(page.getByRole('tab', { name: 'API' })).toHaveAttribute('aria-selected', 'true')
+
+    await page.request.delete(`/dashboard/api/apps/${app.id}`)
+  })
 })
 
 test.describe('Unsaved changes guard on logout', () => {
@@ -267,24 +301,26 @@ test.describe('Unsaved changes guard on logout', () => {
   // other specs reuse, so this one signs in on its own.
   test.use({ storageState: { cookies: [], origins: [] } })
 
-  test('logging out with a dirty form still reaches login (native leave prompt, not the in-app dialog)', async ({ page }) => {
+  test('logging out with a dirty form warns in the logout dialog and skips the native prompt', async ({ page }) => {
     await login(page)
     await page.goto('/dashboard/configuracoes')
     const input = page.locator('input[placeholder="Zeep Tecnologia"]')
     await expect(input).toBeVisible()
     await input.fill(`${await input.inputValue()} edited`)
 
-    // Logout is a full navigation, so the in-app blocker stays out of it and the browser's
-    // own beforeunload prompt is the only guard. Accept it to let the logout finish.
+    // The browser prompt would come after the session is already revoked, and "Stay" would
+    // leave a page whose saves can only fail. The logout dialog warns instead.
     const nativePrompts: string[] = []
     page.on('dialog', (d) => {
       nativePrompts.push(d.type())
       void d.accept()
     })
     await page.getByRole('button', { name: 'Log Out' }).first().click()
-    await page.getByRole('dialog').getByRole('button', { name: 'Log Out' }).click()
+    const confirm = page.getByRole('dialog')
+    await expect(confirm.getByText('You have unsaved changes on this page.', { exact: false })).toBeVisible()
+    await confirm.getByRole('button', { name: 'Log Out' }).click()
     await page.waitForURL('**/login')
-    expect(nativePrompts).toContain('beforeunload')
+    expect(nativePrompts).toEqual([])
     await expect(page.getByRole('dialog', { name: 'Leave without saving?' })).toHaveCount(0)
   })
 })
