@@ -1,7 +1,7 @@
 # Multi-Replica Consistency Tasks
 
 **Design**: `.specs/features/multi-replica-consistency/design.md`
-**Status**: In progress (T1–T16 done; phases 1–3 complete)
+**Status**: Done (T1–T17, 2026-10-23)
 
 There is no `.specs/codebase/TESTING.md`. The test types and gates come from AGENTS.md §3 and the existing suites:
 - **unit**: plain `go test` with no DB.
@@ -415,12 +415,13 @@ T9, T11, T12, T14, T15 ──→ T16 (docs + CHANGELOG) ──→ T17 (full gate
 **Requirement**: all
 
 **Done when**:
-- [ ] Full gate green.
-- [ ] Smoke evidence recorded (no secrets).
-- [ ] Traceability marked Verified per requirement.
+- [x] Full gate green.
+- [x] Smoke evidence recorded (no secrets).
+- [x] Traceability marked Verified per requirement.
 
 **Tests**: e2e (manual, scripted)
 **Gate**: full
+**Status**: Done (2026-10-23). Evidence is in `validation.md`.
 
 ---
 

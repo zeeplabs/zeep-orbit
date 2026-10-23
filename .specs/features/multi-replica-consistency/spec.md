@@ -169,27 +169,27 @@ Reported in production (2026-10): creating or editing tables "locked up" and onl
 
 | Requirement ID | Story | Phase | Status |
 |---|---|---|---|
-| MREP-01 | P1 (propagation) AC1–AC2: table/column changes reach every pod | Tasks | In Tasks |
-| MREP-02 | P1 (propagation) AC3: app deletion reaches every pod | Tasks | In Tasks |
-| MREP-03 | P1 (propagation) AC4: app auth/storage/rate-limit config reaches every pod | Tasks | In Tasks |
-| MREP-04 | P1 (propagation) AC5: reload-on-miss with miss-flood protection | Tasks | In Tasks |
-| MREP-05 | P1 (propagation) AC6: periodic reconcile converges without the signal path | Tasks | In Tasks |
-| MREP-06 | P1 (propagation) AC7: failed reload keeps last good registry | Tasks | In Tasks |
-| MREP-07 | P1 (system config) AC1: system config reaches every pod | Tasks | In Tasks |
-| MREP-08 | P1 (system config) AC2: boot-time config read retries | Tasks | In Tasks |
-| MREP-09 | P1 (DDL) AC1: lock timeout returns retryable error, no metadata persisted | Tasks | In Tasks |
-| MREP-10 | P1 (DDL) AC2: per-app DDL serialized across pods | Tasks | In Tasks |
-| MREP-11 | P1 (DDL) AC3: lock-timeout log with blocker info, no sensitive data | Tasks | In Tasks |
-| MREP-12 | P1 (DDL) AC4: success path unchanged | Tasks | In Tasks |
-| MREP-13 | P1 (DDL) AC5: boot provisioning bounded | Tasks | In Tasks |
-| MREP-14 | P2 (diagnostics) AC1–AC2: readiness pings DB, liveness does not | Tasks | In Tasks |
-| MREP-15 | P2 (diagnostics) AC3: reload/fallback logging | Tasks | In Tasks |
-| MREP-16 | P2 (diagnostics) AC4: lock-up runbook documented | Tasks | In Tasks |
-| MREP-17 | P2 (pool) AC1–AC3: configurable pool size, documented | Tasks | In Tasks |
-| MREP-18 | P2 (tokens) AC1: token revocation reaches every pod | Tasks | In Tasks |
-| MREP-19 | P3 (purge) AC1–AC2: purge lock on one connection | Tasks | In Tasks |
+| MREP-01 | P1 (propagation) AC1–AC2: table/column changes reach every pod | Done | Verified |
+| MREP-02 | P1 (propagation) AC3: app deletion reaches every pod | Done | Verified |
+| MREP-03 | P1 (propagation) AC4: app auth/storage/rate-limit config reaches every pod | Done | Verified |
+| MREP-04 | P1 (propagation) AC5: reload-on-miss with miss-flood protection | Done | Verified |
+| MREP-05 | P1 (propagation) AC6: periodic reconcile converges without the signal path | Done | Verified |
+| MREP-06 | P1 (propagation) AC7: failed reload keeps last good registry | Done | Verified |
+| MREP-07 | P1 (system config) AC1: system config reaches every pod | Done | Verified |
+| MREP-08 | P1 (system config) AC2: boot-time config read retries | Done | Verified |
+| MREP-09 | P1 (DDL) AC1: lock timeout returns retryable error, no metadata persisted | Done | Verified |
+| MREP-10 | P1 (DDL) AC2: per-app DDL serialized across pods | Done | Verified |
+| MREP-11 | P1 (DDL) AC3: lock-timeout log with blocker info, no sensitive data | Done | Verified |
+| MREP-12 | P1 (DDL) AC4: success path unchanged | Done | Verified |
+| MREP-13 | P1 (DDL) AC5: boot provisioning bounded | Done | Verified |
+| MREP-14 | P2 (diagnostics) AC1–AC2: readiness pings DB, liveness does not | Done | Verified |
+| MREP-15 | P2 (diagnostics) AC3: reload/fallback logging | Done | Verified |
+| MREP-16 | P2 (diagnostics) AC4: lock-up runbook documented | Done | Verified |
+| MREP-17 | P2 (pool) AC1–AC3: configurable pool size, documented | Done | Verified |
+| MREP-18 | P2 (tokens) AC1: token revocation reaches every pod | Done | Verified |
+| MREP-19 | P3 (purge) AC1–AC2: purge lock on one connection | Done | Verified |
 
-**Coverage:** 19 total, 19 mapped to tasks (see `tasks.md` Requirement Coverage), 0 unmapped
+**Coverage:** 19 total, 19 mapped to tasks (see `tasks.md` Requirement Coverage), 0 unmapped. All 19 verified on 2026-10-23 (see `validation.md`).
 
 ---
 
