@@ -224,3 +224,50 @@ func TestPurgeExpiredSoftDeletesUnaffectedByActiveDenyAllPolicy(t *testing.T) {
 		t.Errorf("remaining rows = %d, want 2 (recent-deleted + not-deleted)", remaining)
 	}
 }
+
+// TestPurgeExpiredSoftDeletesReleasesLock (multi-replica-consistency T15):
+// the session lock is taken and released on the same connection, so after a
+// run no connection keeps holding it and the next run (on any replica)
+// gets it. Repeated runs exercise different pooled connections.
+func TestPurgeExpiredSoftDeletesReleasesLock(t *testing.T) {
+	pool, reg := purgeTestPool(t)
+	ctx := context.Background()
+
+	for i := 0; i < 5; i++ {
+		if _, err := PurgeExpiredSoftDeletes(ctx, pool, reg, 5); err != nil {
+			t.Fatalf("purge run %d: %v", i, err)
+		}
+		var held int
+		if err := pool.QueryRow(ctx,
+			`SELECT count(*) FROM pg_locks
+			 WHERE locktype = 'advisory' AND granted AND objsubid = 1
+			   AND objid = (hashtext($1)::bigint & 4294967295)::oid`,
+			purgeAdvisoryLockKey,
+		).Scan(&held); err != nil {
+			t.Fatalf("count purge locks: %v", err)
+		}
+		if held != 0 {
+			t.Fatalf("after run %d the purge advisory lock is still held by %d session(s)", i, held)
+		}
+	}
+
+	// Another session (another replica) can take it right away.
+	other, err := db.New(ctx, os.Getenv("TEST_DATABASE_URL"))
+	if err != nil {
+		t.Fatalf("connect second pool: %v", err)
+	}
+	defer other.Close()
+	conn, err := other.Acquire(ctx)
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	defer conn.Release()
+	var got bool
+	if err := conn.QueryRow(ctx, `SELECT pg_try_advisory_lock(hashtext($1))`, purgeAdvisoryLockKey).Scan(&got); err != nil {
+		t.Fatalf("try lock: %v", err)
+	}
+	if !got {
+		t.Fatal("a second replica could not take the purge lock after the run")
+	}
+	_, _ = conn.Exec(ctx, `SELECT pg_advisory_unlock(hashtext($1))`, purgeAdvisoryLockKey)
+}

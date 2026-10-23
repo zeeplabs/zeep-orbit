@@ -1,7 +1,7 @@
 # Multi-Replica Consistency Tasks
 
 **Design**: `.specs/features/multi-replica-consistency/design.md`
-**Status**: In progress (T1–T14 done; phases 1–3 complete)
+**Status**: In progress (T1–T15 done; phases 1–3 complete)
 
 There is no `.specs/codebase/TESTING.md`. The test types and gates come from AGENTS.md §3 and the existing suites:
 - **unit**: plain `go test` with no DB.
@@ -367,11 +367,12 @@ T9, T11, T12, T14, T15 ──→ T16 (docs + CHANGELOG) ──→ T17 (full gate
 **Requirement**: MREP-19
 
 **Done when**:
-- [ ] Integration test: after a purge run, no advisory lock for `hashtext('zeep-orbit-purge')` remains in `pg_locks`, and a second run takes the lock and runs.
-- [ ] The existing purge tests stay green.
+- [x] Integration test: after a purge run, no advisory lock for `hashtext('zeep-orbit-purge')` remains in `pg_locks`, and a second run takes the lock and runs.
+- [x] The existing purge tests stay green.
 
 **Tests**: integration
 **Gate**: quick (`./internal/dashboard/...`)
+**Status**: Done (2026-10-23). The unlock runs on a non-cancelled context; if it fails, the connection is closed instead of being returned to the pool. It was confirmed that the test's `pg_locks` query does detect a held lock.
 
 ---
 

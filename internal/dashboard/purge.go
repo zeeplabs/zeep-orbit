@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
@@ -28,15 +29,36 @@ func PurgeExpiredSoftDeletes(ctx context.Context, pool *db.Pool, reg *registry.R
 		return 0, nil
 	}
 
+	// A session-level advisory lock belongs to the connection that took it,
+	// so lock and unlock must run on the same connection. On the pool they
+	// could land on different ones: the unlock then silently returned false
+	// and the lock stayed held by an idle pooled connection, blocking every
+	// later purge on every replica until that connection closed.
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("purge: acquire connection: %w", err)
+	}
+	defer conn.Release()
+
 	var gotLock bool
-	if err := pool.QueryRow(ctx, `SELECT pg_try_advisory_lock(hashtext($1))`, purgeAdvisoryLockKey).Scan(&gotLock); err != nil {
+	if err := conn.QueryRow(ctx, `SELECT pg_try_advisory_lock(hashtext($1))`, purgeAdvisoryLockKey).Scan(&gotLock); err != nil {
 		return 0, fmt.Errorf("purge: acquire advisory lock: %w", err)
 	}
 	if !gotLock {
 		// Another replica is already running this window's purge.
 		return 0, nil
 	}
-	defer pool.Exec(ctx, `SELECT pg_advisory_unlock(hashtext($1))`, purgeAdvisoryLockKey)
+	defer func() {
+		// Unlock even if ctx was cancelled mid-purge; a leaked session lock
+		// would outlive this run on the pooled connection.
+		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		if _, err := conn.Exec(unlockCtx, `SELECT pg_advisory_unlock(hashtext($1))`, purgeAdvisoryLockKey); err != nil {
+			// The connection is in an unknown state: close it instead of
+			// returning it (and possibly the lock) to the pool.
+			_ = conn.Conn().Close(unlockCtx)
+		}
+	}()
 
 	total := 0
 	var runErr error
