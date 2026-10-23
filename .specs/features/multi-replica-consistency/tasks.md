@@ -1,7 +1,7 @@
 # Multi-Replica Consistency Tasks
 
 **Design**: `.specs/features/multi-replica-consistency/design.md`
-**Status**: In progress (T1 done)
+**Status**: In progress (T1, T2 done)
 
 There is no `.specs/codebase/TESTING.md`. The test types and gates come from AGENTS.md §3 and the existing suites:
 - **unit**: plain `go test` with no DB.
@@ -80,12 +80,13 @@ T9, T11, T12, T14, T15 ──→ T16 (docs + CHANGELOG) ──→ T17 (full gate
 **Requirement**: MREP-17
 
 **Done when**:
-- [ ] Unit table test: unset, `"20"`, `"0"`, `"-1"`, `"abc"`, `" 5 "` (decide trim vs. reject and document it).
-- [ ] The `New(ctx, dsn)` signature is unchanged, so existing callers and tests still compile.
-- [ ] Quick gate passes.
+- [x] Unit table test: unset, `"20"`, `"0"`, `"-1"`, `"abc"`, `" 5 "` (decide trim vs. reject and document it).
+- [x] The `New(ctx, dsn)` signature is unchanged, so existing callers and tests still compile.
+- [x] Quick gate passes.
 
 **Tests**: unit
 **Gate**: quick
+**Status**: Done (2026-10-23). Surrounding whitespace is trimmed; a blank value means unset.
 
 ---
 

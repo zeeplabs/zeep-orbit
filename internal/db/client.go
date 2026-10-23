@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"strconv"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -17,13 +20,42 @@ type Pool struct {
 
 // limitar o tempo de espera (recomendado: 5s).
 func New(ctx context.Context, dsn string) (*Pool, error) {
+	return NewWithMaxConns(ctx, dsn, DefaultMaxConns)
+}
+
+// DefaultMaxConns is the pool size when DB_MAX_CONNS is unset.
+const DefaultMaxConns int32 = 10
+
+// MaxConnsFromEnv reads the pool size from DB_MAX_CONNS. Unset or blank gives
+// DefaultMaxConns; surrounding whitespace is trimmed. A non-numeric value or
+// one ≤ 0 is an error, so a typo fails boot instead of silently running with
+// the default. Size it so replicas × DB_MAX_CONNS stays under the server's
+// max_connections (minus what other clients need).
+func MaxConnsFromEnv() (int32, error) {
+	v := strings.TrimSpace(os.Getenv("DB_MAX_CONNS"))
+	if v == "" {
+		return DefaultMaxConns, nil
+	}
+	n, err := strconv.ParseInt(v, 10, 32)
+	if err != nil || n <= 0 {
+		return 0, fmt.Errorf("invalid DB_MAX_CONNS %q: must be a positive integer", v)
+	}
+	return int32(n), nil
+}
+
+// NewWithMaxConns is New with an explicit pool size. MinConns stays 2,
+// capped at maxConns.
+func NewWithMaxConns(ctx context.Context, dsn string, maxConns int32) (*Pool, error) {
+	if maxConns <= 0 {
+		return nil, fmt.Errorf("db: maxConns must be positive, got %d", maxConns)
+	}
 	cfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("db: invalid DSN: %w", err)
 	}
 
-	cfg.MaxConns = 10
-	cfg.MinConns = 2
+	cfg.MaxConns = maxConns
+	cfg.MinConns = min(2, maxConns)
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
