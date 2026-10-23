@@ -1,7 +1,7 @@
 # Multi-Replica Consistency Tasks
 
 **Design**: `.specs/features/multi-replica-consistency/design.md`
-**Status**: In progress (T1–T15 done; phases 1–3 complete)
+**Status**: In progress (T1–T16 done; phases 1–3 complete)
 
 There is no `.specs/codebase/TESTING.md`. The test types and gates come from AGENTS.md §3 and the existing suites:
 - **unit**: plain `go test` with no DB.
@@ -392,12 +392,13 @@ T9, T11, T12, T14, T15 ──→ T16 (docs + CHANGELOG) ──→ T17 (full gate
 **Requirement**: MREP-16, MREP-17
 
 **Done when**:
-- [ ] All 4 READMEs have the same new row.
-- [ ] The runbook contains no real hostnames, credentials or customer data.
-- [ ] The CHANGELOG has no contradictions with the existing entries.
+- [x] All 4 READMEs have the same new row.
+- [x] The runbook contains no real hostnames, credentials or customer data.
+- [x] The CHANGELOG has no contradictions with the existing entries.
 
 **Tests**: none
 **Gate**: build (`cd docs && npm run build`, if the docs site build is part of CI; otherwise markdown review)
+**Status**: Done (2026-10-23). The `docs` build passes. The new `deployment.md` section is written in pt-BR, like the rest of that page, and its runbook only uses placeholders (`<pod>`, `<pid>`).
 
 ---
 
