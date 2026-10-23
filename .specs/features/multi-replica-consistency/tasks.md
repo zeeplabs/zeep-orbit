@@ -1,7 +1,7 @@
 # Multi-Replica Consistency Tasks
 
 **Design**: `.specs/features/multi-replica-consistency/design.md`
-**Status**: In progress (T1–T13 done; phases 1–3 complete)
+**Status**: In progress (T1–T14 done; phases 1–3 complete)
 
 There is no `.specs/codebase/TESTING.md`. The test types and gates come from AGENTS.md §3 and the existing suites:
 - **unit**: plain `go test` with no DB.
@@ -348,13 +348,14 @@ T9, T11, T12, T14, T15 ──→ T16 (docs + CHANGELOG) ──→ T17 (full gate
 **Requirement**: MREP-14, MREP-17
 
 **Done when**:
-- [ ] `helm template` with default values shows readiness `/ready`, liveness `/health` and no `DB_MAX_CONNS`.
-- [ ] `helm template --set database.maxConns=20` shows `DB_MAX_CONNS: "20"`.
-- [ ] `helm lint` is clean.
-- [ ] `kubectl kustomize k8s/` renders, if available.
+- [x] `helm template` with default values shows readiness `/ready`, liveness `/health` and no `DB_MAX_CONNS`.
+- [x] `helm template --set database.maxConns=20` shows `DB_MAX_CONNS: "20"`.
+- [x] `helm lint` is clean.
+- [x] `kubectl kustomize k8s/` renders, if available.
 
 **Tests**: none (render checks)
 **Gate**: build
+**Status**: Done (2026-10-23). `helm lint` is clean. The default render has liveness `/health`, readiness `/ready` and no `DB_MAX_CONNS`; `--set database.maxConns=20` renders `DB_MAX_CONNS: "20"`. `kubectl kustomize k8s/` renders readiness `/ready`. The chart version is not bumped.
 
 ---
 

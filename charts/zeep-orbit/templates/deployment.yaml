@@ -63,6 +63,10 @@ spec:
               value: {{ .Values.brand.theme }}
             - name: BRAND_COMPANY_NAME
               value: {{ .Values.brand.companyName | quote }}
+            {{- with .Values.database.maxConns }}
+            - name: DB_MAX_CONNS
+              value: {{ . | quote }}
+            {{- end }}
 
           resources:
             {{- toYaml .Values.resources | nindent 12 }}

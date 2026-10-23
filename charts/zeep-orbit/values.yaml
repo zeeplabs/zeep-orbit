@@ -96,6 +96,13 @@ resources:
     memory: "128Mi"
     cpu: "200m"
 
+# ── Database ────────────────────────────────────────────
+database:
+  # Max Postgres connections per pod (DB_MAX_CONNS). Empty uses the app
+  # default (10). Keep replicaCount × maxConns (+ HPA maxReplicas headroom)
+  # under the server's max_connections.
+  maxConns: ""
+
 # ── Probes ──────────────────────────────────────────────
 probes:
   liveness:
@@ -103,8 +110,10 @@ probes:
     initialDelaySeconds: 5
     periodSeconds: 10
     failureThreshold: 3
+  # Readiness pings the database (/ready); liveness does not (/health), so a
+  # database outage removes pods from the Service instead of restarting them.
   readiness:
-    path: /health
+    path: /ready
     initialDelaySeconds: 3
     periodSeconds: 5
     failureThreshold: 2
