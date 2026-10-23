@@ -1,7 +1,7 @@
 # Multi-Replica Consistency Tasks
 
 **Design**: `.specs/features/multi-replica-consistency/design.md`
-**Status**: In progress (T1–T7 done)
+**Status**: In progress (T1–T8 done)
 
 There is no `.specs/codebase/TESTING.md`. The test types and gates come from AGENTS.md §3 and the existing suites:
 - **unit**: plain `go test` with no DB.
@@ -215,13 +215,14 @@ T9, T11, T12, T14, T15 ──→ T16 (docs + CHANGELOG) ──→ T17 (full gate
 **Requirement**: MREP-05..08, MREP-17, MREP-18
 
 **Done when**:
-- [ ] `zeep serve` boots against a fresh DB and against a DB with existing apps. `/health` reports the same app count as before.
-- [ ] `DB_MAX_CONNS=abc zeep serve` exits 1 with a clear message.
-- [ ] `tokencache.Clear` has a unit test.
-- [ ] Full gate passes.
+- [x] `zeep serve` boots against a fresh DB and against a DB with existing apps. `/health` reports the same app count as before.
+- [x] `DB_MAX_CONNS=abc zeep serve` exits 1 with a clear message.
+- [x] `tokencache.Clear` has a unit test.
+- [x] Full gate passes.
 
 **Tests**: unit (tokencache) + manual boot
 **Gate**: full
+**Status**: Done (2026-10-23). Deviation: added a local write generation to `Registry` (`Generation`/`ReplaceIfGeneration`). Without it, a sync whose snapshot was read before a local commit could overwrite the serving pod's `Register` and roll it back until the next poll. Manual boot was checked against a fresh DB, a DB with existing apps, and `DB_MAX_CONNS=abc` (exit 1). With two `zeep serve` processes, an app inserted via SQL reached both in under 2.5s.
 
 ---
 

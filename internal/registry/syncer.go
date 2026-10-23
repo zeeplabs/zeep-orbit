@@ -92,6 +92,7 @@ func (s *Syncer) sync(ctx context.Context) error {
 		return nil
 	}
 
+	gen := s.reg.Generation()
 	snap, err := s.cfg.Load(ctx)
 	if err != nil {
 		s.markUnknown()
@@ -99,7 +100,13 @@ func (s *Syncer) sync(ctx context.Context) error {
 		return fmt.Errorf("registry sync: load snapshot: %w", err)
 	}
 
-	s.reg.Replace(snap.Apps, snap.System)
+	if !s.reg.ReplaceIfGeneration(gen, snap.Apps, snap.System) {
+		// This pod registered a change during the load; the snapshot may
+		// predate it. Keep the newer local state and reload next time.
+		s.markUnknown()
+		s.cfg.Logf("debug", "registry sync: local write during load, retrying on the next sync")
+		return nil
+	}
 	s.mu.Lock()
 	s.lastVersion = version
 	s.mu.Unlock()

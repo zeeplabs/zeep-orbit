@@ -283,6 +283,45 @@ func TestRun_StopsOnCancel(t *testing.T) {
 	}
 }
 
+// TestSyncNow_LocalWriteDuringLoadIsNotRolledBack: the pod that served a
+// write registers it locally right after commit. A sync whose snapshot was
+// read before that commit must not overwrite it.
+func TestSyncNow_LocalWriteDuringLoadIsNotRolledBack(t *testing.T) {
+	reg := New()
+	src := &fakeSource{}
+	src.set(1, "a")
+	s := newTestSyncer(reg, src)
+	if err := s.SyncNow(context.Background()); err != nil {
+		t.Fatalf("first sync: %v", err)
+	}
+
+	// Next load is stale (no "fresh" app) and, while it runs, the pod
+	// registers the app it just created.
+	src.set(2, "a")
+	s.cfg.Load = func(ctx context.Context) (Snapshot, error) {
+		snap, err := src.Load(ctx)
+		reg.Register(newTestApp("fresh"))
+		return snap, err
+	}
+	if err := s.SyncNow(context.Background()); err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+	if _, ok := reg.Get("fresh"); !ok {
+		t.Fatal("a stale snapshot rolled back an app registered during the load")
+	}
+
+	// The next sync reloads even though the version did not move.
+	s.cfg.Load = src.Load
+	src.set(2, "a", "fresh")
+	loadsBefore := src.loads.Load()
+	if err := s.SyncNow(context.Background()); err != nil {
+		t.Fatalf("follow-up sync: %v", err)
+	}
+	if src.loads.Load() != loadsBefore+1 {
+		t.Fatal("a skipped swap must force a reload on the next sync")
+	}
+}
+
 func TestSyncNow_LogsWarnOnFailureAndDebugOnReload(t *testing.T) {
 	reg := New()
 	src := &fakeSource{}

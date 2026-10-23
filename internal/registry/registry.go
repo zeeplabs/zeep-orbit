@@ -1,15 +1,10 @@
 package registry
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
 	"sort"
-	"strings"
 	"sync"
 
 	"github.com/zeeplabs/zeep-orbit/internal/config"
-	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
 
 // All read and write operations are protected by RWMutex.
@@ -18,6 +13,9 @@ type Registry struct {
 	apps     map[string]*App
 	sysCfg   SystemConfig
 	missHook func()
+	// gen counts local writes (Register, Unregister, SetSystemConfig), so a
+	// sync whose snapshot was read before one of them can tell it is stale.
+	gen uint64
 }
 
 // Snapshot is the full registry state loaded from the database: every app
@@ -142,6 +140,34 @@ func (r *Registry) Replace(apps map[string]*App, sys SystemConfig) {
 	r.mu.Unlock()
 }
 
+// Generation returns the local write counter. Pair it with
+// ReplaceIfGeneration.
+func (r *Registry) Generation() uint64 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.gen
+}
+
+// ReplaceIfGeneration is Replace, but only if no local write happened since
+// Generation returned gen. It reports whether it replaced. A sync loads its
+// snapshot from the database while the pod keeps serving: if this pod
+// registered a change it just committed during that load, the snapshot may
+// predate the commit, and swapping it in would roll the pod back until the
+// next poll.
+func (r *Registry) ReplaceIfGeneration(gen uint64, apps map[string]*App, sys SystemConfig) bool {
+	if apps == nil {
+		apps = make(map[string]*App)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.gen != gen {
+		return false
+	}
+	r.apps = apps
+	r.sysCfg = sys
+	return true
+}
+
 // Returns a copy of the slice without exposing the internal map.
 func (r *Registry) Apps() []*App {
 	r.mu.RLock()
@@ -154,139 +180,11 @@ func (r *Registry) Apps() []*App {
 	return result
 }
 
-// Replaces any existing state. Safe to call on startup.
-func (r *Registry) LoadFromDB(ctx context.Context, pool *db.Pool) error {
-	type appRow struct {
-		id               string
-		name             string
-		jwtSecret        string
-		authEmailEnabled bool
-		authProviders    []byte
-		storageConfig    []byte
-		rateLimitConfig  []byte
-	}
-
-	rows, err := pool.Query(ctx,
-		`SELECT id, name, jwt_secret, auth_email_enabled, COALESCE(auth_providers, '{}'), COALESCE(storage_config, '{}'), COALESCE(rate_limit_config, '{}') FROM zeep_system.apps ORDER BY name`,
-	)
-	if err != nil {
-		return fmt.Errorf("registry: load from db: query apps: %w", err)
-	}
-	defer rows.Close()
-
-	var appRows []appRow
-	for rows.Next() {
-		var a appRow
-		var providersJSON, storageJSON, rateLimitJSON []byte
-		if err := rows.Scan(&a.id, &a.name, &a.jwtSecret, &a.authEmailEnabled, &providersJSON, &storageJSON, &rateLimitJSON); err != nil {
-			return fmt.Errorf("registry: load from db: scan app: %w", err)
-		}
-		a.authProviders = providersJSON
-		a.storageConfig = storageJSON
-		a.rateLimitConfig = rateLimitJSON
-		appRows = append(appRows, a)
-	}
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("registry: load from db: rows: %w", err)
-	}
-
-	newApps := make(map[string]*App, len(appRows))
-
-	for _, a := range appRows {
-		tableRows, err := pool.Query(ctx,
-			`SELECT name, rls, columns FROM zeep_system.app_tables WHERE app_id = $1 ORDER BY name`,
-			a.id,
-		)
-		if err != nil {
-			return fmt.Errorf("registry: load from db: query tables for %s: %w", a.name, err)
-		}
-
-		tables := make(map[string]*Table)
-		var tableCfgs []config.TableConfig
-
-		for tableRows.Next() {
-			var tName, tRLS string
-			var colsJSON []byte
-			if err := tableRows.Scan(&tName, &tRLS, &colsJSON); err != nil {
-				tableRows.Close()
-				return fmt.Errorf("registry: load from db: scan table: %w", err)
-			}
-
-			var cols []config.ColumnConfig
-			if err := json.Unmarshal(colsJSON, &cols); err != nil {
-				tableRows.Close()
-				return fmt.Errorf("registry: load from db: unmarshal columns for %s.%s: %w", a.name, tName, err)
-			}
-
-			regCols := make([]Column, 0, len(cols))
-			for _, c := range cols {
-				regCols = append(regCols, Column{
-					Name:       c.Name,
-					Type:       c.Type,
-					Required:   c.Required,
-					Default:    c.Default,
-					Unique:     c.Unique,
-					RenameFrom: c.RenameFrom,
-				})
-			}
-
-			tables[tName] = &Table{Name: tName, RLS: tRLS, Columns: regCols}
-			tableCfgs = append(tableCfgs, config.TableConfig{Name: tName, RLS: tRLS, Columns: cols})
-		}
-		tableRows.Close()
-		if err := tableRows.Err(); err != nil {
-			return fmt.Errorf("registry: load from db: table rows: %w", err)
-		}
-
-		var authProviders map[string]any
-		if len(a.authProviders) > 0 {
-			json.Unmarshal(a.authProviders, &authProviders)
-		}
-
-		var storageCfg *config.StorageConfig
-		if len(a.storageConfig) > 0 && string(a.storageConfig) != "{}" {
-			var sc config.StorageConfig
-			if err := json.Unmarshal(a.storageConfig, &sc); err == nil && sc.Bucket != "" {
-				storageCfg = &sc
-			}
-		}
-
-		var rateLimitCfg *config.RateLimitConfig
-		if len(a.rateLimitConfig) > 0 && string(a.rateLimitConfig) != "{}" {
-			var rc config.RateLimitConfig
-			if err := json.Unmarshal(a.rateLimitConfig, &rc); err == nil && rc.Enabled {
-				rateLimitCfg = &rc
-			}
-		}
-
-		newApps[a.name] = &App{
-			Config: config.AppConfig{
-				Name: a.name,
-				Auth: config.AuthConfig{
-					JWTSecret: a.jwtSecret,
-					Providers: config.AuthProviders{Email: a.authEmailEnabled},
-				},
-				Tables: tableCfgs,
-			},
-			SchemaName:    strings.ReplaceAll(a.name, "-", "_"),
-			Tables:        tables,
-			AuthProviders: authProviders,
-			StorageConfig: storageCfg,
-			RateLimit:     rateLimitCfg,
-		}
-	}
-
-	r.mu.Lock()
-	r.apps = newApps
-	r.mu.Unlock()
-
-	return nil
-}
-
 // Register adds or replaces a single app in the registry.
 func (r *Registry) Register(app *App) {
 	r.mu.Lock()
 	r.apps[app.Config.Name] = app
+	r.gen++
 	r.mu.Unlock()
 }
 
@@ -294,6 +192,7 @@ func (r *Registry) Register(app *App) {
 func (r *Registry) Unregister(appName string) {
 	r.mu.Lock()
 	delete(r.apps, appName)
+	r.gen++
 	r.mu.Unlock()
 }
 
@@ -301,6 +200,7 @@ func (r *Registry) Unregister(appName string) {
 func (r *Registry) SetSystemConfig(cfg SystemConfig) {
 	r.mu.Lock()
 	r.sysCfg = cfg
+	r.gen++
 	r.mu.Unlock()
 }
 

@@ -7,10 +7,9 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 )
 
-// newTestApp builds an *App the way LoadFromDB would for production data —
-// the same shape Load() used to build before it was removed as dead code
-// (D-243/item 6: no production caller, registry is populated from the
-// database, not from a config.Config file — see LoadFromDB).
+// newTestApp builds an *App with the shape production data has. The
+// registry is populated from the database by registry.Syncer, using
+// dashboard.LoadRegistrySnapshot; there is no config-file loader.
 func newTestApp(name string) *App {
 	return &App{
 		Config: config.AppConfig{

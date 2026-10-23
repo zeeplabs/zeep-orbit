@@ -14,6 +14,7 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/provisioner"
 	"github.com/zeeplabs/zeep-orbit/internal/registry"
 	"github.com/zeeplabs/zeep-orbit/internal/server"
+	"github.com/zeeplabs/zeep-orbit/internal/tokencache"
 )
 
 var (
@@ -53,8 +54,14 @@ func cmdServe() *cobra.Command {
 				os.Exit(1)
 			}
 
+			maxConns, err := db.MaxConnsFromEnv()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+				os.Exit(1)
+			}
+
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			pool, err := db.New(ctx, dsn)
+			pool, err := db.NewWithMaxConns(ctx, dsn, maxConns)
 			cancel()
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -80,11 +87,39 @@ func cmdServe() *cobra.Command {
 				os.Exit(1)
 			}
 
+			// Every replica keeps apps, tables and the system config in
+			// memory. The syncer polls zeep_system.state_version and reloads
+			// when another pod (or MCP, or a manual SQL fix) changed them,
+			// so a change served by one pod reaches the others within one
+			// poll instead of only after a restart.
 			reg := registry.New()
-			if err := reg.LoadFromDB(context.Background(), pool); err != nil {
-				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			syncer := registry.NewSyncer(reg, registry.SyncerConfig{
+				Version: func(ctx context.Context) (int64, error) {
+					return dashboard.ReadStateVersion(ctx, pool)
+				},
+				Load: func(ctx context.Context) (registry.Snapshot, error) {
+					return dashboard.LoadRegistrySnapshot(ctx, pool)
+				},
+				OnChange: []func(){tokencache.Clear},
+				Logf: func(level, format string, args ...any) {
+					if level == "debug" && os.Getenv("LOG_LEVEL") != "debug" {
+						return
+					}
+					fmt.Fprintf(os.Stderr, level+": "+format+"\n", args...)
+				},
+			})
+			// Fail boot rather than serve with an empty registry or a
+			// zero-value system config (no statement timeout, soft delete
+			// off), which would silently change delete semantics.
+			syncCtx, syncCancel := context.WithTimeout(context.Background(), 10*time.Second)
+			err = syncer.SyncNow(syncCtx)
+			syncCancel()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error: initial registry load: %v\n", err)
 				os.Exit(1)
 			}
+			reg.SetMissHook(syncer.OnMiss)
+			go syncer.Run(context.Background())
 
 			schemaNames := make([]string, 0, len(reg.Apps()))
 			for _, app := range reg.Apps() {
@@ -99,20 +134,6 @@ func cmdServe() *cobra.Command {
 			// schema shouldn't take every other app down with it.
 			for _, err := range provisioner.New(pool).BackfillEnduserGrants(context.Background(), schemaNames) {
 				fmt.Fprintf(os.Stderr, "WARNING: %v\n", err)
-			}
-
-			sysCfg, err := dashboard.GetSystemConfig(context.Background(), pool)
-			if err != nil {
-				// Fail-open would silently leave the registry at its zero-value
-				// SystemConfig (StatementTimeoutMs: 0 = no timeout enforced,
-				// SoftDeleteEnabled: false) without anyone noticing. Loud enough
-				// to page on, since it means query-timeout protection is off.
-				fmt.Fprintf(os.Stderr, "WARNING: failed to load system config at boot, statement_timeout and soft-delete enforcement are OFF until the next successful config read: %v\n", err)
-			} else {
-				reg.SetSystemConfig(registry.SystemConfig{
-					SoftDeleteEnabled:  sysCfg.SoftDeleteEnabled,
-					StatementTimeoutMs: sysCfg.StatementTimeoutMs,
-				})
 			}
 
 			go func() {
