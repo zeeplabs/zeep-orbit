@@ -1,7 +1,7 @@
 # Multi-Replica Consistency Tasks
 
 **Design**: `.specs/features/multi-replica-consistency/design.md`
-**Status**: In progress (T1–T4, T6, T7 done)
+**Status**: In progress (T1–T7 done)
 
 There is no `.specs/codebase/TESTING.md`. The test types and gates come from AGENTS.md §3 and the existing suites:
 - **unit**: plain `go test` with no DB.
@@ -141,13 +141,14 @@ T9, T11, T12, T14, T15 ──→ T16 (docs + CHANGELOG) ──→ T17 (full gate
 **Requirement**: MREP-01..03, MREP-07
 
 **Done when**:
-- [ ] Parity test: for an app with enum `AllowedValues`, storage config, rate limit, auth providers and 2 tables, `LoadRegistrySnapshot().Apps[name]` deep-equals `appRowToRegistryApp(GetApp(...))`.
-- [ ] Test: an error from `GetSystemConfig` makes `LoadRegistrySnapshot` return an error, never a partial snapshot.
-- [ ] The existing `ListApps`/`GetApp` tests stay green after the extraction.
-- [ ] List the consumers of `registry.Column.AllowedValues`, `App.Config.Storage` and `App.Config.RateLimit` in the commit message, to close the design's [Provável] on user-visible divergence.
+- [x] Parity test: for an app with enum `AllowedValues`, storage config, rate limit, auth providers and 2 tables, `LoadRegistrySnapshot().Apps[name]` deep-equals `appRowToRegistryApp(GetApp(...))`.
+- [x] Test: an error from `GetSystemConfig` makes `LoadRegistrySnapshot` return an error, never a partial snapshot.
+- [x] The existing `ListApps`/`GetApp` tests stay green after the extraction.
+- [x] List the consumers of `registry.Column.AllowedValues`, `App.Config.Storage` and `App.Config.RateLimit` in the commit message, to close the design's [Provável] on user-visible divergence.
 
 **Tests**: integration
 **Gate**: quick (`./internal/dashboard/...`)
+**Status**: Done (2026-10-23). Consumers: `registry.Column.AllowedValues` is read only by `internal/docs/generator.go` (OpenAPI `enum`), so after a restart `/docs` lost the enum values. `App.Config.Storage` and `App.Config.RateLimit` have no consumers; the server reads `App.StorageConfig` and `App.RateLimit`, which the old loader did fill. The user-visible divergence was limited to the API docs.
 
 ---
 
