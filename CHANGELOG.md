@@ -9,11 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.11.0] — 2026-10-23
+
 ### Added
 
 - **Dashboard: leaving a screen with unsaved edits now asks first, not only on tab close.** The router moved from `<BrowserRouter>` to a data router (`createBrowserRouter` + `RouterProvider`, same `/dashboard` basename) so `useBlocker` can intercept in-app navigation: sidebar and mobile links, browser back/forward and switching the app detail tab. A "Leave without saving?" dialog offers Stay or Leave page. Forms keep using `useUnsavedChangesGuard`/`useFormDirtyGuard` unchanged; a single `UnsavedChangesBlocker` in the shell handles the prompt. Covered by `e2e/keyboard-a11y.spec.ts`.
 - **`GET /ready` readiness endpoint.** Pings Postgres with a 2s timeout and answers `503 {"status":"unavailable"}` when it fails. `/health` stays a liveness check that never touches the database. The Helm chart and `k8s/deployment.yaml` now point the readiness probe at `/ready`, so a pod that loses its database leaves the Service instead of every pod being restarted. The ping uses its own one-connection pool, so a pod whose main pool is saturated by slow queries stays ready (`internal/server/handler.go`).
-- **`DB_MAX_CONNS` sets the Postgres pool size per pod** (default 10, previously hardcoded). An invalid value stops boot. The Helm chart exposes it as `database.maxConns`, rendered only when set. Each pod opens one more connection for the readiness probe.
+- **`DB_MAX_CONNS` sets the Postgres pool size per pod** (default 10, previously hardcoded). An invalid value stops boot. The Helm chart exposes it as `database.maxConns`, rendered only when set. Each pod also opens one connection for the readiness probe and, once an inbound webhook with deduplication arrives, up to 4 for the dedup lock pool, so plan for `replicas × (DB_MAX_CONNS + 5)`.
 
 ### Fixed
 
