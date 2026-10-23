@@ -125,7 +125,7 @@ func defaultSQL(col config.ColumnConfig) string {
 // Returns true if the table was created (did not exist), false if it already existed.
 func (p *Provisioner) createTable(ctx context.Context, schemaName, tableName string, cols []config.ColumnConfig, rls string) (bool, error) {
 	var exists bool
-	err := p.pool.QueryRow(ctx,
+	err := p.q.QueryRow(ctx,
 		`SELECT EXISTS(
 			SELECT 1 FROM information_schema.tables
 			WHERE table_schema = $1 AND table_name = $2
@@ -176,7 +176,7 @@ func (p *Provisioner) createTable(ctx context.Context, schemaName, tableName str
 		strings.Join(colDefs, ", "),
 	)
 
-	if _, err := p.pool.Exec(ctx, sql); err != nil {
+	if _, err := p.q.Exec(ctx, sql); err != nil {
 		return false, fmt.Errorf("table: create %q.%q: %w", schemaName, tableName, err)
 	}
 
@@ -188,7 +188,7 @@ func (p *Provisioner) createTable(ctx context.Context, schemaName, tableName str
 	// already get their filtering from the application layer in the
 	// meantime.
 	if rls == "policy" {
-		if err := EnsureRowLevelSecurity(ctx, p.pool, schemaName, tableName); err != nil {
+		if err := EnsureRowLevelSecurity(ctx, p.q, schemaName, tableName); err != nil {
 			return false, err
 		}
 	}
@@ -219,7 +219,28 @@ func EnsureRowLevelSecurity(ctx context.Context, pool db.Querier, schemaName, ta
 // no end-user identity to populate it with) never guarantee a value. Safe to
 // call unconditionally — a no-op if owner_id is already nullable or the
 // table predates HasOwnerColumn (no owner_id at all).
+//
+// It reads the catalog first and only runs the ALTER when owner_id exists
+// and is still NOT NULL: inside a transaction a failed ALTER (42703) would
+// abort the whole transaction, and skipping a no-op ALTER avoids taking an
+// ACCESS EXCLUSIVE lock for nothing.
 func RelaxOwnerColumn(ctx context.Context, pool db.Querier, schemaName, tableName string) error {
+	var notNull bool
+	err := pool.QueryRow(ctx,
+		`SELECT a.attnotnull FROM pg_attribute a
+		 WHERE a.attrelid = format('%I.%I', $1::text, $2::text)::regclass
+		   AND a.attname = 'owner_id' AND NOT a.attisdropped`,
+		schemaName, tableName,
+	).Scan(&notNull)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("table: read owner_id of %q.%q: %w", schemaName, tableName, err)
+	}
+	if !notNull {
+		return nil
+	}
 	sql := fmt.Sprintf(
 		`ALTER TABLE %q.%q ALTER COLUMN "owner_id" DROP NOT NULL`,
 		schemaName, tableName,
@@ -240,7 +261,7 @@ func RelaxOwnerColumn(ctx context.Context, pool db.Querier, schemaName, tableNam
 // error.
 func (p *Provisioner) checkDependents(ctx context.Context, schemaName, tableName string) (string, error) {
 	var dependentTable, dependentColumn string
-	err := p.pool.QueryRow(ctx,
+	err := p.q.QueryRow(ctx,
 		`SELECT tc.table_name, kcu.column_name
 		 FROM information_schema.table_constraints tc
 		 JOIN information_schema.key_column_usage kcu
@@ -263,12 +284,8 @@ func (p *Provisioner) checkDependents(ctx context.Context, schemaName, tableName
 	return fmt.Sprintf("%s.%s", dependentTable, dependentColumn), nil
 }
 
-// DropTable drops a table if it exists. Used when a single table is removed
-// from an app without touching the app's other tables. Refuses to drop a
-// table still referenced by another table's foreign key — the dependent FK
-// must be removed first (own apply or prior apply), rather than silently
-// leaving a dangling reference or failing with a raw Postgres error.
-func (p *Provisioner) DropTable(ctx context.Context, schemaName, tableName string) error {
+// dropTable is the body of DropTable, run under the per-app DDL lock.
+func (p *Provisioner) dropTable(ctx context.Context, schemaName, tableName string) error {
 	dependent, err := p.checkDependents(ctx, schemaName, tableName)
 	if err != nil {
 		return err
@@ -278,7 +295,7 @@ func (p *Provisioner) DropTable(ctx context.Context, schemaName, tableName strin
 	}
 
 	sql := fmt.Sprintf(`DROP TABLE IF EXISTS %q.%q`, schemaName, tableName)
-	if _, err := p.pool.Exec(ctx, sql); err != nil {
+	if _, err := p.q.Exec(ctx, sql); err != nil {
 		return fmt.Errorf("table: drop %q.%q: %w", schemaName, tableName, err)
 	}
 	return nil
@@ -286,7 +303,7 @@ func (p *Provisioner) DropTable(ctx context.Context, schemaName, tableName strin
 
 // Retorna a lista de colunas adicionadas no formato "schema.table.column".
 func (p *Provisioner) addMissingColumns(ctx context.Context, schemaName, tableName string, cols []config.ColumnConfig, rls string) ([]string, error) {
-	rows, err := p.pool.Query(ctx,
+	rows, err := p.q.Query(ctx,
 		`SELECT column_name FROM information_schema.columns
 		 WHERE table_schema = $1 AND table_name = $2`,
 		schemaName, tableName,
@@ -321,7 +338,7 @@ func (p *Provisioner) addMissingColumns(ctx context.Context, schemaName, tableNa
 			continue
 		}
 		var rowCount int64
-		if err := p.pool.QueryRow(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM %q.%q`, schemaName, tableName)).Scan(&rowCount); err != nil {
+		if err := p.q.QueryRow(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM %q.%q`, schemaName, tableName)).Scan(&rowCount); err != nil {
 			return nil, fmt.Errorf("table: count rows in %q.%q: %w", schemaName, tableName, err)
 		}
 		if rowCount > 0 {
@@ -344,7 +361,7 @@ func (p *Provisioner) addMissingColumns(ctx context.Context, schemaName, tableNa
 			schemaName, tableName,
 			columnDDL(schemaName, col),
 		)
-		if _, err := p.pool.Exec(ctx, sql); err != nil {
+		if _, err := p.q.Exec(ctx, sql); err != nil {
 			return nil, fmt.Errorf("table: add column %q to %q.%q: %w", col.Name, schemaName, tableName, err)
 		}
 
@@ -357,7 +374,7 @@ func (p *Provisioner) addMissingColumns(ctx context.Context, schemaName, tableNa
 				`ALTER TABLE %q.%q ADD COLUMN IF NOT EXISTS "owner_id" UUID REFERENCES %q."_auth_users"("id")`,
 				schemaName, tableName, schemaName,
 			)
-			if _, err := p.pool.Exec(ctx, sql); err != nil {
+			if _, err := p.q.Exec(ctx, sql); err != nil {
 				return nil, fmt.Errorf("table: add owner_id to %q.%q: %w", schemaName, tableName, err)
 			}
 			added = append(added, fmt.Sprintf("%s.%s.owner_id", schemaName, tableName))
@@ -368,7 +385,7 @@ func (p *Provisioner) addMissingColumns(ctx context.Context, schemaName, tableNa
 }
 
 func (p *Provisioner) fetchExistingColumns(ctx context.Context, schemaName, tableName string) (map[string]string, error) {
-	rows, err := p.pool.Query(ctx,
+	rows, err := p.q.Query(ctx,
 		`SELECT column_name, udt_name FROM information_schema.columns
 		 WHERE table_schema = $1 AND table_name = $2`,
 		schemaName, tableName,
@@ -421,19 +438,13 @@ func (p *Provisioner) CheckForeignKeyColumnTypesMatch(ctx context.Context, schem
 	return nil
 }
 
-// AddColumnForeignKey runs ALTER TABLE ... ADD FOREIGN KEY on an existing
-// column. The constraint is left unnamed so Postgres applies its own
-// "<table>_<column>_fkey" convention — identical naming to a column created
-// with an inline REFERENCES clause (columnDDL), so a FK's origin (added at
-// creation vs. added later) is never distinguishable by name. A Postgres FK
-// violation (orphaned rows, code 23503) is translated into a typed, safe-
-// to-expose *ForeignKeyViolationError carrying Postgres's own Detail text.
-func (p *Provisioner) AddColumnForeignKey(ctx context.Context, schemaName, tableName, columnName string, ref config.ReferenceConfig) error {
+// addColumnForeignKey is the body of AddColumnForeignKey, run under the per-app DDL lock.
+func (p *Provisioner) addColumnForeignKey(ctx context.Context, schemaName, tableName, columnName string, ref config.ReferenceConfig) error {
 	sql := fmt.Sprintf(
 		`ALTER TABLE %q.%q ADD FOREIGN KEY (%q) REFERENCES %q.%q(%q) ON DELETE %s`,
 		schemaName, tableName, columnName, schemaName, ref.Table, ref.Column, onDeleteSQL(ref.OnDelete),
 	)
-	if _, err := p.pool.Exec(ctx, sql); err != nil {
+	if _, err := p.q.Exec(ctx, sql); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23503" { // foreign_key_violation
 			return &ForeignKeyViolationError{Column: columnName, Detail: pgErr.Detail, Cause: err}
@@ -443,15 +454,10 @@ func (p *Provisioner) AddColumnForeignKey(ctx context.Context, schemaName, table
 	return nil
 }
 
-// DropColumnForeignKey locates the real FK constraint on a column via the
-// Postgres catalog (never by assuming a naming convention — see
-// AddColumnForeignKey's comment on why a FK's origin is not name-derivable)
-// and drops it. found=false, err=nil means no FK constraint currently
-// exists on that column — the caller treats this as convergence (a stale
-// stored schema catching up to reality), not an error.
-func (p *Provisioner) DropColumnForeignKey(ctx context.Context, schemaName, tableName, columnName string) (found bool, err error) {
+// dropColumnForeignKey is the body of DropColumnForeignKey, run under the per-app DDL lock.
+func (p *Provisioner) dropColumnForeignKey(ctx context.Context, schemaName, tableName, columnName string) (found bool, err error) {
 	var constraintName string
-	err = p.pool.QueryRow(ctx,
+	err = p.q.QueryRow(ctx,
 		`SELECT tc.constraint_name
 		 FROM information_schema.table_constraints tc
 		 JOIN information_schema.key_column_usage kcu
@@ -471,7 +477,7 @@ func (p *Provisioner) DropColumnForeignKey(ctx context.Context, schemaName, tabl
 	}
 
 	sql := fmt.Sprintf(`ALTER TABLE %q.%q DROP CONSTRAINT %q`, schemaName, tableName, constraintName)
-	if _, err := p.pool.Exec(ctx, sql); err != nil {
+	if _, err := p.q.Exec(ctx, sql); err != nil {
 		return false, fmt.Errorf("table: drop foreign key %q on %q.%q: %w", constraintName, schemaName, tableName, err)
 	}
 	return true, nil
@@ -501,7 +507,7 @@ func (p *Provisioner) findColumnCheckConstraint(ctx context.Context, schemaName,
 	// one), picking an arbitrary one to DROP would silently remove a
 	// constraint this call was never asked to touch — fail closed instead
 	// of guessing.
-	rows, err := p.pool.Query(ctx,
+	rows, err := p.q.Query(ctx,
 		`SELECT c.conname
 		 FROM pg_constraint c
 		 JOIN pg_class r ON r.oid = c.conrelid
@@ -565,7 +571,7 @@ func (p *Provisioner) countRowsUsingValues(ctx context.Context, schemaName, tabl
 		`SELECT %q, COUNT(*) FROM %q.%q WHERE %q = ANY($1) GROUP BY %q`,
 		columnName, schemaName, tableName, columnName, columnName,
 	)
-	rows, err := p.pool.Query(ctx, sql, values)
+	rows, err := p.q.Query(ctx, sql, values)
 	if err != nil {
 		return nil, fmt.Errorf("table: count rows using values on %q.%q.%q: %w", schemaName, tableName, columnName, err)
 	}
@@ -588,23 +594,8 @@ func (p *Provisioner) countRowsUsingValues(ctx context.Context, schemaName, tabl
 	return counts, nil
 }
 
-// ReplaceColumnEnumValues replaces the CHECK constraint restricting an enum
-// column to oldValues with one restricting it to newValues.
-//
-// A narrowing (any value in oldValues missing from newValues) is pre-checked:
-// if existing rows still hold a value being removed, the call fails with a
-// typed *EnumValueInUseError naming every offending value and its exact row
-// count, before any DDL runs — so a rejected narrow leaves the current
-// constraint completely untouched. A pure widening skips the pre-check, since
-// every existing value is still a member of the larger set.
-//
-// The swap is a single ALTER TABLE statement carrying both the DROP and the
-// ADD, so Postgres applies both or neither: the table is never left without a
-// constraint. The new constraint is deliberately left unnamed so Postgres
-// applies its own "<table>_<column>_check" convention — identical to a column
-// created with an inline CHECK (columnDDL), so a constraint's origin (created
-// with the column vs. replaced later) is never distinguishable by name.
-func (p *Provisioner) ReplaceColumnEnumValues(ctx context.Context, schemaName, tableName, columnName string, oldValues, newValues []string) error {
+// replaceColumnEnumValues is the body of ReplaceColumnEnumValues, run under the per-app DDL lock.
+func (p *Provisioner) replaceColumnEnumValues(ctx context.Context, schemaName, tableName, columnName string, oldValues, newValues []string) error {
 	if removed := removedValues(oldValues, newValues); len(removed) > 0 {
 		counts, err := p.countRowsUsingValues(ctx, schemaName, tableName, columnName, removed)
 		if err != nil {
@@ -631,7 +622,7 @@ func (p *Provisioner) ReplaceColumnEnumValues(ctx context.Context, schemaName, t
 		sql = fmt.Sprintf(`ALTER TABLE %q.%q %s`, schemaName, tableName, addClause)
 	}
 
-	if _, err := p.pool.Exec(ctx, sql); err != nil {
+	if _, err := p.q.Exec(ctx, sql); err != nil {
 		return fmt.Errorf("table: replace enum values on %q.%q.%q: %w", schemaName, tableName, columnName, err)
 	}
 	return nil

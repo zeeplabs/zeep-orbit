@@ -1,7 +1,7 @@
 # Multi-Replica Consistency Tasks
 
 **Design**: `.specs/features/multi-replica-consistency/design.md`
-**Status**: In progress (T1–T9 done; phases 1–2 complete)
+**Status**: In progress (T1–T12 done; phases 1–3 complete)
 
 There is no `.specs/codebase/TESTING.md`. The test types and gates come from AGENTS.md §3 and the existing suites:
 - **unit**: plain `go test` with no DB.
@@ -262,17 +262,18 @@ T9, T11, T12, T14, T15 ──→ T16 (docs + CHANGELOG) ──→ T17 (full gate
 **Requirement**: MREP-09, MREP-10, MREP-12
 
 **Done when**:
-- [ ] All existing provisioner tests pass unchanged. This covers MREP-12: the success path is unchanged.
-- [ ] Integration tests, with `DDLLockTimeout = 300ms`:
+- [x] All existing provisioner tests pass unchanged. This covers MREP-12: the success path is unchanged.
+- [x] Integration tests, with `DDLLockTimeout = 300ms`:
   - another session holding `ACCESS SHARE` on the table makes `Apply` (add column) return `errors.Is(err, ErrDDLLockTimeout)`, and the column does **not** exist afterwards;
   - two concurrent `Apply` on the same app have the second wait or time out;
   - two concurrent `Apply` on different apps both succeed;
   - a failure in the second statement of a multi-statement `Apply` leaves no partial DDL.
-- [ ] `ApplyColumnConstraintChanges` still works when nested (savepoint).
-- [ ] Full gate passes for `./internal/provisioner/...` and `./internal/dashboard/...`.
+- [x] `ApplyColumnConstraintChanges` still works when nested (savepoint).
+- [x] Full gate passes for `./internal/provisioner/...` and `./internal/dashboard/...`.
 
 **Tests**: integration
 **Gate**: full
+**Status**: Done (2026-10-23), committed together with T11 and T12 (the files overlap: `table.go` and `ddl_lock.go`). 109 existing provisioner tests pass unchanged. Extra finding fixed here: `EnsureAuthUserColumns` ran 7 `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` on `_auth_users` on every dashboard app-users request. Each takes `ACCESS EXCLUSIVE` even when the column exists, so it could queue behind a reader and block logins. It now checks the catalog first and only takes the lock when something is missing.
 
 ---
 
@@ -286,12 +287,13 @@ T9, T11, T12, T14, T15 ──→ T16 (docs + CHANGELOG) ──→ T17 (full gate
 **Requirement**: MREP-09, MREP-10
 
 **Done when**:
-- [ ] Existing RLS mode-switch and policy tests stay green.
-- [ ] Integration test: policy create against a locked table returns `ErrDDLLockTimeout`-wrapped error, and there is no metadata row.
-- [ ] Integration test: switching a table without `owner_id` into policy mode still succeeds (the `42703` path).
+- [x] Existing RLS mode-switch and policy tests stay green.
+- [x] Integration test: policy create against a locked table returns `ErrDDLLockTimeout`-wrapped error, and there is no metadata row.
+- [x] Integration test: switching a table without `owner_id` into policy mode still succeeds (the `42703` path).
 
 **Tests**: integration
 **Gate**: full
+**Status**: Done (2026-10-23). `RelaxOwnerColumn` reads `pg_attribute` first (no ALTER if `owner_id` is absent or already nullable). `UpdateAppTable` now writes the metadata and the RLS DDL in one transaction, so a timeout no longer leaves a table marked `policy` without RLS.
 
 ---
 
@@ -307,12 +309,13 @@ T9, T11, T12, T14, T15 ──→ T16 (docs + CHANGELOG) ──→ T17 (full gate
 **Requirement**: MREP-09, MREP-11
 
 **Done when**:
-- [ ] Handler test: `PUT /tables/{id}` against a locked table returns 409 with the exact message, and `app_tables` is unchanged.
-- [ ] MCP tool test: same lock, and the tool error text matches.
-- [ ] A log assertion (captured logger) contains the holders' pid/state and does **not** contain `query`, `usename` or `client_addr`.
+- [x] Handler test: `PUT /tables/{id}` against a locked table returns 409 with the exact message, and `app_tables` is unchanged.
+- [x] MCP tool test: same lock, and the tool error text matches.
+- [x] A log assertion (captured logger) contains the holders' pid/state and does **not** contain `query`, `usename` or `client_addr`.
 
 **Tests**: integration
 **Gate**: full
+**Status**: Done (2026-10-23). Deviation: the 409 mapping lives in `writeError` (any 5xx whose error is a lock timeout becomes 409), not only in `writeProvisioningError`, so every handler that runs DDL is covered, including the policy handlers. Lock timeouts carry the schema in `provisioner.DDLLockTimeoutError`, which feeds the holders log. The MCP `mapWriteError` returns the same message.
 
 ---
 

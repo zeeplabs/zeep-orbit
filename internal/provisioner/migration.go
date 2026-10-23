@@ -79,14 +79,14 @@ func (p *Provisioner) ensureMigrationTable(ctx context.Context, schemaName strin
 		"sql_executed" TEXT NOT NULL,
 		"applied_at"  TIMESTAMPTZ NOT NULL DEFAULT now()
 	)`, schemaName)
-	_, err := p.pool.Exec(ctx, sql)
+	_, err := p.q.Exec(ctx, sql)
 	return err
 }
 
 // isMigrationApplied checks if a migration_id has already been executed.
 func (p *Provisioner) isMigrationApplied(ctx context.Context, schemaName, migrationID string) (bool, error) {
 	var exists bool
-	err := p.pool.QueryRow(ctx,
+	err := p.q.QueryRow(ctx,
 		fmt.Sprintf(`SELECT EXISTS(SELECT 1 FROM %q."_schema_migrations" WHERE migration_id = $1)`, schemaName),
 		migrationID,
 	).Scan(&exists)
@@ -94,7 +94,7 @@ func (p *Provisioner) isMigrationApplied(ctx context.Context, schemaName, migrat
 }
 
 func (p *Provisioner) recordMigration(ctx context.Context, schemaName, migrationID, description, sqlExecuted string) error {
-	_, err := p.pool.Exec(ctx,
+	_, err := p.q.Exec(ctx,
 		fmt.Sprintf(`INSERT INTO %q."_schema_migrations" (migration_id, description, sql_executed) VALUES ($1, $2, $3)`, schemaName),
 		migrationID, description, sqlExecuted,
 	)
@@ -122,7 +122,7 @@ func (p *Provisioner) applyRename(ctx context.Context, schemaName, tableName str
 	sql := fmt.Sprintf(`ALTER TABLE %q.%q RENAME COLUMN %q TO %q`,
 		schemaName, tableName, col.RenameFrom, col.Name)
 
-	if _, err := p.pool.Exec(ctx, sql); err != nil {
+	if _, err := p.q.Exec(ctx, sql); err != nil {
 		return "", fmt.Errorf("rename column %q to %q: %w", col.RenameFrom, col.Name, err)
 	}
 
@@ -173,7 +173,7 @@ func (p *Provisioner) applyTypeChange(ctx context.Context, schemaName, tableName
 	sql := fmt.Sprintf(`ALTER TABLE %q.%q ALTER COLUMN %q TYPE %s USING %q::%s`,
 		schemaName, tableName, col.Name, targetType, col.Name, strings.ToLower(targetType))
 
-	if _, err := p.pool.Exec(ctx, sql); err != nil {
+	if _, err := p.q.Exec(ctx, sql); err != nil {
 		return "", &TypeChangeError{Column: col.Name, CurrentType: currentType, DesiredType: desiredType, Reason: ReasonRuntimeFailure, Cause: err}
 	}
 

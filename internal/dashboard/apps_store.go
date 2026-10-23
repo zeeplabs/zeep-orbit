@@ -652,8 +652,22 @@ func UpdateAppTable(ctx context.Context, pool *db.Pool, appID, tableID, schemaNa
 	if err != nil {
 		return AppTableRow{}, fmt.Errorf("dashboard: marshal indexes for table %s: %w", tableID, err)
 	}
+	// The metadata write and the RLS DDL share one transaction under the
+	// per-app DDL lock: a lock timeout on the DDL rolls the metadata back
+	// too, instead of leaving a table marked "policy" without RLS enabled.
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return AppTableRow{}, fmt.Errorf("dashboard: update app table %s begin tx: %w", tableID, err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	if rls == "policy" {
+		if err := db.LockAppDDL(ctx, tx, schemaName); err != nil {
+			return AppTableRow{}, provisioner.WrapLockTimeout(schemaName, err)
+		}
+	}
+
 	var row AppTableRow
-	err = pool.QueryRow(ctx,
+	err = tx.QueryRow(ctx,
 		`UPDATE zeep_system.app_tables
 		 SET rls = $3, columns = $4, indexes = $5
 		 WHERE id = $1 AND app_id = $2
@@ -674,14 +688,17 @@ func UpdateAppTable(ctx context.Context, pool *db.Pool, appID, tableID, schemaNa
 	}
 
 	if rls == "policy" {
-		if err := provisioner.EnsureRowLevelSecurity(ctx, pool, schemaName, row.Name); err != nil {
-			return AppTableRow{}, fmt.Errorf("dashboard: enable row level security for table %s: %w", tableID, err)
+		if err := provisioner.EnsureRowLevelSecurity(ctx, tx, schemaName, row.Name); err != nil {
+			return AppTableRow{}, provisioner.WrapLockTimeout(schemaName, fmt.Errorf("dashboard: enable row level security for table %s: %w", tableID, err))
 		}
-		if err := provisioner.RelaxOwnerColumn(ctx, pool, schemaName, row.Name); err != nil {
-			return AppTableRow{}, fmt.Errorf("dashboard: relax owner_id for table %s: %w", tableID, err)
+		if err := provisioner.RelaxOwnerColumn(ctx, tx, schemaName, row.Name); err != nil {
+			return AppTableRow{}, provisioner.WrapLockTimeout(schemaName, fmt.Errorf("dashboard: relax owner_id for table %s: %w", tableID, err))
 		}
 	}
 
+	if err := tx.Commit(ctx); err != nil {
+		return AppTableRow{}, provisioner.WrapLockTimeout(schemaName, fmt.Errorf("dashboard: update app table %s commit: %w", tableID, err))
+	}
 	return row, nil
 }
 

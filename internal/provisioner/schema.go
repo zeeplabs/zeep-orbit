@@ -15,7 +15,7 @@ const enduserRole = "zeep_app_enduser"
 func (p *Provisioner) createSchema(ctx context.Context, schemaName string) (bool, error) {
 	// Checks existence first to detect if it was just created.
 	var exists bool
-	err := p.pool.QueryRow(ctx,
+	err := p.q.QueryRow(ctx,
 		`SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname = $1)`,
 		schemaName,
 	).Scan(&exists)
@@ -24,13 +24,15 @@ func (p *Provisioner) createSchema(ctx context.Context, schemaName string) (bool
 	}
 
 	if exists {
-		if err := p.grantEnduserSchemaAccess(ctx, schemaName); err != nil {
+		if err := p.withAppLock(ctx, schemaName, func(tp *Provisioner) error {
+			return tp.grantEnduserSchemaAccess(ctx, schemaName)
+		}); err != nil {
 			return false, err
 		}
 		return false, nil
 	}
 
-	_, err = p.pool.Exec(ctx, fmt.Sprintf(`CREATE SCHEMA IF NOT EXISTS %q`, schemaName))
+	_, err = p.q.Exec(ctx, fmt.Sprintf(`CREATE SCHEMA IF NOT EXISTS %q`, schemaName))
 	if err != nil {
 		return false, fmt.Errorf("schema: create %q: %w", schemaName, err)
 	}
@@ -56,7 +58,9 @@ func (p *Provisioner) createSchema(ctx context.Context, schemaName string) (bool
 func (p *Provisioner) BackfillEnduserGrants(ctx context.Context, schemaNames []string) []error {
 	var errs []error
 	for _, schemaName := range schemaNames {
-		if err := p.grantEnduserSchemaAccess(ctx, schemaName); err != nil {
+		if err := p.withAppLock(ctx, schemaName, func(tp *Provisioner) error {
+			return tp.grantEnduserSchemaAccess(ctx, schemaName)
+		}); err != nil {
 			errs = append(errs, fmt.Errorf("provisioner: backfill enduser grants %q: %w", schemaName, err))
 		}
 	}
@@ -90,7 +94,7 @@ func (p *Provisioner) grantEnduserSchemaAccess(ctx context.Context, schemaName s
 		fmt.Sprintf(`ALTER DEFAULT PRIVILEGES IN SCHEMA %q GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO %s`, schemaName, enduserRole),
 	}
 	for _, stmt := range stmts {
-		if _, err := p.pool.Exec(ctx, stmt); err != nil {
+		if _, err := p.q.Exec(ctx, stmt); err != nil {
 			return fmt.Errorf("schema: grant enduser access %q: %w", schemaName, err)
 		}
 	}
