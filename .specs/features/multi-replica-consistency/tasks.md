@@ -1,7 +1,7 @@
 # Multi-Replica Consistency Tasks
 
 **Design**: `.specs/features/multi-replica-consistency/design.md`
-**Status**: In progress (T1–T8 done)
+**Status**: In progress (T1–T9 done; phases 1–2 complete)
 
 There is no `.specs/codebase/TESTING.md`. The test types and gates come from AGENTS.md §3 and the existing suites:
 - **unit**: plain `go test` with no DB.
@@ -234,19 +234,20 @@ T9, T11, T12, T14, T15 ──→ T16 (docs + CHANGELOG) ──→ T17 (full gate
 **Requirement**: MREP-01..05, MREP-07, MREP-18
 
 **Done when**: B converges for each of these changes:
-- [ ] table create;
-- [ ] column add;
-- [ ] enum values change;
-- [ ] app delete (B `Get` returns false);
-- [ ] auth provider change;
-- [ ] `jwt_secret` rotation;
-- [ ] soft-delete toggle;
-- [ ] token revoke (B's tokencache entry is gone).
-- [ ] Miss path: a table created through A is found by B's `GetTable` with **no** `SyncNow` call, via the hook.
-- [ ] Mutation check: disable the trigger on `app_tables` and confirm the column-add case fails (then restore).
+- [x] table create;
+- [x] column add;
+- [x] enum values change;
+- [x] app delete (B `Get` returns false);
+- [x] auth provider change;
+- [x] `jwt_secret` rotation;
+- [x] soft-delete toggle;
+- [x] token revoke (B's tokencache entry is gone).
+- [x] Miss path: a table created through A is found by B's `GetTable` with **no** `SyncNow` call, via the hook.
+- [x] Mutation check: disable the trigger on `app_tables` and confirm the column-add case fails (then restore).
 
 **Tests**: integration
 **Gate**: full
+**Status**: Done (2026-10-23). The mutation check is a permanent test (`TestMultiReplica_TriggerIsLoadBearing`), not a one-off manual step.
 
 ---
 
