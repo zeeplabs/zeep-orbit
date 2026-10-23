@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
@@ -28,15 +29,36 @@ func PurgeExpiredSoftDeletes(ctx context.Context, pool *db.Pool, reg *registry.R
 		return 0, nil
 	}
 
+	// A session-level advisory lock belongs to the connection that took it,
+	// so lock and unlock must run on the same connection. On the pool they
+	// could land on different ones: the unlock then silently returned false
+	// and the lock stayed held by an idle pooled connection, blocking every
+	// later purge on every replica until that connection closed.
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("purge: acquire connection: %w", err)
+	}
+	defer conn.Release()
+
 	var gotLock bool
-	if err := pool.QueryRow(ctx, `SELECT pg_try_advisory_lock(hashtext($1))`, purgeAdvisoryLockKey).Scan(&gotLock); err != nil {
+	if err := conn.QueryRow(ctx, `SELECT pg_try_advisory_lock(hashtext($1))`, purgeAdvisoryLockKey).Scan(&gotLock); err != nil {
 		return 0, fmt.Errorf("purge: acquire advisory lock: %w", err)
 	}
 	if !gotLock {
 		// Another replica is already running this window's purge.
 		return 0, nil
 	}
-	defer pool.Exec(ctx, `SELECT pg_advisory_unlock(hashtext($1))`, purgeAdvisoryLockKey)
+	defer func() {
+		// Unlock even if ctx was cancelled mid-purge; a leaked session lock
+		// would outlive this run on the pooled connection.
+		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		if _, err := conn.Exec(unlockCtx, `SELECT pg_advisory_unlock(hashtext($1))`, purgeAdvisoryLockKey); err != nil {
+			// The connection is in an unknown state: close it instead of
+			// returning it (and possibly the lock) to the pool.
+			_ = conn.Conn().Close(unlockCtx)
+		}
+	}()
 
 	total := 0
 	var runErr error
@@ -47,7 +69,10 @@ func PurgeExpiredSoftDeletes(ctx context.Context, pool *db.Pool, reg *registry.R
 				`DELETE FROM %s WHERE deleted_at IS NOT NULL AND deleted_at < now() - $1::interval`,
 				ident,
 			)
-			tag, err := pool.Exec(ctx, sql, fmt.Sprintf("%d days", retentionDays))
+			// The DELETEs and the audit insert run on the held connection: with
+			// a small pool (DB_MAX_CONNS=1) asking the pool for another one
+			// would wait forever behind the connection this purge holds.
+			tag, err := conn.Exec(ctx, sql, fmt.Sprintf("%d days", retentionDays))
 			if err != nil {
 				runErr = fmt.Errorf("purge %s.%s: %w", app.SchemaName, table.Name, err)
 				break
@@ -65,7 +90,7 @@ func PurgeExpiredSoftDeletes(ctx context.Context, pool *db.Pool, reg *registry.R
 		"completed":      runErr == nil,
 		"error":          errString(runErr),
 	})
-	_ = InsertAuditLog(ctx, pool, "", "system", "system.purge.run", "system_config", "", "retention purge", meta, "")
+	_ = InsertAuditLog(ctx, conn, "", "system", "system.purge.run", "system_config", "", "retention purge", meta, "")
 
 	return total, runErr
 }

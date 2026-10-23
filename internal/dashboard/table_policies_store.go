@@ -104,7 +104,8 @@ func toProvisionerClauses(clauses []PolicyClause) []provisioner.PolicyClause {
 // executes the generated CREATE POLICY, and persists the metadata row —
 // all inside one transaction so a DDL failure never leaves an orphaned
 // metadata row (and vice versa).
-func CreateTablePolicy(ctx context.Context, pool *db.Pool, appID, schemaName, tableName string, tableColumns []config.ColumnConfig, def PolicyDef, createdBy string) (TablePolicyRow, error) {
+func CreateTablePolicy(ctx context.Context, pool *db.Pool, appID, schemaName, tableName string, tableColumns []config.ColumnConfig, def PolicyDef, createdBy string) (_ TablePolicyRow, err error) {
+	defer func() { err = provisioner.WrapLockTimeout(schemaName, err) }()
 	ddl, err := provisioner.BuildPolicySQL(schemaName, tableName, provisioner.PolicyDef{
 		Name:    def.Name,
 		Action:  def.Action,
@@ -129,6 +130,11 @@ func CreateTablePolicy(ctx context.Context, pool *db.Pool, appID, schemaName, ta
 		return TablePolicyRow{}, fmt.Errorf("dashboard: create policy begin tx: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
+	// Policy DDL takes table locks: serialize it with every other DDL for
+	// this app across replicas and bound the wait (multi-replica-consistency).
+	if err := db.LockAppDDL(ctx, tx, schemaName); err != nil {
+		return TablePolicyRow{}, err
+	}
 
 	var existingCount int
 	if err := tx.QueryRow(ctx,
@@ -239,12 +245,18 @@ func ListTablePoliciesForUser(ctx context.Context, pool *db.Pool, user *Dashboar
 // spec requires default-deny to remain explicit (a table with RLS enabled
 // and zero policies denies every row to zeep_app_enduser, which is the
 // intended behavior, not a bug to "fix" by disabling RLS again).
-func DeleteTablePolicy(ctx context.Context, pool *db.Pool, appID, schemaName, policyID string) error {
+func DeleteTablePolicy(ctx context.Context, pool *db.Pool, appID, schemaName, policyID string) (err error) {
+	defer func() { err = provisioner.WrapLockTimeout(schemaName, err) }()
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("dashboard: delete policy begin tx: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
+	// Policy DDL takes table locks: serialize it with every other DDL for
+	// this app across replicas and bound the wait (multi-replica-consistency).
+	if err := db.LockAppDDL(ctx, tx, schemaName); err != nil {
+		return err
+	}
 
 	var tableName, pgPolicyName string
 	err = tx.QueryRow(ctx,
@@ -274,7 +286,8 @@ func DeleteTablePolicy(ctx context.Context, pool *db.Pool, appID, schemaName, po
 // policy and the catalog change, or neither does (spec table-policy-edit
 // AC1/AC5). def is validated via provisioner.BuildPolicySQL before any
 // DROP/CREATE runs (AC2: no partial mutation on an invalid payload).
-func UpdateTablePolicy(ctx context.Context, pool *db.Pool, appID, schemaName, tableName, policyID string, tableColumns []config.ColumnConfig, def PolicyDef, updatedBy string) (TablePolicyRow, error) {
+func UpdateTablePolicy(ctx context.Context, pool *db.Pool, appID, schemaName, tableName, policyID string, tableColumns []config.ColumnConfig, def PolicyDef, updatedBy string) (_ TablePolicyRow, err error) {
+	defer func() { err = provisioner.WrapLockTimeout(schemaName, err) }()
 	ddl, err := provisioner.BuildPolicySQL(schemaName, tableName, provisioner.PolicyDef{
 		Name:    def.Name,
 		Action:  def.Action,
@@ -299,6 +312,11 @@ func UpdateTablePolicy(ctx context.Context, pool *db.Pool, appID, schemaName, ta
 		return TablePolicyRow{}, fmt.Errorf("dashboard: update policy begin tx: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
+	// Policy DDL takes table locks: serialize it with every other DDL for
+	// this app across replicas and bound the wait (multi-replica-consistency).
+	if err := db.LockAppDDL(ctx, tx, schemaName); err != nil {
+		return TablePolicyRow{}, err
+	}
 
 	var currentPgPolicyName string
 	err = tx.QueryRow(ctx,
@@ -357,7 +375,7 @@ func UpdateTablePolicy(ctx context.Context, pool *db.Pool, appID, schemaName, ta
 // ("o DROP TABLE já remove as policies nativas do Postgres; a limpeza é do
 // metadado próprio do Orbit"). Native policies are already gone once DROP
 // TABLE runs; this only removes the now-orphaned Orbit-side metadata rows.
-func deleteTablePoliciesForTable(ctx context.Context, pool *db.Pool, appID, tableName string) error {
+func deleteTablePoliciesForTable(ctx context.Context, pool db.Querier, appID, tableName string) error {
 	if _, err := pool.Exec(ctx,
 		`DELETE FROM zeep_system.table_policies WHERE app_id = $1 AND table_name = $2`,
 		appID, tableName,

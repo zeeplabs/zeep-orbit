@@ -57,7 +57,7 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
       return;
     }
     if (!isSuperAdminAction && !currentPassword) {
-      setError("Current password is required");
+      setError(t("changePassword.currentRequired"));
       return;
     }
 
@@ -108,8 +108,8 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
               </DialogTitle>
               <DialogDescription style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 20px", lineHeight: 1.4 }}>
                 {isSuperAdminAction
-                  ? t("changePassword.title")
-                  : t("changePassword.title")}
+                  ? t("changePassword.descriptionAdmin")
+                  : t("changePassword.description")}
               </DialogDescription>
             </div>
 
@@ -126,18 +126,18 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
                 >
                   <Icon name="check_circle" size={40} style={{ color: "var(--success)" }} />
                   <p style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>
-                    {t("changePassword.title")}
+                    {t("changePassword.success")}
                   </p>
                 </div>
                 <Button onClick={handleClose} className="w-full">
-                  Fechar
+                  {t("common.close")}
                 </Button>
               </div>
             ) : (
               <div style={{ padding: "0 24px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
                 {!isSuperAdminAction && (
                   <div>
-                    <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 6 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 6 }}>
                       {t("changePassword.current")}
                     </label>
                     <div style={{ position: "relative" }}>
@@ -171,7 +171,7 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
                 )}
 
                 <div>
-                  <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 6 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 6 }}>
                     {t("changePassword.new")}
                   </label>
                   <div style={{ position: "relative" }}>
@@ -204,7 +204,7 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
                 </div>
 
                 <div>
-                  <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 6 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 6 }}>
                     {t("changePassword.confirm")}
                   </label>
                   <div style={{ position: "relative" }}>
@@ -250,7 +250,7 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
                     disabled={isPending}
                     className="flex-1 rounded-[10px] border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--hover-surface)] hover:text-[var(--text-primary)] font-medium"
                   >
-                    Cancelar
+                    {t("changePassword.cancel")}
                   </Button>
                   <Button
                     size="sm"
@@ -261,10 +261,10 @@ export default function ChangePasswordModal({ open, onClose, targetUserId, targe
                     {isPending ? (
                       <>
                         <Icon name="progress_activity" size={14} style={{ marginRight: 6 }} className="animate-spin" />
-                        Alterando...
+                        {t("changePassword.submitting")}
                       </>
                     ) : (
-                      "Alterar senha"
+                      t("changePassword.submit")
                     )}
                   </Button>
                 </div>

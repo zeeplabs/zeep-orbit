@@ -65,7 +65,7 @@ func DiffColumnConstraints(oldCols, newCols []config.ColumnConfig) []ColumnConst
 // change in the same request, so a rejection leaves the table untouched.
 func (p *Provisioner) CheckColumnConstraintChanges(ctx context.Context, schemaName, tableName string, changes []ColumnConstraintChange) error {
 	for _, ch := range changes {
-		if err := checkColumnConstraintChange(ctx, p.pool, schemaName, tableName, ch); err != nil {
+		if err := checkColumnConstraintChange(ctx, p.q, schemaName, tableName, ch); err != nil {
 			return err
 		}
 	}
@@ -100,24 +100,13 @@ func checkColumnConstraintChange(ctx context.Context, q db.Querier, schemaName, 
 	return nil
 }
 
-// ApplyColumnConstraintChanges runs the DDL for every change in one
-// transaction — all applied or none (CCC-05). The pre-check runs again
-// inside the transaction so a row written between CheckColumnConstraintChanges
-// and this call still yields a typed error rather than a raw Postgres one.
-//
-// Every statement is idempotent against a database that already matches the
-// requested state (CCC-06): SET/DROP NOT NULL and SET/DROP DEFAULT are no-ops
-// in that case, and UNIQUE is only added when no single-column unique
-// constraint already covers the column.
-//
-// Returns one "schema.table.column (description)" entry per applied change,
-// the same format applyColumnChanges reports.
-func (p *Provisioner) ApplyColumnConstraintChanges(ctx context.Context, schemaName, tableName string, changes []ColumnConstraintChange) ([]string, error) {
+// applyColumnConstraintChanges is the body of ApplyColumnConstraintChanges, run under the per-app DDL lock.
+func (p *Provisioner) applyColumnConstraintChanges(ctx context.Context, schemaName, tableName string, changes []ColumnConstraintChange) ([]string, error) {
 	if len(changes) == 0 {
 		return nil, nil
 	}
 
-	tx, err := p.pool.Begin(ctx)
+	tx, err := p.q.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("table: begin constraint changes on %q.%q: %w", schemaName, tableName, err)
 	}

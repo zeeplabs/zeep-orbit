@@ -30,18 +30,11 @@ import {
   type Column,
 } from "@/components/patterns";
 import { cn } from "@/lib/utils";
+import { formatDate } from "@/lib/format";
 
 interface AppMembersListProps {
   appId: string;
   axis: AppAxis;
-}
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
 }
 
 /**
@@ -358,7 +351,7 @@ export function AppMembersList({ appId, axis }: AppMembersListProps) {
             <div className="flex min-w-0 flex-col">
               <span className="truncate text-[13px] font-medium text-[var(--text-primary)]">{name}</span>
               {email && (
-                <span className="flex items-center gap-1 truncate text-[11px] text-[var(--text-tertiary)]">
+                <span className="flex items-center gap-1 truncate text-[12px] text-[var(--text-tertiary)]">
                   <Icon name="mail" size={11} />
                   {email}
                 </span>
@@ -400,6 +393,7 @@ export function AppMembersList({ appId, axis }: AppMembersListProps) {
 
       <DataTable
         columns={columns}
+        caption={t("appMembers.title")}
         rows={members}
         getRowId={(m) => m.user_id}
         loading={isLoading}

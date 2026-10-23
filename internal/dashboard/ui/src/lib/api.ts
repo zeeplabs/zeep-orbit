@@ -92,8 +92,48 @@ export function useSystemConfig(): UseQueryResult<SystemConfig> {
   })
 }
 
+let redirectingToLogin = false
+
+// An expired or revoked session answers 401 on every API call, but nothing told the
+// user: pages just showed a generic error. Send them to /login and bring them back to
+// the same screen afterwards. A full navigation (not the router) is deliberate: it
+// drops the query cache with the dead session, and it cannot be held back by the
+// unsaved-changes blocker, which would otherwise trap a user whose edits can't be saved.
+export function redirectToLoginOnUnauthorized(): void {
+  const { pathname, search } = window.location
+  if (redirectingToLogin || pathname.startsWith('/dashboard/login')) return
+  redirectingToLogin = true
+  const returnTo = encodeURIComponent(pathname + search)
+  window.location.assign(`/dashboard/login?return_to=${returnTo}`)
+  // With unsaved edits the browser asks before leaving. If the user stays (to copy what
+  // they typed), the page is still here: let the next 401 try again instead of never.
+  setTimeout(() => {
+    redirectingToLogin = false
+  }, 2000)
+}
+
+// Drop-in `fetch` that sends the session on 401 to the login screen. For call sites that
+// need the raw Response (custom error handling); everything else should use apiFetch.
+export async function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const res = await fetch(input, init)
+  if (res.status === 401 && (await isSessionExpired(res))) redirectToLoginOnUnauthorized()
+  return res
+}
+
+// Not every 401 means the session is gone: changing a password with a wrong current
+// password also answers 401 ("current password is incorrect"). Only the auth middleware's
+// body, {"error":"unauthorized"}, is a dead session.
+async function isSessionExpired(res: Response): Promise<boolean> {
+  try {
+    const body = await res.clone().json()
+    return body?.error === 'unauthorized'
+  } catch {
+    return false
+  }
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, { credentials: 'include', ...init })
+  const res = await authFetch(path, { credentials: 'include', ...init })
   if (!res.ok) {
     let message = `HTTP ${res.status}`
     try {
@@ -667,7 +707,7 @@ export async function exportDataBrowserCSV(
       if (val) params.set(col, val)
     }
   }
-  const res = await fetch(`/dashboard/api/data-browser/export?${params}`, {
+  const res = await authFetch(`/dashboard/api/data-browser/export?${params}`, {
     credentials: 'include',
   })
   if (!res.ok) throw new Error('Export failed')

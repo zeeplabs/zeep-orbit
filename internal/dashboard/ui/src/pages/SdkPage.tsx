@@ -169,7 +169,7 @@ export default function SdkPage() {
                   {sdk.name}
                 </div>
                 <div
-                  className="truncate text-[11.5px]"
+                  className="truncate text-[12px]"
                   style={{ color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}
                 >
                   {sdk.pkg}
@@ -182,7 +182,7 @@ export default function SdkPage() {
               style={{ background: 'var(--bg-sunken)' }}
             >
               <span
-                className={cn('flex-1 truncate text-[11.5px]')}
+                className={cn('flex-1 truncate text-[12px]')}
                 style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}
               >
                 {sdk.install}
@@ -192,7 +192,7 @@ export default function SdkPage() {
 
             <div className="relative">
               <pre
-                className="m-0 overflow-x-auto rounded-[10px] border p-3 text-[11px] leading-[1.5]"
+                className="m-0 overflow-x-auto rounded-[10px] border p-3 text-[12px] leading-[1.5]"
                 style={{
                   background: 'var(--bg-page)',
                   borderColor: 'var(--border)',

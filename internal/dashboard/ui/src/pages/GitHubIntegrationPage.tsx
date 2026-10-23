@@ -29,9 +29,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { PageHeader, EmptyState, LoadingState, StatusPill, DataTable, ProviderTabs, AboutPanel } from '@/components/patterns'
+import { PageHeader, EmptyState, LoadingState, StatusPill, DataTable, ProviderTabs, AboutPanel, ConfirmDialog } from '@/components/patterns'
 import type { Column } from '@/components/patterns'
 import { cn } from '@/lib/utils'
+import { authFetch } from '@/lib/api'
 
 interface GitHubStatus {
   connected: boolean
@@ -92,7 +93,7 @@ export default function GitHubIntegrationPage() {
   const { data: me, isLoading: meLoading } = useQuery({
     queryKey: ['me'],
     queryFn: async () => {
-      const res = await fetch('/dashboard/api/me', { credentials: 'include' })
+      const res = await authFetch('/dashboard/api/me', { credentials: 'include' })
       if (!res.ok) return null
       return res.json() as Promise<{ id: string; email: string; name: string; role: string; language: string }>
     },
@@ -209,7 +210,7 @@ function GitHubConfigTab() {
 
   useEffect(() => {
     fetchStatus()
-    fetch('/dashboard/api/github/templates', { credentials: 'include' })
+    authFetch('/dashboard/api/github/templates', { credentials: 'include' })
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => setLinkedTemplates(data))
       .catch(() => {
@@ -220,7 +221,8 @@ function GitHubConfigTab() {
 
   const fetchStatus = async () => {
     try {
-      const res = await fetch('/dashboard/api/github/status', { credentials: 'include' })
+      const res = await authFetch('/dashboard/api/github/status', { credentials: 'include' })
+      if (!res.ok) throw new Error('status failed')
       const data = await res.json()
       setStatus(data)
       if (data.configured) {
@@ -235,7 +237,8 @@ function GitHubConfigTab() {
 
   const fetchConfig = async () => {
     try {
-      const res = await fetch('/dashboard/api/github/config', { credentials: 'include' })
+      const res = await authFetch('/dashboard/api/github/config', { credentials: 'include' })
+      if (!res.ok) throw new Error('config failed')
       const data = await res.json()
       setAppId(data.app_id || '')
       setAppSlug(data.app_slug || '')
@@ -249,7 +252,7 @@ function GitHubConfigTab() {
     setSaving(true)
     setMessage(null)
     try {
-      const res = await fetch('/dashboard/api/github/config', {
+      const res = await authFetch('/dashboard/api/github/config', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -283,12 +286,16 @@ function GitHubConfigTab() {
   const handleInstall = async () => {
     setInstalling(true)
     try {
-      const res = await fetch('/dashboard/api/github/install/start', { credentials: 'include' })
+      const res = await authFetch('/dashboard/api/github/install/start', { credentials: 'include' })
       const data = await res.json()
-      if (data.install_url) {
-        window.location.href = data.install_url
+      if (!res.ok || !data.install_url) {
+        toast.error(data.error || t('github.installError'))
+        setInstalling(false)
+        return
       }
+      window.location.href = data.install_url
     } catch {
+      toast.error(t('common.connectionError'))
       setInstalling(false)
     }
   }
@@ -296,7 +303,7 @@ function GitHubConfigTab() {
   const handleDisconnect = async () => {
     setDisconnecting(true)
     try {
-      const res = await fetch('/dashboard/api/github/config', {
+      const res = await authFetch('/dashboard/api/github/config', {
         method: 'DELETE',
         credentials: 'include',
       })
@@ -333,7 +340,7 @@ function GitHubConfigTab() {
     <div className="flex flex-wrap items-start gap-6">
       <div className="flex min-w-0 flex-1 flex-col gap-6">
       <div className="flex flex-col gap-3">
-        <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
+        <div className="text-[12px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
           {t('integrations.codeHostSectionTitle')}
         </div>
         <ProviderTabs
@@ -422,7 +429,7 @@ function GitHubConfigTab() {
                 type={showSecret ? 'text' : 'password'}
                 value={clientSecret}
                 onChange={(e) => setClientSecret(e.target.value)}
-                placeholder={status?.configured ? '•••••••• (empty = keep current)' : t('github.clientSecret')}
+                placeholder={status?.configured ? t('github.keepCurrentSecret') : t('github.clientSecret')}
                 className="pr-10"
               />
               <button
@@ -445,9 +452,9 @@ function GitHubConfigTab() {
                 id="gh-private-key"
                 value={privateKey}
                 onChange={(e) => setPrivateKey(e.target.value)}
-                placeholder={status?.configured ? '•••••••• (empty = keep current)' : t('github.privateKey')}
+                placeholder={status?.configured ? t('github.keepCurrentSecret') : t('github.privateKey')}
                 rows={4}
-                className="w-full resize-none rounded-[10px] border px-3 py-2 font-mono text-[12px] outline-none"
+                className="w-full resize-none rounded-[10px] border px-3 py-2 font-mono text-[12px] outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 style={{
                   background: 'var(--bg-page)',
                   borderColor: 'var(--border-strong)',
@@ -533,7 +540,7 @@ function GitHubConfigTab() {
           className="flex flex-col gap-1 rounded-[14px] border p-2"
           style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
         >
-          <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
+          <div className="px-3 py-2 text-[12px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
             {t('integrations.linkedTemplatesTitle')}
           </div>
           {linkedTemplates.map((tpl) => (
@@ -567,6 +574,8 @@ function GitHubTemplatesTab() {
   const [error, setError] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<GitHubTemplate | null>(null)
+  const [deactivateTarget, setDeactivateTarget] = useState<GitHubTemplate | null>(null)
+  const [deactivating, setDeactivating] = useState(false)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
@@ -589,7 +598,7 @@ function GitHubTemplatesTab() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/dashboard/api/github/templates', { credentials: 'include' })
+      const res = await authFetch('/dashboard/api/github/templates', { credentials: 'include' })
       if (!res.ok) {
         const data = await res.json()
         throw new Error(data.error || t('common.connectionError'))
@@ -652,7 +661,7 @@ function GitHubTemplatesTab() {
         ? `/dashboard/api/github/templates/${editingTemplate.id}`
         : '/dashboard/api/github/templates'
       const method = editingTemplate ? 'PUT' : 'POST'
-      const res = await fetch(url, {
+      const res = await authFetch(url, {
         method,
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -673,29 +682,46 @@ function GitHubTemplatesTab() {
 
   const handleToggleActive = async (tpl: GitHubTemplate) => {
     try {
-      await fetch(`/dashboard/api/github/templates/${tpl.id}/active`, {
+      const res = await authFetch(`/dashboard/api/github/templates/${tpl.id}/active`, {
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ active: !tpl.active }),
       })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        toast.error(data.error || t('github.toggleError'))
+        return
+      }
       setTemplates((prev) =>
         prev.map((x) => (x.id === tpl.id ? { ...x, active: !x.active } : x)),
       )
     } catch {
-      // non-critical
+      toast.error(t('common.connectionError'))
     }
   }
 
-  const handleDelete = async (tpl: GitHubTemplate) => {
+  const handleDeactivate = async (tpl: GitHubTemplate) => {
+    setDeactivating(true)
     try {
-      await fetch(`/dashboard/api/github/templates/${tpl.id}`, {
+      const res = await authFetch(`/dashboard/api/github/templates/${tpl.id}`, {
         method: 'DELETE',
         credentials: 'include',
       })
-      setTemplates((prev) => prev.filter((x) => x.id !== tpl.id))
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        toast.error(data.error || t('github.deactivateErr'))
+        return
+      }
+      // The API soft-deactivates (active=false) and keeps the row, so mirror that
+      // instead of removing it: a reload would bring it back as inactive.
+      setTemplates((prev) => prev.map((x) => (x.id === tpl.id ? { ...x, active: false } : x)))
+      toast.success(t('github.deactivated'))
     } catch {
-      // non-critical
+      toast.error(t('common.connectionError'))
+    } finally {
+      setDeactivating(false)
+      setDeactivateTarget(null)
     }
   }
 
@@ -708,7 +734,7 @@ function GitHubTemplatesTab() {
           <div className="text-[13px] font-bold">{tpl.name}</div>
           {tpl.description && (
             <div
-              className="mt-0.5 line-clamp-1 text-[11.5px]"
+              className="mt-0.5 line-clamp-1 text-[12px]"
               style={{ color: 'var(--text-tertiary)' }}
             >
               {tpl.description}
@@ -723,7 +749,7 @@ function GitHubTemplatesTab() {
       render: (tpl) =>
         tpl.framework ? (
           <span
-            className="rounded px-2 py-0.5 text-[11.5px]"
+            className="rounded px-2 py-0.5 text-[12px]"
             style={{ background: 'var(--bg-sunken)', color: 'var(--text-secondary)' }}
           >
             {tpl.framework}
@@ -748,7 +774,7 @@ function GitHubTemplatesTab() {
       render: (tpl) => (
         <div className="flex items-center gap-2">
           <Switch checked={tpl.active} onCheckedChange={() => handleToggleActive(tpl)} />
-          <span className="text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
+          <span className="text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
             {tpl.active ? t('github.active') : t('github.inactive')}
           </span>
         </div>
@@ -773,12 +799,13 @@ function GitHubTemplatesTab() {
           <Button
             variant="outline"
             size="icon"
-            onClick={() => handleDelete(tpl)}
-            title={t('github.deleteTemplate')}
+            onClick={() => setDeactivateTarget(tpl)}
+            title={t('github.deactivateTemplate')}
+            aria-label={t('github.deactivateTemplate')}
             className="size-7 rounded-[8px]"
             style={{ color: 'var(--danger)' }}
           >
-            <Icon name="delete" size={12} />
+            <Icon name="block" size={12} />
           </Button>
         </div>
       ),
@@ -804,11 +831,25 @@ function GitHubTemplatesTab() {
 
       <DataTable<GitHubTemplate>
         columns={columns}
+        caption={t("github.templatesCaption")}
         rows={templates}
         getRowId={(tpl) => tpl.id}
         loading={loading}
         error={!!error}
         empty={{ title: t('github.noTemplates'), icon: 'code' }}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deactivateTarget)}
+        title={t('github.deactivateTitle')}
+        message={t('github.deactivateDesc', { name: deactivateTarget?.name })}
+        confirmLabel={deactivating ? t('github.deactivating') : t('github.deactivateConfirm')}
+        cancelLabel={t('github.cancel')}
+        destructive
+        icon="block"
+        loading={deactivating}
+        onConfirm={() => deactivateTarget && handleDeactivate(deactivateTarget)}
+        onCancel={() => setDeactivateTarget(null)}
       />
 
       <Dialog open={showModal} onOpenChange={setShowModal}>
@@ -870,7 +911,7 @@ function GitHubTemplatesTab() {
               style={{ borderColor: 'var(--border)' }}
             >
               <p
-                className="text-[11px] font-semibold uppercase tracking-wider"
+                className="text-[12px] font-semibold uppercase tracking-wider"
                 style={{ color: 'var(--text-tertiary)' }}
               >
                 {t('github.deployConfig')}
@@ -974,7 +1015,7 @@ function DeployTab() {
 
   const fetchStatus = async () => {
     try {
-      const res = await fetch('/dashboard/api/deploy-provider/status', { credentials: 'include' })
+      const res = await authFetch('/dashboard/api/deploy-provider/status', { credentials: 'include' })
       if (res.ok) {
         const data = await res.json()
         setStatus(data)
@@ -989,7 +1030,7 @@ function DeployTab() {
 
   const fetchRecentDeploys = async () => {
     try {
-      const res = await fetch('/dashboard/api/deploy-provider/recent-deploys', { credentials: 'include' })
+      const res = await authFetch('/dashboard/api/deploy-provider/recent-deploys', { credentials: 'include' })
       if (res.ok) {
         const data = await res.json()
         setRecentDeploys(data.deploys || [])
@@ -1003,7 +1044,7 @@ function DeployTab() {
     setSaving(true)
     setMessage(null)
     try {
-      const res = await fetch('/dashboard/api/deploy-provider/config', {
+      const res = await authFetch('/dashboard/api/deploy-provider/config', {
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -1036,7 +1077,7 @@ function DeployTab() {
     <div className="flex flex-wrap items-start gap-6">
       <div className="flex min-w-0 flex-1 flex-col gap-6">
       <div className="flex flex-col gap-3">
-        <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
+        <div className="text-[12px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
           {t('integrations.deployProviderSectionTitle')}
         </div>
         <ProviderTabs
@@ -1097,7 +1138,7 @@ function DeployTab() {
                 if (e.key === 'Enter') handleSave()
               }}
             />
-            <p className="mt-1 text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
+            <p className="mt-1 text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
               {t('deploy.apiKeyHint')}
             </p>
           </div>
@@ -1108,7 +1149,7 @@ function DeployTab() {
               onChange={(e) => setRenderProjectId(e.target.value)}
               placeholder="prj-..."
             />
-            <p className="mt-1 text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
+            <p className="mt-1 text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
               {t('deploy.projectIdHint')}
             </p>
           </div>
@@ -1119,7 +1160,7 @@ function DeployTab() {
               onChange={(e) => setRenderEnvironmentId(e.target.value)}
               placeholder="evm-..."
             />
-            <p className="mt-1 text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
+            <p className="mt-1 text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
               {t('deploy.environmentIdHint')}
             </p>
           </div>
@@ -1128,12 +1169,12 @@ function DeployTab() {
             <Input
               value={baseDomain}
               onChange={(e) => setBaseDomain(e.target.value)}
-              placeholder="meusite.com"
+              placeholder={t('github.domainPlaceholder')}
             />
-            <p className="mt-1 text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
+            <p className="mt-1 text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
               {t('deploy.baseDomainHint')}
             </p>
-            <p className="mt-1 text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
+            <p className="mt-1 text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
               {t('deploy.dnsHint')}
             </p>
           </div>
@@ -1163,7 +1204,7 @@ function DeployTab() {
         className="flex flex-col gap-1 rounded-[14px] border p-2"
         style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
       >
-        <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
+        <div className="px-3 py-2 text-[12px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
           {t('integrations.recentDeploysTitle')}
         </div>
         {recentDeploys.length === 0 ? (
@@ -1239,7 +1280,7 @@ function AIProviderTab() {
   const fetchStatus = async () => {
     setLoading(true)
     try {
-      const res = await fetch('/dashboard/api/ai-providers/openai', { credentials: 'include' })
+      const res = await authFetch('/dashboard/api/ai-providers/openai', { credentials: 'include' })
       if (res.ok) {
         const data = (await res.json()) as AIProviderStatus
         const savedModel = data.model || ''
@@ -1261,7 +1302,7 @@ function AIProviderTab() {
     setSaving(true)
     setMessage(null)
     try {
-      const res = await fetch('/dashboard/api/ai-providers/openai', {
+      const res = await authFetch('/dashboard/api/ai-providers/openai', {
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -1291,7 +1332,7 @@ function AIProviderTab() {
     <div className="flex flex-wrap items-start gap-6">
       <div className="flex min-w-0 flex-1 flex-col gap-6">
         <div className="flex flex-col gap-3">
-          <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
+          <div className="text-[12px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
             {t('aiProvider.sectionTitle')}
           </div>
           <ProviderTabs
@@ -1384,7 +1425,7 @@ function AIProviderTab() {
                   <Icon name={showKey ? 'visibility_off' : 'visibility'} size={16} />
                 </button>
               </div>
-              <p className="mt-1 text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
+              <p className="mt-1 text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
                 {hasKey ? t('aiProvider.apiKeyHintConfigured') : t('aiProvider.apiKeyHint')}
               </p>
             </div>

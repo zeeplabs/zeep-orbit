@@ -1,4 +1,5 @@
 import { useState, useEffect, ReactNode } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useLogs, useLogMetrics, useApps, LogEntry } from "../lib/api";
 import { Icon } from "@/components/ui/icon";
@@ -16,18 +17,11 @@ import {
   type Column,
   type StatusTone,
 } from "@/components/patterns";
+import { formatTime } from "@/lib/format";
 
 const ALL = "__all__";
 
 type LogRow = LogEntry & { _id: string };
-
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("pt-BR", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
 
 function formatBodyInline(body: string): string {
   try {
@@ -88,7 +82,7 @@ function StatCard({ icon, label, value, fg }: StatCardProps) {
 function DetailField({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
-      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
+      <p className="mb-1 text-[12px] font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
         {label}
       </p>
       {children}
@@ -98,7 +92,15 @@ function DetailField({ label, children }: { label: string; children: ReactNode }
 
 export default function LogsPage() {
   const { t } = useTranslation();
-  const [appFilter, setAppFilter] = useState("");
+  // Filtro de app na URL (?app=) — reload, voltar e link preservam a visão.
+  const [params, setParams] = useSearchParams();
+  const appFilter = params.get("app") ?? "";
+  const setAppFilter = (app: string) => {
+    const next = new URLSearchParams(params);
+    if (app) next.set("app", app);
+    else next.delete("app");
+    setParams(next);
+  };
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [countdown, setCountdown] = useState(10);
@@ -163,10 +165,10 @@ export default function LogsPage() {
     {
       key: "time",
       header: t("logs.colTime"),
-      width: 100,
+      width: 120,
       align: "right",
       render: (e) => (
-        <span className="text-[12px] tabular-nums text-[var(--text-tertiary)]">
+        <span className="whitespace-nowrap text-[12px] tabular-nums text-[var(--text-tertiary)]">
           {formatTime(e.timestamp)}
         </span>
       ),
@@ -186,7 +188,7 @@ export default function LogsPage() {
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--success)] opacity-75" />
                   <span className="relative inline-flex size-2 rounded-full bg-[var(--success)]" />
                 </span>
-                <span className="text-[11px] font-medium text-[var(--success)] tabular-nums">
+                <span className="text-[12px] font-medium text-[var(--success)] tabular-nums">
                   {t("logs.autoRefreshing", { s: countdown })}
                 </span>
               </span>
@@ -264,6 +266,7 @@ export default function LogsPage() {
 
       <DataTable
         columns={columns}
+        caption={t("logs.title")}
         rows={rows}
         getRowId={(e) => e._id}
         loading={isLoading}

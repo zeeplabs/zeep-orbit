@@ -183,6 +183,10 @@ func mapWriteError(err error) error {
 	switch {
 	case err == nil:
 		return nil
+	case errors.Is(err, provisioner.ErrDDLLockTimeout) || db.IsLockTimeout(err):
+		// Same message as REST's 409: nothing changed, retry shortly.
+		toolLogger.Warn("mcp tool hit a DDL lock timeout", zap.Error(err))
+		return provisioner.ErrDDLLockTimeout
 	case errors.Is(err, dashboard.ErrNotFound):
 		return errors.New("not found")
 	case errors.Is(err, dashboard.ErrForbidden):

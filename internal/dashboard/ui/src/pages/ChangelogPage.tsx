@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { PageHeader, EmptyState, LoadingState } from '@/components/patterns'
 import { Button } from '@/components/ui/button'
+import { authFetch } from '@/lib/api'
 
 const PAGE_SIZE = 10
 
@@ -86,7 +87,7 @@ function ChangelogEntryView({ entry }: { entry: ChangelogEntry }) {
           {entry.version}
         </div>
         <div
-          className="mt-0.5 text-[11.5px]"
+          className="mt-0.5 text-[12px]"
           style={{ color: 'var(--text-tertiary)' }}
         >
           {dateLabel}
@@ -124,7 +125,7 @@ function ChangelogEntryView({ entry }: { entry: ChangelogEntry }) {
                     className="flex items-start gap-2.5 text-[12.5px]"
                   >
                     <span
-                      className="mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold leading-none text-white opacity-90"
+                      className="mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[12px] font-bold leading-none text-white opacity-90"
                       style={{ background: color }}
                     >
                       {t(`changelog.sectionType.${section.type}`)}
@@ -157,7 +158,7 @@ export default function ChangelogPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['changelog'],
     queryFn: async () => {
-      const res = await fetch('/dashboard/api/changelog', { credentials: 'include' })
+      const res = await authFetch('/dashboard/api/changelog', { credentials: 'include' })
       if (!res.ok) throw new Error('Failed to load')
       return res.json() as Promise<{ entries: ChangelogEntry[] }>
     },

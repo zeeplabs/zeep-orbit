@@ -152,7 +152,7 @@ export function BuildWithAIDrawer({ open, onOpenChange }: BuildWithAIDrawerProps
             type="button"
             onClick={handleRestart}
             disabled={restartSession.isPending}
-            className="self-start text-[11.5px] font-medium underline-offset-2 hover:underline disabled:opacity-50"
+            className="self-start text-[12px] font-medium underline-offset-2 hover:underline disabled:opacity-50"
             style={{ color: 'var(--text-tertiary)' }}
           >
             {t('buildWithAI.restart')}

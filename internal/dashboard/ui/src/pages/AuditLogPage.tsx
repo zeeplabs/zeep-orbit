@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuditLog, AuditEntry } from "../lib/api";
 import { Input } from "@/components/ui/input";
@@ -9,6 +10,7 @@ import {
   type StatusTone,
 } from "@/components/patterns";
 import { cn } from "@/lib/utils";
+import { formatDateTime } from "@/lib/format";
 
 const ACTION_TONE_COLOR: Record<StatusTone, { fg: string; bg: string }> = {
   success: { fg: "var(--success)", bg: "var(--success-tint)" },
@@ -49,17 +51,6 @@ function resourceTypeLabel(type: string): string {
     .join(" ");
 }
 
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleString("en-US", {
-    month: "short",
-    day: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-}
-
 function actionTone(action: string): StatusTone {
   if (action.includes("delete") || action.includes("remove") || action.includes("revoke")) return "danger";
   if (action.includes("create") || action.includes("added")) return "success";
@@ -78,17 +69,47 @@ function useDebounced(value: string, delayMs: number) {
 
 export default function AuditLogPage() {
   const { t } = useTranslation();
-  const [category, setCategory] = useState("");
-  const [emailFilter, setEmailFilter] = useState("");
+  // Categoria, e-mail e página ficam na URL (?category=&email=&page=) — reload, voltar e link preservam a visão.
+  const [params, setParams] = useSearchParams();
+  const category = params.get("category") ?? "";
+  const emailParam = params.get("email") ?? "";
+  const page = Math.max(0, (parseInt(params.get("page") ?? "1", 10) || 1) - 1);
+  // `replace` ao digitar o e-mail para não criar uma entrada de histórico por tecla.
+  const updateParams = (changes: Record<string, string | null>, replace = false) => {
+    const next = new URLSearchParams(params);
+    for (const [k, v] of Object.entries(changes)) {
+      if (v) next.set(k, v);
+      else next.delete(k);
+    }
+    setParams(next, { replace });
+  };
+
+  // O input é controlado por estado local, não pela URL: o Router atualiza a URL de forma
+  // assíncrona (transition), e um input ligado direto a ela perdia/duplicava teclas ao
+  // digitar rápido. A URL é escrita depois do debounce; mudança externa da URL (voltar/avançar)
+  // volta para o input.
+  const [emailFilter, setEmailFilter] = useState(emailParam);
+  const lastWrittenEmail = useRef(emailParam);
   const debouncedEmail = useDebounced(emailFilter, 300);
-  const [page, setPage] = useState(0);
+  useEffect(() => {
+    if (emailParam !== lastWrittenEmail.current) {
+      lastWrittenEmail.current = emailParam;
+      setEmailFilter(emailParam);
+    }
+  }, [emailParam]);
+  useEffect(() => {
+    if (debouncedEmail !== lastWrittenEmail.current) {
+      lastWrittenEmail.current = debouncedEmail;
+      updateParams({ email: debouncedEmail || null, page: null }, true);
+    }
+  }, [debouncedEmail]);
   const limit = 50;
   const { data, isLoading, error } = useAuditLog(
     limit,
     page * limit,
     undefined,
     category || undefined,
-    debouncedEmail || undefined,
+    emailParam || undefined,
   );
 
   const totalPages = data ? Math.ceil(data.total / limit) : 0;
@@ -100,8 +121,8 @@ export default function AuditLogPage() {
       header: t("audit.date"),
       width: 160,
       render: (e) => (
-        <span className="text-[12.5px] tabular-nums text-[var(--text-tertiary)]">
-          {formatTime(e.created_at)}
+        <span className="whitespace-nowrap text-[12.5px] tabular-nums text-[var(--text-tertiary)]">
+          {formatDateTime(e.created_at)}
         </span>
       ),
     },
@@ -121,7 +142,7 @@ export default function AuditLogPage() {
         }
         return (
           <span
-            className="inline-block rounded-[6px] border px-2 py-1 font-mono text-[11.5px] font-bold"
+            className="inline-block rounded-[6px] border px-2 py-1 font-mono text-[12px] font-bold"
             style={{ color: fg, background: bg, borderColor: fg }}
           >
             {e.action}
@@ -166,7 +187,7 @@ export default function AuditLogPage() {
           {CATEGORIES.map((c) => (
             <button
               key={c.value}
-              onClick={() => { setCategory(c.value); setPage(0); }}
+              onClick={() => updateParams({ category: c.value, page: null })}
               className={cn(
                 "cursor-pointer rounded-[8px] px-3.5 py-1.5 text-[13px] font-semibold transition-colors",
                 category === c.value
@@ -180,7 +201,7 @@ export default function AuditLogPage() {
         </div>
         <Input
           value={emailFilter}
-          onChange={(e) => { setEmailFilter(e.target.value); setPage(0); }}
+          onChange={(e) => setEmailFilter(e.target.value)}
           placeholder={t("audit.filterUserPlaceholder")}
           className="h-9 w-[240px] text-[12.5px]"
         />
@@ -188,6 +209,7 @@ export default function AuditLogPage() {
 
       <DataTable
         columns={columns}
+        caption={t("audit.title")}
         rows={rows}
         getRowId={(e) => e.id}
         loading={isLoading}
@@ -206,7 +228,7 @@ export default function AuditLogPage() {
             ? {
                 page: page + 1,
                 pageCount: totalPages,
-                onPageChange: (p) => setPage(p - 1),
+                onPageChange: (p) => updateParams({ page: p > 1 ? String(p) : null }),
                 prevLabel: t("common.previous"),
                 nextLabel: t("common.next"),
                 label: data ? t("audit.total", { count: data.total }) : undefined,

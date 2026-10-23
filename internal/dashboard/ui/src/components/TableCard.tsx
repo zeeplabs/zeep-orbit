@@ -353,12 +353,12 @@ export default function TableCard({
         </Select>
       </div>
       {!authEmailEnabled && (
-        <p className="px-4 text-[11px] text-[var(--text-secondary)]">
+        <p className="px-4 text-[12px] text-[var(--text-secondary)]">
           {t("tableCard.restrictedHint")}
         </p>
       )}
       {isDraft && draftRlsHint && (
-        <p className="px-4 text-[11px] text-[var(--text-secondary)]">
+        <p className="px-4 text-[12px] text-[var(--text-secondary)]">
           {draftRlsHint}
         </p>
       )}
@@ -533,24 +533,24 @@ function SchemaEditor({
     <>
       <div className="px-4 pb-4">
         <div className="flex items-center justify-between gap-2 mb-2">
-          <p className="text-[11px] text-[var(--text-secondary)]">
+          <p className="text-[12px] text-[var(--text-secondary)]">
             {t("tableCard.autoColumnsNote")}
           </p>
           <button
             type="button"
             onClick={() => setShowRelationshipsInfo(true)}
-            className="flex items-center gap-1 text-[11px] text-[var(--text-secondary)] hover:text-[var(--primary)] bg-transparent border-none cursor-pointer shrink-0 transition-colors"
+            className="flex items-center gap-1 text-[12px] text-[var(--text-secondary)] hover:text-[var(--primary)] bg-transparent border-none cursor-pointer shrink-0 transition-colors"
           >
             <Icon name="error" size={12} />
             {t("tableCard.relationshipsInfoBtn")}
           </button>
         </div>
-        <div className="grid gap-3 mb-1" style={{ gridTemplateColumns: "1fr 140px 80px 80px 140px 32px 40px" }}>
-          <span className="text-[11px] text-[var(--text-secondary)] font-semibold">{t("appForm.columnName")}</span>
-          <span className="text-[11px] text-[var(--text-secondary)] font-semibold">{t("appForm.columnType")}</span>
-          <span className="text-[11px] text-[var(--text-secondary)] font-semibold text-center">{t("appForm.columnReq")}</span>
-          <span className="text-[11px] text-[var(--text-secondary)] font-semibold text-center">{t("appForm.columnUnique")}</span>
-          <span className="text-[11px] text-[var(--text-secondary)] font-semibold">{t("tableCard.defaultValue")}</span>
+        <div className="grid gap-3 mb-1 max-md:hidden" style={{ gridTemplateColumns: "1fr 140px 80px 80px 140px 32px 40px" }}>
+          <span className="text-[12px] text-[var(--text-secondary)] font-semibold">{t("appForm.columnName")}</span>
+          <span className="text-[12px] text-[var(--text-secondary)] font-semibold">{t("appForm.columnType")}</span>
+          <span className="text-[12px] text-[var(--text-secondary)] font-semibold text-center">{t("appForm.columnReq")}</span>
+          <span className="text-[12px] text-[var(--text-secondary)] font-semibold text-center">{t("appForm.columnUnique")}</span>
+          <span className="text-[12px] text-[var(--text-secondary)] font-semibold">{t("tableCard.defaultValue")}</span>
           <span />
           <span />
         </div>
@@ -566,15 +566,17 @@ function SchemaEditor({
                 <Icon name="lock" size={10} className="shrink-0" />
                 {auto.name}
               </div>
-              <div className="contents max-md:flex max-md:items-center max-md:gap-2">
+              <div className="contents max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-2">
                 <div className="h-8 w-[130px] max-md:flex-1 flex items-center px-2 text-[12px] bg-[var(--sunken)] border border-[var(--border)] rounded-md text-[var(--text-secondary)]">
                   {auto.type}
                 </div>
-                <div className="flex justify-center">
-                  <Switch checked={auto.required} disabled className="h-5 w-9 opacity-40" />
+                <div className="flex items-center justify-center gap-1.5">
+                  <Switch checked={auto.required} disabled aria-label={t("appForm.columnReq")} className="h-5 w-9 opacity-40" />
+                  <span className="text-[12px] text-[var(--text-secondary)] md:hidden">{t("appForm.columnReq")}</span>
                 </div>
-                <div className="flex justify-center">
-                  <Switch checked={auto.unique} disabled className="h-5 w-9 opacity-40" />
+                <div className="flex items-center justify-center gap-1.5">
+                  <Switch checked={auto.unique} disabled aria-label={t("appForm.columnUnique")} className="h-5 w-9 opacity-40" />
+                  <span className="text-[12px] text-[var(--text-secondary)] md:hidden">{t("appForm.columnUnique")}</span>
                 </div>
                 <span />
                 <span />
@@ -610,7 +612,7 @@ function SchemaEditor({
                   placeholder={t("tableCard.columnNamePlaceholder")}
                   className="h-8 px-2.5 py-1.5 text-[13px] bg-[var(--sunken)] border-[var(--border)] rounded-md text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] brand-focus"
                 />
-                <div className="contents max-md:flex max-md:items-center max-md:gap-2">
+                <div className="contents max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-2">
                   <Select
                     value={col.type}
                     onValueChange={(val) =>
@@ -642,19 +644,23 @@ function SchemaEditor({
                       ))}
                     </SelectContent>
                   </Select>
-                  <div className="flex justify-center">
+                  <div className="flex items-center justify-center gap-1.5">
                     <Switch
                       checked={col.required}
                       onCheckedChange={(val) => updateColumn(ci, { required: val })}
+                      aria-label={t("appForm.columnReq")}
                       className="h-5 w-9"
                     />
+                    <span className="text-[12px] text-[var(--text-secondary)] md:hidden">{t("appForm.columnReq")}</span>
                   </div>
-                  <div className="flex justify-center">
+                  <div className="flex items-center justify-center gap-1.5">
                     <Switch
                       checked={col.unique}
                       onCheckedChange={(val) => updateColumn(ci, { unique: val })}
+                      aria-label={t("appForm.columnUnique")}
                       className="h-5 w-9"
                     />
+                    <span className="text-[12px] text-[var(--text-secondary)] md:hidden">{t("appForm.columnUnique")}</span>
                   </div>
                   <div className="flex items-center max-md:w-full">
                     {col.type === "boolean" ? (
@@ -756,7 +762,7 @@ function SchemaEditor({
 
               {col.references && (
                 <div className="flex flex-wrap items-center gap-2 mt-2 pl-1">
-                  <span className="text-[11px] text-[var(--text-secondary)]">{t("tableCard.references")}</span>
+                  <span className="text-[12px] text-[var(--text-secondary)]">{t("tableCard.references")}</span>
                   <Select
                     value={col.references.table}
                     onValueChange={(val) =>
@@ -779,7 +785,7 @@ function SchemaEditor({
                       ))}
                     </SelectContent>
                   </Select>
-                  <span className="text-[11px] text-[var(--text-secondary)]">{t("tableCard.column")}</span>
+                  <span className="text-[12px] text-[var(--text-secondary)]">{t("tableCard.column")}</span>
                   <Select
                     value={col.references.column}
                     onValueChange={(val) => updateColumn(ci, { references: { ...col.references!, column: val } })}
@@ -795,7 +801,7 @@ function SchemaEditor({
                       ))}
                     </SelectContent>
                   </Select>
-                  <span className="text-[11px] text-[var(--text-secondary)]">{t("tableCard.onDelete")}</span>
+                  <span className="text-[12px] text-[var(--text-secondary)]">{t("tableCard.onDelete")}</span>
                   <Select
                     value={col.references.on_delete ?? "no_action"}
                     onValueChange={(val) =>
@@ -855,11 +861,11 @@ function SchemaEditor({
 
         <div className="mt-4 pt-4 border-t border-[var(--border)]">
           <div className="flex items-center justify-between gap-2 mb-2">
-            <p className="text-[11px] text-[var(--text-secondary)] font-semibold">{t("tableCard.indexesTitle")}</p>
+            <p className="text-[12px] text-[var(--text-secondary)] font-semibold">{t("tableCard.indexesTitle")}</p>
             <button
               type="button"
               onClick={() => setShowIndexInfo(true)}
-              className="flex items-center gap-1 text-[11px] text-[var(--text-secondary)] hover:text-[var(--primary)] bg-transparent border-none cursor-pointer shrink-0 transition-colors"
+              className="flex items-center gap-1 text-[12px] text-[var(--text-secondary)] hover:text-[var(--primary)] bg-transparent border-none cursor-pointer shrink-0 transition-colors"
             >
             <Icon name="error" size={12} />
               {t("tableCard.indexInfoBtn")}
@@ -885,7 +891,7 @@ function SchemaEditor({
                       type="button"
                       onClick={() => toggleIndexColumn(ii, c.name)}
                       className={cn(
-                        "text-[11px] px-2 py-0.5 rounded-full border transition-colors",
+                        "text-[12px] px-2 py-0.5 rounded-full border transition-colors",
                         idx.columns.includes(c.name)
                           ? "border-[var(--primary)]/40 bg-[var(--primary)]/10 text-[var(--primary)]"
                           : "border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--hover-surface)]",
@@ -897,7 +903,7 @@ function SchemaEditor({
                 </div>
                 <div className="flex items-center gap-2 shrink-0 ml-auto">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] text-[var(--text-secondary)]">{t("tableCard.uniqueLabel")}</span>
+                    <span className="text-[12px] text-[var(--text-secondary)]">{t("tableCard.uniqueLabel")}</span>
                     <Switch
                       checked={!!idx.unique}
                       onCheckedChange={(val) => updateIndex(ii, { unique: val })}
@@ -1025,12 +1031,12 @@ function EnumAllowedValuesEditor({
 
   return (
     <div className="flex flex-wrap items-center gap-2 mt-2 pl-1">
-      <span className="text-[11px] text-[var(--text-secondary)]">{t("tableCard.allowedValuesLabel")}</span>
+      <span className="text-[12px] text-[var(--text-secondary)]">{t("tableCard.allowedValuesLabel")}</span>
       <div className="flex flex-wrap gap-1">
         {values.map((v) => (
           <span
             key={v}
-            className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--text-secondary)]"
+            className="flex items-center gap-1 text-[12px] px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--text-secondary)]"
           >
             {v}
             {!readOnly && (
@@ -1046,7 +1052,7 @@ function EnumAllowedValuesEditor({
           </span>
         ))}
         {values.length === 0 && (
-          <span className="text-[11px] text-[var(--text-tertiary)]">{t("tableCard.allowedValuesEmpty")}</span>
+          <span className="text-[12px] text-[var(--text-tertiary)]">{t("tableCard.allowedValuesEmpty")}</span>
         )}
       </div>
       {readOnly ? null : (
@@ -1076,7 +1082,7 @@ function EnumAllowedValuesEditor({
           <Icon name="add" size={10} />
         </button>
       )}
-      {err && <span className="w-full text-[11px] text-[var(--danger)]">{err}</span>}
+      {err && <span className="w-full text-[12px] text-[var(--danger)]">{err}</span>}
     </div>
   );
 }
@@ -1136,7 +1142,7 @@ function EditEnumValuesAction({
       <button
         type="button"
         onClick={openDrawer}
-        className="flex items-center gap-1 text-[11px] font-semibold bg-transparent border border-[var(--border)] rounded-full px-2 py-0.5 cursor-pointer hover:bg-[var(--hover-surface)] transition-colors"
+        className="flex items-center gap-1 text-[12px] font-semibold bg-transparent border border-[var(--border)] rounded-full px-2 py-0.5 cursor-pointer hover:bg-[var(--hover-surface)] transition-colors"
         style={{ color: "var(--primary)" }}
       >
         <Icon name="edit" size={10} />

@@ -7,10 +7,9 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 )
 
-// newTestApp builds an *App the way LoadFromDB would for production data —
-// the same shape Load() used to build before it was removed as dead code
-// (D-243/item 6: no production caller, registry is populated from the
-// database, not from a config.Config file — see LoadFromDB).
+// newTestApp builds an *App with the shape production data has. The
+// registry is populated from the database by registry.Syncer, using
+// dashboard.LoadRegistrySnapshot; there is no config-file loader.
 func newTestApp(name string) *App {
 	return &App{
 		Config: config.AppConfig{
@@ -149,4 +148,142 @@ func TestUnregister(t *testing.T) {
 	if len(apps) != 1 {
 		t.Errorf("Apps() após Unregister: esperado 1, obteve %d", len(apps))
 	}
+}
+
+func TestReplace(t *testing.T) {
+	r := New()
+	r.Register(newTestApp("old"))
+
+	r.Replace(map[string]*App{"new": newTestApp("new")}, SystemConfig{SoftDeleteEnabled: true, StatementTimeoutMs: 1234})
+
+	if _, ok := r.Get("old"); ok {
+		t.Error("após Replace: \"old\" não deveria mais existir")
+	}
+	if _, ok := r.Get("new"); !ok {
+		t.Error("após Replace: \"new\" deveria existir")
+	}
+	if got := r.SystemConfig(); !got.SoftDeleteEnabled || got.StatementTimeoutMs != 1234 {
+		t.Errorf("após Replace: SystemConfig = %+v", got)
+	}
+
+	r.Replace(nil, SystemConfig{})
+	if len(r.Apps()) != 0 {
+		t.Error("Replace(nil) deveria deixar o registry vazio")
+	}
+	r.Register(newTestApp("after-nil"))
+	if _, ok := r.Get("after-nil"); !ok {
+		t.Error("Register após Replace(nil) deveria funcionar")
+	}
+}
+
+// TestReplaceConcurrentReaders checks under -race that readers never see a
+// mix of two generations: every Apps() call returns apps from one Replace.
+func TestReplaceConcurrentReaders(t *testing.T) {
+	r := New()
+	gen := func(tag string) map[string]*App {
+		m := map[string]*App{}
+		for _, n := range []string{"a", "b", "c"} {
+			app := newTestApp(n)
+			app.SchemaName = tag
+			m[n] = app
+		}
+		return m
+	}
+	r.Replace(gen("x"), SystemConfig{})
+
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				apps := r.Apps()
+				if len(apps) != 3 {
+					t.Errorf("Apps() retornou %d apps, esperado 3", len(apps))
+					return
+				}
+				for _, a := range apps[1:] {
+					if a.SchemaName != apps[0].SchemaName {
+						t.Errorf("Apps() misturou gerações: %q e %q", apps[0].SchemaName, a.SchemaName)
+						return
+					}
+				}
+				_, _ = r.Get("a")
+				_ = r.SystemConfig()
+			}
+		}()
+	}
+	for i := 0; i < 500; i++ {
+		if i%2 == 0 {
+			r.Replace(gen("y"), SystemConfig{SoftDeleteEnabled: true})
+		} else {
+			r.Replace(gen("x"), SystemConfig{})
+		}
+	}
+	close(stop)
+	wg.Wait()
+}
+
+func TestMissHook(t *testing.T) {
+	t.Run("hit never calls the hook", func(t *testing.T) {
+		r := New()
+		r.Register(newTestApp("hit"))
+		calls := 0
+		r.SetMissHook(func() { calls++ })
+		r.Get("hit")
+		r.GetTable("hit", "users")
+		if calls != 0 {
+			t.Errorf("hook chamado %d vezes em hit, esperado 0", calls)
+		}
+	})
+
+	t.Run("miss calls the hook once per lookup", func(t *testing.T) {
+		r := New()
+		r.Register(newTestApp("present"))
+		calls := 0
+		r.SetMissHook(func() { calls++ })
+		if _, ok := r.Get("ghost"); ok {
+			t.Error("Get(\"ghost\") deveria falhar")
+		}
+		if calls != 1 {
+			t.Errorf("Get: hook chamado %d vezes, esperado 1", calls)
+		}
+		if _, ok := r.GetTable("present", "ghost_table"); ok {
+			t.Error("GetTable de tabela inexistente deveria falhar")
+		}
+		if calls != 2 {
+			t.Errorf("GetTable: hook chamado %d vezes no total, esperado 2", calls)
+		}
+	})
+
+	t.Run("hook can Replace and the retry finds the app", func(t *testing.T) {
+		r := New()
+		r.SetMissHook(func() {
+			r.Replace(map[string]*App{"late": newTestApp("late")}, SystemConfig{})
+		})
+		if _, ok := r.Get("late"); !ok {
+			t.Error("Get deveria achar o app carregado pelo hook")
+		}
+		if _, ok := r.GetTable("late", "posts"); !ok {
+			t.Error("GetTable deveria achar a tabela carregada pelo hook")
+		}
+	})
+
+	t.Run("no hook keeps the old miss behavior", func(t *testing.T) {
+		r := New()
+		if _, ok := r.Get("ghost"); ok {
+			t.Error("Get sem hook deveria falhar")
+		}
+		r.SetMissHook(func() { t.Error("hook removido não deveria ser chamado") })
+		r.SetMissHook(nil)
+		if _, ok := r.GetTable("ghost", "users"); ok {
+			t.Error("GetTable sem hook deveria falhar")
+		}
+	})
 }

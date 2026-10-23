@@ -68,6 +68,71 @@ func TestIsStatementTimeout(t *testing.T) {
 	}
 }
 
+func TestMaxConnsFromEnv(t *testing.T) {
+	cases := []struct {
+		name    string
+		value   string
+		set     bool
+		want    int32
+		wantErr bool
+	}{
+		{name: "unset", set: false, want: db.DefaultMaxConns},
+		{name: "blank", value: "  ", set: true, want: db.DefaultMaxConns},
+		{name: "valid", value: "20", set: true, want: 20},
+		{name: "whitespace trimmed", value: " 5 ", set: true, want: 5},
+		{name: "zero", value: "0", set: true, wantErr: true},
+		{name: "negative", value: "-1", set: true, wantErr: true},
+		{name: "non-numeric", value: "abc", set: true, wantErr: true},
+		{name: "overflow", value: "99999999999", set: true, wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.set {
+				t.Setenv("DB_MAX_CONNS", tc.value)
+			} else {
+				t.Setenv("DB_MAX_CONNS", "")
+				os.Unsetenv("DB_MAX_CONNS")
+			}
+			got, err := db.MaxConnsFromEnv()
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("MaxConnsFromEnv(%q) = %d, want an error", tc.value, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("MaxConnsFromEnv(%q) returned error: %v", tc.value, err)
+			}
+			if got != tc.want {
+				t.Fatalf("MaxConnsFromEnv(%q) = %d, want %d", tc.value, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestNewWithMaxConns(t *testing.T) {
+	if _, err := db.NewWithMaxConns(context.Background(), "postgres://u:p@localhost:1/x", 0); err == nil {
+		t.Fatal("NewWithMaxConns with 0 should return an error")
+	}
+
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("TEST_DATABASE_URL not set — skipping DB integration test")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	pool, err := db.NewWithMaxConns(ctx, dsn, 1)
+	if err != nil {
+		t.Fatalf("NewWithMaxConns(1): %v", err)
+	}
+	defer pool.Close()
+	cfg := pool.Config()
+	if cfg.MaxConns != 1 || cfg.MinConns != 1 {
+		t.Fatalf("got MaxConns=%d MinConns=%d, want 1/1 (MinConns capped at MaxConns)", cfg.MaxConns, cfg.MinConns)
+	}
+}
+
 // rlsTestPool connects to the test DB and bootstraps db.EnduserRole with
 // membership granted to the connecting/principal role — the precondition
 // WithRLSContext's SET LOCAL ROLE relies on. Mirrors the bootstrap that

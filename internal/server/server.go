@@ -52,6 +52,13 @@ type Server struct {
 	httpServer *http.Server
 	reg        *registry.Registry
 	logger     *zap.Logger
+	handler    *Handler
+}
+
+// SetReadyPool routes the /ready probe through its own pool (see
+// Handler.SetReadyPool).
+func (s *Server) SetReadyPool(p *db.Pool) {
+	s.handler.SetReadyPool(p)
 }
 
 // New creates a Server with a configured router ready for Start.
@@ -78,8 +85,9 @@ func New(reg *registry.Registry, pool *db.Pool, port int) (*Server, error) {
 			WriteTimeout: 15 * time.Second,
 			IdleTimeout:  60 * time.Second,
 		},
-		reg:    reg,
-		logger: logger,
+		reg:     reg,
+		logger:  logger,
+		handler: h,
 	}
 
 	return s, nil
@@ -149,6 +157,7 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		http.Redirect(w, r, "/dashboard", http.StatusFound)
 	})
 	r.Get("/health", h.HandleHealth)
+	r.Get("/ready", h.HandleReady)
 	r.Handle("/metrics", promhttp.Handler())
 
 	// Public, unauthenticated inbound webhook route: no dashboard session,

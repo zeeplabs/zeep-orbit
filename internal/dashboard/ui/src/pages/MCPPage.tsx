@@ -9,8 +9,7 @@ import {
   useDeleteOAuthClient,
   useOAuthClients,
   usePATs,
-  useRevokePAT,
-} from "../lib/api";
+  useRevokePAT, authFetch } from "../lib/api";
 import { PageHeader } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +18,7 @@ import { Icon } from "@/components/ui/icon";
 import { EmptyState, LoadingState } from "@/components/patterns/states";
 import { ConfirmDialog } from "@/components/patterns/ConfirmDialog";
 import { highlight, type SdkLang } from "@/lib/prism";
+import { formatDate } from "@/lib/format";
 
 function endpointUrl(): string {
   const base = typeof window !== "undefined" ? window.location.origin : "";
@@ -181,14 +181,14 @@ function ClientTutorials({ t }: { t: (key: string) => string }) {
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
                   <p className="truncate text-[13.5px] font-bold text-[var(--text-primary)]">{client.name}</p>
-                  <p className="truncate font-mono text-[11px] text-[var(--text-tertiary)]">{client.file}</p>
+                  <p className="truncate font-mono text-[12px] text-[var(--text-tertiary)]">{client.file}</p>
                 </div>
               </div>
               <div className="relative">
                 <pre
                   data-testid={`mcp-client-snippet-${client.name}`}
                   data-snippet={snippet}
-                  className="m-0 overflow-x-auto rounded-[10px] border p-3 text-[11px] leading-[1.5]"
+                  className="m-0 overflow-x-auto rounded-[10px] border p-3 text-[12px] leading-[1.5]"
                   style={{
                     background: "var(--bg-sunken)",
                     borderColor: "var(--border)",
@@ -252,7 +252,7 @@ function PersonalAccessTokensSection() {
 
       {createdToken ? (
         <div className="flex flex-col gap-3">
-          <p className="text-[12px] font-semibold text-[var(--warning)]">{t("pats.createdWarning")}</p>
+          <p className="text-[12px] font-semibold text-[var(--warning-text)]">{t("pats.createdWarning")}</p>
           <div className="flex items-center gap-2 rounded-[10px] border border-[var(--border)] bg-[var(--sunken)] px-4 py-3">
             <code
               data-testid="revealed-pat-token"
@@ -313,9 +313,9 @@ function PersonalAccessTokensSection() {
                   >
                     <div className="flex min-w-0 flex-col gap-0.5">
                       <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{pat.name}</p>
-                      <p className="text-[11px] text-[var(--text-tertiary)]">
+                      <p className="text-[12px] text-[var(--text-tertiary)]">
                         {pat.last_used_at
-                          ? t("pats.lastUsed", { date: new Date(pat.last_used_at).toLocaleDateString() })
+                          ? t("pats.lastUsed", { date: formatDate(pat.last_used_at) })
                           : t("pats.neverUsed")}
                       </p>
                     </div>
@@ -366,7 +366,7 @@ function RegisteredOAuthClientsSection() {
   const { data: me, isLoading: meLoading } = useQuery({
     queryKey: ["me"],
     queryFn: async () => {
-      const res = await fetch("/dashboard/api/me", { credentials: "include" });
+      const res = await authFetch("/dashboard/api/me", { credentials: "include" });
       if (!res.ok) return null;
       return res.json() as Promise<{ role: string }>;
     },
@@ -404,7 +404,7 @@ function RegisteredOAuthClientsSection() {
             >
               <div className="flex min-w-0 flex-col gap-0.5">
                 <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{client.name}</p>
-                <p className="truncate text-[11px] text-[var(--text-tertiary)]">
+                <p className="truncate text-[12px] text-[var(--text-tertiary)]">
                   {client.redirect_uris.join(", ")}
                 </p>
               </div>

@@ -110,7 +110,7 @@ export function SidebarFooter({
           <p className="truncate text-[13px] font-bold text-[var(--text-primary)]">
             {user.name ? firstLastName(user.name) : user.email}
           </p>
-          <p className="text-[11px] capitalize text-[var(--text-tertiary)]">{user.role}</p>
+          <p className="text-[12px] capitalize text-[var(--text-tertiary)]">{user.role}</p>
         </div>
       </div>
       {/* flex-wrap: the 72px tablet rail (~44px content box) can't fit 5
@@ -135,7 +135,7 @@ export function SidebarFooter({
       </div>
       {version && (
         <p
-          className="hidden pb-1 text-center text-[10.5px] max-md:block lg:block"
+          className="hidden pb-1 text-center text-[12px] max-md:block lg:block"
           style={{ color: 'var(--text-tertiary)' }}
         >
           {t('app.productName', { defaultValue: 'Zeep Orbit' })} · v{version}

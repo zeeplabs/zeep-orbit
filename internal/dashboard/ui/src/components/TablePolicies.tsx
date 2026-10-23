@@ -213,7 +213,7 @@ export default function TablePoliciesTab({ appId, tableName, columns, rls }: Tab
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] text-[var(--text-secondary)]">{t("tablePolicies.explainer")}</p>
+        <p className="text-[12px] text-[var(--text-secondary)]">{t("tablePolicies.explainer")}</p>
         <div className="flex shrink-0 items-center gap-3">
           <button
             type="button"
@@ -224,7 +224,7 @@ export default function TablePoliciesTab({ appId, tableName, columns, rls }: Tab
             {t("tablePolicies.helpButton")}
           </button>
           <div className="flex items-center gap-1.5">
-            <span className="text-[11px] font-medium text-[var(--text-secondary)]">
+            <span className="text-[12px] font-medium text-[var(--text-secondary)]">
               {t("tablePolicies.advancedModeLabel")}
             </span>
             <Switch
@@ -450,19 +450,21 @@ export default function TablePoliciesTab({ appId, tableName, columns, rls }: Tab
             key={policy.id}
             className="flex flex-col gap-2 rounded-[10px] border border-[var(--border)] bg-[var(--sunken)] px-3 py-2.5"
           >
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Icon name="shield" size={13} className="shrink-0 text-[var(--text-tertiary)]" />
-              <span className="text-[13px] font-semibold text-[var(--text-primary)]">
+              {/* Nomes de policy são identificadores sem espaço: sem `break-all` um nome longo
+                  estoura o card no mobile e empurra editar/excluir pra fora da tela. */}
+              <span className="min-w-0 break-all text-[13px] font-semibold text-[var(--text-primary)]">
                 {policy.pg_policy_name}
               </span>
-              <span className="rounded-full border border-[var(--border)] px-2 py-0.5 text-[11px] uppercase text-[var(--text-secondary)]">
+              <span className="rounded-full border border-[var(--border)] px-2 py-0.5 text-[12px] uppercase text-[var(--text-secondary)]">
                 {policy.action}
               </span>
-              <span className="ml-auto flex gap-1">
+              <span className="ml-auto flex flex-wrap gap-1">
                 {policy.roles.map((r) => (
                   <span
                     key={r}
-                    className="rounded-full bg-[var(--primary)]/10 px-2 py-0.5 text-[11px] text-[var(--primary)]"
+                    className="rounded-full bg-[var(--primary)]/10 px-2 py-0.5 text-[12px] text-[var(--primary)]"
                   >
                     {r}
                   </span>
@@ -472,7 +474,7 @@ export default function TablePoliciesTab({ appId, tableName, columns, rls }: Tab
                 type="button"
                 title={t("tablePolicies.edit")}
                 onClick={() => openEditForm(policy)}
-                className="w-7 h-7 flex items-center justify-center rounded-md border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] cursor-pointer hover:bg-[var(--hover-surface)] transition-colors"
+                className="w-7 h-7 shrink-0 flex items-center justify-center rounded-md border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] cursor-pointer hover:bg-[var(--hover-surface)] transition-colors"
               >
                 <Icon name="edit" size={12} />
               </button>
@@ -481,12 +483,12 @@ export default function TablePoliciesTab({ appId, tableName, columns, rls }: Tab
                 title={t("tablePolicies.delete")}
                 onClick={() => remove(policy)}
                 disabled={deletePolicy.isPending}
-                className="w-7 h-7 flex items-center justify-center rounded-md border border-[var(--danger)]/20 bg-[var(--danger-tint)] text-[var(--danger)] cursor-pointer hover:bg-[var(--danger-tint)] transition-colors disabled:opacity-50"
+                className="w-7 h-7 flex items-center justify-center rounded-md border border-[var(--danger)]/20 bg-[var(--danger-tint)] text-[var(--danger)] cursor-pointer hover:bg-[var(--danger-tint)] transition-colors disabled:opacity-50 shrink-0"
               >
                 <Icon name="delete" size={12} />
               </button>
             </div>
-            <div className="flex flex-col gap-0.5 pl-[19px] font-mono text-[11px] text-[var(--text-secondary)]">
+            <div className="flex flex-col gap-0.5 pl-[19px] font-mono text-[12px] text-[var(--text-secondary)]">
               {policy.clauses.map((clause, i) => (
                 <span key={i}>{clauseSummary(clause)}</span>
               ))}

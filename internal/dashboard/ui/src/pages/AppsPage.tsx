@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation, Trans } from "react-i18next";
 import { toast } from "sonner";
-import { useApps, useDeleteApp, useAIProviderStatus, AppDef } from "../lib/api";
+import { useApps, useDeleteApp, useAIProviderStatus, AppDef, authFetch } from "../lib/api";
 import { BuildWithAIDrawer } from "@/components/patterns/BuildWithAIDrawer";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -74,7 +74,7 @@ function Chip({
   const bg = tone === "primary" ? "var(--primary-tint)" : "var(--sunken)";
   return (
     <span
-      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-semibold"
+      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold"
       style={{ color: fg, background: bg }}
     >
       {icon && <Icon name={icon} size={14} />}
@@ -150,7 +150,7 @@ function AppCard({ app, currentUserId, onEdit, onDelete, onUsers }: AppCardProps
           label={`${app.tables?.length ?? 0} ${t("apps.table", { count: app.tables?.length ?? 0 })}`}
         />
         <span
-          className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-semibold"
+          className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold"
           style={{
             color: authOn ? "var(--success)" : "var(--text-secondary)",
             background: authOn ? "var(--success-tint)" : "var(--sunken)",
@@ -240,11 +240,11 @@ function FrontendCard({ app, onSync, onDelete, onDeployRetry, onSetDomain, loadi
       {/* STATUS */}
       <div className="flex flex-1 flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--sunken)] px-2.5 py-1 text-[11.5px] font-semibold text-[var(--text-secondary)]">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--sunken)] px-2.5 py-1 text-[12px] font-semibold text-[var(--text-secondary)]">
             <span className="size-1.5 rounded-full" style={{ background: repoReady ? "var(--success)" : "var(--danger)" }} />
             {repoReady ? t("frontendApps.repo") : t("frontendApps.repoFailed")}
           </span>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--sunken)] px-2.5 py-1 text-[11.5px] font-semibold text-[var(--text-secondary)]">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--sunken)] px-2.5 py-1 text-[12px] font-semibold text-[var(--text-secondary)]">
             <span className="size-1.5 rounded-full" style={{ background: deployDot }} />
             {deployLabel}
           </span>
@@ -274,12 +274,12 @@ function FrontendCard({ app, onSync, onDelete, onDeployRetry, onSetDomain, loadi
 
         {deployFailed && app.deploy_error_message && (
           <div className="flex flex-col gap-2 rounded-[10px] border border-[var(--danger)] bg-[var(--danger-tint)] p-2.5">
-            <p className="break-all font-mono text-[11px] leading-relaxed text-[var(--danger)]" title={app.deploy_error_message}>
+            <p className="break-all font-mono text-[12px] leading-relaxed text-[var(--danger)]" title={app.deploy_error_message}>
               {app.deploy_error_message}
             </p>
             <button
               type="button"
-              className="self-start text-[11.5px] font-bold text-[var(--danger)] disabled:opacity-60"
+              className="self-start text-[12px] font-bold text-[var(--danger)] disabled:opacity-60"
               onClick={() => onDeployRetry(app)}
               disabled={retrying}
             >
@@ -293,7 +293,7 @@ function FrontendCard({ app, onSync, onDelete, onDeployRetry, onSetDomain, loadi
       <div className="mt-auto flex items-center gap-1.5 border-t border-[var(--border)] pt-3">
         <button
           type="button"
-          className={cn(cardFooterBtn, "flex-1", !repoReady && "text-[var(--warning)]")}
+          className={cn(cardFooterBtn, "flex-1", !repoReady && "text-[var(--warning-text)]")}
           onClick={() => onSync(app)}
         >
           <Icon name={repoReady ? "key" : "refresh"} size={16} />
@@ -335,7 +335,7 @@ export default function AppsPage() {
   const { data: me } = useQuery({
     queryKey: ['me'],
     queryFn: async () => {
-      const res = await fetch('/dashboard/api/me', { credentials: 'include' })
+      const res = await authFetch('/dashboard/api/me', { credentials: 'include' })
       if (!res.ok) return null
       return res.json() as Promise<{ id: string; email: string; name: string; role: string; language: string }>
     },
@@ -387,7 +387,7 @@ export default function AppsPage() {
 
   const fetchFrontendApps = async () => {
     try {
-      const res = await fetch("/dashboard/api/frontend-apps", { credentials: "include" });
+      const res = await authFetch("/dashboard/api/frontend-apps", { credentials: "include" });
       if (res.ok) setFrontendApps(await res.json());
       setFeError(null);
     } catch { setFeError("Failed to load"); }
@@ -395,14 +395,14 @@ export default function AppsPage() {
 
   const fetchTemplates = async () => {
     try {
-      const res = await fetch("/dashboard/api/github/templates", { credentials: "include" });
+      const res = await authFetch("/dashboard/api/github/templates", { credentials: "include" });
       if (res.ok) setTemplates((await res.json()).filter((t: Template) => t.active));
     } catch { /* non-critical */ }
   };
 
   const fetchBaseDomain = async () => {
     try {
-      const res = await fetch("/dashboard/api/deploy-provider/status", { credentials: "include" });
+      const res = await authFetch("/dashboard/api/deploy-provider/status", { credentials: "include" });
       if (res.ok) {
         const data = await res.json();
         setBaseDomain(data.base_domain || "");
@@ -426,7 +426,7 @@ export default function AppsPage() {
   const handleFeCreate = async () => {
     setFeCreating(true); setFeCreateError(null);
     try {
-      const res = await fetch("/dashboard/api/frontend-apps", {
+      const res = await authFetch("/dashboard/api/frontend-apps", {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newFeName, template_id: newFeTemplateId, subdomain: newFeSubdomain }),
@@ -443,7 +443,7 @@ export default function AppsPage() {
   const handleFeDelete = async (id: string) => {
     setDeletingFe(id);
     try {
-      const res = await fetch(`/dashboard/api/frontend-apps/${id}`, { method: "DELETE", credentials: "include" });
+      const res = await authFetch(`/dashboard/api/frontend-apps/${id}`, { method: "DELETE", credentials: "include" });
       if (res.ok) { setFrontendApps(prev => prev.filter(a => a.id !== id)); toast.success(t("frontendApps.deleted")); }
       else { const d = await res.json(); toast.error(d.error || t("frontendApps.deleteErr")); }
     } catch { toast.error(t("frontendApps.deleteErr")); }
@@ -453,7 +453,7 @@ export default function AppsPage() {
   const handleDeployRetry = async (app: FrontendApp) => {
     setDeployRetrying(app.id);
     try {
-      const res = await fetch(`/dashboard/api/frontend-apps/${app.id}/deploy/retry`, { method: "POST", credentials: "include" });
+      const res = await authFetch(`/dashboard/api/frontend-apps/${app.id}/deploy/retry`, { method: "POST", credentials: "include" });
       if (res.ok) toast.success(t("frontendApps.deployRetryOk"));
       else toast.error(t("frontendApps.deployRetryErr"));
       fetchFrontendApps();
@@ -467,7 +467,7 @@ export default function AppsPage() {
     if (!domainApp || !domainSub.trim()) return;
     setSettingDomain(true);
     try {
-      const res = await fetch(`/dashboard/api/frontend-apps/${domainApp.id}/custom-domain`, { method: "PUT", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subdomain: domainSub }) });
+      const res = await authFetch(`/dashboard/api/frontend-apps/${domainApp.id}/custom-domain`, { method: "PUT", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subdomain: domainSub }) });
       if (res.ok) { toast.success(t("frontendApps.domainSaved")); setDomainApp(null); setDomainSub(""); fetchFrontendApps(); }
       else { const d = await res.json(); toast.error(d.error || t("frontendApps.domainErr")); }
     } catch { toast.error(t("frontendApps.domainErr")); }
@@ -478,7 +478,7 @@ export default function AppsPage() {
   const openSync = async (app: FrontendApp) => {
     setSyncApp(app); setSyncInfo(null); setRevealedKey(null); setSyncLoading(true);
     try {
-      const res = await fetch(`/dashboard/api/frontend-apps/${app.id}/sync`, { credentials: "include" });
+      const res = await authFetch(`/dashboard/api/frontend-apps/${app.id}/sync`, { credentials: "include" });
       if (res.ok) setSyncInfo(await res.json());
     } catch { toast.error(t("frontendApps.syncErr")); }
     finally { setSyncLoading(false); }
@@ -488,7 +488,7 @@ export default function AppsPage() {
     if (!syncApp) return;
     setRevealing(true);
     try {
-      const res = await fetch(`/dashboard/api/frontend-apps/${syncApp.id}/reveal-key`, { method: "POST", credentials: "include" });
+      const res = await authFetch(`/dashboard/api/frontend-apps/${syncApp.id}/reveal-key`, { method: "POST", credentials: "include" });
       if (res.ok) setRevealedKey((await res.json()).private_key);
       else toast.error(t("frontendApps.revealErr"));
     } catch { toast.error(t("frontendApps.revealErr")); }
@@ -499,7 +499,7 @@ export default function AppsPage() {
     if (!syncApp) return;
     setSyncLoading(true);
     try {
-      const res = await fetch(`/dashboard/api/frontend-apps/${syncApp.id}/sync/retry`, { method: "POST", credentials: "include" });
+      const res = await authFetch(`/dashboard/api/frontend-apps/${syncApp.id}/sync/retry`, { method: "POST", credentials: "include" });
       if (res.ok) { const d = await res.json(); setSyncInfo({ sync_status: d.sync_status, public_key: d.public_key || "", error_message: d.error_message || "" }); toast.success(t("frontendApps.syncRetryOk")); }
       else toast.error(t("frontendApps.syncRetryErr"));
     } catch { toast.error(t("frontendApps.syncRetryErr")); }
@@ -510,7 +510,7 @@ export default function AppsPage() {
     if (!syncApp) return;
     setSyncLoading(true); setRevealedKey(null);
     try {
-      const res = await fetch(`/dashboard/api/frontend-apps/${syncApp.id}/sync/regenerate`, { method: "POST", credentials: "include" });
+      const res = await authFetch(`/dashboard/api/frontend-apps/${syncApp.id}/sync/regenerate`, { method: "POST", credentials: "include" });
       if (res.ok) { const d = await res.json(); setSyncInfo({ sync_status: d.sync_status, public_key: d.public_key || "", error_message: d.error_message || "" }); toast.success(t("frontendApps.syncRegenOk")); }
       else toast.error(t("frontendApps.syncRegenErr"));
     } catch { toast.error(t("frontendApps.syncRegenErr")); }
@@ -583,7 +583,7 @@ AFTER CLONE
               <Icon name="auto_awesome" size={18} />
               {t("apps.createWithAi")}
               {!aiProviderReady && (
-                <span className="ml-0.5 rounded-full bg-[var(--accent)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+                <span className="ml-0.5 rounded-full bg-[var(--accent)]/15 px-2 py-0.5 text-[12px] font-semibold uppercase tracking-wide">
                   {t("apps.soon")}
                 </span>
               )}
@@ -728,7 +728,7 @@ AFTER CLONE
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="fe-subdomain">{t("frontendApps.formSubdomain")}</Label>
               <Input id="fe-subdomain" value={newFeSubdomain} onChange={(e) => setNewFeSubdomain(e.target.value)}
-                placeholder="meuapp" />
+                placeholder={t("apps.slugPlaceholder")} />
             </div>
             {feCreateError && <p className="text-[12px] text-[var(--danger)]">{feCreateError}</p>}
           </div>
@@ -815,12 +815,12 @@ AFTER CLONE
 
               <div className="flex gap-2">
                 {(syncInfo.sync_status === "pending" || syncInfo.sync_status === "failed") && (
-                  <Button size="sm" variant="outline" className="gap-1.5 text-[var(--warning)]" onClick={handleSyncRetry}>
+                  <Button size="sm" variant="outline" className="gap-1.5 text-[var(--warning-text)]" onClick={handleSyncRetry}>
                     <Icon name="refresh" size={15} />{t("frontendApps.syncRetry")}
                   </Button>
                 )}
                 {syncInfo.sync_status === "ready" && (
-                  <Button size="sm" variant="outline" className="gap-1.5 text-[var(--warning)]" onClick={handleSyncRegenerate}>
+                  <Button size="sm" variant="outline" className="gap-1.5 text-[var(--warning-text)]" onClick={handleSyncRegenerate}>
                     <Icon name="refresh" size={15} />{t("frontendApps.syncRegenerate")}
                   </Button>
                 )}
@@ -881,7 +881,7 @@ AFTER CLONE
                       const val = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "");
                       setDomainSub(val);
                     }}
-                    placeholder="meuapp"
+                    placeholder={t("apps.slugPlaceholder")}
                     className="font-mono"
                   />
                 </div>
@@ -891,7 +891,7 @@ AFTER CLONE
                     {domainSub || "..."}.{baseDomain}
                   </div>
                 </div>
-                <p className="mt-2 text-center text-[10px] text-[var(--text-tertiary)]">
+                <p className="mt-2 text-center text-[12px] text-[var(--text-tertiary)]">
                   {t("frontendApps.dnsHint")}<br/>
                   <code className="text-[var(--text-secondary)]">{domainSub || "..."}.{baseDomain} → {domainApp?.deploy_url?.replace("https://", "") || "..."}</code>
                 </p>

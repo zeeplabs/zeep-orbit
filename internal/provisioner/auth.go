@@ -55,8 +55,31 @@ func (p *Provisioner) provisionAuthTables(ctx context.Context, schema string) ([
 	return created, nil
 }
 
-// Safe to call on every request — only applies ALTER TABLE IF NOT EXISTS.
-func (p *Provisioner) EnsureAuthUserColumns(ctx context.Context, schema string) error {
+// authUserColumns are the _auth_users columns added after the table was
+// first shipped; addMissingAuthUserColumns adds them on older apps.
+var authUserColumns = []string{"phone", "email_confirmed_at", "last_sign_in_at", "active", "provider", "google_id", "role"}
+
+// authUserColumnsPresent reports whether _auth_users already has every
+// column in authUserColumns and the email index, using catalog reads only
+// (no table lock).
+func (p *Provisioner) authUserColumnsPresent(ctx context.Context, schema string) (bool, error) {
+	var cols int
+	var hasIndex bool
+	err := p.q.QueryRow(ctx,
+		`SELECT
+		   (SELECT count(*) FROM information_schema.columns
+		    WHERE table_schema = $1 AND table_name = '_auth_users' AND column_name = ANY($2)),
+		   EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = $1 AND indexname = $3)`,
+		schema, authUserColumns, schema+"_auth_users_email_idx",
+	).Scan(&cols, &hasIndex)
+	if err != nil {
+		return false, err
+	}
+	return cols == len(authUserColumns) && hasIndex, nil
+}
+
+// ensureAuthUserColumns is the body of EnsureAuthUserColumns, run under the per-app DDL lock.
+func (p *Provisioner) ensureAuthUserColumns(ctx context.Context, schema string) error {
 	return p.addMissingAuthUserColumns(ctx, schema)
 }
 
@@ -72,7 +95,7 @@ func (p *Provisioner) addMissingAuthUserColumns(ctx context.Context, schema stri
 		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS %q ON %q."_auth_users" ("email")`, schema+"_auth_users_email_idx", schema),
 	}
 	for _, sql := range alters {
-		if _, err := p.pool.Exec(ctx, sql); err != nil {
+		if _, err := p.q.Exec(ctx, sql); err != nil {
 			return fmt.Errorf("auth migration %q: %w", sql, err)
 		}
 	}
@@ -81,7 +104,7 @@ func (p *Provisioner) addMissingAuthUserColumns(ctx context.Context, schema stri
 
 func (p *Provisioner) createAuthTable(ctx context.Context, schema, table, ddl string) (bool, error) {
 	var exists bool
-	err := p.pool.QueryRow(ctx,
+	err := p.q.QueryRow(ctx,
 		`SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = $2)`,
 		schema, table,
 	).Scan(&exists)
@@ -91,7 +114,7 @@ func (p *Provisioner) createAuthTable(ctx context.Context, schema, table, ddl st
 	if exists {
 		return false, nil
 	}
-	if _, err := p.pool.Exec(ctx, ddl); err != nil {
+	if _, err := p.q.Exec(ctx, ddl); err != nil {
 		return false, fmt.Errorf("auth table: create %q.%q: %w", schema, table, err)
 	}
 	return true, nil

@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/select";
 import { FormDrawer } from "@/components/patterns/FormDrawer";
 import WebhookMappingEditor from "@/components/WebhookMappingEditor";
+import { formatDateTime } from "@/lib/format";
 
 // Every HTTP method the dashboard's create form offers matches exactly what
 // the backend's CreateWebhook handler accepts (internal/dashboard/webhooks_handler.go).
@@ -157,7 +158,7 @@ export default function Webhooks({ appId, tables }: WebhooksProps) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] text-[var(--text-secondary)]">{t("webhooks.explainer")}</p>
+        <p className="text-[12px] text-[var(--text-secondary)]">{t("webhooks.explainer")}</p>
         <Button
           className="shrink-0 gap-1.5"
           size="sm"
@@ -258,23 +259,23 @@ export default function Webhooks({ appId, tables }: WebhooksProps) {
           {webhooks.map((webhook) => (
             <div
               key={webhook.id}
-              className="flex flex-col gap-1 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-3"
+              className="flex min-w-0 flex-col gap-1 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-3"
             >
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-[13px] font-medium text-[var(--text-primary)]">{webhook.name}</span>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="min-w-0 break-words text-[13px] font-medium text-[var(--text-primary)]">{webhook.name}</span>
                   <span
                     className={
                       webhook.status === "active"
-                        ? "rounded-full bg-[var(--success-surface)] px-2 py-0.5 text-[10px] font-medium text-[var(--success)]"
-                        : "rounded-full bg-[var(--hover-surface)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-secondary)]"
+                        ? "rounded-full bg-[var(--success-surface)] px-2 py-0.5 text-[12px] font-medium text-[var(--success)]"
+                        : "rounded-full bg-[var(--hover-surface)] px-2 py-0.5 text-[12px] font-medium text-[var(--text-secondary)]"
                     }
                   >
                     {webhook.status === "active" ? t("webhooks.statusActive") : t("webhooks.statusCapture")}
                   </span>
-                  <span className="text-[11px] text-[var(--text-tertiary)]">{webhook.method}</span>
+                  <span className="text-[12px] text-[var(--text-tertiary)]">{webhook.method}</span>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex flex-wrap items-center gap-1">
                   <Button
                     variant="ghost"
                     size="sm"
@@ -302,10 +303,10 @@ export default function Webhooks({ appId, tables }: WebhooksProps) {
                   </Button>
                 </div>
               </div>
-              <p className="text-[11px] text-[var(--text-tertiary)]">{t("webhooks.eventTypePathLabel")}: {webhook.event_type_path}</p>
+              <p className="text-[12px] text-[var(--text-tertiary)]">{t("webhooks.eventTypePathLabel")}: {webhook.event_type_path}</p>
               {webhook.token ? (
                 <div className="mt-1 flex items-center gap-2">
-                  <code className="flex-1 overflow-x-auto rounded-md border border-[var(--border)] bg-[var(--sunken)] px-2.5 py-1.5 text-[11px]">
+                  <code className="min-w-0 flex-1 overflow-x-auto rounded-md border border-[var(--border)] bg-[var(--sunken)] px-2.5 py-1.5 text-[12px]">
                     {webhookUrl(webhook.id, webhook.token)}
                   </code>
                   <Button
@@ -317,7 +318,7 @@ export default function Webhooks({ appId, tables }: WebhooksProps) {
                   </Button>
                 </div>
               ) : (
-                <p className="mt-1 text-[11px] text-[var(--danger)]">{t("webhooks.tokenUnavailable")}</p>
+                <p className="mt-1 text-[12px] text-[var(--danger)]">{t("webhooks.tokenUnavailable")}</p>
               )}
               {mappingWebhookId === webhook.id && (
                 <WebhookMappingEditor appId={appId} webhook={webhook} tables={tables} />
@@ -392,7 +393,7 @@ function WebhookDeliveryLog({ appId, webhookId }: WebhookDeliveryLogProps) {
 
   if (!deliveries?.length) {
     return (
-      <p className="mt-2 text-[11px] text-[var(--text-tertiary)]">{t("webhooks.deliveriesEmpty")}</p>
+      <p className="mt-2 text-[12px] text-[var(--text-tertiary)]">{t("webhooks.deliveriesEmpty")}</p>
     );
   }
 
@@ -405,14 +406,14 @@ function WebhookDeliveryLog({ appId, webhookId }: WebhookDeliveryLogProps) {
             onClick={() => setExpandedId(expandedId === d.id ? null : d.id)}
             className="flex items-center justify-between gap-2 rounded-md px-2 py-1 text-left text-[12px] hover:bg-[var(--hover-surface)]"
           >
-            <span className="text-[var(--text-tertiary)]">{new Date(d.received_at).toLocaleString()}</span>
-            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${outcomeBadgeClass(d.outcome)}`}>
+            <span className="text-[var(--text-tertiary)]">{formatDateTime(d.received_at)}</span>
+            <span className={`rounded-full px-2 py-0.5 text-[12px] font-medium ${outcomeBadgeClass(d.outcome)}`}>
               {t(`webhooks.outcome.${d.outcome}`)}
             </span>
             <span className="truncate font-mono text-[var(--text-secondary)]">{d.event_type_value ?? "—"}</span>
           </button>
           {expandedId === d.id && (
-            <div className="flex flex-col gap-1 rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-[11px]">
+            <div className="flex flex-col gap-1 rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 text-[12px]">
               <p className="font-medium text-[var(--text-secondary)]">{t("webhooks.rawPayload")}</p>
               <pre className="overflow-x-auto whitespace-pre-wrap font-mono">
                 {JSON.stringify(d.raw_payload, null, 2)}
