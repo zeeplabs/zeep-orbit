@@ -1,7 +1,7 @@
 # Multi-Replica Consistency Tasks
 
 **Design**: `.specs/features/multi-replica-consistency/design.md`
-**Status**: In progress (T1–T12 done; phases 1–3 complete)
+**Status**: In progress (T1–T13 done; phases 1–3 complete)
 
 There is no `.specs/codebase/TESTING.md`. The test types and gates come from AGENTS.md §3 and the existing suites:
 - **unit**: plain `go test` with no DB.
@@ -327,12 +327,13 @@ T9, T11, T12, T14, T15 ──→ T16 (docs + CHANGELOG) ──→ T17 (full gate
 **Requirement**: MREP-14
 
 **Done when**:
-- [ ] Test: a healthy pool returns 200; a pool closed or pointed at `127.0.0.1:1` returns 503 within the timeout.
-- [ ] The `/health` test is unchanged and green.
-- [ ] The route is not behind auth or rate limiting. Confirm it is placed exactly like `/health`.
+- [x] Test: a healthy pool returns 200; a pool closed or pointed at `127.0.0.1:1` returns 503 within the timeout.
+- [x] The `/health` test is unchanged and green.
+- [x] The route is not behind auth or rate limiting. Confirm it is placed exactly like `/health`.
 
 **Tests**: unit/integration
 **Gate**: quick (`./internal/server/...`)
+**Status**: Done (2026-10-23). Registered right after `/health` in `server.go`, before any auth or rate-limit middleware.
 
 ---
 
