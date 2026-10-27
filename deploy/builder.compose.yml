@@ -67,8 +67,8 @@ services:
     security_opt:
       - no-new-privileges:true
     pids_limit: 512
-    mem_limit: 2g
-    memswap_limit: 2g
+    mem_limit: 4g
+    memswap_limit: 4g
     cpus: 2
     tmpfs:
       - /tmp:size=512m,mode=1777
