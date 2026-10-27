@@ -404,6 +404,16 @@ func parseEditOperation(toolName, rawArgs string) (*EditOperation, error) {
 	}
 }
 
+// ParseEditOperation validates one propose_* style call (toolName is one of
+// the eight propose_* names, rawArgs the operation's own JSON payload) into
+// an EditOperation with the exact required-field checks the edit chat uses.
+// The builder agent's propose_backend_change reuses it so both surfaces
+// accept the same operations. A malformed payload returns an error wrapping
+// ErrMalformedEditOp.
+func ParseEditOperation(toolName, rawArgs string) (*EditOperation, error) {
+	return parseEditOperation(toolName, rawArgs)
+}
+
 func firstReadToolCall(calls []ToolCall) (*ToolCall, bool) {
 	for i := range calls {
 		if calls[i].Function.Name == "list_apps" || calls[i].Function.Name == "get_app_schema" {
