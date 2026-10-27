@@ -163,12 +163,16 @@ builder:
     repository: ghcr.io/zeeplabs/zeep-orbit-builder
     tag: ""                     # defaults to the chart appVersion
     pullPolicy: IfNotPresent
+  # Limits are per pod, not per session. Measured on the default template:
+  # ~0.5 GiB peak for one build and ~1.2 GiB for three at once. Each Orbit pod
+  # runs BUILDER_WORKER_CONCURRENCY (default 2) turns, so 2 Orbit replicas can
+  # send 4 concurrent builds: 4Gi leaves headroom. Re-measure with real sessions.
   resources:
     requests:
       memory: "512Mi"
       cpu: "250m"
     limits:
-      memory: "2Gi"
+      memory: "4Gi"
       cpu: "2"
   persistence:
     size: 10Gi
