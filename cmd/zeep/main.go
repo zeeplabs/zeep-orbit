@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -172,9 +173,18 @@ func cmdServe() *cobra.Command {
 				}
 			}()
 
+			// AI Frontend Builder: off (nil runtime, no worker, routes answer 503)
+			// unless BUILDER_URL is set. A set URL without a usable
+			// BUILDER_SHARED_SECRET fails boot with a clear error.
+			builderRT, err := dashboard.NewBuilderRuntimeFromEnv(pool, slog.Default())
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error: %v\n", err)
+				os.Exit(1)
+			}
+
 			fmt.Printf("zeep-orbit starting on :%d (%d apps loaded)\n", port, len(reg.Apps()))
 
-			srv, err := server.New(reg, pool, port)
+			srv, err := server.New(reg, pool, port, server.WithBuilder(builderRT.HandlerConfig()))
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				os.Exit(1)
@@ -191,6 +201,14 @@ func cmdServe() *cobra.Command {
 			} else {
 				defer readyPool.Close()
 				srv.SetReadyPool(readyPool)
+			}
+
+			if builderRT != nil {
+				fmt.Println("AI frontend builder enabled (turn worker running)")
+				builderRT.Start(context.Background())
+				// Stops claiming turns and waits for in-flight ones (up to the
+				// worker's 30s grace) beside the HTTP server's own drain.
+				srv.OnShutdown(builderRT.Stop)
 			}
 
 			return srv.Start()

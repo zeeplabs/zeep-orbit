@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -53,6 +55,34 @@ type Server struct {
 	reg        *registry.Registry
 	logger     *zap.Logger
 	handler    *Handler
+
+	// shutdownTasks run concurrently with the HTTP server's graceful shutdown
+	// (see OnShutdown).
+	shutdownTasks []func(ctx context.Context) error
+}
+
+// Option customizes New.
+type Option func(*serverOptions)
+
+type serverOptions struct {
+	builder dashboard.BuilderHandlerConfig
+}
+
+// WithBuilder wires the AI Frontend Builder (ai-frontend-builder T30). cfg
+// carries what the builder runtime provides (BuilderRuntime.HandlerConfig:
+// store, sandbox, preview signer, worker Poke); New fills in Logger and
+// Dashboard. Without this option, or with a zero cfg (BUILDER_URL empty), the
+// builder routes are still registered but answer 503 "builder not configured",
+// except /api/builder/status, which keeps answering.
+func WithBuilder(cfg dashboard.BuilderHandlerConfig) Option {
+	return func(o *serverOptions) { o.builder = cfg }
+}
+
+// OnShutdown registers fn to run when Start begins shutting down, concurrently
+// with the HTTP server's graceful shutdown and bounded by the same 30s
+// deadline (fn receives that context). Register before Start.
+func (s *Server) OnShutdown(fn func(ctx context.Context) error) {
+	s.shutdownTasks = append(s.shutdownTasks, fn)
 }
 
 // SetReadyPool routes the /ready probe through its own pool (see
@@ -62,7 +92,11 @@ func (s *Server) SetReadyPool(p *db.Pool) {
 }
 
 // New creates a Server with a configured router ready for Start.
-func New(reg *registry.Registry, pool *db.Pool, port int) (*Server, error) {
+func New(reg *registry.Registry, pool *db.Pool, port int, opts ...Option) (*Server, error) {
+	var o serverOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
 	logger, err := buildLogger()
 	if err != nil {
 		return nil, fmt.Errorf("server: failed to build logger: %w", err)
@@ -75,7 +109,11 @@ func New(reg *registry.Registry, pool *db.Pool, port int) (*Server, error) {
 	githubTemplatesH := dashboard.NewGitHubTemplatesHandler(pool)
 	frontendAppsH := dashboard.NewFrontendAppsHandler(pool)
 	deployProviderH := dashboard.NewDeployProviderConfigHandler(pool)
-	r := newRouter(reg, h, pool, logger, dashH, githubConfigH, githubTemplatesH, frontendAppsH, deployProviderH)
+	builderCfg := o.builder
+	builderCfg.Logger = logger
+	builderCfg.Dashboard = dashH
+	builderH := dashboard.NewBuilderHandler(pool, builderCfg)
+	r := newRouter(reg, h, pool, logger, dashH, githubConfigH, githubTemplatesH, frontendAppsH, deployProviderH, builderH)
 
 	s := &Server{
 		httpServer: &http.Server{
@@ -98,7 +136,9 @@ func (s *Server) Router() http.Handler {
 	return s.httpServer.Handler
 }
 
-// Start blocks until SIGINT or SIGTERM, then performs a graceful shutdown (30s).
+// Start blocks until SIGINT or SIGTERM, then performs a graceful shutdown (30s):
+// the HTTP server drains while the OnShutdown tasks (the builder worker) run
+// beside it, under the same deadline.
 func (s *Server) Start() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -114,6 +154,9 @@ func (s *Server) Start() error {
 
 	select {
 	case err := <-errCh:
+		// The listener failed: still stop the background tasks (the worker)
+		// instead of leaving them running while the process unwinds.
+		s.runShutdownTasks(context.Background())
 		return fmt.Errorf("server: listen error: %w", err)
 	case <-ctx.Done():
 		s.logger.Info("shutdown signal received")
@@ -122,12 +165,35 @@ func (s *Server) Start() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	if err := s.httpServer.Shutdown(shutdownCtx); err != nil {
+	tasksDone := make(chan struct{})
+	go func() {
+		defer close(tasksDone)
+		s.runShutdownTasks(shutdownCtx)
+	}()
+
+	err := s.httpServer.Shutdown(shutdownCtx)
+	<-tasksDone
+	if err != nil {
 		return fmt.Errorf("server: shutdown error: %w", err)
 	}
 
 	s.logger.Info("server stopped gracefully")
 	return nil
+}
+
+// runShutdownTasks runs every OnShutdown task concurrently and waits for all.
+func (s *Server) runShutdownTasks(ctx context.Context) {
+	var wg sync.WaitGroup
+	for _, fn := range s.shutdownTasks {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := fn(ctx); err != nil {
+				s.logger.Warn("shutdown task did not finish cleanly", zap.Error(err))
+			}
+		}()
+	}
+	wg.Wait()
 }
 
 func buildLogger() (*zap.Logger, error) {
@@ -138,7 +204,7 @@ func buildLogger() (*zap.Logger, error) {
 }
 
 // newRouter builds the chi.Mux with all routes and middleware.
-func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Logger, dashH *dashboard.Handler, githubConfigH *dashboard.GitHubConfigHandler, githubTemplatesH *dashboard.GitHubTemplatesHandler, frontendAppsH *dashboard.FrontendAppsHandler, deployProviderH *dashboard.DeployProviderConfigHandler) *chi.Mux {
+func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Logger, dashH *dashboard.Handler, githubConfigH *dashboard.GitHubConfigHandler, githubTemplatesH *dashboard.GitHubTemplatesHandler, frontendAppsH *dashboard.FrontendAppsHandler, deployProviderH *dashboard.DeployProviderConfigHandler, builderH *dashboard.BuilderHandler) *chi.Mux {
 	logBuf := dashH.Logs
 	r := chi.NewRouter()
 
@@ -354,6 +420,47 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Post("/api/deploy-provider/config", deployProviderH.UpsertConfig)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/deploy-provider/config", deployProviderH.UpdateFields)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/deploy-provider/recent-deploys", deployProviderH.RecentDeploys)
+		// AI Frontend Builder (ai-frontend-builder T30). Session routes are
+		// owner-scoped inside the handlers and answer 503 "builder not
+		// configured" when BUILDER_URL is empty (status always answers).
+		// Reads are not limited (the UI polls events and status); mutations
+		// share aiChatLimiterMW, keyed by user like the other AI chat routes.
+		// The config routes (settings, prompt, template flag/list) are plain
+		// Orbit configuration: they work before a builder is deployed so the
+		// superadmin can prepare provider, caps and persona first.
+		r.With(dashboard.RequireAuth(pool)).Get("/api/builder/status", builderH.Status)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/builder/settings", dashH.GetBuilderSettingsConfig)
+		r.With(dashboard.RequireAuth(pool)).Put("/api/builder/settings", dashH.UpsertBuilderSettingsConfig)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/builder/prompt", dashH.GetBuilderPromptConfig)
+		r.With(dashboard.RequireAuth(pool)).Put("/api/builder/prompt", dashH.UpsertBuilderPromptConfig)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/builder/prompt/versions", dashH.ListBuilderPromptVersionsConfig)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/builder/templates", githubTemplatesH.ListBuilderTemplates)
+		r.With(dashboard.RequireAuth(pool)).Patch("/api/github/templates/{id}/builder", githubTemplatesH.SetBuilderEnabled)
+		r.With(dashboard.RequireAuth(pool), aiChatLimiterMW).Post("/api/builder/sessions", builderH.CreateSession)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/builder/sessions", builderH.ListSessions)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/builder/sessions/{id}", builderH.GetSession)
+		r.With(dashboard.RequireAuth(pool), aiChatLimiterMW).Delete("/api/builder/sessions/{id}", builderH.DeleteSession)
+		r.With(dashboard.RequireAuth(pool), aiChatLimiterMW).Post("/api/builder/sessions/{id}/messages", builderH.CreateMessage)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/builder/sessions/{id}/events", builderH.ListEvents)
+		r.With(dashboard.RequireAuth(pool), aiChatLimiterMW).Post("/api/builder/sessions/{id}/revert", builderH.RevertSession)
+		r.With(dashboard.RequireAuth(pool), aiChatLimiterMW).Post("/api/builder/sessions/{id}/turns/{turn}/confirm", builderH.ConfirmProposal)
+		r.With(dashboard.RequireAuth(pool), aiChatLimiterMW).Post("/api/builder/sessions/{id}/turns/{turn}/reject", builderH.RejectProposal)
+		r.With(dashboard.RequireAuth(pool), aiChatLimiterMW).Post("/api/builder/sessions/{id}/preview-token", builderH.MintPreviewToken)
+		r.With(dashboard.RequireAuth(pool), aiChatLimiterMW).Post("/api/builder/sessions/{id}/publish", builderH.Publish)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/builder/sessions/{id}/download.zip", builderH.DownloadZip)
+		// Preview: deliberately NOT behind RequireAuth. The iframe is a
+		// sandboxed opaque origin that cannot carry the dashboard cookie; the
+		// handler authenticates the short-lived HMAC preview token (?pt= or the
+		// path-scoped cookie) and re-checks the session owner. No limiter: an
+		// unauthenticated flood fails the token MAC before touching the
+		// database, and an IP key would be the load balancer's address for
+		// every user behind it. GET and HEAD only; the handler answers 405 for
+		// the rest. Registered with and without the trailing slash.
+		for _, m := range []string{http.MethodGet, http.MethodHead} {
+			r.MethodFunc(m, "/api/builder/sessions/{id}/preview", builderH.PreviewProxy)
+			r.MethodFunc(m, "/api/builder/sessions/{id}/preview/", builderH.PreviewProxy)
+			r.MethodFunc(m, "/api/builder/sessions/{id}/preview/*", builderH.PreviewProxy)
+		}
 		r.With(dashboard.RequireAuth(pool)).Get("/api/changelog", dashboard.ChangelogHandler)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/version-check", dashboard.VersionCheckHandler)
 		r.Handle("/*", dashboard.StaticHandler())
@@ -450,7 +557,7 @@ func logMiddleware(logger *zap.Logger, buf *dashboard.RingBuffer) func(http.Hand
 				App:         dashboard.ExtractApp(r.URL.Path),
 				Method:      method,
 				Path:        logPath,
-				Query:       r.URL.RawQuery,
+				Query:       redactBuilderQuery(r.URL.Path, r.URL.RawQuery),
 				Status:      status,
 				LatencyMs:   latency.Milliseconds(),
 				UserAgent:   r.UserAgent(),
@@ -458,7 +565,7 @@ func logMiddleware(logger *zap.Logger, buf *dashboard.RingBuffer) func(http.Hand
 				ContentType: contentType,
 			}
 
-			if isTextContent(contentType) && !isWebhookPath(r.URL.Path) && !isDashboardWebhookTokenPath(r.URL.Path) {
+			if isTextContent(contentType) && !isWebhookPath(r.URL.Path) && !isDashboardWebhookTokenPath(r.URL.Path) && !isBuilderPath(r.URL.Path) {
 				if cw.body.Len() > 0 {
 					entry.ResBody = cw.body.String()
 				}
@@ -504,6 +611,32 @@ func isDashboardWebhookTokenPath(path string) bool {
 	default:
 		return false
 	}
+}
+
+// isBuilderPath reports whether path is an AI Frontend Builder route. Their
+// bodies are never captured into the dashboard log buffer (which other roles,
+// e.g. a global auditor, can read): chat messages and events carry the user's
+// business data, the preview-token response carries a bearer token, and the
+// preview responses are generated code.
+func isBuilderPath(path string) bool {
+	return strings.HasPrefix(path, "/dashboard/api/builder/")
+}
+
+// redactBuilderQuery hides the preview token (?pt=) that the iframe URL
+// carries, so it never lands in the log buffer. Other paths pass through.
+func redactBuilderQuery(path, rawQuery string) string {
+	if rawQuery == "" || !isBuilderPath(path) {
+		return rawQuery
+	}
+	q, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		return "***" // unparsable query on a builder route: keep nothing
+	}
+	if !q.Has("pt") {
+		return rawQuery
+	}
+	q.Set("pt", "***")
+	return q.Encode()
 }
 
 func redactWebhookToken(path string) string {
