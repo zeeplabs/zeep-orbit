@@ -295,8 +295,13 @@ func newBHEnv(t *testing.T, opts ...bhOption) *bhEnv {
 		&aiProviderUpsertInput{Model: "test-model", Enabled: true, BaseURL: &baseURL}); err != nil {
 		t.Fatalf("seed provider: %v", err)
 	}
+	// Token caps default to 0 (unset), which makes the builder unavailable
+	// (budget_not_configured), so the shared setup sets them.
 	enabled, prov := true, aiProviderOpenAICompatible
-	if _, err := UpsertBuilderSettings(ctx, pool, e.super.ID, BuilderSettingsInput{Enabled: &enabled, Provider: &prov}); err != nil {
+	sessionCap, monthlyCap := int64(1_000_000), int64(10_000_000)
+	if _, err := UpsertBuilderSettings(ctx, pool, e.super.ID, BuilderSettingsInput{
+		Enabled: &enabled, Provider: &prov, SessionTokenCap: &sessionCap, UserMonthlyTokenCap: &monthlyCap,
+	}); err != nil {
 		t.Fatalf("seed builder settings: %v", err)
 	}
 
@@ -431,6 +436,21 @@ func TestBuilderStatus_ProviderNotConfigured(t *testing.T) {
 	got := decodeJSON[BuilderStatus](t, e.do(t, e.h.Status, e.owner, http.MethodGet, "/x", ""))
 	if got.Available || got.Reason != "provider_not_configured" || got.ProviderConfigured {
 		t.Errorf("want unavailable/provider_not_configured, got %+v", got)
+	}
+}
+
+// A cap of 0 means unset and would end every turn with budget_exceeded, so
+// the status reports it instead of letting each chat fail.
+func TestBuilderStatus_BudgetNotConfigured(t *testing.T) {
+	for name, caps := range map[string][2]int64{"session cap": {0, 10}, "monthly cap": {10, 0}, "both": {0, 0}} {
+		t.Run(name, func(t *testing.T) {
+			e := newBHEnv(t)
+			e.setSettings(t, BuilderSettingsInput{SessionTokenCap: &caps[0], UserMonthlyTokenCap: &caps[1]})
+			got := decodeJSON[BuilderStatus](t, e.do(t, e.h.Status, e.owner, http.MethodGet, "/x", ""))
+			if got.Available || got.Reason != BuilderReasonBudgetNotConfigured || !got.ProviderConfigured {
+				t.Errorf("want unavailable/budget_not_configured, got %+v", got)
+			}
+		})
 	}
 }
 

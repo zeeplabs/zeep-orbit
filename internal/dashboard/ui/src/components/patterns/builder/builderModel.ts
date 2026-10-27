@@ -358,6 +358,7 @@ export const UNAVAILABLE_REASONS = [
   'not_configured',
   'disabled',
   'provider_not_configured',
+  'budget_not_configured',
   'builder_unreachable',
 ] as const
 

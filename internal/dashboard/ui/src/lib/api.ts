@@ -1904,6 +1904,7 @@ export type BuilderUnavailableReason =
   | 'not_configured' // BUILDER_URL unset: no builder deployed
   | 'disabled' // superadmin switched it off (settings.enabled)
   | 'provider_not_configured' // the settings' LLM provider is unusable
+  | 'budget_not_configured' // a token cap is 0 (unset): every turn would end budget_exceeded
   | 'builder_unreachable' // builder health probe failed
 
 export interface BuilderStatus {
