@@ -10,7 +10,7 @@ Commits only when the user asks (AGENTS.md §2). Tasks touching `docker-compose.
 
 **Spec**: `.specs/features/ai-frontend-builder/spec.md`
 **Design**: `.specs/features/ai-frontend-builder/design.md`
-**Status**: Approved (2026-10-26) — execution on branch `feat/ai-frontend-builder`. Phase 0 (T01–T10) implemented and gated 2026-10-26, uncommitted. Pending: T02 manual real-endpoint run (needs OpenAI + Gemini keys from the owner). Phase 1+ not started.
+**Status**: Approved (2026-10-26) — execution on branch `feat/ai-frontend-builder`. Phase 0 (T01–T10) implemented, gated and pushed 2026-10-26. Pending: T02 manual real-endpoint run (needs OpenAI + Gemini keys from the owner). Phase 1 (T11–T20) code written 2026-10-27, uncommitted; T11–T13 integration-verified against a throwaway Postgres 16, T14/T15/T17/T18/T19 unit-verified; **T16 and T20 integration tests written but NOT run (Docker/OrbStack unresponsive, TEST_DATABASE_URL unset) — T16/T20 not done until they pass.** Phase 2+ not started.
 
 ---
 
