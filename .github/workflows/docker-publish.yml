@@ -15,12 +15,28 @@ jobs:
     uses: ./.github/workflows/reusable-ci.yml
 
   build-push:
-    name: Build & Push
+    name: Build & Push (${{ matrix.name }})
     needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The main image keeps its name and tags. The two AI frontend builder
+          # images are published next to it as <repo>-builder and
+          # <repo>-registry-proxy so the Helm chart can reference them.
+          - name: zeep-orbit
+            dockerfile: Dockerfile
+            suffix: ""
+          - name: zeep-builder
+            dockerfile: Dockerfile.builder
+            suffix: "-builder"
+          - name: zeep-registry-proxy
+            dockerfile: Dockerfile.registry-proxy
+            suffix: "-registry-proxy"
 
     steps:
       - uses: actions/checkout@v4
@@ -42,7 +58,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}${{ matrix.suffix }}
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -53,12 +69,13 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
 
   release:
     name: Create Release
