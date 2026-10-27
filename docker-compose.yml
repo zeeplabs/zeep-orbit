@@ -5,6 +5,14 @@ services:
       - "8080:8080"
     environment:
       DATABASE_URL: postgres://zeep:zeep@db:5432/zeep?sslmode=disable
+      # AI frontend builder: off unless BUILDER_URL is set. To enable it, set
+      #   BUILDER_URL=http://builder:8081 and BUILDER_SHARED_SECRET (>= 16 bytes)
+      # in .env and start with `docker compose --profile builder up -d`.
+      BUILDER_URL: ${BUILDER_URL:-}
+      BUILDER_SHARED_SECRET: ${BUILDER_SHARED_SECRET:-}
+    networks:
+      - default
+      - builder_internal
     depends_on:
       db:
         condition: service_healthy
@@ -26,5 +34,92 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
+  # ---- AI frontend builder (profile "builder") ----
+  # Runs generated, untrusted code. It sits ONLY on builder_internal (no
+  # gateway, no DNS to the outside), so it can reach neither db:5432 nor the
+  # internet. Its single way out is the registry proxy (npm, GET/HEAD only).
+  builder:
+    profiles: [builder]
+    build:
+      context: .
+      dockerfile: Dockerfile.builder
+    image: zeep-builder:local
+    restart: unless-stopped
+    networks:
+      - builder_internal
+    environment:
+      BUILDER_ADDR: ":8081"
+      # `:?` would make plain `docker compose up` fail for everyone, because
+      # Compose interpolates inactive profiles too. The daemon itself refuses
+      # to boot with a missing or short (< 16 bytes) secret.
+      BUILDER_SHARED_SECRET: ${BUILDER_SHARED_SECRET:-}
+      BUILDER_WORK_DIR: /work
+      BUILDER_TEMPLATES_DIR: /opt/templates
+      BUILDER_NPM_REGISTRY: http://registry-proxy:4873
+      BUILDER_HOME: /tmp
+      BUILDER_NPM_CACHE: /work/.npm-cache
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 512
+    mem_limit: 2g
+    memswap_limit: 2g
+    cpus: 2
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    volumes:
+      - builder_work:/work
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('net').connect(8081,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    depends_on:
+      registry-proxy:
+        condition: service_healthy
+
+  registry-proxy:
+    profiles: [builder]
+    build:
+      context: .
+      dockerfile: Dockerfile.registry-proxy
+    image: zeep-registry-proxy:local
+    restart: unless-stopped
+    networks:
+      - builder_internal
+      - egress
+    environment:
+      REGISTRY_PROXY_ADDR: ":4873"
+      REGISTRY_PROXY_UPSTREAMS: ${REGISTRY_PROXY_UPSTREAMS:-https://registry.npmjs.org}
+      REGISTRY_PROXY_TOKEN_DEFAULT:
+      REGISTRY_PROXY_TOKEN_COMPANY:
+    user: "10001:10001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 256m
+    cpus: 0.5
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:4873/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 2s
+
+networks:
+  builder_internal:
+    internal: true
+  egress: {}
+
 volumes:
   pgdata:
+  builder_work:
