@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -33,36 +33,14 @@ import { PageHeader, EmptyState, LoadingState, StatusPill, DataTable, ProviderTa
 import type { Column } from '@/components/patterns'
 import { cn } from '@/lib/utils'
 import { authFetch } from '@/lib/api'
+import type { AIProviderKind, AIProviderStatus, AIProviderUpsertInput, GitHubTemplate } from '@/lib/api'
+import { validateAIProviderBaseUrl } from '@/lib/aiProviderBaseUrl'
+import AIBuilderSettings from '@/pages/settings/AIBuilderSettings'
 
 interface GitHubStatus {
   connected: boolean
   configured: boolean
   org_login: string
-}
-
-// AIProviderStatus mirrors internal/dashboard's AIProviderResponse — the key
-// itself is never present in any form (cleartext or masked), only whether
-// one is stored (AIBC-04).
-interface AIProviderStatus {
-  has_key: boolean
-  model: string
-  enabled: boolean
-}
-
-interface GitHubTemplate {
-  id: string
-  name: string
-  description: string
-  github_owner: string
-  github_repo: string
-  framework: string
-  active: boolean
-  created_by: string
-  created_at: string
-  render_service_type: string
-  build_command: string
-  publish_path: string
-  start_command: string
 }
 
 function PageFooter({ message, type }: { message: string | null; type: 'success' | 'error' }) {
@@ -167,6 +145,13 @@ export default function GitHubIntegrationPage() {
             <Icon name="bolt" size={14} />
             {t('aiProvider.tabTitle')}
           </TabsTrigger>
+          <TabsTrigger
+            value="ai-builder"
+            className="gap-1.5 rounded-[8px] text-[13px] text-[var(--text-secondary)] data-[state=active]:bg-[var(--hover-surface)] data-[state=active]:text-[var(--text-primary)] data-[state=active]:shadow-none"
+          >
+            <Icon name="auto_awesome" size={14} />
+            {t('settings.aiBuilder.tabTitle')}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="config" className="mt-0">
@@ -180,6 +165,9 @@ export default function GitHubIntegrationPage() {
         </TabsContent>
         <TabsContent value="ai" className="mt-0">
           <AIProviderTab />
+        </TabsContent>
+        <TabsContent value="ai-builder" className="mt-0">
+          <AIBuilderSettings />
         </TabsContent>
       </Tabs>
     </>
@@ -1259,10 +1247,22 @@ function DeployTab() {
 // is never blocked.
 const OPENAI_MODEL_PRESETS = ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'o3-mini'] as const
 
+// openai_compatible (ai-frontend-builder AFB-01) is any server speaking the OpenAI chat API
+// at a custom base URL (Ollama, vLLM, a gateway...). Its model is free text (no preset
+// catalog) and base_url is required; the stored URL is shown back (it is not a secret).
+function parseAIProviderKind(value: string | null): AIProviderKind {
+  return value === 'openai_compatible' ? 'openai_compatible' : 'openai'
+}
+
 function AIProviderTab() {
   const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const [searchParams] = useSearchParams()
+  const [provider, setProvider] = useState<AIProviderKind>(() => parseAIProviderKind(searchParams.get('provider')))
   const [model, setModel] = useState('')
   const [customModel, setCustomModel] = useState('')
+  const [baseUrl, setBaseUrl] = useState('')
+  const [baseUrlError, setBaseUrlError] = useState<string | null>(null)
   const [apiKey, setApiKey] = useState('')
   const [enabled, setEnabled] = useState(false)
   const [hasKey, setHasKey] = useState(false)
@@ -1273,51 +1273,85 @@ function AIProviderTab() {
   const [messageType, setMessageType] = useState<'success' | 'error'>('success')
 
   useEffect(() => {
-    fetchStatus()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const fetchStatus = async () => {
+    // Each provider is its own row: reset the form and load the selected one. `cancelled`
+    // drops a late answer of the previously selected provider.
+    let cancelled = false
     setLoading(true)
-    try {
-      const res = await authFetch('/dashboard/api/ai-providers/openai', { credentials: 'include' })
-      if (res.ok) {
+    setModel('')
+    setCustomModel('')
+    setBaseUrl('')
+    setBaseUrlError(null)
+    setApiKey('')
+    setShowKey(false)
+    setEnabled(false)
+    setHasKey(false)
+    setMessage(null)
+    ;(async () => {
+      try {
+        const res = await authFetch(`/dashboard/api/ai-providers/${provider}`, { credentials: 'include' })
+        if (!res.ok || cancelled) return
         const data = (await res.json()) as AIProviderStatus
+        if (cancelled) return
         const savedModel = data.model || ''
         setModel(savedModel)
-        if (savedModel && !(OPENAI_MODEL_PRESETS as readonly string[]).includes(savedModel)) {
+        if (provider === 'openai' && savedModel && !(OPENAI_MODEL_PRESETS as readonly string[]).includes(savedModel)) {
           setCustomModel(savedModel)
         }
+        setBaseUrl(data.base_url || '')
         setEnabled(!!data.enabled)
         setHasKey(!!data.has_key)
+      } catch {
+        // non-critical, form just renders empty
+      } finally {
+        if (!cancelled) setLoading(false)
       }
-    } catch {
-      // non-critical, form just renders empty
-    } finally {
-      setLoading(false)
+    })()
+    return () => {
+      cancelled = true
     }
-  }
+  }, [provider])
+
+  const isCompatible = provider === 'openai_compatible'
 
   const handleSave = async () => {
-    setSaving(true)
     setMessage(null)
+    setBaseUrlError(null)
+    if (isCompatible) {
+      const reason = validateAIProviderBaseUrl(baseUrl)
+      if (reason) {
+        setBaseUrlError(t(`settings.aiBuilder.providerForm.baseUrlError.${reason}`))
+        return
+      }
+    }
+    setSaving(true)
     try {
-      const res = await authFetch('/dashboard/api/ai-providers/openai', {
+      // api_key is only sent when the user typed one (omitted = keep the stored key, which is
+      // write-only). enabled is always sent: it is not merge-on-absent. base_url is sent for
+      // openai_compatible only (a non-empty one is a 400 for openai).
+      const payload: AIProviderUpsertInput = { model, enabled }
+      if (apiKey) payload.api_key = apiKey
+      if (isCompatible) payload.base_url = baseUrl.trim()
+      const res = await authFetch(`/dashboard/api/ai-providers/${provider}`, {
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, api_key: apiKey, enabled }),
+        body: JSON.stringify(payload),
       })
       const data = await res.json()
       if (!res.ok) {
-        setMessage(data.error || t('common.errorSaving'))
+        const errorMessage = data.error || t('common.errorSaving')
+        setMessage(errorMessage)
         setMessageType('error')
+        toast.error(errorMessage)
         return
       }
       setMessage(t('aiProvider.configSaved'))
       setMessageType('success')
       setApiKey('')
       setHasKey(!!(data as AIProviderStatus).has_key)
+      if (isCompatible) setBaseUrl((data as AIProviderStatus).base_url || baseUrl.trim())
+      // The AI Builder tab reads the same row through this key.
+      queryClient.invalidateQueries({ queryKey: ['ai-provider-status', provider] })
     } catch {
       setMessage(t('common.connectionError'))
       setMessageType('error')
@@ -1336,9 +1370,11 @@ function AIProviderTab() {
             {t('aiProvider.sectionTitle')}
           </div>
           <ProviderTabs
-            value="openai"
+            value={provider}
+            onChange={(key) => setProvider(parseAIProviderKind(key))}
             items={[
               { key: 'openai', name: 'OpenAI', icon: 'bolt' },
+              { key: 'openai_compatible', name: t('settings.aiBuilder.providerForm.openaiCompatible'), icon: 'hub' },
               { key: 'gemini', name: 'Gemini', icon: 'auto_awesome', disabled: true, badge: t('apps.soon') },
               { key: 'claude', name: 'Claude', icon: 'diamond', disabled: true, badge: t('apps.soon') },
             ]}
@@ -1352,14 +1388,18 @@ function AIProviderTab() {
           <div className="flex items-center justify-between">
             <div>
               <div className="text-[15px] font-bold" style={{ color: 'var(--text-primary)' }}>
-                OpenAI
+                {isCompatible ? t('settings.aiBuilder.providerForm.openaiCompatible') : 'OpenAI'}
               </div>
               <p className="mt-0.5 text-[12px]" style={{ color: 'var(--text-secondary)' }}>
-                {t('aiProvider.configDesc')}
+                {isCompatible ? t('settings.aiBuilder.providerForm.configDesc') : t('aiProvider.configDesc')}
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <Switch checked={enabled} onCheckedChange={setEnabled} />
+              <Switch
+                checked={enabled}
+                onCheckedChange={setEnabled}
+                aria-label={t('aiProvider.enabled')}
+              />
               <span
                 className="text-[12px] font-medium"
                 style={{ color: enabled ? 'var(--success)' : 'var(--text-tertiary)' }}
@@ -1370,10 +1410,51 @@ function AIProviderTab() {
           </div>
 
           <div className="flex flex-col gap-4">
+            {isCompatible && (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="ai-base-url" className="text-[12px] font-semibold">
+                  {t('settings.aiBuilder.providerForm.baseUrl')}
+                </Label>
+                <Input
+                  id="ai-base-url"
+                  type="url"
+                  inputMode="url"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={baseUrl}
+                  onChange={(e) => {
+                    setBaseUrl(e.target.value)
+                    setBaseUrlError(null)
+                  }}
+                  placeholder="https://llm.example.com/v1"
+                  aria-invalid={baseUrlError ? true : undefined}
+                  aria-describedby={baseUrlError ? 'ai-base-url-error' : 'ai-base-url-hint'}
+                />
+                {baseUrlError ? (
+                  <p id="ai-base-url-error" role="alert" className="text-[12px]" style={{ color: 'var(--danger)' }}>
+                    {baseUrlError}
+                  </p>
+                ) : (
+                  <p id="ai-base-url-hint" className="text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
+                    {t('settings.aiBuilder.providerForm.baseUrlHint')}
+                  </p>
+                )}
+              </div>
+            )}
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="ai-model" className="text-[12px] font-semibold">
                 {t('aiProvider.model')}
               </Label>
+              {isCompatible ? (
+                <Input
+                  id="ai-model"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  placeholder={t('settings.aiBuilder.providerForm.modelPlaceholder')}
+                />
+              ) : (
               <Select
                 value={(OPENAI_MODEL_PRESETS as readonly string[]).includes(model) ? model : 'custom'}
                 onValueChange={(value) => setModel(value === 'custom' ? customModel : value)}
@@ -1390,7 +1471,8 @@ function AIProviderTab() {
                   <SelectItem value="custom">{t('aiProvider.customModel')}</SelectItem>
                 </SelectContent>
               </Select>
-              {!(OPENAI_MODEL_PRESETS as readonly string[]).includes(model) && (
+              )}
+              {!isCompatible && !(OPENAI_MODEL_PRESETS as readonly string[]).includes(model) && (
                 <Input
                   aria-label={t('aiProvider.customModel')}
                   value={customModel}
