@@ -20,6 +20,9 @@ export function ChatMarkdown({ content }: { content: string }) {
           ul: ({ children }) => <ul className="flex flex-col gap-1 pl-4 list-disc">{children}</ul>,
           ol: ({ children }) => <ol className="flex flex-col gap-1 pl-4 list-decimal">{children}</ol>,
           li: ({ children }) => <li>{children}</li>,
+          // Model output must never trigger a network request: a remote <img> is a data-exfiltration
+          // channel under prompt injection. Show the alt text instead.
+          img: ({ alt }) => <span>{alt}</span>,
           a: ({ children, href }) => (
             <a href={href} target="_blank" rel="noreferrer" className="underline">
               {children}
