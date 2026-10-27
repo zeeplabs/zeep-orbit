@@ -692,9 +692,22 @@ T32, T37, T38, T39, T40 → T44
 **Depends on**: T10, T30
 **Requirement**: AFB-16
 
-**Done when**: [ ] Manifest gate · [ ] builder cannot reach `db:5432` (verified) · [ ] user confirmed diff
+**Done when**: [x] Manifest gate (`docker compose config` renders 2 services without the `builder` profile, 4 with it) · [x] builder cannot reach `db:5432` (verified 2026-10-27 by name and by IP: `EAI_AGAIN` / `ENETUNREACH`; only `registry-proxy:4873` answers) · [x] user confirmed compose diff · [ ] `easypanel.json` (see T38a: no images to reference yet; Easypanel runs on Docker Swarm, and whether its templates can declare an `internal` overlay network is unverified, so the builder may share a network with the DB there; decide and document in T41/T44)
 
 **Tests**: none · **Gate**: manifest · **Commit**: `feat: add builder services to compose`
+
+---
+
+### T38a: Publish builder images in CI
+
+**What**: `docker-publish.yml` builds and pushes `zeep-builder` and `zeep-registry-proxy` (multi-arch) next to the main image, via a build matrix. The main image keeps its name and tags. Added after T38: Helm and Easypanel reference ready images and nothing published them.
+**Where**: `.github/workflows/docker-publish.yml`
+**Depends on**: T38
+**Requirement**: AFB-16
+
+**Done when**: [ ] workflow YAML valid · [ ] main image name/tags unchanged · [ ] user confirmed diff (CI is high-risk, AGENTS.md §8) · [ ] first tagged release publishes the 3 images (check on release)
+
+**Tests**: none · **Gate**: manifest · **Commit**: `ci: publish builder images`
 
 ---
 
@@ -702,7 +715,7 @@ T32, T37, T38, T39, T40 → T44
 
 **What**: `builder.enabled` (default false), builder Deployment + Service + PVC, registry-proxy Deployment + Service, NetworkPolicy, security contexts, secret keys for `BUILDER_SHARED_SECRET` and proxy tokens.
 **Where**: `charts/zeep-orbit/templates/*`, `values.yaml`, `Chart.yaml` untouched (version bump is release-time)
-**Depends on**: T38
+**Depends on**: T38, T38a
 **Requirement**: AFB-16
 
 **Done when**: [ ] `helm lint` + `helm template` with enabled true/false · [ ] disabled renders zero new objects · [ ] user confirmed diff
