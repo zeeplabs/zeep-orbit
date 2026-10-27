@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import {
   useQuery,
   useMutation,
@@ -132,16 +133,35 @@ async function isSessionExpired(res: Response): Promise<boolean> {
   }
 }
 
+// ApiError is what apiFetch throws for a non-2xx answer. It is still an Error whose
+// message is the server's English `error` string (so `toast.error(e.message)` keeps
+// working), and it also carries the HTTP status and the machine-readable `reason` some
+// routes add next to `error` (e.g. the builder publish 409s), so UIs can branch on a code
+// instead of parsing text.
+export class ApiError extends Error {
+  readonly status: number
+  readonly reason: string | undefined
+
+  constructor(message: string, status: number, reason?: string) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.reason = reason
+  }
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await authFetch(path, { credentials: 'include', ...init })
   if (!res.ok) {
     let message = `HTTP ${res.status}`
+    let reason: string | undefined
     try {
       const body = await res.json()
       message = body.error ?? body.message ?? message
+      if (typeof body.reason === 'string') reason = body.reason
     } catch {
     }
-    throw new Error(message)
+    throw new ApiError(message, res.status, reason)
   }
   if (res.status === 204) return undefined as unknown as T
   return res.json() as Promise<T>
@@ -1492,12 +1512,34 @@ export function useWebhookDeliveries(
 // internal/dashboard/ai/client.go's AppPlan exactly.
 // ----------------------------------------------------------------------------
 
+// Provider kinds the backend persists today (ai_provider_handlers.go aiProviderImplemented).
+// gemini/claude are accepted names but answer {available: false} on GET and 501 on PUT.
+export type AIProviderKind = 'openai' | 'openai_compatible'
+
+// Mirrors AIProviderResponse (ai_providers_store.go). base_url is "" for 'openai' and for an
+// unconfigured provider; it is never a secret (credentials in the URL are rejected). The API
+// key is never returned, only has_key.
 export interface AIProviderStatus {
   provider?: string
   has_key?: boolean
   model?: string
   enabled?: boolean
+  base_url?: string
+  updated_at?: string
   available?: boolean
+}
+
+// Body of PUT /dashboard/api/ai-providers/{provider} (aiProviderUpsertInput). Merge-on-absent-key:
+//  - api_key: omit (or "") keeps the stored key; the key can only be replaced, not cleared.
+//  - base_url: only for 'openai_compatible', where it is required. Omit keeps the stored one;
+//    an explicit "" is rejected with 400 (the provider cannot work without it). For 'openai' send
+//    nothing, or "" (a non-empty value is a 400).
+//  - model is required (non-blank) and enabled is always sent.
+export interface AIProviderUpsertInput {
+  model: string
+  enabled: boolean
+  api_key?: string
+  base_url?: string
 }
 
 export function useAIProviderStatus(provider = 'openai'): UseQueryResult<AIProviderStatus> {
@@ -1800,6 +1842,857 @@ export function useRestartEditChatSession(appId: string): UseMutationResult<Edit
       qc.setQueryData(['edit-chat-session', appId], data)
     },
     onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+// ---- AI Frontend Builder (ai-frontend-builder T33) ----
+// Types mirror internal/dashboard/builder_*.go, builder_settings_store.go and
+// builder_templates.go exactly (JSON tags, nullability). Routes live under
+// /dashboard/api/builder/*, plus PATCH /dashboard/api/github/templates/{id}/builder.
+// No user-facing strings here: callers localize from the codes below.
+
+/** A registered GitHub template (github_templates_store.go GitHubTemplate). */
+export interface GitHubTemplate {
+  id: string
+  name: string
+  description: string
+  github_owner: string
+  github_repo: string
+  framework: string
+  active: boolean
+  created_by: string
+  created_at: string
+  render_service_type: string
+  build_command: string
+  publish_path: string
+  start_command: string
+  /** Marks the template as a base template of the AI Frontend Builder. Independent of `active`. */
+  builder_enabled: boolean
+}
+
+/** A published frontend app (frontend_apps_store.go FrontendApp). */
+export interface FrontendApp {
+  id: string
+  name: string
+  slug: string
+  template_id: string
+  template_name: string
+  github_repo_url: string
+  status: string
+  error_message?: string
+  created_by: string
+  created_at: string
+  archived_at?: string
+  backend_app_id?: string
+  deploy_service_id?: string
+  deploy_url?: string
+  deploy_status?: string
+  deploy_error_message?: string
+  custom_domain?: string
+  owner_id: string
+  owner_email?: string
+  owner_name?: string
+}
+
+// -- Status --
+
+/** Why GET /builder/status says available=false ('' when available). */
+export type BuilderUnavailableReason =
+  | ''
+  | 'not_configured' // BUILDER_URL unset: no builder deployed
+  | 'disabled' // superadmin switched it off (settings.enabled)
+  | 'provider_not_configured' // the settings' LLM provider is unusable
+  | 'builder_unreachable' // builder health probe failed
+
+export interface BuilderStatus {
+  available: boolean
+  provider_configured: boolean
+  reason: BuilderUnavailableReason
+}
+
+// -- Sessions / turns --
+
+export type BuilderSessionStatus =
+  | 'idle'
+  | 'running'
+  | 'queued'
+  | 'awaiting_confirmation'
+  | 'failed'
+  | 'archived'
+
+export type BuilderTurnStatus =
+  | 'pending'
+  | 'queued'
+  | 'running'
+  | 'awaiting_confirmation'
+  | 'completed'
+  | 'failed'
+  | 'limit_reached'
+  | 'budget_exceeded'
+
+export type BuilderTurnKind = 'chat' | 'revert'
+
+/** Generic turn error codes (agent/limits.go, agent/revert.go). Open set: treat unknown as generic. */
+export type BuilderTurnErrorCode =
+  | 'provider_unavailable'
+  | 'context_too_long'
+  | 'workspace_lost'
+  | 'tool_failed'
+  | 'commit_failed'
+  | 'internal_error'
+  | 'unsupported_turn_kind'
+  | 'revert_failed'
+
+/** `limit` of a limit_reached event: which cap ended the turn. */
+export type BuilderLimitKind = 'max_steps' | 'max_fix_iterations' | 'max_turn_duration'
+
+/**
+ * The model's propose_backend_change arguments: {"operation": {"kind": ..., "<kind>": {...}}}.
+ * Schema names only, never row data. The shape under each kind is not fixed here.
+ */
+export interface BuilderProposalOperation {
+  operation?: { kind?: string; [key: string]: unknown }
+  [key: string]: unknown
+}
+
+export interface BuilderProposal {
+  tool_call_id: string
+  name: string
+  operation: BuilderProposalOperation
+}
+
+export interface BuilderTurn {
+  id: string
+  seq: number
+  kind: BuilderTurnKind
+  status: BuilderTurnStatus
+  commit_sha: string
+  error_code: BuilderTurnErrorCode | string | null
+  /** The user's message that opened the turn; absent for revert turns. */
+  user_message?: string
+  /** Present only while status === 'awaiting_confirmation'. */
+  pending_proposal?: BuilderProposal
+  created_at: string
+  finished_at: string | null
+}
+
+export interface BuilderSession {
+  id: string
+  backend_app_id: string
+  title: string
+  template_kind: 'default' | 'github'
+  template_id: string | null
+  template_version: string
+  prompt_version_id: string | null
+  locale: string
+  status: BuilderSessionStatus
+  head_sha: string
+  head_turn_seq: number
+  frontend_app_id: string | null
+  published_sha: string
+  tokens_in: number
+  tokens_out: number
+  created_at: string
+  updated_at: string
+}
+
+export interface BuilderSessionDetail extends BuilderSession {
+  turns: BuilderTurn[]
+}
+
+/** Body of POST /builder/sessions. Empty/absent template_id selects the built-in default template. */
+export interface CreateBuilderSessionInput {
+  backend_app_id: string
+  template_id?: string
+  /** Defaults to the backend app's name; max 120 characters. */
+  title?: string
+  /** BCP-47-ish tag ('pt-BR'); defaults to Accept-Language, then 'en'. The agent replies in it. */
+  locale?: string
+}
+
+// -- Events --
+
+export interface BuilderEventPayloads {
+  turn_started: { seq?: number; resumed?: boolean; kind?: string }
+  queued: Record<string, never>
+  assistant_message: { content?: string }
+  tool_call: { name?: string; summary?: string }
+  file_changed: { path?: string; op?: string }
+  build_started: { step?: string }
+  build_succeeded: { step?: string }
+  build_failed: { step?: string; tail?: string }
+  proposal: { tool_call_id?: string; name?: string; operation?: BuilderProposalOperation }
+  limit_reached: { limit?: BuilderLimitKind | string }
+  budget_exceeded: Record<string, never>
+  error: { code?: BuilderTurnErrorCode | string }
+  revert: {
+    to_turn_seq?: number
+    sha?: string
+    changed?: boolean
+    build?: 'succeeded' | 'failed' | 'unavailable' | string
+  }
+  turn_finished: { status?: BuilderTurnStatus | string; sha?: string }
+  // Written by the proposal and publish handlers; only short scalar fields are served.
+  proposal_confirmed: { tool_call_id?: string; applied?: boolean; kind?: string }
+  proposal_rejected: { tool_call_id?: string }
+  publish_started: { republish?: boolean }
+  publish_succeeded: { republish?: boolean; sha?: string }
+  publish_failed: { code?: BuilderPublishConflictReason | 'github_failed' | string }
+}
+
+export type BuilderEventType = keyof BuilderEventPayloads
+
+/**
+ * One entry of the event log (BuilderEventView). Payload keys are whitelisted server side and
+ * every key is optional. The set of types can grow: ignore a `type` you do not know.
+ */
+export type BuilderEvent = {
+  [K in BuilderEventType]: {
+    id: number
+    turn_id: string | null
+    type: K
+    payload: BuilderEventPayloads[K]
+    created_at: string
+  }
+}[BuilderEventType]
+
+/** Wire shape of GET /builder/sessions/{id}/events. */
+export interface BuilderEventsPage {
+  events: BuilderEvent[]
+  /** Equals the request's `after` when nothing is new. */
+  next_cursor: number
+}
+
+// -- Messages / revert / proposals --
+
+/** Body of POST /builder/sessions/{id}/revert. turn_seq 0 is the initial template; always send it. */
+export interface RevertBuilderSessionInput {
+  turn_seq: number
+}
+
+/** Body of the confirm and reject routes (builderProposalResult). */
+export interface BuilderProposalResult {
+  applied: boolean
+  rejected?: boolean
+  kind?: string
+  /** A repeated request that did nothing. */
+  already_resolved?: boolean
+  turn?: BuilderTurn
+}
+
+// -- Preview / publish --
+
+/** Body of POST /builder/sessions/{id}/preview-token. Keep `token` out of logs and visible URLs. */
+export interface BuilderPreviewToken {
+  token: string
+  expires_at: string
+  /** The iframe src: same-origin path with ?pt=<token>. Mint a new one before expires_at (10 minutes). */
+  url: string
+}
+
+/** Body of POST /builder/sessions/{id}/publish. Optional; lowercase DNS label. */
+export interface PublishBuilderSessionInput {
+  subdomain?: string
+}
+
+export interface BuilderPublishResult {
+  frontend_app: FrontendApp
+  published_sha: string
+  /** True when an existing frontend app was updated. */
+  republish: boolean
+}
+
+/** `reason` of a 409 from the publish route (ApiError.reason). */
+export type BuilderPublishConflictReason =
+  | 'github_not_configured'
+  | 'deploy_not_configured'
+  | 'template_not_deployable'
+  | 'template_unavailable'
+  | 'nothing_to_publish'
+  | 'turn_in_progress'
+  | 'publish_in_progress'
+  | 'remote_moved'
+
+// -- Templates --
+
+export interface BuilderTemplate {
+  /** 'default' has an empty id; pass a 'github' template's id as template_id when creating a session. */
+  kind: 'default' | 'github'
+  id: string
+  name: string
+  description: string
+  framework: string
+  render_service_type: string
+  build_command: string
+  publish_path: string
+}
+
+// -- Settings (superadmin) --
+
+export type BuilderProviderKind = 'openai' | 'openai_compatible'
+
+export interface BuilderSettings {
+  enabled: boolean
+  provider: BuilderProviderKind | string
+  context_window_tokens: number
+  /** Tokens (in + out). 0 = unset; sessions stay blocked until both caps are positive. */
+  session_token_cap: number
+  user_monthly_token_cap: number
+  max_steps_per_turn: number
+  max_fix_iterations: number
+  max_turn_seconds: number
+  updated_by: string | null
+  updated_at: string | null
+  /** false until the first save (defaults shown). */
+  configured: boolean
+}
+
+/**
+ * Body of PUT /builder/settings (BuilderSettingsInput): merge-on-absent-key. A key that is
+ * absent (or undefined, which JSON drops) keeps the stored value; at least one key is required.
+ * To "clear" a cap send 0 explicitly. enabled/provider/limits have no empty value: send the
+ * new value. Never send NaN/null (JSON turns NaN into null, which the server reads as absent).
+ */
+export interface BuilderSettingsUpdate {
+  enabled?: boolean
+  provider?: BuilderProviderKind
+  context_window_tokens?: number
+  session_token_cap?: number
+  user_monthly_token_cap?: number
+  max_steps_per_turn?: number
+  max_fix_iterations?: number
+  max_turn_seconds?: number
+}
+
+/** Server-side bounds of the numeric settings (builder_settings.go), for form validation. */
+export const BUILDER_SETTINGS_LIMITS = {
+  context_window_tokens: { min: 4096, max: 2_000_000 },
+  session_token_cap: { min: 0, max: 1_000_000_000_000 },
+  user_monthly_token_cap: { min: 0, max: 1_000_000_000_000 },
+  max_steps_per_turn: { min: 1, max: 200 },
+  max_fix_iterations: { min: 1, max: 20 },
+  max_turn_seconds: { min: 10, max: 3600 },
+} as const
+
+// -- Persona + rules (superadmin) --
+
+export interface BuilderPrompt {
+  /** '' until the first save. */
+  id: string
+  persona: string
+  rules: string
+  created_by: string
+  created_by_email: string
+  created_at: string | null
+  /** Size of the company layer (persona + rules) and its save-time cap. */
+  chars: number
+  max_chars: number
+  /** Set by PUT only: false when the save matched the active version (no new version). */
+  changed?: boolean
+}
+
+/**
+ * Body of PUT /builder/prompt (BuilderPromptInput): merge-on-absent-key against the active
+ * version. Absent = keep; "" = clear. At least one key is required, and a form that lets the
+ * user empty a field MUST send that key as "" (never omit it, omission silently no-ops).
+ */
+export interface BuilderPromptUpdate {
+  persona?: string
+  rules?: string
+}
+
+export interface BuilderPromptVersion {
+  id: string
+  persona: string
+  rules: string
+  created_by: string
+  created_by_email: string
+  created_at: string
+}
+
+export interface BuilderPromptVersionsPage {
+  versions: BuilderPromptVersion[]
+  total: number
+}
+
+// -- Helpers --
+
+/** Poll period of the session detail and events while a turn is in flight. */
+export const BUILDER_POLL_INTERVAL_MS = 1500
+
+/**
+ * True while the builder is working on the session: the session is running/queued, or a turn is
+ * still pending/queued/running. The turn check matters: right after a message the turn is
+ * 'pending' while the session status is still 'idle'. 'awaiting_confirmation' is NOT active
+ * (nothing happens until the user confirms or rejects).
+ */
+export function isBuilderSessionActive(session: BuilderSessionDetail | undefined): boolean {
+  if (!session) return false
+  if (session.status === 'running' || session.status === 'queued') return true
+  return session.turns.some(
+    (t) => t.status === 'pending' || t.status === 'queued' || t.status === 'running',
+  )
+}
+
+export type BuilderApiErrorKind =
+  | 'not_configured' // 503 "builder not configured": no builder deployed
+  | 'unavailable' // 503 "builder unavailable": disabled, provider missing or builder down
+  | 'turn_active' // 409 on message/revert: a turn is already in progress
+  | 'publish_conflict' // 409 with a `reason` (see BuilderPublishConflictReason)
+  | 'conflict' // any other 409
+  | 'not_found'
+  | 'forbidden'
+  | 'other'
+
+/**
+ * Classifies a builder API failure so the UI can pick a state without parsing text. Returns
+ * 'other' for anything that is not an ApiError. Budget and limit outcomes are not HTTP errors:
+ * read them from BuilderTurn.status ('budget_exceeded' | 'limit_reached') and the events.
+ */
+export function classifyBuilderError(error: unknown): {
+  kind: BuilderApiErrorKind
+  reason?: BuilderPublishConflictReason | string
+} {
+  if (!(error instanceof ApiError)) return { kind: 'other' }
+  switch (error.status) {
+    case 503:
+      return { kind: error.message === 'builder not configured' ? 'not_configured' : 'unavailable' }
+    case 409:
+      if (error.reason) return { kind: 'publish_conflict', reason: error.reason }
+      if (error.message === 'a turn is already in progress') return { kind: 'turn_active' }
+      return { kind: 'conflict' }
+    case 404:
+      return { kind: 'not_found' }
+    case 403:
+      return { kind: 'forbidden' }
+    default:
+      return { kind: 'other' }
+  }
+}
+
+const BUILDER_BASE = '/dashboard/api/builder'
+
+export const builderKeys = {
+  all: ['builder'] as const,
+  status: () => ['builder', 'status'] as const,
+  sessions: () => ['builder', 'sessions'] as const,
+  session: (id: string) => ['builder', 'session', id] as const,
+  events: (id: string) => ['builder', 'events', id] as const,
+  templates: () => ['builder', 'templates'] as const,
+  settings: () => ['builder', 'settings'] as const,
+  prompt: () => ['builder', 'prompt'] as const,
+  promptVersions: (limit?: number, offset?: number) =>
+    ['builder', 'prompt-versions', limit ?? null, offset ?? null] as const,
+}
+
+function builderSessionPath(sessionId: string): string {
+  return `${BUILDER_BASE}/sessions/${encodeURIComponent(sessionId)}`
+}
+
+function jsonRequest(method: string, body?: unknown): RequestInit {
+  return body === undefined
+    ? { method }
+    : { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+}
+
+/** URL of the ZIP download of a session's project. Use it as an <a href> (same-origin, cookie auth). */
+export function builderDownloadUrl(sessionId: string): string {
+  return `${builderSessionPath(sessionId)}/download.zip`
+}
+
+// -- Queries --
+
+/** Any authenticated user. Answers 200 even when no builder is deployed (reason 'not_configured'). */
+export function useBuilderStatus(): UseQueryResult<BuilderStatus> {
+  return useQuery({
+    queryKey: builderKeys.status(),
+    queryFn: () => apiFetch<BuilderStatus>(`${BUILDER_BASE}/status`),
+    staleTime: 15000,
+  })
+}
+
+/** The caller's own non-archived sessions, most recently updated first. */
+export function useBuilderSessions(): UseQueryResult<BuilderSession[]> {
+  return useQuery({
+    queryKey: builderKeys.sessions(),
+    queryFn: () => apiFetch<BuilderSession[]>(`${BUILDER_BASE}/sessions`),
+  })
+}
+
+/** Session + turns (owner only). Polls while a turn is in flight (see isBuilderSessionActive). */
+export function useBuilderSession(sessionId: string): UseQueryResult<BuilderSessionDetail> {
+  return useQuery({
+    queryKey: builderKeys.session(sessionId),
+    queryFn: () => apiFetch<BuilderSessionDetail>(builderSessionPath(sessionId)),
+    enabled: Boolean(sessionId),
+    retry: (count, error) => !(error instanceof ApiError && error.status === 404) && count < 2,
+    refetchInterval: (query) =>
+      query.state.status !== 'error' && isBuilderSessionActive(query.state.data)
+        ? BUILDER_POLL_INTERVAL_MS
+        : false,
+  })
+}
+
+/** What useBuilderEvents returns: every event fetched so far (oldest first) and the cursor. */
+export interface BuilderEventsState {
+  events: BuilderEvent[]
+  next_cursor: number
+}
+
+const BUILDER_EVENTS_PAGE_LIMIT = 500 // store.MaxEventsLimit
+const BUILDER_EVENTS_MAX_PAGES = 20 // per fetch; the next poll continues from the cursor
+
+/**
+ * The session's event log, accumulated: each fetch asks only for events after the cursor kept in
+ * the cache and appends them, so callers never manage the cursor. Polls every
+ * BUILDER_POLL_INTERVAL_MS only while the session is active (see isBuilderSessionActive) and
+ * does one last fetch when it goes inactive, so the closing events are never missed. It reads
+ * the session through useBuilderSession (same cache entry, no extra request).
+ */
+export function useBuilderEvents(sessionId: string): UseQueryResult<BuilderEventsState> {
+  const qc = useQueryClient()
+  const session = useBuilderSession(sessionId)
+  const active = isBuilderSessionActive(session.data)
+
+  const wasActive = useRef(false)
+  useEffect(() => {
+    if (wasActive.current && !active && sessionId) {
+      void qc.invalidateQueries({ queryKey: builderKeys.events(sessionId) })
+    }
+    wasActive.current = active
+  }, [active, sessionId, qc])
+
+  return useQuery({
+    queryKey: builderKeys.events(sessionId),
+    enabled: Boolean(sessionId),
+    retry: (count, error) => !(error instanceof ApiError && error.status === 404) && count < 2,
+    refetchInterval: (query) =>
+      active && query.state.status !== 'error' ? BUILDER_POLL_INTERVAL_MS : false,
+    queryFn: async (): Promise<BuilderEventsState> => {
+      const prev = qc.getQueryData<BuilderEventsState>(builderKeys.events(sessionId))
+      let cursor = prev?.next_cursor ?? 0
+      const events = prev ? [...prev.events] : []
+      let added = 0
+      for (let i = 0; i < BUILDER_EVENTS_MAX_PAGES; i++) {
+        const page = await apiFetch<BuilderEventsPage>(
+          `${builderSessionPath(sessionId)}/events?after=${cursor}&limit=${BUILDER_EVENTS_PAGE_LIMIT}`,
+        )
+        if (page.events.length === 0) break
+        events.push(...page.events)
+        added += page.events.length
+        cursor = page.next_cursor
+        if (page.events.length < BUILDER_EVENTS_PAGE_LIMIT) break
+      }
+      // Nothing new: keep the same object so subscribers do not re-render every poll.
+      return prev && added === 0 ? prev : { events, next_cursor: cursor }
+    },
+  })
+}
+
+/** Default template first, then the builder-enabled company templates. Any authenticated user. */
+export function useBuilderTemplates(): UseQueryResult<BuilderTemplate[]> {
+  return useQuery({
+    queryKey: builderKeys.templates(),
+    queryFn: () => apiFetch<BuilderTemplate[]>(`${BUILDER_BASE}/templates`),
+    staleTime: 30000,
+  })
+}
+
+// Superadmin-only routes (403 for anyone else): pass { enabled: false } to skip the request.
+export interface BuilderAdminQueryOptions {
+  enabled?: boolean
+}
+
+export function useBuilderSettings(
+  options: BuilderAdminQueryOptions = {},
+): UseQueryResult<BuilderSettings> {
+  return useQuery({
+    queryKey: builderKeys.settings(),
+    queryFn: () => apiFetch<BuilderSettings>(`${BUILDER_BASE}/settings`),
+    enabled: options.enabled ?? true,
+  })
+}
+
+/** The active persona + rules (the newest version; empty fields and id '' before the first save). */
+export function useBuilderPrompt(
+  options: BuilderAdminQueryOptions = {},
+): UseQueryResult<BuilderPrompt> {
+  return useQuery({
+    queryKey: builderKeys.prompt(),
+    queryFn: () => apiFetch<BuilderPrompt>(`${BUILDER_BASE}/prompt`),
+    enabled: options.enabled ?? true,
+  })
+}
+
+/** Full prompt history, newest first. limit defaults to 20 (max 100) server side. */
+export function useBuilderPromptVersions(
+  params: { limit?: number; offset?: number } = {},
+  options: BuilderAdminQueryOptions = {},
+): UseQueryResult<BuilderPromptVersionsPage> {
+  const search = new URLSearchParams()
+  if (params.limit !== undefined) search.set('limit', String(params.limit))
+  if (params.offset !== undefined) search.set('offset', String(params.offset))
+  const qs = search.toString()
+  return useQuery({
+    queryKey: builderKeys.promptVersions(params.limit, params.offset),
+    queryFn: () =>
+      apiFetch<BuilderPromptVersionsPage>(`${BUILDER_BASE}/prompt/versions${qs ? `?${qs}` : ''}`),
+    enabled: options.enabled ?? true,
+  })
+}
+
+// -- Mutations --
+
+export function useUpdateBuilderSettings(): UseMutationResult<
+  BuilderSettings,
+  Error,
+  BuilderSettingsUpdate
+> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: BuilderSettingsUpdate) =>
+      apiFetch<BuilderSettings>(`${BUILDER_BASE}/settings`, jsonRequest('PUT', input)),
+    onSuccess: (data) => {
+      qc.setQueryData(builderKeys.settings(), data)
+      // enabled/provider decide the availability the status endpoint reports.
+      qc.invalidateQueries({ queryKey: builderKeys.status() })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+export function useUpdateBuilderPrompt(): UseMutationResult<
+  BuilderPrompt,
+  Error,
+  BuilderPromptUpdate
+> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: BuilderPromptUpdate) =>
+      apiFetch<BuilderPrompt>(`${BUILDER_BASE}/prompt`, jsonRequest('PUT', input)),
+    onSuccess: (data) => {
+      qc.setQueryData(builderKeys.prompt(), data)
+      if (data.changed) {
+        qc.invalidateQueries({ queryKey: ['builder', 'prompt-versions'] })
+      }
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+/** PATCH /github/templates/{id}/builder (superadmin): returns the updated template. */
+export function useSetBuilderTemplateEnabled(): UseMutationResult<
+  GitHubTemplate,
+  Error,
+  { id: string; builder_enabled: boolean }
+> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, builder_enabled }) =>
+      apiFetch<GitHubTemplate>(
+        `/dashboard/api/github/templates/${encodeURIComponent(id)}/builder`,
+        jsonRequest('PATCH', { builder_enabled }),
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: builderKeys.templates() })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+export function useCreateBuilderSession(): UseMutationResult<
+  BuilderSession,
+  Error,
+  CreateBuilderSessionInput
+> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: CreateBuilderSessionInput) =>
+      apiFetch<BuilderSession>(`${BUILDER_BASE}/sessions`, jsonRequest('POST', input)),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: builderKeys.sessions() })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+/** Archives the session and destroys its workspace (204). Published frontend apps are untouched. */
+export function useDeleteBuilderSession(): UseMutationResult<void, Error, string> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (sessionId: string) =>
+      apiFetch<void>(builderSessionPath(sessionId), { method: 'DELETE' }),
+    onSuccess: (_data, sessionId) => {
+      qc.removeQueries({ queryKey: builderKeys.session(sessionId) })
+      qc.removeQueries({ queryKey: builderKeys.events(sessionId) })
+      qc.invalidateQueries({ queryKey: builderKeys.sessions() })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+// After any mutation that creates or resolves a turn the session detail (status, turns) and
+// the event log are stale; refetching them also (re)starts the polling.
+function invalidateBuilderSession(qc: ReturnType<typeof useQueryClient>, sessionId: string): void {
+  qc.invalidateQueries({ queryKey: builderKeys.session(sessionId) })
+  qc.invalidateQueries({ queryKey: builderKeys.events(sessionId) })
+}
+
+/** Enqueues a chat turn (202 with the new pending turn). 409 when a turn is already in progress. */
+export function useSendBuilderMessage(
+  sessionId: string,
+): UseMutationResult<BuilderTurn, Error, string> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (content: string) =>
+      apiFetch<BuilderTurn>(
+        `${builderSessionPath(sessionId)}/messages`,
+        jsonRequest('POST', { content }),
+      ),
+    onSuccess: () => {
+      invalidateBuilderSession(qc, sessionId)
+      qc.invalidateQueries({ queryKey: builderKeys.sessions() })
+    },
+    onError: (error) => {
+      // BuilderPage shows a localized inline notice for a concurrent turn (409).
+      if (classifyBuilderError(error).kind === 'turn_active') return
+      toast.error(error.message)
+    },
+  })
+}
+
+/** Restores the state a previous turn left (as a new revert turn). Variable: the target turn_seq (0 = template). */
+export function useRevertBuilderSession(
+  sessionId: string,
+): UseMutationResult<BuilderTurn, Error, number> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (turnSeq: number) =>
+      apiFetch<BuilderTurn>(
+        `${builderSessionPath(sessionId)}/revert`,
+        jsonRequest('POST', { turn_seq: turnSeq } satisfies RevertBuilderSessionInput),
+      ),
+    onSuccess: () => {
+      invalidateBuilderSession(qc, sessionId)
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+function builderTurnPath(
+  sessionId: string,
+  turn: string | number,
+  action: 'confirm' | 'reject',
+): string {
+  return `${builderSessionPath(sessionId)}/turns/${encodeURIComponent(String(turn))}/${action}`
+}
+
+/**
+ * Confirms the paused proposal of a turn (variable: turn id or seq). Applies a schema change to
+ * the BACKEND app, so it needs write access there (403/404 otherwise, the turn stays paused).
+ * A change the app refuses answers 400 with a safe message AND resumes the turn, so the session
+ * is refreshed on error as well (onSettled).
+ */
+export function useConfirmBuilderTurn(
+  sessionId: string,
+): UseMutationResult<BuilderProposalResult, Error, string | number> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (turn: string | number) =>
+      apiFetch<BuilderProposalResult>(builderTurnPath(sessionId, turn, 'confirm'), {
+        method: 'POST',
+      }),
+    onSuccess: () => {
+      // The backend app's schema changed.
+      qc.invalidateQueries({ queryKey: ['apps'] })
+    },
+    onSettled: () => {
+      invalidateBuilderSession(qc, sessionId)
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+/** Rejects the paused proposal of a turn (variable: turn id or seq). Applies nothing. */
+export function useRejectBuilderTurn(
+  sessionId: string,
+): UseMutationResult<BuilderProposalResult, Error, string | number> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (turn: string | number) =>
+      apiFetch<BuilderProposalResult>(builderTurnPath(sessionId, turn, 'reject'), {
+        method: 'POST',
+      }),
+    onSettled: () => {
+      invalidateBuilderSession(qc, sessionId)
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+/**
+ * Mints a preview token (POST; the answer is an iframe src that expires, so this is a mutation,
+ * not a cached query). Re-mint before `expires_at`. The iframe must be sandboxed WITHOUT
+ * allow-same-origin (design section 10).
+ */
+export function useBuilderPreviewToken(
+  sessionId: string,
+): UseMutationResult<BuilderPreviewToken, Error, void> {
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<BuilderPreviewToken>(`${builderSessionPath(sessionId)}/preview-token`, {
+        method: 'POST',
+      }),
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+/**
+ * Publishes (first time) or republishes the session as a frontend app. Precondition failures
+ * are 409 with an ApiError.reason (BuilderPublishConflictReason); use classifyBuilderError.
+ * The variable is optional: call .mutate() or .mutate({ subdomain }).
+ */
+export function usePublishBuilderSession(
+  sessionId: string,
+): UseMutationResult<BuilderPublishResult, Error, PublishBuilderSessionInput | void> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input?: PublishBuilderSessionInput | void) =>
+      apiFetch<BuilderPublishResult>(
+        `${builderSessionPath(sessionId)}/publish`,
+        jsonRequest('POST', input ?? {}),
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['frontend-apps'] })
+      qc.invalidateQueries({ queryKey: builderKeys.sessions() })
+    },
+    // A failed publish can still have recorded publish_* events or changed the session.
+    onSettled: () => {
+      invalidateBuilderSession(qc, sessionId)
+    },
+    onError: (error) => {
+      // BuilderPage shows a localized inline message for the publish preconditions (409).
+      if (classifyBuilderError(error).kind === 'publish_conflict') return
       toast.error(error.message)
     },
   })
