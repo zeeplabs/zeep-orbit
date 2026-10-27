@@ -35,7 +35,7 @@ type fakeStore struct {
 	msgs   []store.Message
 	nextID int64
 	events []fakeEvent
-	snaps  map[int]store.Snapshot
+	snaps  []store.Snapshot // append-only, in (turn_seq, part) order
 	usage  []store.UsageRecord
 	finish *store.FinishParams
 
@@ -48,8 +48,8 @@ func newFakeStore() *fakeStore {
 	return &fakeStore{
 		turn: &store.Turn{ID: "turn-1", SessionID: "sess-1", Seq: 1, Kind: store.KindChat, Status: store.TurnRunning, LeaseOwner: &owner},
 		sess: &store.Session{ID: "sess-1", OwnerUserID: "user-1", BackendAppID: "app-1", Locale: "en", HeadSHA: "sha0", Status: store.SessionRunning},
-		snaps: map[int]store.Snapshot{
-			0: {SessionID: "sess-1", TurnSeq: 0, CommitSHA: "sha0", Bundle: []byte("bundle-0")},
+		snaps: []store.Snapshot{
+			{SessionID: "sess-1", TurnSeq: 0, Part: 0, CommitSHA: "sha0", Bundle: []byte("bundle-0")},
 		},
 	}
 }
@@ -153,20 +153,20 @@ func (f *fakeStore) SaveSnapshot(ctx context.Context, l store.Lease, sha string,
 	if err := f.checkLease(l); err != nil {
 		return err
 	}
-	f.snaps[f.turn.Seq] = store.Snapshot{SessionID: f.sess.ID, TurnSeq: f.turn.Seq, CommitSHA: sha, Bundle: append([]byte(nil), bundle...)}
+	part := 0
+	for _, sn := range f.snaps {
+		if sn.TurnSeq == f.turn.Seq {
+			part = sn.Part + 1
+		}
+	}
+	f.snaps = append(f.snaps, store.Snapshot{SessionID: f.sess.ID, TurnSeq: f.turn.Seq, Part: part, CommitSHA: sha, Bundle: append([]byte(nil), bundle...)})
 	return nil
 }
 
 func (f *fakeStore) ListSnapshots(_ context.Context, _ string) ([]store.Snapshot, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var out []store.Snapshot
-	for seq := 0; seq <= 100; seq++ {
-		if s, ok := f.snaps[seq]; ok {
-			out = append(out, s)
-		}
-	}
-	return out, nil
+	return append([]store.Snapshot(nil), f.snaps...), nil
 }
 
 func (f *fakeStore) FinishTurn(ctx context.Context, l store.Lease, p store.FinishParams) error {

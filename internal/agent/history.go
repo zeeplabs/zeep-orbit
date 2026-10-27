@@ -1,12 +1,8 @@
 package agent
 
 import (
-	"bytes"
 	"context"
-	"encoding/binary"
 	"encoding/json"
-	"errors"
-	"fmt"
 
 	"github.com/zeeplabs/zeep-orbit/internal/agent/provider"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/sandbox"
@@ -155,87 +151,17 @@ func toProviderMessages(msgs []store.Message, currentTurnID string) []provider.M
 	return out
 }
 
-// ---- snapshot framing ----
-//
-// builder_snapshots keeps ONE row per (session, turn_seq), but the loop
-// commits after every tool batch that wrote files, so a turn can produce
-// several commits and each one has its own incremental bundle (prev..sha).
-// Overwriting the row would drop the earlier bundles and break the restore
-// chain. The loop therefore stores the bundles of a turn in that single row,
-// framed as:
-//
-//	magic | (uvarint len(sha) | sha | uvarint len(bundle) | bundle)*
-//
-// Rows without the magic (the turn-0 snapshot written at session creation) are
-// a plain git bundle whose commit is the row's commit_sha.
-const snapshotMagic = "ORBSNAP1\n"
+// ---- snapshots ----
 
-type snapPart struct {
-	SHA  string
-	Data []byte
-}
-
-func encodeSnapshotParts(parts []snapPart) []byte {
-	var b bytes.Buffer
-	b.WriteString(snapshotMagic)
-	var tmp [binary.MaxVarintLen64]byte
-	for _, p := range parts {
-		n := binary.PutUvarint(tmp[:], uint64(len(p.SHA)))
-		b.Write(tmp[:n])
-		b.WriteString(p.SHA)
-		n = binary.PutUvarint(tmp[:], uint64(len(p.Data)))
-		b.Write(tmp[:n])
-		b.Write(p.Data)
-	}
-	return b.Bytes()
-}
-
-func decodeSnapshotParts(sn store.Snapshot) ([]snapPart, error) {
-	if !bytes.HasPrefix(sn.Bundle, []byte(snapshotMagic)) {
-		return []snapPart{{SHA: sn.CommitSHA, Data: sn.Bundle}}, nil
-	}
-	r := bytes.NewReader(sn.Bundle[len(snapshotMagic):])
-	var parts []snapPart
-	read := func() ([]byte, error) {
-		n, err := binary.ReadUvarint(r)
-		if err != nil || n > uint64(r.Len()) {
-			return nil, errors.New("agent: corrupt snapshot frame")
-		}
-		buf := make([]byte, n)
-		if _, err := r.Read(buf); err != nil && n > 0 {
-			return nil, errors.New("agent: corrupt snapshot frame")
-		}
-		return buf, nil
-	}
-	for r.Len() > 0 {
-		sha, err := read()
-		if err != nil {
-			return nil, err
-		}
-		data, err := read()
-		if err != nil {
-			return nil, err
-		}
-		parts = append(parts, snapPart{SHA: string(sha), Data: data})
-	}
-	return parts, nil
-}
-
-// BundlesFromSnapshots flattens stored snapshots (turn_seq order) into the
-// ordered bundle list [sandbox.Sandbox.Restore] expects, unpacking the framed
-// multi-commit rows the loop writes.
-func BundlesFromSnapshots(snaps []store.Snapshot) ([]sandbox.Bundle, error) {
-	var out []sandbox.Bundle
+// BundlesFromSnapshots maps stored snapshots, already in (turn_seq, part)
+// order as ListSnapshots returns them, to the ordered bundle list
+// [sandbox.Sandbox.Restore] expects: one bundle per row.
+func BundlesFromSnapshots(snaps []store.Snapshot) []sandbox.Bundle {
+	out := make([]sandbox.Bundle, 0, len(snaps))
 	for _, sn := range snaps {
-		parts, err := decodeSnapshotParts(sn)
-		if err != nil {
-			return nil, fmt.Errorf("snapshot of turn %d: %w", sn.TurnSeq, err)
-		}
-		for _, p := range parts {
-			out = append(out, sandbox.Bundle{Seq: sn.TurnSeq, SHA: p.SHA, Data: p.Data})
-		}
+		out = append(out, sandbox.Bundle{Seq: sn.TurnSeq, SHA: sn.CommitSHA, Data: sn.Bundle})
 	}
-	return out, nil
+	return out
 }
 
 // SnapshotLister is the part of the store [SnapshotProvider] needs.
@@ -251,6 +177,6 @@ func SnapshotProvider(l SnapshotLister) sandbox.SnapshotProvider {
 		if err != nil {
 			return nil, err
 		}
-		return BundlesFromSnapshots(snaps)
+		return BundlesFromSnapshots(snaps), nil
 	}
 }

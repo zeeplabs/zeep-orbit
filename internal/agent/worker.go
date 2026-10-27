@@ -62,6 +62,14 @@ type WorkerConfig struct {
 	LeaseTTL      time.Duration
 	RenewEvery    time.Duration
 	ShutdownGrace time.Duration
+	// PrepareDeps, when set, runs at the start of every claimed turn and
+	// returns the Deps that turn runs with. It lets a deployment resolve what
+	// can change at runtime (the provider row, the limits from the settings
+	// table) per turn instead of once at start-up. It must not fail: report a
+	// problem through the Deps it returns (a Provider whose Chat errors ends
+	// the turn with provider_unavailable). nil runs every turn with the Deps
+	// given to NewWorker.
+	PrepareDeps func(ctx context.Context, base Deps) Deps
 }
 
 // Worker is the per-replica turn executor: a Postgres-backed queue consumer.
@@ -270,7 +278,11 @@ func (w *Worker) safeRun(ctx context.Context, lease store.Lease) (err error) {
 			err = fmt.Errorf("turn panicked")
 		}
 	}()
-	return RunTurn(ctx, w.deps, lease)
+	deps := w.deps
+	if w.cfg.PrepareDeps != nil {
+		deps = w.cfg.PrepareDeps(ctx, deps)
+	}
+	return RunTurn(ctx, deps, lease)
 }
 
 // renewLoop extends the lease every RenewEvery while the turn runs. Losing the

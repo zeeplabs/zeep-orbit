@@ -169,10 +169,12 @@ type Event struct {
 
 // Snapshot is a row of zeep_system.builder_snapshots: the incremental git
 // bundle that takes a workspace from the previous snapshot to CommitSHA
-// (turn 0 is the full initial tree).
+// (turn 0, part 0 is the full initial tree). A turn that commits several times
+// has one row per commit, numbered by Part from 0 in save order.
 type Snapshot struct {
 	SessionID string
 	TurnSeq   int
+	Part      int
 	CommitSHA string
 	Bundle    []byte
 	SizeBytes int
@@ -831,33 +833,55 @@ func (s *Store) ListMessages(ctx context.Context, sessionID string) ([]Message, 
 
 // ---- snapshots ----
 
-// SaveSnapshot stores the git bundle of the leased turn under that turn's seq.
-// Idempotent: a resumed turn that saves again replaces the row. ErrLeaseLost
-// when l no longer owns a running turn.
+// SaveSnapshot appends the git bundle of one commit of the leased turn as the
+// next part (0, 1, ...) of that turn's snapshots. Not idempotent: every call
+// adds a row, so callers save each commit once. The part is assigned inside a
+// transaction that first locks the turn row, which both checks the lease and
+// serializes concurrent saves of the same turn (without the lock two saves
+// could read the same max(part) and one would hit the primary key).
+// ErrLeaseLost when l no longer owns a running turn.
 func (s *Store) SaveSnapshot(ctx context.Context, l Lease, commitSHA string, bundle []byte) error {
 	if commitSHA == "" || len(bundle) == 0 {
 		return fmt.Errorf("%w: commit sha and bundle are required", ErrInvalidArgument)
 	}
-	tag, err := s.pool.Exec(ctx,
-		`INSERT INTO zeep_system.builder_snapshots (session_id, turn_seq, commit_sha, bundle, size_bytes)
-		 SELECT t.session_id, t.seq, $3::text, $4::bytea, $5::int
-		 FROM zeep_system.builder_turns t
-		 WHERE t.id = $1 AND t.lease_owner = $2 AND t.status = 'running'
-		 ON CONFLICT (session_id, turn_seq)
-		 DO UPDATE SET commit_sha = EXCLUDED.commit_sha, bundle = EXCLUDED.bundle,
-		               size_bytes = EXCLUDED.size_bytes, created_at = now()`,
-		l.TurnID, l.Owner, commitSHA, bundle, len(bundle),
-	)
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
+		return fmt.Errorf("builder store: save snapshot: begin: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var sessionID string
+	var turnSeq int
+	err = tx.QueryRow(ctx,
+		`SELECT session_id, seq FROM zeep_system.builder_turns
+		 WHERE id = $1 AND lease_owner = $2 AND status = 'running'
+		 FOR NO KEY UPDATE`,
+		l.TurnID, l.Owner,
+	).Scan(&sessionID, &turnSeq)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrLeaseLost
+		}
+		return fmt.Errorf("builder store: save snapshot: lease: %w", err)
+	}
+	// A separate statement from the lock above: under READ COMMITTED it takes
+	// a fresh snapshot, so it sees parts committed by a save that held the lock
+	// before us.
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO zeep_system.builder_snapshots (session_id, turn_seq, part, commit_sha, bundle, size_bytes)
+		 SELECT $1::uuid, $2::int, COALESCE(MAX(part) + 1, 0), $3::text, $4::bytea, $5::int
+		 FROM zeep_system.builder_snapshots WHERE session_id = $1::uuid AND turn_seq = $2::int`,
+		sessionID, turnSeq, commitSHA, bundle, len(bundle),
+	); err != nil {
 		return fmt.Errorf("builder store: save snapshot: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return ErrLeaseLost
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("builder store: save snapshot: commit: %w", err)
 	}
 	return nil
 }
 
-// SaveInitialSnapshot stores the turn-0 snapshot (the full initial tree) at
+// SaveInitialSnapshot stores the turn-0, part-0 snapshot (the full initial tree) at
 // session creation, before any turn exists. Owner-scoped; also records the
 // session head. Idempotent.
 func (s *Store) SaveInitialSnapshot(ctx context.Context, ownerUserID, sessionID, commitSHA string, bundle []byte) error {
@@ -882,9 +906,9 @@ func (s *Store) SaveInitialSnapshot(ctx context.Context, ownerUserID, sessionID,
 		return ErrNotFound
 	}
 	if _, err := tx.Exec(ctx,
-		`INSERT INTO zeep_system.builder_snapshots (session_id, turn_seq, commit_sha, bundle, size_bytes)
-		 VALUES ($1, 0, $2, $3, $4)
-		 ON CONFLICT (session_id, turn_seq)
+		`INSERT INTO zeep_system.builder_snapshots (session_id, turn_seq, part, commit_sha, bundle, size_bytes)
+		 VALUES ($1, 0, 0, $2, $3, $4)
+		 ON CONFLICT (session_id, turn_seq, part)
 		 DO UPDATE SET commit_sha = EXCLUDED.commit_sha, bundle = EXCLUDED.bundle,
 		               size_bytes = EXCLUDED.size_bytes, created_at = now()`,
 		sessionID, commitSHA, bundle, len(bundle),
@@ -897,13 +921,13 @@ func (s *Store) SaveInitialSnapshot(ctx context.Context, ownerUserID, sessionID,
 	return nil
 }
 
-// ListSnapshots returns every snapshot of a session in turn_seq order, bundles
-// included (the builder replays them in order to restore a workspace).
+// ListSnapshots returns every snapshot of a session in (turn_seq, part) order,
+// bundles included (the builder replays them in order to restore a workspace).
 // Internal; not owner-scoped.
 func (s *Store) ListSnapshots(ctx context.Context, sessionID string) ([]Snapshot, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT session_id, turn_seq, commit_sha, bundle, size_bytes, created_at
-		 FROM zeep_system.builder_snapshots WHERE session_id = $1 ORDER BY turn_seq`, sessionID,
+		`SELECT session_id, turn_seq, part, commit_sha, bundle, size_bytes, created_at
+		 FROM zeep_system.builder_snapshots WHERE session_id = $1 ORDER BY turn_seq, part`, sessionID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("builder store: list snapshots: %w", err)
@@ -912,7 +936,7 @@ func (s *Store) ListSnapshots(ctx context.Context, sessionID string) ([]Snapshot
 	out := []Snapshot{}
 	for rows.Next() {
 		var sn Snapshot
-		if err := rows.Scan(&sn.SessionID, &sn.TurnSeq, &sn.CommitSHA, &sn.Bundle, &sn.SizeBytes, &sn.CreatedAt); err != nil {
+		if err := rows.Scan(&sn.SessionID, &sn.TurnSeq, &sn.Part, &sn.CommitSHA, &sn.Bundle, &sn.SizeBytes, &sn.CreatedAt); err != nil {
 			return nil, fmt.Errorf("builder store: scan snapshot: %w", err)
 		}
 		out = append(out, sn)

@@ -60,7 +60,7 @@ func TestRunTurn_HappyPathEndsWithCommit(t *testing.T) {
 	if ev[len(ev)-1] != EventTurnFinished {
 		t.Errorf("last event = %q, want turn_finished", ev[len(ev)-1])
 	}
-	if _, ok := h.st.snaps[1]; !ok {
+	if len(h.st.snaps) < 2 {
 		t.Error("no snapshot saved for the turn")
 	}
 }
@@ -393,14 +393,17 @@ func TestRunTurn_CommitsAndSnapshotsAfterEachWritingBatch(t *testing.T) {
 	if fin.CommitSHA != "sha2" {
 		t.Errorf("turn commit = %q, want sha2 (the head after the last batch)", fin.CommitSHA)
 	}
-	// Both bundles must survive in the single (session, turn) snapshot row.
+	// Each batch is its own (turn, part) row; the restore chain keeps them all.
 	snaps, _ := h.st.ListSnapshots(context.Background(), "sess-1")
-	bundles, err := BundlesFromSnapshots(snaps)
-	if err != nil {
-		t.Fatalf("BundlesFromSnapshots: %v", err)
+	var rows []string
+	for _, sn := range snaps {
+		rows = append(rows, fmt.Sprintf("%d/%d/%s", sn.TurnSeq, sn.Part, sn.CommitSHA))
+	}
+	if strings.Join(rows, ",") != "0/0/sha0,1/0/sha1,1/1/sha2" {
+		t.Errorf("snapshot rows (turn/part/sha) = %v, want 0/0/sha0,1/0/sha1,1/1/sha2", rows)
 	}
 	var shas []string
-	for _, b := range bundles {
+	for _, b := range BundlesFromSnapshots(snaps) {
 		shas = append(shas, b.SHA)
 	}
 	if strings.Join(shas, ",") != "sha0,sha1,sha2" {
@@ -497,31 +500,44 @@ func TestToProviderMessages_RepairsUnansweredCallsOfEarlierTurns(t *testing.T) {
 	}
 }
 
-func TestSnapshotFraming_RoundTripAndPlainRows(t *testing.T) {
-	parts := []snapPart{{SHA: "a1", Data: []byte("one")}, {SHA: "b2", Data: nil}, {SHA: "c3", Data: []byte("three")}}
-	enc := encodeSnapshotParts(parts)
-	got, err := decodeSnapshotParts(store.Snapshot{CommitSHA: "c3", Bundle: enc})
-	if err != nil || len(got) != 3 || got[0].SHA != "a1" || string(got[2].Data) != "three" {
-		t.Fatalf("round trip = %+v, %v", got, err)
+// SnapshotProvider maps rows to sandbox bundles one to one, in the order the
+// store returns them, with no framing.
+func TestSnapshotProvider_MapsRowsInOrder(t *testing.T) {
+	st := newFakeStore()
+	l := st.lease()
+	for _, sha := range []string{"sha1", "sha2"} {
+		if err := st.SaveSnapshot(context.Background(), l, sha, []byte("inc-"+sha)); err != nil {
+			t.Fatal(err)
+		}
 	}
-	plain, err := decodeSnapshotParts(store.Snapshot{CommitSHA: "t0", Bundle: []byte("# v2 git bundle")})
-	if err != nil || len(plain) != 1 || plain[0].SHA != "t0" {
-		t.Fatalf("plain turn-0 row = %+v, %v", plain, err)
+	got, err := SnapshotProvider(st)(context.Background(), "sess-1")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, err := decodeSnapshotParts(store.Snapshot{Bundle: append([]byte(snapshotMagic), 0x7f, 'x')}); err == nil {
-		t.Error("a truncated frame must be reported, not silently accepted")
+	if len(got) != 3 {
+		t.Fatalf("bundles = %d, want 3", len(got))
+	}
+	want := []sandbox.Bundle{
+		{Seq: 0, SHA: "sha0", Data: []byte("bundle-0")},
+		{Seq: 1, SHA: "sha1", Data: []byte("inc-sha1")},
+		{Seq: 1, SHA: "sha2", Data: []byte("inc-sha2")},
+	}
+	for i := range want {
+		if got[i].Seq != want[i].Seq || got[i].SHA != want[i].SHA || string(got[i].Data) != string(want[i].Data) {
+			t.Errorf("bundle %d = %+v, want %+v", i, got[i], want[i])
+		}
 	}
 }
 
-func TestRunTurn_RevertTurnsAreNotRunByTheChatLoop(t *testing.T) {
+func TestRunTurn_UnknownTurnKindIsUnsupported(t *testing.T) {
 	h := newHarness(t)
-	h.st.turn.Kind = store.KindRevert
+	h.st.turn.Kind = "bogus"
 	h.mustRun()
 	fin := h.finished()
 	if fin.Status != store.TurnFailed || fin.ErrorCode != CodeUnsupportedTurn {
-		t.Fatalf("finish = %+v, want failed/%s until the revert branch exists (T28)", fin, CodeUnsupportedTurn)
+		t.Fatalf("finish = %+v, want failed/%s", fin, CodeUnsupportedTurn)
 	}
 	if h.prov.calls() != 0 {
-		t.Error("the provider must not be called for a revert turn")
+		t.Error("the provider must not be called for an unknown turn kind")
 	}
 }

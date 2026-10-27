@@ -79,6 +79,11 @@ type Deps struct {
 	Budget  BudgetChecker
 	Limits  Limits
 	Prompt  PromptSource
+	// PreviewBase returns the URL path a session's preview is served under
+	// (vite --base); the revert turn's rebuild passes it like run_build does.
+	// Default tools.DefaultPreviewBase: pass the same function the workspace
+	// tools were registered with.
+	PreviewBase func(sessionID string) string
 	// Clock defaults to time.Now.
 	Clock func() time.Time
 	// Logger receives the raw errors that must never reach users or events.
@@ -110,6 +115,9 @@ type outcome struct {
 	// commit asks for the final Builder.Commit + snapshot.
 	commit   bool
 	proposal json.RawMessage // awaiting_confirmation
+	// sha is the turn's commit when it was already made (revert); with commit
+	// set, finish computes it instead.
+	sha string
 }
 
 const (
@@ -139,8 +147,7 @@ type run struct {
 
 	// snapshot chain bookkeeping, loaded lazily on the first commit.
 	snapLoaded bool
-	snapParts  []snapPart // bundles already stored for this turn's row
-	lastSHA    string     // newest commit known to the stored snapshots
+	lastSHA    string // newest commit known to the stored snapshots
 }
 
 // RunTurn runs (or resumes) one turn that the caller has claimed with lease.
@@ -210,7 +217,11 @@ func (r *run) abort(ctx context.Context, err error) error {
 }
 
 func (r *run) run(ctx context.Context) (*outcome, error) {
-	if r.turn.Kind != store.KindChat {
+	switch r.turn.Kind {
+	case store.KindChat:
+	case store.KindRevert:
+		return r.runRevert(ctx)
+	default:
 		return &outcome{status: store.TurnFailed, code: CodeUnsupportedTurn}, nil
 	}
 
@@ -535,11 +546,20 @@ func (r *run) commitAndSnapshot(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if err := r.snapshot(ctx, res); err != nil {
+		return "", err
+	}
+	return res.SHA, nil
+}
+
+// snapshot stores the incremental bundle of a commit the builder just made
+// (a no-op when nothing changed).
+func (r *run) snapshot(ctx context.Context, res sandbox.CommitResult) error {
 	if !res.Changed {
-		return res.SHA, nil
+		return nil
 	}
 	if err := r.loadSnapshotState(ctx); err != nil {
-		return "", err
+		return err
 	}
 	if r.lastSHA != "" && res.Prev != r.lastSHA {
 		// A commit made by a crashed attempt never got its snapshot. The new
@@ -547,12 +567,11 @@ func (r *run) commitAndSnapshot(ctx context.Context) (string, error) {
 		// workspace itself is fine, so keep going and make it loud.
 		r.log.Error("agent snapshot chain gap", "turn", r.turn.ID, "session", r.sess.ID, "prev", res.Prev, "stored_head", r.lastSHA)
 	}
-	parts := append(append([]snapPart(nil), r.snapParts...), snapPart{SHA: res.SHA, Data: res.Bundle})
-	if err := r.deps.Store.SaveSnapshot(ctx, r.lease, res.SHA, encodeSnapshotParts(parts)); err != nil {
-		return "", fmt.Errorf("save snapshot: %w", err)
+	if err := r.deps.Store.SaveSnapshot(ctx, r.lease, res.SHA, res.Bundle); err != nil {
+		return fmt.Errorf("save snapshot: %w", err)
 	}
-	r.snapParts, r.lastSHA = parts, res.SHA
-	return res.SHA, nil
+	r.lastSHA = res.SHA
+	return nil
 }
 
 func (r *run) loadSnapshotState(ctx context.Context) error {
@@ -563,15 +582,8 @@ func (r *run) loadSnapshotState(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("list snapshots: %w", err)
 	}
-	for _, sn := range snaps {
-		parts, err := decodeSnapshotParts(sn)
-		if err != nil || len(parts) == 0 {
-			continue
-		}
-		r.lastSHA = parts[len(parts)-1].SHA
-		if sn.TurnSeq == r.turn.Seq {
-			r.snapParts = parts
-		}
+	if len(snaps) > 0 {
+		r.lastSHA = snaps[len(snaps)-1].CommitSHA
 	}
 	r.snapLoaded = true
 	return nil
@@ -580,7 +592,7 @@ func (r *run) loadSnapshotState(ctx context.Context) error {
 // finish persists the outcome: final commit (when asked), the closing events
 // and the turn state.
 func (r *run) finish(ctx context.Context, out *outcome) error {
-	sha := ""
+	sha := out.sha
 	if out.commit {
 		head, err := r.commitAndSnapshot(ctx)
 		switch {

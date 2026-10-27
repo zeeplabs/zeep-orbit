@@ -826,15 +826,45 @@ func provisionZeepSystemOnce(ctx context.Context, pool *db.Pool) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS builder_events_session_idx
 		 ON zeep_system.builder_events (session_id, id)`,
+		// One row per commit: a turn that commits after several tool batches
+		// stores one incremental bundle per batch, numbered by part from 0 in
+		// save order. Turn 0 / part 0 is the full initial tree.
 		`CREATE TABLE IF NOT EXISTS zeep_system.builder_snapshots (
 			session_id UUID        NOT NULL REFERENCES zeep_system.builder_sessions(id) ON DELETE CASCADE,
 			turn_seq   INT         NOT NULL,
+			part       INT         NOT NULL DEFAULT 0,
 			commit_sha TEXT        NOT NULL,
 			bundle     BYTEA       NOT NULL,
 			size_bytes INT         NOT NULL,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-			PRIMARY KEY (session_id, turn_seq)
+			PRIMARY KEY (session_id, turn_seq, part)
 		)`,
+		// Upgrade for databases that ran the old one-row-per-turn shape. The
+		// PK is only replaced when its columns differ from the new key, so a
+		// second boot (or a fresh DB) is a no-op.
+		`ALTER TABLE zeep_system.builder_snapshots ADD COLUMN IF NOT EXISTS part INT NOT NULL DEFAULT 0`,
+		`DO $do$
+		 DECLARE
+		   pk_name TEXT;
+		   pk_cols TEXT[];
+		 BEGIN
+		   SELECT c.conname,
+		          array_agg(a.attname::text ORDER BY k.ord)
+		     INTO pk_name, pk_cols
+		     FROM pg_constraint c
+		     CROSS JOIN LATERAL unnest(c.conkey) WITH ORDINALITY AS k(attnum, ord)
+		     JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.attnum
+		    WHERE c.conrelid = 'zeep_system.builder_snapshots'::regclass
+		      AND c.contype = 'p'
+		    GROUP BY c.conname;
+		   IF pk_cols IS DISTINCT FROM ARRAY['session_id', 'turn_seq', 'part'] THEN
+		     IF pk_name IS NOT NULL THEN
+		       EXECUTE format('ALTER TABLE zeep_system.builder_snapshots DROP CONSTRAINT %I', pk_name);
+		     END IF;
+		     ALTER TABLE zeep_system.builder_snapshots ADD PRIMARY KEY (session_id, turn_seq, part);
+		   END IF;
+		 END
+		 $do$`,
 		// Per-call token ledger. Month caps are computed from created_at
 		// (AFB-14); no FK on session_id/turn_id so usage survives session
 		// deletion.

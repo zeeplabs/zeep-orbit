@@ -310,3 +310,35 @@ func TestWorkerPoke_NeverBlocks(t *testing.T) {
 		t.Fatal("Poke blocked with nobody receiving")
 	}
 }
+
+// PrepareDeps runs once per claimed turn and the Deps it returns are the ones
+// the turn runs with: a runtime-resolved provider reaches the loop.
+func TestWorkerUnit_PrepareDepsProviderIsUsedPerTurn(t *testing.T) {
+	q := newFakeQueue()
+	base := &fakeProvider{}
+	resolved := &fakeProvider{}
+	var mu sync.Mutex
+	prepared := 0
+	w := unitWorker(t, q, base, newFakeSandbox(), WorkerConfig{
+		PrepareDeps: func(_ context.Context, d Deps) Deps {
+			mu.Lock()
+			prepared++
+			mu.Unlock()
+			d.Provider = resolved
+			return d
+		},
+	})
+	cancel, done := runWorker(w)
+	defer func() { cancel(); <-done }()
+
+	eventually(t, "turn completed", func() bool { return q.status() == store.TurnCompleted })
+	mu.Lock()
+	n := prepared
+	mu.Unlock()
+	if n != 1 {
+		t.Errorf("PrepareDeps calls = %d, want 1 (one claimed turn)", n)
+	}
+	if base.calls() != 0 || resolved.calls() == 0 {
+		t.Errorf("provider calls: base=%d resolved=%d; the turn must use the prepared provider", base.calls(), resolved.calls())
+	}
+}

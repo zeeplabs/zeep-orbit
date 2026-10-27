@@ -704,8 +704,9 @@ func TestAppendMessage_RoundTripAndOrder(t *testing.T) {
 	}
 }
 
-// Snapshots: turn 0 (owner-scoped, sets head) plus lease-checked per-turn
-// snapshots, listed in turn_seq order; re-saving a turn replaces it.
+// Snapshots: turn 0 / part 0 (owner-scoped, sets head) plus lease-checked
+// per-turn parts, listed in (turn_seq, part) order. Each save of a turn is its
+// own row.
 func TestSnapshots_SaveAndList(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
@@ -717,32 +718,154 @@ func TestSnapshots_SaveAndList(t *testing.T) {
 	if err := e.st.SaveInitialSnapshot(ctx, e.userA, sess.ID, "sha0", []byte("full")); err != nil {
 		t.Fatalf("SaveInitialSnapshot: %v", err)
 	}
+	// Idempotent: a retried session creation replaces turn 0 / part 0.
+	if err := e.st.SaveInitialSnapshot(ctx, e.userA, sess.ID, "sha0", []byte("full")); err != nil {
+		t.Fatalf("SaveInitialSnapshot (retry): %v", err)
+	}
 	turn, lease := e.claimed(t, sess, "w1")
 	if err := e.st.SaveSnapshot(ctx, lease, "sha1", []byte("inc-1")); err != nil {
 		t.Fatalf("SaveSnapshot: %v", err)
 	}
 	if err := e.st.SaveSnapshot(ctx, lease, "sha1b", []byte("inc-1b")); err != nil {
-		t.Fatalf("SaveSnapshot (resume re-save): %v", err)
+		t.Fatalf("SaveSnapshot (second batch): %v", err)
 	}
 
 	snaps, err := e.st.ListSnapshots(ctx, sess.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(snaps) != 2 {
-		t.Fatalf("want 2 snapshots, got %d", len(snaps))
+	if len(snaps) != 3 {
+		t.Fatalf("want 3 snapshots (turn 0 + 2 parts), got %d", len(snaps))
 	}
-	if snaps[0].TurnSeq != 0 || snaps[0].CommitSHA != "sha0" || string(snaps[0].Bundle) != "full" || snaps[0].SizeBytes != 4 {
+	if snaps[0].TurnSeq != 0 || snaps[0].Part != 0 || snaps[0].CommitSHA != "sha0" || string(snaps[0].Bundle) != "full" || snaps[0].SizeBytes != 4 {
 		t.Errorf("turn-0 snapshot wrong: %+v", snaps[0])
 	}
-	if snaps[1].TurnSeq != turn.Seq || snaps[1].CommitSHA != "sha1b" || string(snaps[1].Bundle) != "inc-1b" || snaps[1].SizeBytes != 6 {
-		t.Errorf("turn snapshot wrong or not replaced: %+v", snaps[1])
+	if snaps[1].TurnSeq != turn.Seq || snaps[1].Part != 0 || snaps[1].CommitSHA != "sha1" || string(snaps[1].Bundle) != "inc-1" || snaps[1].SizeBytes != 5 {
+		t.Errorf("first part wrong: %+v", snaps[1])
+	}
+	if snaps[2].TurnSeq != turn.Seq || snaps[2].Part != 1 || snaps[2].CommitSHA != "sha1b" || string(snaps[2].Bundle) != "inc-1b" || snaps[2].SizeBytes != 6 {
+		t.Errorf("second part wrong or replaced the first: %+v", snaps[2])
 	}
 	if s, _ := e.st.GetSession(ctx, e.userA, sess.ID); s.HeadSHA != "sha0" || s.HeadTurnSeq != 0 {
 		t.Errorf("initial snapshot must set the session head: %+v", s)
 	}
 	if err := e.st.SaveSnapshot(ctx, lease, "", nil); !errors.Is(err, store.ErrInvalidArgument) {
 		t.Errorf("empty bundle: want ErrInvalidArgument, got %v", err)
+	}
+}
+
+// Several turns, several parts each: ListSnapshots orders by (turn_seq, part),
+// and parts restart at 0 for every turn.
+func TestSnapshots_MultiplePartsPerTurnOrdered(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	sess := e.session(t, e.userA, e.appA)
+	if err := e.st.SaveInitialSnapshot(ctx, e.userA, sess.ID, "sha0", []byte("full")); err != nil {
+		t.Fatal(err)
+	}
+
+	var want []string
+	want = append(want, "0/0/sha0")
+	for turnN := 1; turnN <= 2; turnN++ {
+		turn, lease := e.claimed(t, sess, "w1")
+		for part := 0; part < 4; part++ {
+			sha := fmt.Sprintf("sha-%d-%d", turnN, part)
+			if err := e.st.SaveSnapshot(ctx, lease, sha, []byte("b-"+sha)); err != nil {
+				t.Fatalf("SaveSnapshot %s: %v", sha, err)
+			}
+			want = append(want, fmt.Sprintf("%d/%d/%s", turn.Seq, part, sha))
+		}
+		if err := e.st.FinishTurn(ctx, lease, store.FinishParams{Status: store.TurnCompleted}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	snaps, err := e.st.ListSnapshots(ctx, sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, sn := range snaps {
+		got = append(got, fmt.Sprintf("%d/%d/%s", sn.TurnSeq, sn.Part, sn.CommitSHA))
+	}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("snapshots (turn/part/sha)\n got %v\nwant %v", got, want)
+	}
+}
+
+// Concurrent saves of the same leased turn must each get a distinct part with
+// no gaps and no primary-key failure (the part is assigned under a row lock).
+func TestSnapshots_PartAssignedAtomicallyUnderConcurrentSaves(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	sess := e.session(t, e.userA, e.appA)
+	turn, lease := e.claimed(t, sess, "w1")
+
+	const n = 16
+	var wg sync.WaitGroup
+	errs := make(chan error, n)
+	start := make(chan struct{})
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start
+			errs <- e.st.SaveSnapshot(ctx, lease, fmt.Sprintf("sha-%d", i), []byte(fmt.Sprintf("b-%d", i)))
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Errorf("concurrent SaveSnapshot: %v", err)
+		}
+	}
+
+	snaps, err := e.st.ListSnapshots(ctx, sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snaps) != n {
+		t.Fatalf("want %d snapshots, got %d", n, len(snaps))
+	}
+	seen := map[string]bool{}
+	for i, sn := range snaps {
+		if sn.TurnSeq != turn.Seq || sn.Part != i {
+			t.Errorf("row %d: turn_seq=%d part=%d, want turn_seq=%d part=%d (parts must be 0..%d without gaps)", i, sn.TurnSeq, sn.Part, turn.Seq, i, n-1)
+		}
+		seen[sn.CommitSHA] = true
+	}
+	if len(seen) != n {
+		t.Errorf("a save was lost or duplicated: %d distinct shas, want %d", len(seen), n)
+	}
+}
+
+// A stale lease holder cannot append a part, and leaves no row behind.
+func TestSnapshots_StaleLeaseRejectedNoRow(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	sess := e.session(t, e.userA, e.appA)
+	turn, stale := e.claimed(t, sess, "worker-a")
+	if err := e.st.SaveSnapshot(ctx, stale, "sha1", []byte("inc-1")); err != nil {
+		t.Fatal(err)
+	}
+
+	e.expireLease(t, turn.ID)
+	if _, err := e.st.ClaimTurn(ctx, "worker-b", 30*time.Second); err != nil {
+		t.Fatalf("takeover: %v", err)
+	}
+	if err := e.st.SaveSnapshot(ctx, stale, "sha-stale", []byte("x")); !errors.Is(err, store.ErrLeaseLost) {
+		t.Fatalf("stale SaveSnapshot: want ErrLeaseLost, got %v", err)
+	}
+	fresh := store.Lease{TurnID: turn.ID, Owner: "worker-b"}
+	if err := e.st.SaveSnapshot(ctx, fresh, "sha2", []byte("inc-2")); err != nil {
+		t.Fatalf("new owner SaveSnapshot: %v", err)
+	}
+
+	snaps, _ := e.st.ListSnapshots(ctx, sess.ID)
+	if len(snaps) != 2 || snaps[0].CommitSHA != "sha1" || snaps[1].CommitSHA != "sha2" || snaps[1].Part != 1 {
+		t.Errorf("stale save leaked or disturbed the parts: %+v", snaps)
 	}
 }
 
