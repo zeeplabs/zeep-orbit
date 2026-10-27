@@ -728,6 +728,130 @@ func provisionZeepSystemOnce(ctx context.Context, pool *db.Pool) error {
 		   END LOOP;
 		 END
 		 $do$`,
+		// AI Frontend Builder (ai-frontend-builder spec, T11). Everything
+		// below is appended after apps, frontend_apps, github_templates and
+		// ai_providers because it references them. See design.md Data Models.
+		`ALTER TABLE zeep_system.ai_providers ADD COLUMN IF NOT EXISTS base_url TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE zeep_system.github_templates ADD COLUMN IF NOT EXISTS builder_enabled BOOLEAN NOT NULL DEFAULT false`,
+		// Singleton settings row (id = 1). A zero cap means "unset": sessions
+		// stay blocked until a superadmin sets one (AFB-02, AFB-14).
+		`CREATE TABLE IF NOT EXISTS zeep_system.builder_settings (
+			id                     SMALLINT    PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+			enabled                BOOLEAN     NOT NULL DEFAULT false,
+			provider               TEXT        NOT NULL DEFAULT 'openai',
+			context_window_tokens  INT         NOT NULL DEFAULT 128000,
+			session_token_cap      BIGINT      NOT NULL DEFAULT 0,
+			user_monthly_token_cap BIGINT      NOT NULL DEFAULT 0,
+			max_steps_per_turn     INT         NOT NULL DEFAULT 40,
+			max_fix_iterations     INT         NOT NULL DEFAULT 3,
+			max_turn_seconds       INT         NOT NULL DEFAULT 600,
+			updated_by             UUID,
+			updated_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		// Versioned persona + rules (AFB-25). The active version is the
+		// newest row.
+		`CREATE TABLE IF NOT EXISTS zeep_system.builder_prompt_versions (
+			id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+			persona    TEXT        NOT NULL DEFAULT '',
+			rules      TEXT        NOT NULL DEFAULT '',
+			created_by UUID        NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE TABLE IF NOT EXISTS zeep_system.builder_sessions (
+			id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+			owner_user_id     UUID        NOT NULL,
+			backend_app_id    UUID        NOT NULL REFERENCES zeep_system.apps(id) ON DELETE CASCADE,
+			title             TEXT        NOT NULL DEFAULT '',
+			template_kind     TEXT        NOT NULL,
+			template_id       UUID,
+			template_version  TEXT        NOT NULL,
+			prompt_version_id UUID        REFERENCES zeep_system.builder_prompt_versions(id),
+			locale            TEXT        NOT NULL DEFAULT 'en',
+			status            TEXT        NOT NULL DEFAULT 'idle',
+			head_sha          TEXT        NOT NULL DEFAULT '',
+			head_turn_seq     INT         NOT NULL DEFAULT 0,
+			frontend_app_id   UUID        REFERENCES zeep_system.frontend_apps(id) ON DELETE SET NULL,
+			published_sha     TEXT        NOT NULL DEFAULT '',
+			tokens_in         BIGINT      NOT NULL DEFAULT 0,
+			tokens_out        BIGINT      NOT NULL DEFAULT 0,
+			created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS builder_sessions_owner_idx
+		 ON zeep_system.builder_sessions (owner_user_id, updated_at DESC)`,
+		// Turn queue. lease_owner/lease_until implement the Postgres row lease
+		// claimed with FOR UPDATE SKIP LOCKED (AFB-18); the partial unique
+		// index below allows at most one non-terminal turn per session.
+		`CREATE TABLE IF NOT EXISTS zeep_system.builder_turns (
+			id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+			session_id       UUID        NOT NULL REFERENCES zeep_system.builder_sessions(id) ON DELETE CASCADE,
+			seq              INT         NOT NULL,
+			kind             TEXT        NOT NULL DEFAULT 'chat',
+			status           TEXT        NOT NULL DEFAULT 'pending',
+			pending_proposal JSONB,
+			commit_sha       TEXT        NOT NULL DEFAULT '',
+			lease_owner      TEXT,
+			lease_until      TIMESTAMPTZ,
+			error_code       TEXT,
+			created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+			finished_at      TIMESTAMPTZ,
+			UNIQUE (session_id, seq)
+		)`,
+		`CREATE INDEX IF NOT EXISTS builder_turns_claim_idx
+		 ON zeep_system.builder_turns (status, created_at)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS builder_turns_one_active_idx
+		 ON zeep_system.builder_turns (session_id)
+		 WHERE status IN ('pending','queued','running','awaiting_confirmation')`,
+		`CREATE TABLE IF NOT EXISTS zeep_system.builder_messages (
+			id           BIGSERIAL   PRIMARY KEY,
+			session_id   UUID        NOT NULL REFERENCES zeep_system.builder_sessions(id) ON DELETE CASCADE,
+			turn_id      UUID        NOT NULL REFERENCES zeep_system.builder_turns(id) ON DELETE CASCADE,
+			role         TEXT        NOT NULL,
+			content      TEXT        NOT NULL DEFAULT '',
+			tool_calls   JSONB,
+			tool_call_id TEXT,
+			created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS builder_messages_session_idx
+		 ON zeep_system.builder_messages (session_id, id)`,
+		// builder_events.id is the polling cursor. payload never carries
+		// secrets or raw provider errors.
+		`CREATE TABLE IF NOT EXISTS zeep_system.builder_events (
+			id         BIGSERIAL   PRIMARY KEY,
+			session_id UUID        NOT NULL REFERENCES zeep_system.builder_sessions(id) ON DELETE CASCADE,
+			turn_id    UUID        REFERENCES zeep_system.builder_turns(id) ON DELETE CASCADE,
+			type       TEXT        NOT NULL,
+			payload    JSONB       NOT NULL DEFAULT '{}',
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS builder_events_session_idx
+		 ON zeep_system.builder_events (session_id, id)`,
+		`CREATE TABLE IF NOT EXISTS zeep_system.builder_snapshots (
+			session_id UUID        NOT NULL REFERENCES zeep_system.builder_sessions(id) ON DELETE CASCADE,
+			turn_seq   INT         NOT NULL,
+			commit_sha TEXT        NOT NULL,
+			bundle     BYTEA       NOT NULL,
+			size_bytes INT         NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			PRIMARY KEY (session_id, turn_seq)
+		)`,
+		// Per-call token ledger. Month caps are computed from created_at
+		// (AFB-14); no FK on session_id/turn_id so usage survives session
+		// deletion.
+		`CREATE TABLE IF NOT EXISTS zeep_system.ai_usage_ledger (
+			id            BIGSERIAL   PRIMARY KEY,
+			user_id       UUID        NOT NULL,
+			feature       TEXT        NOT NULL,
+			session_id    UUID,
+			turn_id       UUID,
+			provider      TEXT        NOT NULL,
+			model         TEXT        NOT NULL,
+			input_tokens  INT         NOT NULL,
+			output_tokens INT         NOT NULL,
+			created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
+		`CREATE INDEX IF NOT EXISTS ai_usage_ledger_user_month_idx
+		 ON zeep_system.ai_usage_ledger (user_id, created_at)`,
 	}
 
 	for _, stmt := range stmts {
