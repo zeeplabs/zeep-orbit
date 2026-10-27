@@ -1,0 +1,92 @@
+# The builder may only be called by the Orbit pods and may only talk to the
+# registry proxy (plus DNS): no Postgres, no Kubernetes API, no cloud
+# metadata, no internet. Needs a CNI that enforces NetworkPolicy.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: zeep-orbit-builder
+  labels:
+    app: zeep-orbit-builder
+spec:
+  podSelector:
+    matchLabels:
+      app: zeep-orbit-builder
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: zeep-orbit
+              component: orbit
+      ports:
+        - port: 8081
+          protocol: TCP
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: zeep-orbit-registry-proxy
+      ports:
+        - port: 4873
+          protocol: TCP
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+---
+# The registry proxy is the only pod with egress, and only to the public
+# internet: private ranges, link-local (cloud metadata) and loopback excluded.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: zeep-orbit-registry-proxy
+  labels:
+    app: zeep-orbit-registry-proxy
+spec:
+  podSelector:
+    matchLabels:
+      app: zeep-orbit-registry-proxy
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: zeep-orbit-builder
+      ports:
+        - port: 4873
+          protocol: TCP
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+              - 127.0.0.0/8
+      ports:
+        - port: 443
+          protocol: TCP
+        - port: 80
+          protocol: TCP
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
