@@ -1,0 +1,151 @@
+# Local builder stack for the AI Frontend Builder (development and eval only).
+# Design: .specs/features/ai-frontend-builder/design.md, sections 5 and 7.
+#
+#   docker compose -f deploy/builder.compose.yml up -d --build
+#   docker compose -f deploy/builder.compose.yml down -v --remove-orphans
+#
+# Required env: BUILDER_SHARED_SECRET (>= 16 bytes, shared with the Orbit side
+# that signs X-Builder-Token), e.g.  export BUILDER_SHARED_SECRET=$(openssl rand -hex 32)
+# Optional env: REGISTRY_PROXY_UPSTREAMS, REGISTRY_PROXY_TOKEN_DEFAULT,
+#               REGISTRY_PROXY_TOKEN_COMPANY (see cmd/zeep-registry-proxy/proxy.go),
+#               BUILDER_PUBLISHED_PORT (host port, default 8081).
+# Nothing secret lives in this file.
+#
+# Network topology (AFB-16, AFB-27: generated code is untrusted):
+#
+#   host 127.0.0.1:8081 -> edge -> builder:8081        (builder_internal)
+#                          builder -> registry-proxy:4873 (builder_internal)
+#                          registry-proxy -> internet      (egress)
+#
+#   builder_internal  internal: true. No gateway, no NAT, no DNS to the outside.
+#                     Holds builder, registry-proxy and edge.
+#   egress            normal bridge. Attached ONLY to registry-proxy and edge.
+#                     The builder is never on it.
+#
+# Trade-off: an `internal: true` network cannot publish ports to the host, and
+# a service on a non-internal network gets a default route to the internet.
+# So the builder cannot publish its own port without losing isolation. `edge`
+# is a TCP forwarder (alpine/socat, no application logic, no shell script) on
+# both networks: the host reaches it on 127.0.0.1 only and it forwards to
+# builder:8081. The builder stays without any internet route. Alternatives:
+# run the eval/test process inside builder_internal instead (no edge needed),
+# or drop the edge service in production, where Orbit reaches the builder over
+# a private network. `edge` has internet access but runs no untrusted code and
+# only forwards one TCP port; every request still needs a valid X-Builder-Token.
+#
+# Production (Easypanel/Swarm/Helm) is NOT covered by this file: how `internal`
+# networks behave there is untested (tracked in tasks T38/T44).
+
+name: zeep-builder
+
+services:
+  builder:
+    build:
+      context: ..
+      dockerfile: Dockerfile.builder
+    image: zeep-builder:local
+    restart: unless-stopped
+    networks:
+      - builder_internal
+    environment:
+      BUILDER_ADDR: ":8081"
+      BUILDER_SHARED_SECRET: ${BUILDER_SHARED_SECRET:?set BUILDER_SHARED_SECRET}
+      BUILDER_WORK_DIR: /work
+      BUILDER_TEMPLATES_DIR: /opt/templates
+      # npm gets this as npm_config_registry (and replace-registry-host=always):
+      # the registry proxy is the only registry the builder can reach.
+      BUILDER_NPM_REGISTRY: http://registry-proxy:4873
+      # Root fs is read-only: HOME and the shared npm cache must be writable
+      # paths (tmpfs /tmp, volume /work).
+      BUILDER_HOME: /tmp
+      BUILDER_NPM_CACHE: /work/.npm-cache
+    # Sandbox hardening. The builder daemon delegates memory/CPU/process limits
+    # of build steps to the container (task T04), so these ARE the limits:
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 512
+    mem_limit: 2g
+    memswap_limit: 2g
+    cpus: 2
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    volumes:
+      - builder_work:/work
+    # No docker.sock, no host paths, no privileged mode.
+    # The daemon rejects every request without a signed token (including
+    # /v1/health), so the probe is a plain TCP connect.
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('net').connect(8081,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    depends_on:
+      registry-proxy:
+        condition: service_healthy
+
+  registry-proxy:
+    build:
+      context: ..
+      dockerfile: Dockerfile.registry-proxy
+    image: zeep-registry-proxy:local
+    restart: unless-stopped
+    networks:
+      - builder_internal
+      - egress
+    environment:
+      REGISTRY_PROXY_ADDR: ":4873"
+      REGISTRY_PROXY_UPSTREAMS: ${REGISTRY_PROXY_UPSTREAMS:-https://registry.npmjs.org}
+      # Passed through only when set in the shell; never defaulted.
+      REGISTRY_PROXY_TOKEN_DEFAULT:
+      REGISTRY_PROXY_TOKEN_COMPANY:
+    user: "10001:10001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 256m
+    cpus: 0.5
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:4873/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 2s
+
+  # Host entry point for local dev/eval: 127.0.0.1 only, never 0.0.0.0.
+  edge:
+    image: alpine/socat:1.8.0.3
+    restart: unless-stopped
+    command: ["TCP-LISTEN:8081,fork,reuseaddr", "TCP:builder:8081"]
+    user: "65534:65534"
+    networks:
+      - builder_internal
+      - egress
+    ports:
+      - "127.0.0.1:${BUILDER_PUBLISHED_PORT:-8081}:8081"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 64m
+    depends_on:
+      builder:
+        condition: service_healthy
+
+networks:
+  builder_internal:
+    internal: true
+  egress: {}
+
+volumes:
+  builder_work: {}
