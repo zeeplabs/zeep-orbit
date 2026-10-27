@@ -3,12 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation, Trans } from "react-i18next";
 import { toast } from "sonner";
-import { useApps, useDeleteApp, useAIProviderStatus, AppDef, authFetch } from "../lib/api";
+import { useApps, useDeleteApp, useAIProviderStatus, useBuilderStatus, AppDef, authFetch } from "../lib/api";
 import { BuildWithAIDrawer } from "@/components/patterns/BuildWithAIDrawer";
+import { NewBuilderSessionDialog } from "@/components/patterns/NewBuilderSessionDialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Icon } from "@/components/ui/icon";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Dialog,
   DialogContent,
@@ -85,7 +87,17 @@ function Chip({
 
 // --- Section header ---
 
-function SectionHeader({ icon, label, count }: { icon: string; label: string; count: number }) {
+function SectionHeader({
+  icon,
+  label,
+  count,
+  action,
+}: {
+  icon: string;
+  label: string;
+  count: number;
+  action?: React.ReactNode;
+}) {
   return (
     <div className="mb-4 flex items-center gap-2.5">
       <Icon name={icon} size={18} className="text-[var(--text-tertiary)]" />
@@ -93,7 +105,58 @@ function SectionHeader({ icon, label, count }: { icon: string; label: string; co
       <span className="rounded-full bg-[var(--sunken)] px-2 py-0.5 text-xs text-[var(--text-tertiary)]">
         {count}
       </span>
+      {action && <div className="ml-auto">{action}</div>}
     </div>
+  );
+}
+
+// --- "Create with AI" (AI Frontend Builder) entry button ---
+
+// Disabled (never hidden) when the builder can't be used, with the reason as tooltip. The disabled
+// <button> doesn't receive pointer/focus events, so the tooltip trigger is a focusable wrapper.
+function CreateWithAIButton({
+  loading,
+  available,
+  unavailableMessage,
+  onClick,
+}: {
+  loading: boolean;
+  available: boolean;
+  unavailableMessage: string;
+  onClick: () => void;
+}) {
+  const { t } = useTranslation();
+  const disabled = loading || !available;
+  const button = (
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      className="gap-2"
+      disabled={disabled}
+      aria-busy={loading}
+      aria-describedby={disabled ? "builder-entry-reason" : undefined}
+      onClick={onClick}
+    >
+      <Icon name={loading ? "progress_activity" : "auto_awesome"} size={16} className={loading ? "animate-spin" : undefined} />
+      {t("builder.newSession.button")}
+    </Button>
+  );
+
+  if (!disabled) return button;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span tabIndex={0} className="inline-flex rounded-[10px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          {button}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs">{unavailableMessage}</TooltipContent>
+      <span id="builder-entry-reason" className="sr-only">
+        {unavailableMessage}
+      </span>
+    </Tooltip>
   );
 }
 
@@ -366,6 +429,29 @@ export default function AppsPage() {
   const { data: aiProviderStatus } = useAIProviderStatus();
   const aiProviderReady = Boolean(aiProviderStatus?.enabled && aiProviderStatus?.has_key);
 
+  // Create with AI (ai-frontend-builder T35): the entry point stays disabled, with the reason
+  // from GET /builder/status, whenever the builder can't serve sessions (AFB-03).
+  const [showNewBuilderSession, setShowNewBuilderSession] = useState(false);
+  const builderStatus = useBuilderStatus();
+  const builderAvailable = builderStatus.data?.available === true;
+  const builderReason = builderStatus.data?.reason ?? "";
+  const builderUnavailableMessage = builderStatus.isLoading
+    ? t("builder.newSession.checking")
+    : builderStatus.isError
+    ? t("builder.newSession.reason.status_error")
+    : builderReason === "not_configured"
+    ? t("builder.newSession.reason.not_configured")
+    : builderReason === "disabled"
+    ? t("builder.newSession.reason.disabled")
+    : builderReason === "provider_not_configured"
+    ? t("builder.newSession.reason.provider_not_configured")
+    : builderReason === "builder_unreachable"
+    ? t("builder.newSession.reason.builder_unreachable")
+    : t("builder.newSession.reason.unknown");
+  // With no frontend apps yet the section is only worth showing when a builder is deployed;
+  // otherwise installs without a builder would get an empty section holding a dead button.
+  const showBuilderEntry = !builderStatus.isLoading && !builderStatus.isError && builderReason !== "not_configured";
+
   // Frontend create modal
   const [showFeCreate, setShowFeCreate] = useState(false);
   const [newFeName, setNewFeName] = useState("");
@@ -625,9 +711,23 @@ AFTER CLONE
             </>
           )}
 
-          {frontendApps.length > 0 && (
+          {(frontendApps.length > 0 || showBuilderEntry) && (
             <div className={cn((apps?.length ?? 0) > 0 && "mt-10")}>
-              <SectionHeader icon="language" label={t("apps.frontendSection")} count={frontendApps.length} />
+              <SectionHeader
+                icon="language"
+                label={t("apps.frontendSection")}
+                count={frontendApps.length}
+                action={
+                  <TooltipProvider delayDuration={200}>
+                    <CreateWithAIButton
+                      loading={builderStatus.isLoading}
+                      available={builderAvailable}
+                      unavailableMessage={builderUnavailableMessage}
+                      onClick={() => setShowNewBuilderSession(true)}
+                    />
+                  </TooltipProvider>
+                }
+              />
               <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,340px))] gap-4">
                 {frontendApps.map((app) => (
                   <FrontendCard key={app.id} app={app}
@@ -911,6 +1011,12 @@ AFTER CLONE
       </Dialog>
 
       <BuildWithAIDrawer open={showBuildWithAI} onOpenChange={setShowBuildWithAI} />
+
+      <NewBuilderSessionDialog
+        open={showNewBuilderSession}
+        onOpenChange={setShowNewBuilderSession}
+        apps={apps ?? []}
+      />
     </>
   );
 }
