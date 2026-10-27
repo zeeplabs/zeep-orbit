@@ -1,0 +1,97 @@
+{{- if and .Values.builder.enabled .Values.builder.networkPolicy.enabled }}
+# The builder runs untrusted generated code. It may only be called by the
+# Orbit pods and may only talk to the registry proxy (plus DNS). It cannot
+# reach Postgres, the Kubernetes API, the metadata service or the internet.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "zeep-orbit.builder.fullname" . }}
+  labels:
+    {{- include "zeep-orbit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: builder
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "zeep-orbit.builder.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "zeep-orbit.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: orbit
+      ports:
+        - port: 8081
+          protocol: TCP
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "zeep-orbit.registryProxy.selectorLabels" . | nindent 14 }}
+      ports:
+        - port: 4873
+          protocol: TCP
+    # DNS only, to the cluster resolver.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+---
+# The registry proxy is the only pod with egress, and only to the public
+# internet: private ranges, link-local (cloud metadata) are excluded.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "zeep-orbit.registryProxy.fullname" . }}
+  labels:
+    {{- include "zeep-orbit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: registry-proxy
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "zeep-orbit.registryProxy.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "zeep-orbit.builder.selectorLabels" . | nindent 14 }}
+      ports:
+        - port: 4873
+          protocol: TCP
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+              - 127.0.0.0/8
+      ports:
+        - port: 443
+          protocol: TCP
+        - port: 80
+          protocol: TCP
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+{{- end }}

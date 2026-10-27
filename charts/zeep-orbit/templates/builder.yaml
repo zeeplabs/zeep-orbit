@@ -1,0 +1,133 @@
+{{- if .Values.builder.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "zeep-orbit.builder.fullname" . }}
+  labels:
+    {{- include "zeep-orbit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: builder
+spec:
+  accessModes:
+    - {{ .Values.builder.persistence.accessMode }}
+  {{- with .Values.builder.persistence.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.builder.persistence.size }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "zeep-orbit.builder.fullname" . }}
+  labels:
+    {{- include "zeep-orbit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: builder
+spec:
+  # One replica: the workspaces live on a ReadWriteOnce volume.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "zeep-orbit.builder.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zeep-orbit.builder.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # Generated code runs here: no API token, no service links.
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: builder
+          image: {{ include "zeep-orbit.builder.image" . }}
+          imagePullPolicy: {{ .Values.builder.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          ports:
+            - name: http
+              containerPort: 8081
+              protocol: TCP
+          env:
+            - name: BUILDER_ADDR
+              value: ":8081"
+            - name: BUILDER_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "zeep-orbit.builder.secretName" . }}
+                  key: BUILDER_SHARED_SECRET
+            - name: BUILDER_WORK_DIR
+              value: /work
+            - name: BUILDER_TEMPLATES_DIR
+              value: /opt/templates
+            - name: BUILDER_NPM_REGISTRY
+              value: {{ printf "http://%s:4873" (include "zeep-orbit.registryProxy.fullname" .) | quote }}
+            - name: BUILDER_HOME
+              value: /tmp
+            - name: BUILDER_NPM_CACHE
+              value: /work/.npm-cache
+          resources:
+            {{- toYaml .Values.builder.resources | nindent 12 }}
+          # The daemon rejects every unsigned request (even /v1/health), so
+          # the probes are plain TCP connects.
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            failureThreshold: 2
+          volumeMounts:
+            - name: work
+              mountPath: /work
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: work
+          persistentVolumeClaim:
+            claimName: {{ include "zeep-orbit.builder.fullname" . }}
+        - name: tmp
+          emptyDir:
+            sizeLimit: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "zeep-orbit.builder.fullname" . }}
+  labels:
+    {{- include "zeep-orbit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: builder
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "zeep-orbit.builder.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: 8081
+      targetPort: http
+      protocol: TCP
+{{- end }}

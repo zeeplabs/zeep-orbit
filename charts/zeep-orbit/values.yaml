@@ -142,3 +142,54 @@ serviceMonitor:
   interval: 30s
   scrapeTimeout: 10s
   labels: {}
+
+# ── AI Frontend Builder (opcional) ──────────────────────
+# Off by default: with builder.enabled=false the chart renders no builder
+# object and the Orbit pods get no BUILDER_* env (the feature stays off).
+# The builder runs generated, untrusted code. Isolation is enforced by:
+#   - NetworkPolicy (needs a CNI that enforces them: Calico, Cilium, ...):
+#     the builder may only receive from the Orbit pods and only talk to the
+#     registry proxy (and DNS); the proxy is the only pod with egress.
+#   - no service account token, read-only root fs, all capabilities dropped.
+# The builder keeps session workspaces on a PVC and is a single replica
+# (ReadWriteOnce, Recreate); session state is also snapshotted in Postgres.
+builder:
+  enabled: false
+  # (obrigatório quando enabled) Shared HMAC secret between Orbit and the
+  # builder, >= 16 bytes. Prefer an existing Secret over a plain value.
+  sharedSecret: ""
+  existingSecret: ""            # Secret with key BUILDER_SHARED_SECRET
+  image:
+    repository: ghcr.io/zeeplabs/zeep-orbit-builder
+    tag: ""                     # defaults to the chart appVersion
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "2Gi"
+      cpu: "2"
+  persistence:
+    size: 10Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+  networkPolicy:
+    enabled: true
+  registryProxy:
+    image:
+      repository: ghcr.io/zeeplabs/zeep-orbit-registry-proxy
+      tag: ""
+      pullPolicy: IfNotPresent
+    # Comma separated npm upstreams (REGISTRY_PROXY_UPSTREAMS).
+    upstreams: "https://registry.npmjs.org"
+    # Optional bearer tokens for private upstreams (kept in the chart Secret).
+    tokenDefault: ""
+    tokenCompany: ""
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "50m"
+      limits:
+        memory: "256Mi"
+        cpu: "500m"
