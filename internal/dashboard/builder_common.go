@@ -315,6 +315,7 @@ type BuilderTurnView struct {
 	Status          string               `json:"status"`
 	CommitSHA       string               `json:"commit_sha"`
 	ErrorCode       *string              `json:"error_code"`
+	UserMessage     string               `json:"user_message,omitempty"`
 	PendingProposal *BuilderProposalView `json:"pending_proposal,omitempty"`
 	CreatedAt       time.Time            `json:"created_at"`
 	FinishedAt      *time.Time           `json:"finished_at"`
@@ -323,7 +324,7 @@ type BuilderTurnView struct {
 func newBuilderTurnView(t *store.Turn) BuilderTurnView {
 	return BuilderTurnView{
 		ID: t.ID, Seq: t.Seq, Kind: t.Kind, Status: t.Status, CommitSHA: t.CommitSHA,
-		ErrorCode: t.ErrorCode, PendingProposal: newBuilderProposalView(t),
+		ErrorCode: t.ErrorCode, UserMessage: t.UserMessage, PendingProposal: newBuilderProposalView(t),
 		CreatedAt: t.CreatedAt, FinishedAt: t.FinishedAt,
 	}
 }

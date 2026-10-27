@@ -141,8 +141,11 @@ type Turn struct {
 	LeaseOwner      *string
 	LeaseUntil      *time.Time
 	ErrorCode       *string
-	CreatedAt       time.Time
-	FinishedAt      *time.Time
+	// UserMessage is the user's message that opened the turn. Set only by
+	// ListTurns; empty for revert turns and everywhere else.
+	UserMessage string
+	CreatedAt   time.Time
+	FinishedAt  *time.Time
 }
 
 // Message is a row of zeep_system.builder_messages.
@@ -433,6 +436,34 @@ func (s *Store) ListTurns(ctx context.Context, ownerUserID, sessionID string) ([
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("builder store: list turns: %w", err)
+	}
+	rows.Close()
+
+	// Attach each turn's user message so a reloaded page can rebuild the chat.
+	mrows, err := s.pool.Query(ctx,
+		`SELECT turn_id, content FROM zeep_system.builder_messages
+		 WHERE session_id = $1 AND role = 'user' AND turn_id IS NOT NULL
+		 ORDER BY id`, sessionID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("builder store: list turns: messages: %w", err)
+	}
+	defer mrows.Close()
+	byTurn := map[string]string{}
+	for mrows.Next() {
+		var turnID, content string
+		if err := mrows.Scan(&turnID, &content); err != nil {
+			return nil, fmt.Errorf("builder store: list turns: scan message: %w", err)
+		}
+		if _, seen := byTurn[turnID]; !seen {
+			byTurn[turnID] = content
+		}
+	}
+	if err := mrows.Err(); err != nil {
+		return nil, fmt.Errorf("builder store: list turns: messages: %w", err)
+	}
+	for i := range out {
+		out[i].UserMessage = byTurn[out[i].ID]
 	}
 	return out, nil
 }

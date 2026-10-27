@@ -202,6 +202,25 @@ func TestSessions_ListOrderAndArchive(t *testing.T) {
 }
 
 // AFB-18: a second non-terminal turn on the same session violates the
+// ListTurns attaches each turn's user message and leaves revert turns without one.
+func TestListTurns_UserMessage(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	sess := e.session(t, e.userA, e.appA)
+
+	t1, err := e.st.CreateTurn(ctx, e.userA, sess.ID, store.KindChat, "make a landing page")
+	if err != nil {
+		t.Fatal(err)
+	}
+	turns, err := e.st.ListTurns(ctx, e.userA, sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(turns) != 1 || turns[0].ID != t1.ID || turns[0].UserMessage != "make a landing page" {
+		t.Errorf("unexpected turns: %+v", turns)
+	}
+}
+
 // one-active-turn constraint -> ErrTurnActive, for every non-terminal status;
 // once the turn finishes a new one is accepted with the next seq.
 func TestCreateTurn_OneActiveTurnViolation(t *testing.T) {
