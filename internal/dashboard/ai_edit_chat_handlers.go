@@ -307,7 +307,7 @@ func (h *Handler) EditChatConfirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, applyErr := h.applyEditOperation(r.Context(), user, appID, &op)
+	resp, applyErr := h.applyEditOperation(r.Context(), user, appID, &op, "ai_chat")
 	if applyErr != nil {
 		h.respondEditChatConfirmError(w, r, applyErr)
 		return
@@ -324,10 +324,10 @@ func (h *Handler) EditChatConfirm(w http.ResponseWriter, r *http.Request) {
 // applyEditOperation switches on op.Kind to call exactly one of the 5
 // target *ForUser handlers (AddTableColumnForUser/AddTableIndexForUser/
 // CreateAppTableForUser/UpdateTableRLSModeForUser/UpdateAppForUser) with
-// audit origin "ai_chat" — every handler keeps its own existing RBAC check
+// audit origin (the origin parameter: "ai_chat" for the edit chat, "ai_builder" for the AI Frontend Builder) — every handler keeps its own existing RBAC check
 // (CanWrite(), via GetApp), so authorization is identical to the REST/MCP
 // paths for the same mutation (spec Success Criteria).
-func (h *Handler) applyEditOperation(ctx context.Context, user *DashboardUser, appID string, op *ai.EditOperation) (editChatConfirmResponse, error) {
+func (h *Handler) applyEditOperation(ctx context.Context, user *DashboardUser, appID string, op *ai.EditOperation, origin string) (editChatConfirmResponse, error) {
 	switch op.Kind {
 	case "add_table":
 		if op.AddTable == nil {
@@ -336,7 +336,7 @@ func (h *Handler) applyEditOperation(ctx context.Context, user *DashboardUser, a
 		row, err := h.CreateAppTableForUser(ctx, user, appID, TableRequestBody{
 			Name:    op.AddTable.Name,
 			Columns: planColumnsToConfig(op.AddTable.Columns),
-		}, "ai_chat")
+		}, origin)
 		if err != nil {
 			return editChatConfirmResponse{}, err
 		}
@@ -352,7 +352,7 @@ func (h *Handler) applyEditOperation(ctx context.Context, user *DashboardUser, a
 		// add-column form does, rejecting an "enum" column with no
 		// AllowedValues before anything is provisioned.
 		col := config.ColumnConfig{Name: op.AddColumn.Column.Name, Type: op.AddColumn.Column.Type, AllowedValues: op.AddColumn.Column.AllowedValues}
-		row, err := h.AddTableColumnForUser(ctx, user, appID, op.AddColumn.Table, col, "ai_chat")
+		row, err := h.AddTableColumnForUser(ctx, user, appID, op.AddColumn.Table, col, origin)
 		if err != nil {
 			return editChatConfirmResponse{}, err
 		}
@@ -363,7 +363,7 @@ func (h *Handler) applyEditOperation(ctx context.Context, user *DashboardUser, a
 			return editChatConfirmResponse{}, fmt.Errorf("dashboard: add_index operation missing its index")
 		}
 		idx := config.IndexConfig{Name: op.AddIndex.Name, Columns: op.AddIndex.Columns, Unique: op.AddIndex.Unique}
-		row, err := h.AddTableIndexForUser(ctx, user, appID, op.AddIndex.Table, idx, "ai_chat")
+		row, err := h.AddTableIndexForUser(ctx, user, appID, op.AddIndex.Table, idx, origin)
 		if err != nil {
 			return editChatConfirmResponse{}, err
 		}
@@ -382,7 +382,7 @@ func (h *Handler) applyEditOperation(ctx context.Context, user *DashboardUser, a
 				OnDelete: op.AddReference.OnDelete,
 			},
 		}
-		row, err := h.AddTableColumnForUser(ctx, user, appID, op.AddReference.Table, col, "ai_chat")
+		row, err := h.AddTableColumnForUser(ctx, user, appID, op.AddReference.Table, col, origin)
 		if err != nil {
 			return editChatConfirmResponse{}, err
 		}
@@ -397,7 +397,7 @@ func (h *Handler) applyEditOperation(ctx context.Context, user *DashboardUser, a
 			Column:   op.AddForeignKey.RefColumn,
 			OnDelete: op.AddForeignKey.OnDelete,
 		}
-		row, err := h.AddColumnForeignKeyForUser(ctx, user, appID, op.AddForeignKey.Table, op.AddForeignKey.Column, ref, "ai_chat")
+		row, err := h.AddColumnForeignKeyForUser(ctx, user, appID, op.AddForeignKey.Table, op.AddForeignKey.Column, ref, origin)
 		if err != nil {
 			return editChatConfirmResponse{}, err
 		}
@@ -407,7 +407,7 @@ func (h *Handler) applyEditOperation(ctx context.Context, user *DashboardUser, a
 		if op.RemoveForeignKey == nil {
 			return editChatConfirmResponse{}, fmt.Errorf("dashboard: remove_foreign_key operation missing its target")
 		}
-		row, err := h.RemoveColumnForeignKeyForUser(ctx, user, appID, op.RemoveForeignKey.Table, op.RemoveForeignKey.Column, "ai_chat")
+		row, err := h.RemoveColumnForeignKeyForUser(ctx, user, appID, op.RemoveForeignKey.Table, op.RemoveForeignKey.Column, origin)
 		if err != nil {
 			return editChatConfirmResponse{}, err
 		}
@@ -417,7 +417,7 @@ func (h *Handler) applyEditOperation(ctx context.Context, user *DashboardUser, a
 		if op.SetRLSMode == nil {
 			return editChatConfirmResponse{}, fmt.Errorf("dashboard: set_rls_mode operation missing its target")
 		}
-		row, err := h.UpdateTableRLSModeForUser(ctx, user, appID, op.SetRLSMode.Table, op.SetRLSMode.Mode, "ai_chat")
+		row, err := h.UpdateTableRLSModeForUser(ctx, user, appID, op.SetRLSMode.Table, op.SetRLSMode.Mode, origin)
 		if err != nil {
 			return editChatConfirmResponse{}, err
 		}
@@ -427,7 +427,7 @@ func (h *Handler) applyEditOperation(ctx context.Context, user *DashboardUser, a
 		if op.ToggleAuth == nil {
 			return editChatConfirmResponse{}, fmt.Errorf("dashboard: toggle_auth operation missing its value")
 		}
-		app, err := h.UpdateAppForUser(ctx, user, appID, op.ToggleAuth.EmailEnabled, "ai_chat")
+		app, err := h.UpdateAppForUser(ctx, user, appID, op.ToggleAuth.EmailEnabled, origin)
 		if err != nil {
 			return editChatConfirmResponse{}, err
 		}

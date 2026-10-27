@@ -14,19 +14,35 @@ package dashboard
 // "/dashboard/api/ai-providers/{provider}".
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 )
 
+// Provider names with a functional persistence path.
+const (
+	aiProviderOpenAI           = "openai"
+	aiProviderOpenAICompatible = "openai_compatible"
+)
+
 // aiProviderNames is the fixed set of provider names the API accepts —
-// mirrors the spec's 'openai' | 'gemini' | 'claude' enum (design.md Data
-// Models). Any other value is rejected as an unknown provider.
+// the spec's 'openai' | 'gemini' | 'claude' enum (ai-build-chat design.md)
+// plus 'openai_compatible' (ai-frontend-builder AFB-01: any server speaking
+// the OpenAI Chat Completions wire format, with its own base URL). Any other
+// value is rejected as an unknown provider.
 var aiProviderNames = map[string]bool{
-	"openai": true,
-	"gemini": true,
-	"claude": true,
+	aiProviderOpenAI:           true,
+	aiProviderOpenAICompatible: true,
+	"gemini":                   true,
+	"claude":                   true,
+}
+
+// aiProviderImplemented reports whether provider has a functional
+// persistence path. gemini/claude do not yet (spec Out of Scope).
+func aiProviderImplemented(provider string) bool {
+	return provider == aiProviderOpenAI || provider == aiProviderOpenAICompatible
 }
 
 // GetAIProviderConfig handles GET /dashboard/api/ai-providers/{provider}.
@@ -47,7 +63,7 @@ func (h *Handler) GetAIProviderConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if provider != "openai" {
+	if !aiProviderImplemented(provider) {
 		writeJSON(w, http.StatusOK, map[string]any{"available": false})
 		return
 	}
@@ -83,7 +99,7 @@ func (h *Handler) UpsertAIProviderConfig(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown provider"})
 		return
 	}
-	if provider != "openai" {
+	if !aiProviderImplemented(provider) {
 		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "provider not implemented"})
 		return
 	}
@@ -103,6 +119,13 @@ func (h *Handler) UpsertAIProviderConfig(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	if msg, ok := h.prepareAIProviderBaseURL(w, r, provider, &body); !ok {
+		if msg != "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg})
+		}
+		return
+	}
+
 	result, err := UpsertAIProvider(r.Context(), h.pool, provider, &body)
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "failed to update provider", err)
@@ -110,5 +133,58 @@ func (h *Handler) UpsertAIProviderConfig(w http.ResponseWriter, r *http.Request)
 	}
 
 	writeJSON(w, http.StatusOK, result)
-	h.audit(r.Context(), user.ID, user.Email, "ai_provider.update", "ai_provider", provider, provider, nil, r.RemoteAddr)
+
+	var meta json.RawMessage
+	if provider == aiProviderOpenAICompatible {
+		// base_url is not a secret (credentials in the URL are rejected); the
+		// key is never written to the audit log.
+		meta, _ = json.Marshal(map[string]any{"base_url": result.BaseURL, "model": result.Model, "enabled": result.Enabled})
+	}
+	h.audit(r.Context(), user.ID, user.Email, "ai_provider.update", "ai_provider", provider, provider, meta, r.RemoteAddr)
+}
+
+// prepareAIProviderBaseURL validates body.BaseURL for provider and rewrites it
+// to its normalized form. It returns ok=false with the message to send as a
+// 400 (msg != ""), or ok=false with msg=="" when it already wrote a response
+// (a store failure).
+//
+//   - openai: no base URL (the stock API). An explicit "" is accepted as a
+//     no-op so clients may send the field uniformly; anything else is a 400.
+//   - openai_compatible: a base URL is required. Absent keeps the stored one
+//     (merge-on-absent-key), so a model-only update works; an explicit "" tries
+//     to clear it and is rejected because the provider cannot work without it.
+func (h *Handler) prepareAIProviderBaseURL(w http.ResponseWriter, r *http.Request, provider string, body *aiProviderUpsertInput) (msg string, ok bool) {
+	if provider == aiProviderOpenAI {
+		if body.BaseURL != nil {
+			if strings.TrimSpace(*body.BaseURL) != "" {
+				return "base_url is only supported by the openai_compatible provider", false
+			}
+			empty := ""
+			body.BaseURL = &empty
+		}
+		return "", true
+	}
+
+	// openai_compatible
+	if body.BaseURL != nil {
+		normalized, err := normalizeAIProviderBaseURL(*body.BaseURL)
+		if err != nil {
+			return err.Error(), false
+		}
+		body.BaseURL = &normalized
+		if normalized == "" {
+			return "base_url is required for the openai_compatible provider", false
+		}
+		return "", true
+	}
+
+	existing, err := GetAIProvider(r.Context(), h.pool, provider)
+	if err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "failed to update provider", err)
+		return "", false
+	}
+	if existing.BaseURL == "" {
+		return "base_url is required for the openai_compatible provider", false
+	}
+	return "", true
 }
