@@ -8,6 +8,7 @@ const sidebars: SidebarsConfig = {
     'dashboard/overview',
     'dashboard/apps',
     'deployment',
+    'ai-frontend-builder',
     'api/crud',
     'api/files',
     'api/rate-limiting',

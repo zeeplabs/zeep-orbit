@@ -94,6 +94,7 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/miapp/tareas
 | **Dominios personalizados** | Configura dominio propio + DNS CNAME para cada frontend |
 | **Credenciales de sincronización** | Deploy keys por app para sincronizar local↔repo   |
 | **Deploys recientes**    | Lista en vivo de los últimos deploys en Render de tus apps frontend |
+| **AI Frontend Builder**  | Describe un frontend en un chat, míralo en un preview en vivo conectado a tu app backend y publícalo (opcional, requiere el servicio builder) |
 
 ### Plataforma
 
@@ -163,6 +164,8 @@ docker compose up -d
 Luego visita **http://localhost:8080/dashboard** para completar la configuración inicial.
 
 > **Nota:** Si PostgreSQL corre en la máquina anfitriona (no en otro contenedor), usa `host.docker.internal` en lugar de `localhost` en `DATABASE_URL`.
+
+> **AI Frontend Builder (opcional):** apagado por defecto. Para habilitarlo, usa el `docker-compose.yml` del repositorio (construye las imágenes del builder), define `BUILDER_URL=http://builder:8081` y `BUILDER_SHARED_SECRET` (mínimo 16 bytes) en `.env` y levanta con `docker compose --profile builder up -d`. Consulta [AI Frontend Builder](../docs/docs/ai-frontend-builder.md).
 
 ### Binario
 
@@ -301,6 +304,18 @@ Generá una **private key** en la página de configuración de la App (descarga 
 **4. Agregá un repositorio template** — en la pestaña **Templates**, registrá un repo marcado como **Template repository** en GitHub (`Settings → Template repository` en el propio repo). Este es el que se clona cada vez que alguien crea una nueva app frontend.
 
 Una vez conectado, las deploy keys se gestionan automáticamente por app frontend, y los repos se archivan (no se eliminan) cuando se borra una app frontend.
+
+### AI Frontend Builder
+
+El AI Frontend Builder permite que un usuario describa un frontend en un chat y lo vea funcionando en un preview en vivo, ya conectado a una de sus apps backend. Cuando el resultado esté bien, el usuario lo publica por el mismo pipeline GitHub + Render de cualquier app frontend, o descarga el código fuente en ZIP.
+
+- **Apagado por defecto.** Solo funciona cuando `BUILDER_URL` está definida en Orbit y un superadmin lo habilita en **Integraciones → AI Builder**. Con `BUILDER_URL` vacía, no se inicia ningún worker y las rutas del builder responden `503`.
+- **Tu propio LLM.** Un superadmin configura un proveedor `openai` o `openai_compatible` (este admite una base URL, por ejemplo Ollama, vLLM, Azure OpenAI o un gateway) y define los límites de tokens. La clave queda en Orbit; el builder nunca la recibe.
+- **Ejecución aislada.** El loop del agente corre en Orbit. Un servicio builder separado ejecuta el código generado y el `npm install`, sin ruta hacia Postgres ni hacia internet; un proxy de registry npm es la única salida. El socket de Docker nunca se monta. La fuerza del aislamiento depende de la plataforma: la `NetworkPolicy` de Kubernetes requiere un CNI que la aplique, y el aislamiento en Easypanel/Swarm no se ha verificado.
+- **Los cambios en el backend requieren aprobación.** El agente lee el schema de la app backend vinculada, y cualquier cambio de tabla, columna o policy es una propuesta que el usuario debe confirmar.
+- **Para habilitarlo**, usa `docker compose --profile builder up -d`, `builder.enabled=true` en Helm o el Component Kustomize `k8s/builder`.
+
+Consulta [AI Frontend Builder](../docs/docs/ai-frontend-builder.md) para la arquitectura, el modelo de aislamiento, los números de dimensionamiento, las limitaciones conocidas y el troubleshooting.
 
 ---
 
@@ -515,6 +530,10 @@ helm repo add zeeplabs https://zeeplabs.github.io/zeep-orbit/helm
 helm install zeep-orbit zeeplabs/zeep-orbit --values values.yaml
 ```
 
+#### AI Frontend Builder (opcional)
+
+Apagado por defecto (`builder.enabled: false`): el chart no renderiza ningún objeto del builder. Para habilitarlo, define `builder.enabled: true` e indica `builder.existingSecret` (un Secret con la clave `BUILDER_SHARED_SECRET`, mínimo 16 bytes) o `builder.sharedSecret`. El chart agrega entonces los Deployments del builder y del registry-proxy, un PVC y NetworkPolicies, y define `BUILDER_URL` en los pods de Orbit. Las NetworkPolicies solo surten efecto en un CNI que las aplique. Sin Helm, usa el Component Kustomize `k8s/builder`. Consulta [AI Frontend Builder](../docs/docs/ai-frontend-builder.md).
+
 #### Actualizando
 
 ```bash
@@ -562,6 +581,9 @@ En producción, fija `image.tag` o `image.digest` en tu `values.yaml` en vez de 
 | `DASHBOARD_LOG_BUFFER_SIZE`   | No        | Tamaño del ring buffer del visor de logs (default: 2000) |
 | `DB_MAX_CONNS`                | No        | Máximo de conexiones Postgres por pod (default: 10). Cada pod abre además 1 para el readiness probe y hasta 4 para la deduplicación de webhooks: mantén réplicas × (este valor + 5) por debajo del `max_connections` del servidor; un valor inválido detiene el arranque |
 | `ORBIT_PUBLIC_URL`            | No        | URL base visible externamente (ej: `https://orbit.example.com`) para el documento de metadatos OAuth 2.1 (`/.well-known/oauth-authorization-server`). Sin ella, la URL se deriva de los encabezados `Host`/`X-Forwarded-Proto` de la petición — configúrala cuando Orbit no esté detrás de un proxy que valide esos encabezados, para que un cliente MCP no pueda ser dirigido a un endpoint de token falsificado. |
+| `BUILDER_URL`                 | No        | URL base del servicio AI Frontend Builder (ej: `http://builder:8081`). Vacía (por defecto) apaga la funcionalidad |
+| `BUILDER_SHARED_SECRET`       | No        | Secret HMAC compartido entre Orbit y el builder, mínimo 16 bytes. Obligatorio cuando `BUILDER_URL` está definida (Orbit no arranca sin él). Firma las solicitudes Orbit→builder y los tokens de preview |
+| `BUILDER_WORKER_CONCURRENCY`  | No        | Máximo de turnos del AI builder que una réplica de Orbit ejecuta a la vez (por defecto: 2) |
 
 ---
 
