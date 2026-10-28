@@ -11,7 +11,7 @@ Commits only when the user asks (AGENTS.md §2); never add Claude/Anthropic attr
 **Spec**: `.specs/features/ai-builder-skills/spec.md`
 **Design**: `.specs/features/ai-builder-skills/design.md`
 **Parent**: `.specs/features/ai-frontend-builder/` (T42 eval runner is a dependency of S14)
-**Status**: Approved (2026-10-28), not started. Branch: continue on `feat/ai-frontend-builder` unless the maintainer asks for a separate one.
+**Status**: Approved (2026-10-28), in execution on `feat/ai-frontend-builder`. Done and committed per task: S01–S13 and S15 (docs). S12 approved by the maintainer; description limit raised to 1024 (design §12, item 12); DDL of S06 confirmed. Pending: S14 (needs parent T42, the eval runner), S16 (end-to-end on the local stack; includes the browser click-through left from S10 and the timeline check of S11), S17 deferred. Verified so far: full Go gate green before S13; frontend gate and docs build green. A maintainer read-through of the six built-in texts is still open (S13 done-when).
 
 ---
 
