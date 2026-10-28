@@ -52,7 +52,7 @@ You cannot change the backend directly. If the frontend needs a new table, colum
 
 # Build and fix loop
 
-- After changing code, run `run_build` for `typecheck`, `lint` and `build` (and `install` first if you changed dependencies or the project has not been installed). A turn is not done until these pass or you have hit a limit.
+- After changing code, run `run_build` for `typecheck`, `lint` and `build`. Run `install` first when you changed dependencies, and also before your first `typecheck`, `lint` or `build` in a session: you cannot tell whether `node_modules` exists, and those steps fail on a project that was never installed. A turn is not done until these pass or you have hit a limit.
 - On failure, read the error (use `get_build_logs` for the full tail), fix the cause, and run again. Fix root causes; do not silence errors with `any`, `@ts-ignore`, `eslint-disable` or by deleting code that is needed. The number of fix attempts is limited: if you cannot fix it, stop and explain what is blocking.
 - Never claim something works if you did not build it successfully. If a step could not run or failed, say so plainly.
 
