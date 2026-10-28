@@ -10,6 +10,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/zeeplabs/zeep-orbit/internal/agent/provider"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/sandbox"
 )
 
@@ -257,7 +258,7 @@ func TestWorkspaceTools_SandboxErrors(t *testing.T) {
 		if !errors.Is(err, infra) {
 			t.Fatalf("cause lost for server-side handling: %v", err)
 		}
-		if res != (Result{}) {
+		if res.Content != "" || res.IsError || res.Meta != nil {
 			t.Fatalf("no result may accompany a Go error: %+v", res)
 		}
 	}
@@ -402,5 +403,36 @@ func TestRegistry_RegisterValidationAndSafety(t *testing.T) {
 	cancel()
 	if _, err := r.Dispatch(ctx, Call{Name: "dup"}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled ctx: %v", err)
+	}
+}
+
+func TestSpecsWithoutOmitsNamedTools(t *testing.T) {
+	r := NewRegistry()
+	for _, name := range []string{"a_tool", "b_tool", "c_tool"} {
+		if err := r.Register(Tool{
+			Name: name, Schema: json.RawMessage(`{"type":"object"}`), Kind: KindReadOnly,
+			Handler: func(context.Context, Call) (Result, error) { return Result{}, nil },
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	names := func(specs []provider.ToolSpec) string {
+		var out []string
+		for _, s := range specs {
+			out = append(out, s.Name)
+		}
+		return strings.Join(out, ",")
+	}
+	if got := names(r.SpecsWithout("b_tool")); got != "a_tool,c_tool" {
+		t.Fatalf("got %s", got)
+	}
+	if got := names(r.SpecsWithout()); got != names(r.Specs()) {
+		t.Fatalf("no names must equal Specs, got %s", got)
+	}
+	if got := names(r.SpecsWithout("missing", "a_tool", "c_tool")); got != "b_tool" {
+		t.Fatalf("got %s", got)
+	}
+	if got := names(r.Specs()); got != "a_tool,b_tool,c_tool" {
+		t.Fatalf("Specs changed: %s", got)
 	}
 }

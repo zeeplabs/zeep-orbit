@@ -95,6 +95,11 @@ type Result struct {
 	// BuildFailed is set by run_build when the step exited non-zero or timed
 	// out. The loop counts these toward max_fix_iterations (AFB-07).
 	BuildFailed bool
+	// Meta carries small structured facts about the call for the loop: it is
+	// persisted with the tool message and read when events are emitted (for
+	// example which skill a load_skill call loaded). It is never sent to the
+	// model and never holds content.
+	Meta map[string]string
 }
 
 // Handler runs one call. See the package comment for how its error is
@@ -210,6 +215,26 @@ func (r *Registry) Specs() []provider.ToolSpec {
 	defer r.mu.RUnlock()
 	out := make([]provider.ToolSpec, 0, len(r.order))
 	for _, name := range r.order {
+		t := r.tools[name]
+		out = append(out, provider.ToolSpec{Name: t.Name, Description: t.Description, Schema: t.Schema})
+	}
+	return out
+}
+
+// SpecsWithout is Specs minus the named tools, for tools that are registered
+// once on the shared registry but must not be offered in a given turn.
+func (r *Registry) SpecsWithout(names ...string) []provider.ToolSpec {
+	skip := make(map[string]bool, len(names))
+	for _, n := range names {
+		skip[n] = true
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]provider.ToolSpec, 0, len(r.order))
+	for _, name := range r.order {
+		if skip[name] {
+			continue
+		}
 		t := r.tools[name]
 		out = append(out, provider.ToolSpec{Name: t.Name, Description: t.Description, Schema: t.Schema})
 	}
