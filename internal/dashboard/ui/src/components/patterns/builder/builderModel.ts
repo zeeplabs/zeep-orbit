@@ -69,6 +69,8 @@ function toEntry(event: BuilderEvent, fixAttempt: number): ActivityEntry | null 
         ? { ...base, icon: 'play_arrow', tone: 'neutral', labelKey: 'resumed' }
         : null
     case 'tool_call': {
+      // A skill load has its own row (skill_loaded, with the skill's name); the raw call adds noise.
+      if (event.payload.name === 'load_skill') return null
       const what = event.payload.summary || event.payload.name
       return what
         ? { ...base, icon: 'build', tone: 'neutral', labelKey: 'toolCall', params: { what } }
