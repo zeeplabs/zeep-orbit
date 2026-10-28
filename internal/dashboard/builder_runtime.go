@@ -43,6 +43,7 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/agent"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/provider"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/sandbox"
+	"github.com/zeeplabs/zeep-orbit/internal/agent/skills"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/store"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/tools"
 	"github.com/zeeplabs/zeep-orbit/internal/builder"
@@ -96,6 +97,8 @@ type BuilderRuntime struct {
 	signer  *builder.Signer
 	worker  *agent.Worker
 	log     *slog.Logger
+	// skills serves the enabled skills (built-ins plus custom) to every turn.
+	skills skills.Source
 
 	// providerHTTP is the SSRF-guarded client handed to the LLM adapter. Tests
 	// replace it; nothing outside this package can.
@@ -144,16 +147,15 @@ func NewBuilderRuntime(pool *db.Pool, cfg BuilderRuntimeConfig) (*BuilderRuntime
 	st := store.New(pool)
 	sb := sandbox.NewRestoring(raw, agent.SnapshotProvider(st))
 
-	reg := tools.NewRegistry(tools.WithLogger(log))
-	if err := tools.RegisterWorkspaceTools(reg, sb, tools.WorkspaceConfig{PreviewBase: tools.PreviewBuildBase}); err != nil {
-		return nil, fmt.Errorf("builder: register workspace tools: %w", err)
-	}
-	if err := RegisterBuilderTools(reg, BuilderToolDeps{Pool: pool, Sessions: st}); err != nil {
-		return nil, fmt.Errorf("builder: register orbit tools: %w", err)
+	skillSrc := NewBuilderSkillSource(pool)
+	reg, err := newBuilderToolRegistry(pool, sb, st, skillSrc, log)
+	if err != nil {
+		return nil, err
 	}
 
 	rt := &BuilderRuntime{
 		pool: pool, store: st, sandbox: sb, signer: signer, log: log,
+		skills:       skillSrc,
 		providerHTTP: newAIProviderHTTPClient(nil),
 	}
 
@@ -182,6 +184,23 @@ func NewBuilderRuntime(pool *db.Pool, cfg BuilderRuntimeConfig) (*BuilderRuntime
 	}
 	rt.worker = w
 	return rt, nil
+}
+
+// newBuilderToolRegistry builds the one tool registry the agent loop shares:
+// the workspace tools, the Orbit tools and load_skill. load_skill is always
+// registered; the loop only offers it to the model while skills are enabled.
+func newBuilderToolRegistry(pool *db.Pool, sb sandbox.Sandbox, st *store.Store, skillSrc skills.Source, log *slog.Logger) (*tools.Registry, error) {
+	reg := tools.NewRegistry(tools.WithLogger(log))
+	if err := tools.RegisterWorkspaceTools(reg, sb, tools.WorkspaceConfig{PreviewBase: tools.PreviewBuildBase}); err != nil {
+		return nil, fmt.Errorf("builder: register workspace tools: %w", err)
+	}
+	if err := RegisterBuilderTools(reg, BuilderToolDeps{Pool: pool, Sessions: st}); err != nil {
+		return nil, fmt.Errorf("builder: register orbit tools: %w", err)
+	}
+	if err := skills.RegisterTool(reg, skillSrc); err != nil {
+		return nil, fmt.Errorf("builder: register skills tool: %w", err)
+	}
+	return reg, nil
 }
 
 // HandlerConfig is the part of BuilderHandlerConfig that comes from the
@@ -306,7 +325,10 @@ func (unavailableProvider) Model() string { return "" }
 // promptSource is agent.PromptSource. The company layer is the prompt version
 // pinned when the session was created (later edits do not change a running
 // session); a database failure fails the turn rather than silently dropping
-// the company rules. The workspace-derived parts (template guide, file tree)
+// the company rules. The skills index is resolved on every turn, not pinned
+// to the session, so disabling or deleting a skill applies to the next turn;
+// a database failure fails the turn here too, so company skills are never
+// silently dropped. The workspace-derived parts (template guide, file tree)
 // and the app name degrade to empty: the agent has tools to look at all three.
 func (rt *BuilderRuntime) promptSource(ctx context.Context, s *store.Session) (agent.PromptInput, error) {
 	in := agent.PromptInput{Session: agent.SessionContext{
@@ -323,6 +345,18 @@ func (rt *BuilderRuntime) promptSource(ctx context.Context, s *store.Session) (a
 			in.Company = agent.CompanyLayer(v.Persona, v.Rules)
 		}
 	}
+
+	entries, err := rt.skills.Entries(ctx)
+	if err != nil {
+		return agent.PromptInput{}, err
+	}
+	index, dropped := skills.RenderIndex(entries, agent.MaxSkillsIndexChars)
+	if len(dropped) > 0 {
+		// Only reachable when the index is over budget (for example after an
+		// upgrade that added built-ins); the superadmin sees it in the UI too.
+		rt.log.Warn("builder: skills left out of the prompt index (over budget)", "session", s.ID, "dropped", dropped)
+	}
+	in.SkillsIndex = index
 
 	var name string
 	if err := rt.pool.QueryRow(ctx, `SELECT name FROM zeep_system.apps WHERE id = $1`, s.BackendAppID).Scan(&name); err != nil {

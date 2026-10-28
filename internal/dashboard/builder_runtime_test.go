@@ -22,7 +22,9 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/agent"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/provider"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/sandbox"
+	"github.com/zeeplabs/zeep-orbit/internal/agent/skills"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/store"
+	"github.com/zeeplabs/zeep-orbit/internal/agent/tools"
 )
 
 func TestBuilderRuntime_EmptyURLIsOffAndNilSafe(t *testing.T) {
@@ -305,4 +307,117 @@ func TestBuilderRuntime_StartStop(t *testing.T) {
 	if err := rt.Stop(ctx); err != nil {
 		t.Errorf("second Stop: %v", err)
 	}
+}
+
+// Skills reach the agent through the prompt index and load_skill, resolved on
+// every turn: a disable applies to the next turn, and a database failure fails
+// the turn instead of silently dropping company skills (ai-builder-skills S08).
+func TestBuilderRuntime_PromptSourceServesSkillsIndexPerTurn(t *testing.T) {
+	rt := newTestBuilderRuntime(t)
+	pool := rt.pool
+	super := mustCreateSuperadmin(t, pool)
+	ctx := context.Background()
+	rt.sandbox = archiveSandbox{err: sandbox.ErrWorkspaceLost}
+	sess := &store.Session{ID: "11111111-1111-4111-8111-111111111111", BackendAppID: "22222222-2222-4222-8222-222222222222", Locale: "en"}
+
+	truncate := func() {
+		_, _ = pool.Exec(ctx, `TRUNCATE zeep_system.builder_skills, zeep_system.builder_skill_versions, zeep_system.builder_skill_builtin_state CASCADE`)
+	}
+	truncate()
+	t.Cleanup(truncate)
+	withBuiltinSkills(t, fixtureBuiltin("orbit-a", "Use when a"))
+
+	// A session created before skills existed: only the built-in, no custom.
+	in, err := rt.promptSource(ctx, sess)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(in.SkillsIndex, "- orbit-a: Use when a") || strings.Contains(in.SkillsIndex, "invoice-layout") {
+		t.Fatalf("index: %q", in.SkillsIndex)
+	}
+
+	mustSave(t, pool, super.ID, parsedSkill("invoice-layout", "Use when building invoices", "INVOICE-BODY"))
+	in, err = rt.promptSource(ctx, sess)
+	if err != nil || !strings.Contains(in.SkillsIndex, "- invoice-layout: Use when building invoices") {
+		t.Fatalf("custom skill missing from the index: %q %v", in.SkillsIndex, err)
+	}
+	if strings.Contains(in.SkillsIndex, "INVOICE-BODY") {
+		t.Fatal("the index carries a skill body")
+	}
+
+	// Disable both: the very next turn has no skills section at all.
+	for _, n := range []string{"orbit-a", "invoice-layout"} {
+		if _, err := SetBuilderSkillEnabled(ctx, pool, super.ID, n, false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	in, err = rt.promptSource(ctx, sess)
+	if err != nil || in.SkillsIndex != "" {
+		t.Fatalf("with no enabled skills the index must be empty: %q %v", in.SkillsIndex, err)
+	}
+}
+
+func TestBuilderRuntime_PromptSourceFailsTheTurnWhenSkillsCannotBeRead(t *testing.T) {
+	rt := newTestBuilderRuntime(t)
+	rt.sandbox = archiveSandbox{err: sandbox.ErrWorkspaceLost}
+	rt.pool.Close()
+	sess := &store.Session{ID: "11111111-1111-4111-8111-111111111111", BackendAppID: "22222222-2222-4222-8222-222222222222", Locale: "en"}
+	if _, err := rt.promptSource(context.Background(), sess); err == nil {
+		t.Fatal("a database failure must fail the prompt (the loop maps it to internal_error)")
+	}
+}
+
+// load_skill is registered on the shared registry next to the other tools and
+// serves what is enabled right now.
+func TestBuilderRuntime_ToolRegistryHasLoadSkillAndOnlyKnownTools(t *testing.T) {
+	rt := newTestBuilderRuntime(t)
+	pool := rt.pool
+	super := mustCreateSuperadmin(t, pool)
+	ctx := context.Background()
+	_, _ = pool.Exec(ctx, `TRUNCATE zeep_system.builder_skills, zeep_system.builder_skill_versions, zeep_system.builder_skill_builtin_state CASCADE`)
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `TRUNCATE zeep_system.builder_skills, zeep_system.builder_skill_versions, zeep_system.builder_skill_builtin_state CASCADE`)
+	})
+
+	reg, err := newBuilderToolRegistry(pool, rt.sandbox, rt.store, rt.skills, quietSlog())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, spec := range reg.Specs() {
+		names = append(names, spec.Name)
+		// Built-in skill lint accepts exactly the tools the builder registers;
+		// a new tool must be added to skills.KnownToolName.
+		if !skills.KnownToolName(spec.Name) {
+			t.Errorf("registered tool %q is unknown to the built-in skill lint (skills.KnownToolName)", spec.Name)
+		}
+	}
+	if indexOfString(names, skills.ToolLoadSkill) < 0 {
+		t.Fatalf("load_skill is not registered: %v", names)
+	}
+
+	mustSave(t, pool, super.ID, parsedSkill("invoice-layout", "Use when building invoices", "INVOICE-BODY"))
+	res, err := reg.Dispatch(ctx, tools.Call{ID: "c1", Name: skills.ToolLoadSkill, Arguments: json.RawMessage(`{"name":"invoice-layout"}`), SessionID: "s"})
+	if err != nil || res.IsError || !strings.Contains(res.Content, "INVOICE-BODY") || res.Meta[skills.MetaSkill] != "invoice-layout" {
+		t.Fatalf("load_skill: %+v %v", res, err)
+	}
+
+	if _, err := SetBuilderSkillEnabled(ctx, pool, super.ID, "invoice-layout", false); err != nil {
+		t.Fatal(err)
+	}
+	res, err = reg.Dispatch(ctx, tools.Call{ID: "c2", Name: skills.ToolLoadSkill, Arguments: json.RawMessage(`{"name":"invoice-layout"}`), SessionID: "s"})
+	if err != nil || !res.IsError || strings.Contains(res.Content, "INVOICE-BODY") {
+		t.Fatalf("a disabled skill must be unavailable on the next call: %+v %v", res, err)
+	}
+}
+
+func quietSlog() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
+
+func indexOfString(list []string, want string) int {
+	for i, s := range list {
+		if s == want {
+			return i
+		}
+	}
+	return -1
 }
