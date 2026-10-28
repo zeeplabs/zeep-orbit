@@ -32,6 +32,8 @@ import type {
 import { formatDateTime } from '@/lib/format'
 import { roleAllowed } from '@/lib/roles'
 import { useCurrentRole } from '@/lib/useCurrentRole'
+import { BuilderSkillsSection } from './BuilderSkillsSection'
+import { Notice, SectionCard } from './builderSettingsParts'
 
 // Settings -> "AI Builder" (ai-frontend-builder T34, AFB-01/02/25/26). Superadmin only: the
 // routes answer 403 to anyone else, so the sections (and with them their queries) are only
@@ -124,50 +126,6 @@ function formatNumber(value: number): string {
   return new Intl.NumberFormat().format(value)
 }
 
-function SectionCard({
-  title,
-  description,
-  children,
-}: {
-  title: string
-  description?: string
-  children: ReactNode
-}) {
-  return (
-    <section
-      className="flex flex-col gap-5 rounded-[14px] border p-6"
-      style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
-    >
-      <div>
-        <h2 className="text-[15px] font-bold" style={{ color: 'var(--text-primary)' }}>
-          {title}
-        </h2>
-        {description && (
-          <p className="mt-0.5 text-[12.5px]" style={{ color: 'var(--text-secondary)' }}>
-            {description}
-          </p>
-        )}
-      </div>
-      {children}
-    </section>
-  )
-}
-
-function Notice({ tone, children }: { tone: 'warning' | 'danger'; children: ReactNode }) {
-  const color = tone === 'warning' ? 'var(--warning-text)' : 'var(--danger)'
-  const bg = tone === 'warning' ? 'var(--warning-tint)' : 'var(--danger-tint)'
-  return (
-    <div
-      role="status"
-      className="flex items-start gap-2 rounded-[10px] px-3 py-2 text-[12.5px]"
-      style={{ background: bg, color }}
-    >
-      <Icon name="warning" size={16} className="mt-px shrink-0" />
-      <div>{children}</div>
-    </div>
-  )
-}
-
 function SaveButton({
   pending,
   disabled,
@@ -219,6 +177,7 @@ export default function AIBuilderSettings() {
     <div className="flex max-w-3xl flex-col gap-6">
       <GeneralSection />
       <PromptSection />
+      <BuilderSkillsSection />
       <TemplatesSection />
     </div>
   )
