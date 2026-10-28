@@ -40,6 +40,17 @@ const (
 	builderDefaultMaxStepsPerTurn     = 40
 	builderDefaultMaxFixIterations    = 3
 	builderDefaultMaxTurnSeconds      = 600
+	builderDefaultApprovalMode        = BuilderApprovalAsk
+	builderDefaultPublishRLSGate      = BuilderRLSGateWarn
+)
+
+// Backend approval modes (builder_settings.backend_approval_mode) and publish
+// checks (builder_settings.publish_rls_gate), ai-builder-backend spec BBE-15.
+const (
+	BuilderApprovalAsk  = "ask"
+	BuilderApprovalAuto = "auto"
+	BuilderRLSGateWarn  = "warn"
+	BuilderRLSGateBlock = "block"
 )
 
 // BuilderSettings is the API view of the singleton settings row.
@@ -54,6 +65,11 @@ type BuilderSettings struct {
 	MaxStepsPerTurn     int   `json:"max_steps_per_turn"`
 	MaxFixIterations    int   `json:"max_fix_iterations"`
 	MaxTurnSeconds      int   `json:"max_turn_seconds"`
+	// BackendApprovalMode: "ask" (every backend change waits for the user) or
+	// "auto" (additive changes on a builder-created backend apply directly).
+	BackendApprovalMode string `json:"backend_approval_mode"`
+	// PublishRLSGate: "warn" lists open tables on publish, "block" refuses.
+	PublishRLSGate string `json:"publish_rls_gate"`
 	// UpdatedBy and UpdatedAt are nil/zero while the row has never been saved.
 	UpdatedBy *string    `json:"updated_by"`
 	UpdatedAt *time.Time `json:"updated_at"`
@@ -72,6 +88,8 @@ type BuilderSettingsInput struct {
 	MaxStepsPerTurn     *int    `json:"max_steps_per_turn"`
 	MaxFixIterations    *int    `json:"max_fix_iterations"`
 	MaxTurnSeconds      *int    `json:"max_turn_seconds"`
+	BackendApprovalMode *string `json:"backend_approval_mode"`
+	PublishRLSGate      *string `json:"publish_rls_gate"`
 }
 
 func defaultBuilderSettings() *BuilderSettings {
@@ -81,11 +99,14 @@ func defaultBuilderSettings() *BuilderSettings {
 		MaxStepsPerTurn:     builderDefaultMaxStepsPerTurn,
 		MaxFixIterations:    builderDefaultMaxFixIterations,
 		MaxTurnSeconds:      builderDefaultMaxTurnSeconds,
+		BackendApprovalMode: builderDefaultApprovalMode,
+		PublishRLSGate:      builderDefaultPublishRLSGate,
 	}
 }
 
 const builderSettingsCols = `enabled, provider, context_window_tokens, session_token_cap, user_monthly_token_cap,
-	max_steps_per_turn, max_fix_iterations, max_turn_seconds, updated_by::text, updated_at`
+	max_steps_per_turn, max_fix_iterations, max_turn_seconds, backend_approval_mode, publish_rls_gate,
+	updated_by::text, updated_at`
 
 func scanBuilderSettings(row pgx.Row) (*BuilderSettings, error) {
 	var (
@@ -94,7 +115,8 @@ func scanBuilderSettings(row pgx.Row) (*BuilderSettings, error) {
 		updatedAt time.Time
 	)
 	if err := row.Scan(&s.Enabled, &s.Provider, &s.ContextWindowTokens, &s.SessionTokenCap, &s.UserMonthlyTokenCap,
-		&s.MaxStepsPerTurn, &s.MaxFixIterations, &s.MaxTurnSeconds, &updatedBy, &updatedAt); err != nil {
+		&s.MaxStepsPerTurn, &s.MaxFixIterations, &s.MaxTurnSeconds, &s.BackendApprovalMode, &s.PublishRLSGate,
+		&updatedBy, &updatedAt); err != nil {
 		return nil, err
 	}
 	s.UpdatedBy = updatedBy
@@ -124,11 +146,13 @@ func UpsertBuilderSettings(ctx context.Context, pool *db.Pool, updatedBy string,
 	s, err := scanBuilderSettings(pool.QueryRow(ctx,
 		`INSERT INTO zeep_system.builder_settings
 		   (id, enabled, provider, context_window_tokens, session_token_cap, user_monthly_token_cap,
-		    max_steps_per_turn, max_fix_iterations, max_turn_seconds, updated_by, updated_at)
+		    max_steps_per_turn, max_fix_iterations, max_turn_seconds,
+		    backend_approval_mode, publish_rls_gate, updated_by, updated_at)
 		 VALUES (1,
 		   COALESCE($1::boolean, false), COALESCE($2::text, $9), COALESCE($3::int, $10),
 		   COALESCE($4::bigint, 0), COALESCE($5::bigint, 0),
 		   COALESCE($6::int, $11), COALESCE($7::int, $12), COALESCE($8::int, $13),
+		   COALESCE($15::text, $17), COALESCE($16::text, $18),
 		   $14::uuid, now())
 		 ON CONFLICT (id) DO UPDATE SET
 		   enabled                = COALESCE($1::boolean, builder_settings.enabled),
@@ -139,6 +163,8 @@ func UpsertBuilderSettings(ctx context.Context, pool *db.Pool, updatedBy string,
 		   max_steps_per_turn     = COALESCE($6::int,     builder_settings.max_steps_per_turn),
 		   max_fix_iterations     = COALESCE($7::int,     builder_settings.max_fix_iterations),
 		   max_turn_seconds       = COALESCE($8::int,     builder_settings.max_turn_seconds),
+		   backend_approval_mode  = COALESCE($15::text,   builder_settings.backend_approval_mode),
+		   publish_rls_gate       = COALESCE($16::text,   builder_settings.publish_rls_gate),
 		   updated_by             = $14::uuid,
 		   updated_at             = now()
 		 RETURNING `+builderSettingsCols,
@@ -147,6 +173,7 @@ func UpsertBuilderSettings(ctx context.Context, pool *db.Pool, updatedBy string,
 		builderDefaultProvider, builderDefaultContextWindowTokens,
 		builderDefaultMaxStepsPerTurn, builderDefaultMaxFixIterations, builderDefaultMaxTurnSeconds,
 		updatedBy,
+		in.BackendApprovalMode, in.PublishRLSGate, builderDefaultApprovalMode, builderDefaultPublishRLSGate,
 	))
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: upsert builder settings: %w", err)

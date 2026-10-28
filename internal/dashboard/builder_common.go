@@ -287,6 +287,7 @@ type BuilderSessionView struct {
 	HeadSHA         string    `json:"head_sha"`
 	HeadTurnSeq     int       `json:"head_turn_seq"`
 	FrontendAppID   *string   `json:"frontend_app_id"`
+	BackendOrigin   string    `json:"backend_origin"`
 	PublishedSHA    string    `json:"published_sha"`
 	TokensIn        int64     `json:"tokens_in"`
 	TokensOut       int64     `json:"tokens_out"`
@@ -300,7 +301,7 @@ func newBuilderSessionView(s *store.Session) BuilderSessionView {
 		TemplateKind: s.TemplateKind, TemplateID: s.TemplateID, TemplateVersion: s.TemplateVersion,
 		PromptVersionID: s.PromptVersionID, Locale: s.Locale, Status: s.Status,
 		HeadSHA: s.HeadSHA, HeadTurnSeq: s.HeadTurnSeq,
-		FrontendAppID: s.FrontendAppID, PublishedSHA: s.PublishedSHA,
+		FrontendAppID: s.FrontendAppID, BackendOrigin: s.BackendOrigin, PublishedSHA: s.PublishedSHA,
 		TokensIn: s.TokensIn, TokensOut: s.TokensOut,
 		CreatedAt: s.CreatedAt, UpdatedAt: s.UpdatedAt,
 	}

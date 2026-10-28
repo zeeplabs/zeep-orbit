@@ -148,6 +148,9 @@ func TestBuilderSettings_GetDefaultsWithoutWriting(t *testing.T) {
 		got.MaxFixIterations != 3 || got.MaxTurnSeconds != 600 {
 		t.Errorf("unexpected default limits: %+v", got)
 	}
+	if got.BackendApprovalMode != "ask" || got.PublishRLSGate != "warn" {
+		t.Errorf("defaults must be approval ask and publish check warn: %+v", got)
+	}
 	if got.UpdatedAt != nil || got.UpdatedBy != nil {
 		t.Errorf("defaults carry no updated_at/updated_by: %+v", got)
 	}
@@ -176,6 +179,7 @@ func TestBuilderSettings_PutCreatesRowAndPersistsCaps(t *testing.T) {
 		Enabled: true, Provider: "openai_compatible", ContextWindowTokens: 32000,
 		SessionTokenCap: 200000, UserMonthlyTokenCap: 5000000,
 		MaxStepsPerTurn: 25, MaxFixIterations: 2, MaxTurnSeconds: 300, Configured: true,
+		BackendApprovalMode: "ask", PublishRLSGate: "warn",
 	}
 	got.UpdatedAt = nil
 	if got.UpdatedBy == nil || *got.UpdatedBy != super.ID {
@@ -215,6 +219,42 @@ func TestBuilderSettings_PartialPutMergesOnAbsentKey(t *testing.T) {
 	}
 }
 
+// The two backend settings (ai-builder-backend B01) merge on absent key like
+// the rest, and a settings row saved before they existed reads the defaults.
+func TestBuilderSettings_BackendSettingsMergeAndDefault(t *testing.T) {
+	pool, h := builderSettingsTestPool(t)
+	super := mustCreateSuperadmin(t, pool)
+	put := func(body string) BuilderSettings {
+		t.Helper()
+		w := callBuilder(t, h.UpsertBuilderSettingsConfig, super, http.MethodPut, "/x", body)
+		if w.Code != http.StatusOK {
+			t.Fatalf("PUT %s: %d %s", body, w.Code, w.Body.String())
+		}
+		return decodeJSON[BuilderSettings](t, w)
+	}
+
+	// A first save that never mentions them stores the defaults.
+	got := put(`{"enabled":true}`)
+	if got.BackendApprovalMode != "ask" || got.PublishRLSGate != "warn" {
+		t.Fatalf("first save must default to ask/warn: %+v", got)
+	}
+
+	got = put(`{"backend_approval_mode":"auto","publish_rls_gate":"block"}`)
+	if got.BackendApprovalMode != "auto" || got.PublishRLSGate != "block" || !got.Enabled {
+		t.Fatalf("both settings must apply and keep the rest: %+v", got)
+	}
+
+	// Sending one key keeps the other; unrelated keys keep both.
+	got = put(`{"backend_approval_mode":"ask"}`)
+	if got.BackendApprovalMode != "ask" || got.PublishRLSGate != "block" {
+		t.Errorf("approval-only update must keep the publish check: %+v", got)
+	}
+	got = put(`{"max_steps_per_turn":12}`)
+	if got.BackendApprovalMode != "ask" || got.PublishRLSGate != "block" || got.MaxStepsPerTurn != 12 {
+		t.Errorf("an unrelated update must keep both backend settings: %+v", got)
+	}
+}
+
 // Invalid values are 400 and never create or alter the row.
 func TestBuilderSettings_InvalidValuesRejected(t *testing.T) {
 	pool, h := builderSettingsTestPool(t)
@@ -235,6 +275,10 @@ func TestBuilderSettings_InvalidValuesRejected(t *testing.T) {
 		`{"max_turn_seconds":1}`,
 		`{"max_turn_seconds":86400}`,
 		`{"enabled":"yes"}`,
+		`{"backend_approval_mode":"always"}`,
+		`{"backend_approval_mode":""}`,
+		`{"publish_rls_gate":"off"}`,
+		`{"publish_rls_gate":""}`,
 		`not json`,
 	} {
 		w := callBuilder(t, h.UpsertBuilderSettingsConfig, super, http.MethodPut, "/x", body)

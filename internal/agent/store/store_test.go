@@ -951,4 +951,50 @@ func TestCreateSession_Validation(t *testing.T) {
 	if _, err := e.st.CreateTurn(ctx, e.userA, "00000000-0000-0000-0000-000000000000", "bogus", "x"); !errors.Is(err, store.ErrInvalidArgument) {
 		t.Errorf("bad turn kind: want ErrInvalidArgument, got %v", err)
 	}
+	bad = base
+	bad.BackendOrigin = "cloud"
+	if _, err := e.st.CreateSession(ctx, bad); !errors.Is(err, store.ErrInvalidArgument) {
+		t.Errorf("bad backend origin: want ErrInvalidArgument, got %v", err)
+	}
+}
+
+// backend_origin (ai-builder-backend B01): defaults to "existing", stores
+// "builder", and is returned by every session read path.
+func TestCreateSession_BackendOrigin(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	base := store.CreateSessionParams{OwnerUserID: e.userA, BackendAppID: e.appA, TemplateKind: store.TemplateDefault, TemplateVersion: "v0"}
+
+	def, err := e.st.CreateSession(ctx, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if def.BackendOrigin != store.BackendOriginExisting {
+		t.Errorf("default origin = %q, want %q", def.BackendOrigin, store.BackendOriginExisting)
+	}
+
+	p := base
+	p.BackendOrigin = store.BackendOriginBuilder
+	built, err := e.st.CreateSession(ctx, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if built.BackendOrigin != store.BackendOriginBuilder {
+		t.Errorf("created origin = %q, want %q", built.BackendOrigin, store.BackendOriginBuilder)
+	}
+
+	got, err := e.st.GetSession(ctx, e.userA, built.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.BackendOrigin != store.BackendOriginBuilder {
+		t.Errorf("GetSession origin = %q, want %q", got.BackendOrigin, store.BackendOriginBuilder)
+	}
+	byID, err := e.st.GetSessionByID(ctx, built.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if byID.BackendOrigin != store.BackendOriginBuilder {
+		t.Errorf("GetSessionByID origin = %q, want %q", byID.BackendOrigin, store.BackendOriginBuilder)
+	}
 }

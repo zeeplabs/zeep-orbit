@@ -117,7 +117,8 @@ func (h *Handler) UpsertBuilderSettingsConfig(w http.ResponseWriter, r *http.Req
 
 func validateBuilderSettingsInput(in *BuilderSettingsInput) error {
 	if in.Enabled == nil && in.Provider == nil && in.ContextWindowTokens == nil && in.SessionTokenCap == nil &&
-		in.UserMonthlyTokenCap == nil && in.MaxStepsPerTurn == nil && in.MaxFixIterations == nil && in.MaxTurnSeconds == nil {
+		in.UserMonthlyTokenCap == nil && in.MaxStepsPerTurn == nil && in.MaxFixIterations == nil && in.MaxTurnSeconds == nil &&
+		in.BackendApprovalMode == nil && in.PublishRLSGate == nil {
 		return errors.New("no settings to update")
 	}
 	if in.Provider != nil {
@@ -144,6 +145,20 @@ func validateBuilderSettingsInput(in *BuilderSettingsInput) error {
 	}
 	if v := in.MaxTurnSeconds; v != nil && (*v < builderMinMaxTurnSeconds || *v > builderMaxMaxTurnSeconds) {
 		return fmt.Errorf("max_turn_seconds must be between %d and %d", builderMinMaxTurnSeconds, builderMaxMaxTurnSeconds)
+	}
+	if v := in.BackendApprovalMode; v != nil {
+		m := strings.TrimSpace(*v)
+		if m != BuilderApprovalAsk && m != BuilderApprovalAuto {
+			return errors.New("backend_approval_mode must be 'ask' or 'auto'")
+		}
+		in.BackendApprovalMode = &m
+	}
+	if v := in.PublishRLSGate; v != nil {
+		g := strings.TrimSpace(*v)
+		if g != BuilderRLSGateWarn && g != BuilderRLSGateBlock {
+			return errors.New("publish_rls_gate must be 'warn' or 'block'")
+		}
+		in.PublishRLSGate = &g
 	}
 	return nil
 }

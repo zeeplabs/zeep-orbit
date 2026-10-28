@@ -814,6 +814,17 @@ func provisionZeepSystemOnce(ctx context.Context, pool *db.Pool) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS builder_sessions_owner_idx
 		 ON zeep_system.builder_sessions (owner_user_id, updated_at DESC)`,
+		// AI Builder Backend (ai-builder-backend spec, B01). All additive and
+		// defaulted: existing rows keep today's behavior.
+		`ALTER TABLE zeep_system.builder_sessions
+		   ADD COLUMN IF NOT EXISTS backend_origin TEXT NOT NULL DEFAULT 'existing'
+		   CHECK (backend_origin IN ('existing', 'builder'))`,
+		`ALTER TABLE zeep_system.builder_settings
+		   ADD COLUMN IF NOT EXISTS backend_approval_mode TEXT NOT NULL DEFAULT 'ask'
+		   CHECK (backend_approval_mode IN ('ask', 'auto'))`,
+		`ALTER TABLE zeep_system.builder_settings
+		   ADD COLUMN IF NOT EXISTS publish_rls_gate TEXT NOT NULL DEFAULT 'warn'
+		   CHECK (publish_rls_gate IN ('warn', 'block'))`,
 		// Turn queue. lease_owner/lease_until implement the Postgres row lease
 		// claimed with FOR UPDATE SKIP LOCKED (AFB-18); the partial unique
 		// index below allows at most one non-terminal turn per session.

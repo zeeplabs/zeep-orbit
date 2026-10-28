@@ -79,6 +79,13 @@ const (
 	RoleSummary   = "summary"
 )
 
+// Backend origins (builder_sessions.backend_origin): whether the session's
+// backend app already existed or was created by the builder for this session.
+const (
+	BackendOriginExisting = "existing"
+	BackendOriginBuilder  = "builder"
+)
+
 // Template kinds (builder_sessions.template_kind).
 const (
 	TemplateDefault = "default"
@@ -127,6 +134,8 @@ type Session struct {
 	TokensOut       int64
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+	// BackendOrigin is BackendOriginExisting or BackendOriginBuilder.
+	BackendOrigin string
 }
 
 // Turn is a row of zeep_system.builder_turns.
@@ -208,11 +217,13 @@ type CreateSessionParams struct {
 	TemplateVersion string
 	PromptVersionID *string
 	Locale          string
+	// BackendOrigin defaults to BackendOriginExisting when empty.
+	BackendOrigin string
 }
 
 const sessionColumns = `id, owner_user_id, backend_app_id, title, template_kind, template_id,
 	template_version, prompt_version_id, locale, status, head_sha, head_turn_seq,
-	frontend_app_id, published_sha, tokens_in, tokens_out, created_at, updated_at`
+	frontend_app_id, published_sha, tokens_in, tokens_out, created_at, updated_at, backend_origin`
 
 const turnColumns = `id, session_id, seq, kind, status, pending_proposal, commit_sha,
 	lease_owner, lease_until, error_code, created_at, finished_at`
@@ -221,7 +232,7 @@ func scanSession(row pgx.Row) (*Session, error) {
 	var s Session
 	err := row.Scan(&s.ID, &s.OwnerUserID, &s.BackendAppID, &s.Title, &s.TemplateKind, &s.TemplateID,
 		&s.TemplateVersion, &s.PromptVersionID, &s.Locale, &s.Status, &s.HeadSHA, &s.HeadTurnSeq,
-		&s.FrontendAppID, &s.PublishedSHA, &s.TokensIn, &s.TokensOut, &s.CreatedAt, &s.UpdatedAt)
+		&s.FrontendAppID, &s.PublishedSHA, &s.TokensIn, &s.TokensOut, &s.CreatedAt, &s.UpdatedAt, &s.BackendOrigin)
 	if err != nil {
 		return nil, err
 	}
@@ -253,12 +264,19 @@ func (s *Store) CreateSession(ctx context.Context, p CreateSessionParams) (*Sess
 	if locale == "" {
 		locale = "en"
 	}
+	origin := p.BackendOrigin
+	if origin == "" {
+		origin = BackendOriginExisting
+	}
+	if origin != BackendOriginExisting && origin != BackendOriginBuilder {
+		return nil, fmt.Errorf("%w: backend origin must be %q or %q", ErrInvalidArgument, BackendOriginExisting, BackendOriginBuilder)
+	}
 	sess, err := scanSession(s.pool.QueryRow(ctx,
 		`INSERT INTO zeep_system.builder_sessions
-		   (owner_user_id, backend_app_id, title, template_kind, template_id, template_version, prompt_version_id, locale)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		   (owner_user_id, backend_app_id, title, template_kind, template_id, template_version, prompt_version_id, locale, backend_origin)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		 RETURNING `+sessionColumns,
-		p.OwnerUserID, p.BackendAppID, p.Title, p.TemplateKind, p.TemplateID, p.TemplateVersion, p.PromptVersionID, locale,
+		p.OwnerUserID, p.BackendAppID, p.Title, p.TemplateKind, p.TemplateID, p.TemplateVersion, p.PromptVersionID, locale, origin,
 	))
 	if err != nil {
 		return nil, fmt.Errorf("builder store: create session: %w", err)
