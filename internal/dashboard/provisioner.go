@@ -757,6 +757,41 @@ func provisionZeepSystemOnce(ctx context.Context, pool *db.Pool) error {
 			created_by UUID        NOT NULL,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`,
+		// Custom builder skills (ai-builder-skills S06). One row per skill
+		// lineage; a soft delete frees the name, and a later upload of the
+		// same name starts a new lineage. Built-ins live in the binary, never
+		// here: only their enabled override is stored.
+		`CREATE TABLE IF NOT EXISTS zeep_system.builder_skills (
+			id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+			name       TEXT        NOT NULL,
+			enabled    BOOLEAN     NOT NULL DEFAULT true,
+			created_by UUID        NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			deleted_at TIMESTAMPTZ,
+			deleted_by UUID
+		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS builder_skills_name_live_idx
+		 ON zeep_system.builder_skills (lower(name)) WHERE deleted_at IS NULL`,
+		// Append-only versions; the active version is the highest one.
+		`CREATE TABLE IF NOT EXISTS zeep_system.builder_skill_versions (
+			id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+			skill_id       UUID        NOT NULL REFERENCES zeep_system.builder_skills(id) ON DELETE CASCADE,
+			version        INT         NOT NULL,
+			description    TEXT        NOT NULL,
+			license        TEXT        NOT NULL DEFAULT '',
+			body           TEXT        NOT NULL,
+			content_sha256 TEXT        NOT NULL,
+			created_by     UUID        NOT NULL,
+			created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+			UNIQUE (skill_id, version)
+		)`,
+		// Enabled override of an embedded built-in. No row means enabled.
+		`CREATE TABLE IF NOT EXISTS zeep_system.builder_skill_builtin_state (
+			name       TEXT        PRIMARY KEY,
+			enabled    BOOLEAN     NOT NULL,
+			updated_by UUID        NOT NULL,
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`,
 		`CREATE TABLE IF NOT EXISTS zeep_system.builder_sessions (
 			id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
 			owner_user_id     UUID        NOT NULL,
