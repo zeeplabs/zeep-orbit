@@ -30,6 +30,7 @@ type skillsEnv struct {
 func newSkillsEnv(t *testing.T) *skillsEnv {
 	t.Helper()
 	pool, h := builderSettingsTestPool(t)
+	withBuiltinSkills(t) // empty built-in set; tests that need built-ins swap it
 	truncate := func() {
 		_, _ = pool.Exec(context.Background(),
 			`TRUNCATE zeep_system.builder_skills, zeep_system.builder_skill_versions, zeep_system.builder_skill_builtin_state CASCADE`)

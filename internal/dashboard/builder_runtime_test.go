@@ -370,6 +370,7 @@ func TestBuilderRuntime_PromptSourceFailsTheTurnWhenSkillsCannotBeRead(t *testin
 // load_skill is registered on the shared registry next to the other tools and
 // serves what is enabled right now.
 func TestBuilderRuntime_ToolRegistryHasLoadSkillAndOnlyKnownTools(t *testing.T) {
+	withBuiltinSkills(t)
 	rt := newTestBuilderRuntime(t)
 	pool := rt.pool
 	super := mustCreateSuperadmin(t, pool)

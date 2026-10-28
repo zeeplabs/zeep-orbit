@@ -19,6 +19,9 @@ import (
 func builderSkillsTestPool(t *testing.T) (*db.Pool, string) {
 	t.Helper()
 	pool, _ := builderSettingsTestPool(t)
+	// Start from an empty built-in set so budget arithmetic does not depend on
+	// the shipped skills; tests that need built-ins call withBuiltinSkills.
+	withBuiltinSkills(t)
 	truncate := func() {
 		_, _ = pool.Exec(context.Background(),
 			`TRUNCATE zeep_system.builder_skills, zeep_system.builder_skill_versions, zeep_system.builder_skill_builtin_state CASCADE`)
@@ -456,5 +459,43 @@ func TestCheckSkillsBudget_ShrinkingAnOverBudgetIndexIsAllowed(t *testing.T) {
 	}
 	if err := checkSkillsBudget(before, withEntry(before, big("s-00", 300))); err == nil {
 		t.Fatal("growing an over-budget index must be rejected")
+	}
+}
+
+// The built-ins that ship in the binary: listed first, locked, enabled by
+// default, loadable, and inside the budget reserved for them.
+func TestBuilderSkillsStore_ShippedBuiltinsAreListedLockedAndLoadable(t *testing.T) {
+	pool, _ := builderSettingsTestPool(t) // no withBuiltinSkills: the real embedded set
+	ctx := context.Background()
+	_, _ = pool.Exec(ctx, `TRUNCATE zeep_system.builder_skills, zeep_system.builder_skill_versions, zeep_system.builder_skill_builtin_state CASCADE`)
+
+	want := []string{
+		"orbit-accessibility", "orbit-crud-screens", "orbit-forms-and-states",
+		"orbit-frontend-design", "orbit-react-patterns", "orbit-responsive-layout",
+	}
+	list, info, err := ListBuilderSkills(ctx, pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, s := range list {
+		names = append(names, s.Name)
+		if !s.Locked || !s.Enabled || s.Source != "built-in" || !s.InAgentView || s.Provenance == "" {
+			t.Errorf("%s: %+v", s.Name, s)
+		}
+	}
+	if strings.Join(names, ",") != strings.Join(want, ",") {
+		t.Fatalf("built-ins: %v", names)
+	}
+	if info.Chars > skills.MaxBuiltinIndexChars || len(info.Dropped) != 0 {
+		t.Fatalf("built-in index %d chars (reserved %d), dropped %v", info.Chars, skills.MaxBuiltinIndexChars, info.Dropped)
+	}
+
+	src := NewBuilderSkillSource(pool)
+	for _, n := range want {
+		l, err := src.Get(ctx, n)
+		if err != nil || l.Source != skills.OriginBuiltin || len(l.Body) < 1000 {
+			t.Fatalf("%s: %v (body %d bytes)", n, err, len(l.Body))
+		}
 	}
 }

@@ -1,3 +1,9 @@
 # name version sha256-of-SKILL.md
 # Regenerate after editing a built-in (and bumping its `version`):
 #   go test ./internal/agent/skills -run TestBuiltinLint -update-lock
+orbit-accessibility 1 1db9ec0961c6ffd14d6c561ac0fbcfbd1e51935489fac927f2062dd7cc68a090
+orbit-crud-screens 1 fd77adcf8baaed4d3dab9e4a66243c29ef50982a6bc715bea543c3892dd85db8
+orbit-forms-and-states 1 1475a405ee70a8396e4cdc6a9de25dc054f6ba60d639fb59469a6d067d6fdf3a
+orbit-frontend-design 1 11ce224993d662c31a5eaaffb64629877924ee604e82c02e2c54fd1b812bfd66
+orbit-react-patterns 1 662b32e77fcf24076a9b5afece57ec6ca64b76877758c976635e4e2050832c55
+orbit-responsive-layout 1 6670b0ef31954aa3cfb61ae23d1a9f0db864e2a0e435a5b1499608d065c94e32
