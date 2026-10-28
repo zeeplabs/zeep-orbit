@@ -21,18 +21,18 @@ const (
 	ToolGetBuildLogs = "get_build_logs"
 )
 
-// DefaultPreviewBase returns the URL path the dashboard serves a session's
-// preview under, used as vite's --base so asset URLs resolve inside the
-// preview iframe.
-func DefaultPreviewBase(sessionID string) string {
-	return "/dashboard/api/builder/sessions/" + sessionID + "/preview/"
-}
+// PreviewBuildBase returns the vite --base used for the preview build: always
+// the relative "./", so asset URLs resolve against the document URL and inherit
+// the token path segment the preview is served under (cookies are not sent
+// from the sandboxed iframe). Only the preview build uses it; the published and
+// exported source keep vite's default base "/".
+func PreviewBuildBase(string) string { return "./" }
 
 // WorkspaceConfig configures the workspace tools.
 type WorkspaceConfig struct {
 	// PreviewBase returns the public URL path (starting and ending with "/")
 	// the session's preview is served under; it is passed to the build step as
-	// vite's --base. Default [DefaultPreviewBase].
+	// vite's --base. Default [PreviewBuildBase].
 	PreviewBase func(sessionID string) string
 }
 
@@ -60,7 +60,7 @@ func NewWorkspaceTools(sb sandbox.Sandbox, cfg WorkspaceConfig) ([]Tool, error) 
 		return nil, errors.New("tools: sandbox is required")
 	}
 	if cfg.PreviewBase == nil {
-		cfg.PreviewBase = DefaultPreviewBase
+		cfg.PreviewBase = PreviewBuildBase
 	}
 	w := &workspace{sb: sb, previewBase: cfg.PreviewBase}
 	return []Tool{

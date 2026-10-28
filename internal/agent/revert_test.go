@@ -125,7 +125,7 @@ func TestRunTurn_Revert_RestoresSnapshotsAndRebuildsWithoutTheModel(t *testing.T
 	if p["to_turn_seq"] != float64(1) || p["sha"] != "sha-revert" || p["changed"] != true || p["build"] != RevertBuildSucceeded {
 		t.Errorf("revert event = %v", p)
 	}
-	if want := "/dashboard/api/builder/sessions/sess-1/preview/"; rs.previewBase[0] != want {
+	if want := "./"; rs.previewBase[0] != want {
 		t.Errorf("preview base = %q, want %q", rs.previewBase[0], want)
 	}
 	if rs.buildOpIDs[0] != "revert-turn-1-build" {

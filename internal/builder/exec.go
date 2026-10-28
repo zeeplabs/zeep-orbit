@@ -138,10 +138,18 @@ func (s BuildStep) validate() error {
 	return &OpError{Err: ErrUnknownStep, Msg: fmt.Sprintf("unknown build step %q", truncateUTF8(string(s), 64))}
 }
 
-// ValidatePreviewBase checks the vite --base value. It must start and end with
-// "/", contain only URL-unreserved characters, no empty and no "."/".."
+// PreviewRelativeBase is the one non-absolute vite base accepted: the preview
+// is served under a per-token URL path, so its assets must resolve relative to
+// the document.
+const PreviewRelativeBase = "./"
+
+// ValidatePreviewBase checks the vite --base value: [PreviewRelativeBase], or
+// one that must start and end with "/", contain only URL-unreserved characters, no empty and no "."/".."
 // segments, and stay under 256 bytes.
 func ValidatePreviewBase(base string) error {
+	if base == PreviewRelativeBase {
+		return nil
+	}
 	bad := func(reason string) error {
 		return &OpError{Err: ErrInvalidPreviewBase, Msg: "invalid preview_base: " + reason}
 	}

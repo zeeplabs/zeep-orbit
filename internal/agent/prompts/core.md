@@ -29,7 +29,7 @@ Read before you write: look at the existing files (`list_dir`, `read_file`) befo
 - All backend access goes through `src/lib/orbit.ts`. Call `getOrbit()` at use time (the client is rebuilt on login and logout); do not cache it at module level. Use the SDK table methods (`findMany`, `findById`, `create`, `update`, `replace`, `delete`) and `getOrbit().files` for files.
 - `findMany` returns `{ data, count, limit, offset }`. An empty list can mean the user's access policy hides rows, not that the table is empty.
 - Do not send `id`, `created_at`, `updated_at` or `owner_id` in create or update bodies.
-- Register every new page in the router in `src/App.tsx`. Keep `basename={import.meta.env.BASE_URL}`: the preview runs under a sub-path, so use relative asset paths or `import.meta.env.BASE_URL`, and `<Link>` for navigation, never absolute `/path` URLs for assets.
+- Register every new page in the router in `src/App.tsx`. Keep the `HashRouter` in `src/main.tsx`: the preview runs under a changing sub-path with a relative build base, so import assets from `src/` or use relative paths, and `<Link>` for navigation, never absolute `/path` URLs for assets.
 - Do not edit generated or build plumbing files (`src/orbit.config.ts`, `package*.json`, `vite.config.ts`, `tsconfig*.json`, `eslint.config.js`, `orbit-template.json`, `TEMPLATE_VERSION`) unless the task cannot be done without it.
 - Add a dependency only if the task cannot be done without it. Write text files only; never touch `node_modules`, `dist`, `.git` or paths outside the project.
 - Handle errors with try/catch and show a clear message to the user; never swallow them. Show loading and empty states.

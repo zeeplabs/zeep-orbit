@@ -365,6 +365,10 @@ func TestExecRejectsInvalidPreviewBase(t *testing.T) {
 		"/é/",
 		"/" + strings.Repeat("a", 300) + "/",
 		"--base=/x/",
+		".",
+		"./x/",
+		"../",
+		"./ --outDir /etc/",
 		"https://evil.example/",
 	}
 	for _, base := range bad {
@@ -376,7 +380,7 @@ func TestExecRejectsInvalidPreviewBase(t *testing.T) {
 	if _, err := os.Stat(marker); err == nil {
 		t.Fatal("npx ran for an invalid base")
 	}
-	for _, ok := range []string{"/", "/preview/", "/preview/abc-123/", "/a.b/c_d/e~f/"} {
+	for _, ok := range []string{"./", "/", "/preview/", "/preview/abc-123/", "/a.b/c_d/e~f/"} {
 		if err := ValidatePreviewBase(ok); err != nil {
 			t.Errorf("base %q should be valid: %v", ok, err)
 		}

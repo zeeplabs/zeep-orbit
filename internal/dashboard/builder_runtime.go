@@ -145,7 +145,7 @@ func NewBuilderRuntime(pool *db.Pool, cfg BuilderRuntimeConfig) (*BuilderRuntime
 	sb := sandbox.NewRestoring(raw, agent.SnapshotProvider(st))
 
 	reg := tools.NewRegistry(tools.WithLogger(log))
-	if err := tools.RegisterWorkspaceTools(reg, sb, tools.WorkspaceConfig{PreviewBase: tools.DefaultPreviewBase}); err != nil {
+	if err := tools.RegisterWorkspaceTools(reg, sb, tools.WorkspaceConfig{PreviewBase: tools.PreviewBuildBase}); err != nil {
 		return nil, fmt.Errorf("builder: register workspace tools: %w", err)
 	}
 	if err := RegisterBuilderTools(reg, BuilderToolDeps{Pool: pool, Sessions: st}); err != nil {
@@ -166,7 +166,7 @@ func NewBuilderRuntime(pool *db.Pool, cfg BuilderRuntimeConfig) (*BuilderRuntime
 		Prompt:   rt.promptSource,
 		// The same function the workspace tools were registered with: the
 		// revert turn's rebuild must use the base the preview is served under.
-		PreviewBase: tools.DefaultPreviewBase,
+		PreviewBase: tools.PreviewBuildBase,
 		Logger:      log,
 	}
 	concurrency := cfg.Concurrency

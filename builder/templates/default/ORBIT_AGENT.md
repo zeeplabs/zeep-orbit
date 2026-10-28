@@ -6,7 +6,7 @@ Vite 7, React 19, TypeScript (strict), React Router 7, plain CSS (`src/index.css
 components and use the CSS variables in `src/index.css`.
 
 ## Layout
-- `src/main.tsx` - entry; router with `basename={import.meta.env.BASE_URL}`. Do not remove it.
+- `src/main.tsx` - entry; `HashRouter` (the preview is served under a changing URL path). Do not replace it with `BrowserRouter`.
 - `src/App.tsx` - layout and `<Routes>`. Register every new page here.
 - `src/pages/` - one file per route (`FooPage.tsx`).
 - `src/components/` - reusable UI.
@@ -34,9 +34,9 @@ await signIn(email, password) // stores the JWT; call getOrbit() again afterward
 ## Rules
 - Never hardcode secrets, tokens, API URLs or the app name. Use `src/lib/orbit.ts`.
 - Never call `localStorage`/`sessionStorage` directly; use `createSafeStorage()`.
-- The app runs under a sub-path in preview: use relative asset paths or
-  `import.meta.env.BASE_URL`, never absolute `/something` URLs for assets or links
-  (use `<Link to="/x">` for navigation).
+- The app runs under a changing sub-path in preview (the build base is relative):
+  import assets from `src/` or use relative paths, never absolute `/something` URLs
+  for assets (use `<Link to="/x">` for navigation).
 - No new dependencies unless the task cannot be done without them.
 - Text files only. Do not touch `node_modules`, `dist`, `.git`.
 - Keep `npm run lint` and `npx tsc -b` green before finishing a turn.

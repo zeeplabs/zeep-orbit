@@ -81,7 +81,7 @@ type Deps struct {
 	Prompt  PromptSource
 	// PreviewBase returns the URL path a session's preview is served under
 	// (vite --base); the revert turn's rebuild passes it like run_build does.
-	// Default tools.DefaultPreviewBase: pass the same function the workspace
+	// Default tools.PreviewBuildBase: pass the same function the workspace
 	// tools were registered with.
 	PreviewBase func(sessionID string) string
 	// Clock defaults to time.Now.

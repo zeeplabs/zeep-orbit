@@ -99,7 +99,7 @@ func (r *run) revertBuild(ctx, tctx context.Context) (string, error) {
 	if err := r.emit(ctx, EventBuildStarted, map[string]any{"step": string(step)}); err != nil {
 		return "", err
 	}
-	previewBase := tools.DefaultPreviewBase
+	previewBase := tools.PreviewBuildBase
 	if r.deps.PreviewBase != nil {
 		previewBase = r.deps.PreviewBase
 	}
