@@ -1,6 +1,6 @@
 # AI Builder Skills — Design
 
-> Status: **Draft, awaiting approval** (2026-10-28). Implements `spec.md` (SKL-01..SKL-25; P2/P3 listed but not designed in detail). Builds on the shipped builder (`internal/agent`, `internal/dashboard/builder_*`). Facts below marked **[Certo]** were read in the code on 2026-10-28.
+> Status: **Approved** (2026-10-28); implementation in progress, deviations recorded in §12. Implements `spec.md` (SKL-01..SKL-25; P2/P3 listed but not designed in detail). Builds on the shipped builder (`internal/agent`, `internal/dashboard/builder_*`). Facts below marked **[Certo]** were read in the code on 2026-10-28.
 
 ## 1. Overview
 
@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS zeep_system.builder_skill_builtin_state (
 | Item | Value |
 | --- | --- |
 | `name` | ≤ 64, `^[a-z0-9]+(-[a-z0-9]+)*$`; built-ins `orbit-*`; custom `orbit-*` rejected |
-| `description` | required, ≤ 300 runes after folding to one line (built-ins ≤ 200) |
+| `description` | required, ≤ 1024 runes after folding to one line (the Agent Skills format limit; built-ins ≤ 200). See §12 item 12. |
 | body | non-empty, ≤ 24 KiB bytes (tool-result cap is 32 KiB, `DefaultMaxResultBytes`) |
 | frontmatter | ≤ 4 KiB; raw POST body ≤ 64 KiB |
 | loads per turn | 5 distinct skills |
@@ -205,3 +205,22 @@ Unknown / disabled / deleted name → `Result{IsError:true, Content:"skill not a
 ## 11. Rollout
 
 No env var, Helm, compose, k8s or CI change. DDL is additive and idempotent. Docs: CHANGELOG `[Unreleased]`, `docs/docs/ai-frontend-builder.md` (skills section, upload format, limits), README only if a feature-table row changes (then mirror in the 3 translations). Core prompt change ships with the binary; existing sessions pick it up on their next turn.
+
+## 12. Implementation notes (deviations found while building, 2026-10-28)
+
+Kept here so the design stays the record of what shipped. Each item changes a detail above, not a decision.
+
+| # | Detail | What changed and why |
+| --- | --- | --- |
+| 1 | Parser entry points (§4) | `Parse(content)` has custom-upload semantics (`version`/`source` are ignored with a warning, the safe default for the upload handler); `ParseBuiltin(content)` requires them and applies the 200-char description limit. One signature per trust level instead of a flag. |
+| 2 | Field codes (§6) | Added `frontmatter_too_large` and `content_too_large`. A bad `license`, `version` or `source` is reported as `frontmatter_invalid` on that field. `skill_name_reserved` also appears as a field code on its 400. |
+| 3 | Status codes (§6) | Every validation failure, including `skill_name_reserved`, is **400**, the precedent of `PUT /builder/prompt` (the table said 422 for the reserved name). 409 stays for `skill_builtin_readonly` and `skills_index_budget_exceeded`; 404 for `skill_not_found`. |
+| 4 | Body limits (§4) | The file is capped at 64 KiB by the parser (`content_too_large`). The HTTP body cap is 3x that so JSON escaping of a legitimate file is never cut by the transport. |
+| 5 | Index text (§4) | `RenderIndex` returns the intro sentence plus the lines; the section header is added by the prompt builder (`headerSkills`) like every other section. `IndexChars` counts intro + lines and is the single measure for runtime and budget checks. |
+| 6 | Version identity (§3) | `content_sha256` is the hash of the stored fields (name, description, license, body), not of the raw upload, so a change to an ignored key or to whitespace outside the body is not a new version. |
+| 7 | Budget rule (§3) | A change is rejected when the resulting index is over budget **and** bigger than the current one, so an operator can always repair an index that is already over budget (after an upgrade) by shrinking or disabling. |
+| 8 | Loop gating (§5) | A `load_skill` call while the tool is not offered (no skills) is answered `unknown tool` without dispatch, so a hallucinated call cannot reach the source. |
+| 9 | Event payload whitelist | `skill_loaded` (`name`, `source`, `version`) is added to `builderEventFields`; the events route whitelists payload keys per type. |
+| 10 | Tool-name list for the lint (§7) | `skills.KnownToolName` is the single list. A dashboard test builds the real registry (`newBuilderToolRegistry`) and fails if a registered tool is unknown to it, so adding a tool without updating the list breaks CI. `go test ./internal/agent/skills -run TestBuiltinLint -update-lock` rewrites `builtin.lock` and refuses a content change without a version bump. |
+| 11 | Frontend errors | `ApiError` gained `details` (the parsed error body) so the upload dialog can show `fields` and the budget `index`. |
+| 12 | Description limit vs real-world skills | **Finding:** all 9 `SKILL.md` files vendored in this repo exceed 300 characters of description (the compat test records `description_too_long`; `playwright-best-practices` also exceeds the 24 KiB body). A superadmin uploading a skill written for another tool will usually have to shorten the description. Measured on 55 skills found locally: 25 of them (about 45%) exceed 300 and the longest are about 1040, so a 300 limit would reject many real files. **Decision (maintainer, 2026-10-28): raised to 1024**, the Agent Skills format limit. The index budget (8000) stays the real bound and the UI shows each skill's share of it; the built-in limit stays 200, so the reserved built-in budget is unaffected. |

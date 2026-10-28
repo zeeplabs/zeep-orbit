@@ -219,6 +219,8 @@ This spec covers the **first deliverable: a time-boxed PoC/MVP** that proves the
 
 ### P2: Knowledge packs (design system docs, guidelines)
 
+> **Superseded 2026-10-28** by `.specs/features/ai-builder-skills/`. Skills (`load_skill`, an index in the prompt, locked built-ins plus superadmin uploads) cover this story; `load_knowledge` and the `builder_knowledge_*` tables are not built.
+
 **User Story**: As a superadmin, I want to upload documentation (design system usage, component catalog, UX guidelines) as packs the agent consults when relevant, so that it uses our components correctly without every doc going into every call.
 
 **Acceptance Criteria**:
@@ -329,7 +331,7 @@ This spec covers the **first deliverable: a time-boxed PoC/MVP** that proves the
 | AFB-25 | P1: Company standards — versioned persona + rules, layered under the core prompt | Design | Pending |
 | AFB-26 | P1: Company standards — builder base templates (reuse `github_templates`) + lint feedback | Design | Pending |
 | AFB-27 | P1: Company standards — private registry auth via egress proxy | Design | Pending |
-| AFB-28 | P2: Knowledge packs loaded on demand | - | Pending |
+| AFB-28 | P2: Knowledge packs loaded on demand | - | **Superseded** by `.specs/features/ai-builder-skills/` (2026-10-28): skills are the same mechanism (index in the prompt, text loaded on demand) with a locked built-in set |
 | AFB-29 | P2: External MCP servers — registration, encrypted credential, tool allowlist | - | Pending |
 | AFB-30 | P2: External MCP servers — confirmation for mutating tools, SSRF guard, event logging | - | Pending |
 
