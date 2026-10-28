@@ -380,6 +380,7 @@ func TestBuilderEvents_PayloadsNeverCarryFileContentsOrProviderErrors(t *testing
 		"build_failed":   map[string]any{"step": "build", "tail": "error TS2304", "env": map[string]any{"TOKEN": "tok-secret"}},
 		"publish_failed": map[string]any{"code": "render_error", "detail": "render said: tok-secret-2", "body": "x", "nested": map[string]any{"a": "NESTED-SECRET"}},
 		"future_event":   map[string]any{"id": 7, "ok": true, "label": "fine", "content": "FILE-BODY-5", "list": []string{"LIST-SECRET"}},
+		"skill_loaded":   map[string]any{"name": "invoice-layout", "source": "custom", "version": 3, "body": "FILE-BODY-6", "content": "FILE-BODY-7"},
 	} {
 		if _, err := e.st.AppendSessionEvent(ctx, sess.ID, "", typ, payload); err != nil {
 			t.Fatal(err)
@@ -404,6 +405,7 @@ func TestBuilderEvents_PayloadsNeverCarryFileContentsOrProviderErrors(t *testing
 		"build_failed":   `{"step":"build","tail":"error TS2304"}`,
 		"publish_failed": `{"code":"render_error"}`,
 		"future_event":   `{"id":7,"label":"fine","ok":true}`,
+		"skill_loaded":   `{"name":"invoice-layout","source":"custom","version":3}`,
 	}
 	for typ, want := range wantPayload {
 		if by[typ] != want {

@@ -216,6 +216,7 @@ var builderEventFields = map[string]map[string]eventField{
 	"assistant_message": {"content": efStr(maxEventTextString)},
 	"tool_call":         {"name": efStr(64), "summary": efStr(maxEventShortString)},
 	"file_changed":      {"path": efStr(maxEventShortString), "op": efStr(16)},
+	"skill_loaded":      {"name": efStr(64), "source": efStr(16), "version": efNum},
 	"build_started":     {"step": efStr(16)},
 	"build_succeeded":   {"step": efStr(16)},
 	"build_failed":      {"step": efStr(16), "tail": efStr(maxEventTailString)},

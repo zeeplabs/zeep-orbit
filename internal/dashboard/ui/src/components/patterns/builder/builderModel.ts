@@ -76,6 +76,10 @@ function toEntry(event: BuilderEvent, fixAttempt: number): ActivityEntry | null 
     }
     case 'file_changed':
       return { ...base, tone: 'neutral', ...fileLabel(event.payload.op, event.payload.path) }
+    case 'skill_loaded':
+      return event.payload.name
+        ? { ...base, icon: 'menu_book', tone: 'neutral', labelKey: 'skillLoaded', params: { name: event.payload.name } }
+        : { ...base, icon: 'menu_book', tone: 'neutral', labelKey: 'skillLoadedGeneric' }
     case 'build_started':
       return fixAttempt > 0
         ? { ...base, icon: 'autorenew', tone: 'warning', labelKey: 'buildFixing', params: { n: fixAttempt } }
