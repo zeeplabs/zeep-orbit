@@ -141,12 +141,15 @@ async function isSessionExpired(res: Response): Promise<boolean> {
 export class ApiError extends Error {
   readonly status: number
   readonly reason: string | undefined
+  /** The parsed JSON error body, for routes that add structured fields next to `error`/`reason`. */
+  readonly details: Record<string, unknown> | undefined
 
-  constructor(message: string, status: number, reason?: string) {
+  constructor(message: string, status: number, reason?: string, details?: Record<string, unknown>) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.reason = reason
+    this.details = details
   }
 }
 
@@ -155,13 +158,15 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     let message = `HTTP ${res.status}`
     let reason: string | undefined
+    let details: Record<string, unknown> | undefined
     try {
       const body = await res.json()
       message = body.error ?? body.message ?? message
       if (typeof body.reason === 'string') reason = body.reason
+      if (body && typeof body === 'object' && !Array.isArray(body)) details = body
     } catch {
     }
-    throw new ApiError(message, res.status, reason)
+    throw new ApiError(message, res.status, reason, details)
   }
   if (res.status === 204) return undefined as unknown as T
   return res.json() as Promise<T>
@@ -2038,6 +2043,7 @@ export interface BuilderEventPayloads {
   // Written by the proposal and publish handlers; only short scalar fields are served.
   proposal_confirmed: { tool_call_id?: string; applied?: boolean; kind?: string }
   proposal_rejected: { tool_call_id?: string }
+  skill_loaded: { name?: string; source?: string; version?: number }
   publish_started: { republish?: boolean }
   publish_succeeded: { republish?: boolean; sha?: string }
   publish_failed: { code?: BuilderPublishConflictReason | 'github_failed' | string }
@@ -2218,6 +2224,143 @@ export interface BuilderPromptVersionsPage {
   total: number
 }
 
+// -- Skills (superadmin; ai-builder-skills) --
+// Types mirror internal/dashboard/builder_skills*.go (JSON tags, nullability).
+
+/** Where a skill comes from. Built-ins are embedded in the binary and locked. */
+export type BuilderSkillSource = 'built-in' | 'custom'
+
+export interface BuilderSkill {
+  name: string
+  /** One line, already sanitized by the server. */
+  description: string
+  source: BuilderSkillSource
+  enabled: boolean
+  /** True for built-ins: no edit, no delete, only the enabled switch. */
+  locked: boolean
+  version: number
+  license: string
+  /** Built-ins only: where the text comes from. */
+  provenance?: string
+  /** False when the skill is enabled but did not fit the agent's skills index. */
+  in_agent_view: boolean
+  /** What the skill adds to the index while enabled. */
+  chars: number
+  updated_at: string | null
+  updated_by_email: string | null
+}
+
+/** The skills index against its budget. `dropped` lists enabled skills the agent cannot see. */
+export interface BuilderSkillsIndex {
+  chars: number
+  max: number
+  dropped: string[]
+}
+
+export interface BuilderSkillsList {
+  skills: BuilderSkill[]
+  index: BuilderSkillsIndex
+}
+
+export interface BuilderSkillVersion {
+  version: number
+  created_at: string
+  created_by_email: string
+  content_sha256: string
+}
+
+/** GET /builder/skills/{name}: the body is read-only for built-ins; `versions` is custom only. */
+export interface BuilderSkillDetail extends BuilderSkill {
+  body: string
+  versions?: BuilderSkillVersion[]
+}
+
+/** A frontmatter key the server parsed but does not use (`allowed-tools`, `hooks`, ...). */
+export interface BuilderSkillWarning {
+  code: 'ignored_key'
+  key?: string
+}
+
+/** Stable codes of a validation failure, one per field (see the locale keys). */
+export type BuilderSkillFieldCode =
+  | 'name_invalid'
+  | 'name_too_long'
+  | 'description_required'
+  | 'description_too_long'
+  | 'body_empty'
+  | 'body_too_large'
+  | 'frontmatter_missing'
+  | 'frontmatter_invalid'
+  | 'frontmatter_duplicate_key'
+  | 'frontmatter_too_large'
+  | 'content_not_utf8'
+  | 'content_too_large'
+  | 'credentials_detected'
+  | 'skill_name_reserved'
+
+export interface BuilderSkillFieldError {
+  field: string
+  code: BuilderSkillFieldCode | (string & {})
+}
+
+/** `ApiError.reason` of the skills routes. */
+export type BuilderSkillErrorReason =
+  | 'skill_invalid' // 400, with `fields`
+  | 'skill_name_reserved' // 400
+  | 'skill_builtin_readonly' // 409
+  | 'skills_index_budget_exceeded' // 409, with `index`
+  | 'skill_not_found' // 404
+  | 'skill_update_invalid' // 400
+
+/** Response of POST /builder/skills (201 for a new skill, 200 for a new version or a no-op). */
+export interface BuilderSkillSaveResult {
+  skill: BuilderSkill | null
+  /** False when the content equals the active version (nothing was written). */
+  created: boolean
+  version: number
+  warnings: BuilderSkillWarning[]
+  index: BuilderSkillsIndex
+}
+
+/** Response of PATCH /builder/skills/{name}. */
+export interface BuilderSkillToggleResult {
+  skill: BuilderSkill | null
+  changed: boolean
+  index: BuilderSkillsIndex
+}
+
+/** What an ApiError of the skills routes carries, extracted for the UI. */
+export interface BuilderSkillErrorInfo {
+  reason: BuilderSkillErrorReason | undefined
+  fields: BuilderSkillFieldError[]
+  index: { chars: number; max: number } | undefined
+}
+
+export function builderSkillErrorInfo(error: unknown): BuilderSkillErrorInfo {
+  if (!(error instanceof ApiError)) return { reason: undefined, fields: [], index: undefined }
+  const details = error.details ?? {}
+  const rawFields = Array.isArray(details.fields) ? details.fields : []
+  const fields = rawFields.filter(
+    (f): f is BuilderSkillFieldError =>
+      !!f && typeof f === 'object' && typeof (f as BuilderSkillFieldError).field === 'string' && typeof (f as BuilderSkillFieldError).code === 'string',
+  )
+  const idx = details.index as { chars?: unknown; max?: unknown } | undefined
+  const index =
+    idx && typeof idx.chars === 'number' && typeof idx.max === 'number'
+      ? { chars: idx.chars, max: idx.max }
+      : undefined
+  return { reason: error.reason as BuilderSkillErrorReason | undefined, fields, index }
+}
+
+/** Limits enforced by the server (internal/agent/skills), for form hints. */
+export const BUILDER_SKILL_LIMITS = {
+  nameMaxChars: 64,
+  descriptionMaxChars: 1024,
+  bodyMaxBytes: 24 * 1024,
+  fileMaxBytes: 64 * 1024,
+  reservedPrefix: 'orbit-',
+} as const
+
 // -- Helpers --
 
 /** Poll period of the session detail and events while a turn is in flight. */
@@ -2284,6 +2427,8 @@ export const builderKeys = {
   templates: () => ['builder', 'templates'] as const,
   settings: () => ['builder', 'settings'] as const,
   prompt: () => ['builder', 'prompt'] as const,
+  skills: () => ['builder', 'skills'] as const,
+  skill: (name: string, version?: number) => ['builder', 'skill', name, version ?? null] as const,
   promptVersions: (limit?: number, offset?: number) =>
     ['builder', 'prompt-versions', limit ?? null, offset ?? null] as const,
 }
@@ -2480,6 +2625,104 @@ export function useUpdateBuilderPrompt(): UseMutationResult<
       if (data.changed) {
         qc.invalidateQueries({ queryKey: ['builder', 'prompt-versions'] })
       }
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+// -- Skills hooks (superadmin) --
+
+export function useBuilderSkills(
+  options: BuilderAdminQueryOptions = {},
+): UseQueryResult<BuilderSkillsList> {
+  return useQuery({
+    queryKey: builderKeys.skills(),
+    queryFn: () => apiFetch<BuilderSkillsList>(`${BUILDER_BASE}/skills`),
+    enabled: options.enabled ?? true,
+  })
+}
+
+/** One skill with its body. `version` omitted = the latest. */
+export function useBuilderSkill(
+  name: string | null,
+  version?: number,
+  options: BuilderAdminQueryOptions = {},
+): UseQueryResult<BuilderSkillDetail> {
+  return useQuery({
+    queryKey: builderKeys.skill(name ?? '', version),
+    queryFn: () =>
+      apiFetch<BuilderSkillDetail>(
+        `${BUILDER_BASE}/skills/${encodeURIComponent(name ?? '')}${version ? `?version=${version}` : ''}`,
+      ),
+    enabled: (options.enabled ?? true) && !!name,
+    retry: (count, error) => !(error instanceof ApiError && error.status === 404) && count < 2,
+  })
+}
+
+const INLINE_SKILL_REASONS = new Set<string>([
+  'skill_invalid',
+  'skill_name_reserved',
+  'skill_builtin_readonly',
+  'skills_index_budget_exceeded',
+])
+
+/**
+ * POST /builder/skills with the text of a SKILL.md file. The failures a user fixes in the form
+ * (validation, reserved or built-in name, full index) are shown next to it, so they are not toasted.
+ */
+export function useUploadBuilderSkill(): UseMutationResult<BuilderSkillSaveResult, Error, string> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (content: string) =>
+      apiFetch<BuilderSkillSaveResult>(`${BUILDER_BASE}/skills`, jsonRequest('POST', { content })),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: builderKeys.skills() })
+      if (data.skill) qc.invalidateQueries({ queryKey: ['builder', 'skill', data.skill.name] })
+    },
+    onError: (error) => {
+      // The upload dialog shows these next to the form, localized.
+      if (error instanceof ApiError && error.reason && INLINE_SKILL_REASONS.has(error.reason)) return
+      toast.error(error.message)
+    },
+  })
+}
+
+/** PATCH /builder/skills/{name}: the only change allowed on a built-in. */
+export function useSetBuilderSkillEnabled(): UseMutationResult<
+  BuilderSkillToggleResult,
+  Error,
+  { name: string; enabled: boolean }
+> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ name, enabled }) =>
+      apiFetch<BuilderSkillToggleResult>(
+        `${BUILDER_BASE}/skills/${encodeURIComponent(name)}`,
+        jsonRequest('PATCH', { enabled }),
+      ),
+    onSuccess: (_data, { name }) => {
+      qc.invalidateQueries({ queryKey: builderKeys.skills() })
+      qc.invalidateQueries({ queryKey: ['builder', 'skill', name] })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+/** DELETE /builder/skills/{name}: custom skills only (a built-in answers 409). */
+export function useDeleteBuilderSkill(): UseMutationResult<{ deleted: boolean }, Error, string> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (name: string) =>
+      apiFetch<{ deleted: boolean }>(`${BUILDER_BASE}/skills/${encodeURIComponent(name)}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: (_data, name) => {
+      qc.invalidateQueries({ queryKey: builderKeys.skills() })
+      qc.removeQueries({ queryKey: ['builder', 'skill', name] })
     },
     onError: (error) => {
       toast.error(error.message)
