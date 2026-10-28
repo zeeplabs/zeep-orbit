@@ -170,7 +170,7 @@ T32, T37, T38, T39, T40 → T44
 
 ### T04: Builder exec — fixed build steps
 
-**What**: Map `install|typecheck|lint|build` to fixed argv (no shell), minimal env allowlist, per-step timeout and resource limits, output tail capture, `--base <preview_base>` for build, `--ignore-scripts` on install.
+**What**: Map `install|typecheck|lint|build` to fixed argv (no shell), minimal env allowlist, per-step timeout and resource limits, output tail capture, `--base <preview_base>` for build (**Changed 2026-10-27:** the preview build uses the relative base `./`), `--ignore-scripts` on install.
 **Where**: `internal/builder/exec.go`
 **Depends on**: T03
 **Requirement**: AFB-07, AFB-15
@@ -555,7 +555,7 @@ T32, T37, T38, T39, T40 → T44
 
 ### T29: Preview proxy
 
-**What**: `GET .../preview/*` reverse proxy to builder, accepts preview token (`?pt=`) instead of cookie, sets `X-Frame-Options: SAMEORIGIN` (overriding `SecurityHeaders`) and CSP `sandbox …`; endpoint to mint preview token for the owner.
+**What**: `GET .../preview/*` reverse proxy to builder, accepts preview token (`?pt=`) instead of cookie (**Changed 2026-10-27:** token in the path, `/p/{token}/*`, no cookie, because cookies are not sent from a sandboxed iframe; preview built with `--base ./`), sets `X-Frame-Options: SAMEORIGIN` (overriding `SecurityHeaders`) and CSP `sandbox …`; endpoint to mint preview token for the owner.
 **Where**: `internal/dashboard/builder_preview.go`
 **Depends on**: T06, T25
 **Requirement**: AFB-08, AFB-13 (no secrets), design §10
