@@ -15,13 +15,16 @@ import (
 // in the existing tool_calls JSONB column of non-assistant rows (assistant rows
 // keep the provider tool calls array there):
 //
-//   - tool rows:    {"build_failed": bool, "is_error": bool}, so a resumed
-//     turn can recount failed builds (fix iterations) from the DB alone;
+//   - tool rows:    {"build_failed": bool, "is_error": bool, "skill": name},
+//     so a resumed turn can recount failed builds (fix iterations) and the
+//     distinct skills it loaded from the DB alone;
 //   - summary rows: {"through_message_id": N}, the last message the summary
 //     replaces (context compaction).
 type toolMeta struct {
 	BuildFailed bool `json:"build_failed"`
 	IsError     bool `json:"is_error"`
+	// Skill is the skill a successful load_skill call loaded (empty otherwise).
+	Skill string `json:"skill,omitempty"`
 }
 
 type summaryMeta struct {
@@ -63,6 +66,8 @@ type turnState struct {
 	steps int
 	// failedBuilds is the number of failed run_build calls so far.
 	failedBuilds int
+	// skills are the distinct skills loaded so far in this turn.
+	skills map[string]bool
 	// started is true when the turn already produced any assistant output, so
 	// this invocation is a resume.
 	started bool
@@ -91,8 +96,15 @@ func analyzeTurn(msgs []store.Message, turnID string) turnState {
 			lastAssistant = m
 		case store.RoleTool:
 			answered[m.ToolCallID] = true
-			if parseToolMeta(*m).BuildFailed {
+			meta := parseToolMeta(*m)
+			if meta.BuildFailed {
 				st.failedBuilds++
+			}
+			if meta.Skill != "" {
+				if st.skills == nil {
+					st.skills = map[string]bool{}
+				}
+				st.skills[meta.Skill] = true
 			}
 		}
 	}

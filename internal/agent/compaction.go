@@ -110,7 +110,7 @@ func assemble(summary *store.Message, base []store.Message, turnID string) []pro
 // every message that would be sent.
 func (r *run) estimateChars(summary *store.Message, base []store.Message) int {
 	n := len(r.system)
-	for _, t := range r.deps.Tools.Specs() {
+	for _, t := range r.toolSpecs() {
 		n += len(t.Name) + len(t.Description) + len(t.Schema)
 	}
 	if summary != nil {

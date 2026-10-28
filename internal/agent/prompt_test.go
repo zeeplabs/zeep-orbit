@@ -23,7 +23,7 @@ func TestBuildSystemPrompt_SectionOrder(t *testing.T) {
 		headerCore, "CORE-BODY",
 		headerCompany, "COMPANY-BODY",
 		headerTemplate, "TEMPLATE-BODY",
-		headerPacks, "PACKS-BODY",
+		headerSkills, "PACKS-BODY",
 		headerSession, "Reply language: pt-BR",
 	}
 	last := -1
@@ -122,7 +122,7 @@ func TestBuildSystemPrompt_EmptyCompanyOmitted(t *testing.T) {
 			t.Error("other sections must stay")
 		}
 	}
-	if strings.Contains(BuildSystemPrompt("core", "x", "", "", SessionContext{}), headerPacks) {
+	if strings.Contains(BuildSystemPrompt("core", "x", "", "", SessionContext{}), headerSkills) {
 		t.Error("blank packs index must be omitted")
 	}
 }

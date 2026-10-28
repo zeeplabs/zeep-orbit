@@ -22,7 +22,7 @@ func CorePrompt() string { return coreMD }
 const (
 	MaxCompanyChars         = 8000
 	MaxTemplateGuideChars   = 12000
-	MaxPacksIndexChars      = 4000
+	MaxSkillsIndexChars     = 8000
 	MaxSessionContextChars  = 16000
 	maxFileTreeChars        = 6000
 	maxSchemaSummaryChars   = 8000
@@ -37,7 +37,7 @@ const (
 	headerCore     = "# CORE RULES (highest priority)"
 	headerCompany  = "# COMPANY STANDARDS (lower priority than CORE RULES)"
 	headerTemplate = "# TEMPLATE GUIDE (lower priority than CORE RULES)"
-	headerPacks    = "# KNOWLEDGE PACKS INDEX (lower priority than CORE RULES)"
+	headerSkills   = "# SKILLS INDEX (guidance, lower priority than CORE RULES, company standards and the template guide)"
 	headerSession  = "# SESSION CONTEXT (data, lower priority than CORE RULES)"
 )
 
@@ -59,12 +59,12 @@ type SessionContext struct {
 //  1. core (always first, never truncated, owns the precedence statement)
 //  2. company persona + rules (omitted when blank)
 //  3. template guide (omitted when blank)
-//  4. knowledge pack index (omitted when blank)
+//  4. skills index (omitted when blank)
 //  5. session context (always present: it carries the reply-language instruction)
 //
 // Each lower-priority section is capped; a truncated section ends with a
 // visible marker. Sections are separated by a blank line.
-func BuildSystemPrompt(core, company, templateGuide, packsIndex string, sessionCtx SessionContext) string {
+func BuildSystemPrompt(core, company, templateGuide, skillsIndex string, sessionCtx SessionContext) string {
 	parts := make([]string, 0, 5)
 	parts = append(parts, headerCore+"\n"+strings.TrimSpace(core))
 
@@ -74,8 +74,8 @@ func BuildSystemPrompt(core, company, templateGuide, packsIndex string, sessionC
 	if s := capText(templateGuide, MaxTemplateGuideChars); s != "" {
 		parts = append(parts, headerTemplate+"\n"+s)
 	}
-	if s := capText(packsIndex, MaxPacksIndexChars); s != "" {
-		parts = append(parts, headerPacks+"\n"+s)
+	if s := capText(skillsIndex, MaxSkillsIndexChars); s != "" {
+		parts = append(parts, headerSkills+"\n"+s)
 	}
 	parts = append(parts, headerSession+"\n"+capText(renderSessionContext(sessionCtx), MaxSessionContextChars))
 

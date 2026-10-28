@@ -12,6 +12,9 @@ const (
 	DefaultCompactionThreshold = 0.8
 	DefaultKeepRecentTurns     = 2
 	DefaultMaxOutputTokens     = 0 // provider default
+
+	// MaxSkillLoadsPerTurn is the number of distinct skills one turn may load.
+	MaxSkillLoadsPerTurn = 5
 )
 
 // Limits bounds one agent turn. The dashboard fills it from builder_settings;
@@ -77,6 +80,7 @@ const (
 	EventAssistantMessage = "assistant_message"
 	EventToolCall         = "tool_call"
 	EventFileChanged      = "file_changed"
+	EventSkillLoaded      = "skill_loaded"
 	EventBuildStarted     = "build_started"
 	EventBuildSucceeded   = "build_succeeded"
 	EventBuildFailed      = "build_failed"

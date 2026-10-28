@@ -11,12 +11,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/zeeplabs/zeep-orbit/internal/agent/provider"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/sandbox"
+	"github.com/zeeplabs/zeep-orbit/internal/agent/skills"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/store"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/tools"
 )
@@ -56,8 +58,10 @@ type PromptInput struct {
 	Company string
 	// TemplateGuide is the template's ORBIT_AGENT.md, if any.
 	TemplateGuide string
-	// PacksIndex is the knowledge pack index (empty in P1).
-	PacksIndex string
+	// SkillsIndex is the rendered skills index ([skills.RenderIndex]). Empty
+	// means no skills are enabled: the prompt has no skills section and the
+	// model is not offered load_skill.
+	SkillsIndex string
 	// Session is the session context (backend app, schema summary, file tree,
 	// locale).
 	Session SessionContext
@@ -139,8 +143,11 @@ type run struct {
 
 	start  time.Time
 	system string
-	msgs   []store.Message
-	state  turnState
+	// skillsVisible: the skills index is in the prompt, so load_skill is
+	// offered to the model. Fixed per turn (the index is resolved once).
+	skillsVisible bool
+	msgs          []store.Message
+	state         turnState
 
 	// wrote: workspace files were written since the last checkpoint.
 	wrote bool
@@ -250,7 +257,8 @@ func (r *run) run(ctx context.Context) (*outcome, error) {
 			return &outcome{status: store.TurnFailed, code: CodeInternal}, nil
 		}
 	}
-	r.system = BuildSystemPrompt(CorePrompt(), pin.Company, pin.TemplateGuide, pin.PacksIndex, pin.Session)
+	r.system = BuildSystemPrompt(CorePrompt(), pin.Company, pin.TemplateGuide, pin.SkillsIndex, pin.Session)
+	r.skillsVisible = strings.TrimSpace(pin.SkillsIndex) != ""
 
 	// Tool calls persisted by a previous attempt but not answered yet.
 	if len(r.state.pending) > 0 {
@@ -345,7 +353,7 @@ func (r *run) chat(ctx, tctx context.Context) (provider.ChatResponse, *outcome, 
 		resp, err = r.deps.Provider.Chat(tctx, provider.ChatRequest{
 			System:          r.system,
 			Messages:        prompt,
-			Tools:           r.deps.Tools.Specs(),
+			Tools:           r.toolSpecs(),
 			MaxOutputTokens: r.lim.MaxOutputTokens,
 		})
 		if err == nil {
@@ -432,9 +440,13 @@ func (r *run) runCalls(ctx, tctx context.Context, calls []provider.ToolCall) (*o
 			}
 		}
 
-		res, err := r.deps.Tools.Dispatch(tctx, tools.Call{ID: c.ID, Name: c.Name, Arguments: c.Arguments, SessionID: r.sess.ID})
-		if err != nil {
-			return r.toolFailure(ctx, tctx, c, err)
+		res, gated := r.gateSkillCall(c)
+		if !gated {
+			var err error
+			res, err = r.deps.Tools.Dispatch(tctx, tools.Call{ID: c.ID, Name: c.Name, Arguments: c.Arguments, SessionID: r.sess.ID})
+			if err != nil {
+				return r.toolFailure(ctx, tctx, c, err)
+			}
 		}
 
 		if kind, ok := r.deps.Tools.Kind(c.Name); ok && !res.IsError &&
@@ -442,7 +454,11 @@ func (r *run) runCalls(ctx, tctx context.Context, calls []provider.ToolCall) (*o
 			return r.pauseForProposal(ctx, c)
 		}
 
-		meta, _ := json.Marshal(toolMeta{BuildFailed: res.BuildFailed, IsError: res.IsError})
+		loaded := ""
+		if !res.IsError {
+			loaded = res.Meta[skills.MetaSkill]
+		}
+		meta, _ := json.Marshal(toolMeta{BuildFailed: res.BuildFailed, IsError: res.IsError, Skill: loaded})
 		m, err := r.deps.Store.AppendMessage(ctx, r.lease, store.NewMessage{
 			Role: store.RoleTool, Content: res.Content, ToolCallID: c.ID, ToolCalls: meta,
 		})
@@ -453,6 +469,12 @@ func (r *run) runCalls(ctx, tctx context.Context, calls []provider.ToolCall) (*o
 
 		if res.BuildFailed {
 			r.state.failedBuilds++
+		}
+		if loaded != "" {
+			if r.state.skills == nil {
+				r.state.skills = map[string]bool{}
+			}
+			r.state.skills[loaded] = true
 		}
 		if err := r.emitResult(ctx, c, res); err != nil {
 			return nil, err
@@ -481,6 +503,14 @@ func (r *run) emitResult(ctx context.Context, c provider.ToolCall, res tools.Res
 			op = "edit"
 		}
 		return r.emit(ctx, EventFileChanged, map[string]any{"path": argString(c.Arguments, "path"), "op": op})
+	case skills.ToolLoadSkill:
+		if res.IsError || res.Meta[skills.MetaSkill] == "" {
+			return nil
+		}
+		version, _ := strconv.Atoi(res.Meta[skills.MetaVersion])
+		return r.emit(ctx, EventSkillLoaded, map[string]any{
+			"name": res.Meta[skills.MetaSkill], "source": res.Meta[skills.MetaSource], "version": version,
+		})
 	case tools.ToolRunBuild:
 		step := argString(c.Arguments, "step")
 		if res.BuildFailed {
@@ -491,6 +521,37 @@ func (r *run) emitResult(ctx context.Context, c provider.ToolCall, res tools.Res
 		}
 	}
 	return nil
+}
+
+// toolSpecs is what the model is offered: every registered tool, except
+// load_skill when no skills are enabled (the tool lives on the shared
+// registry, so the offer is decided per turn).
+func (r *run) toolSpecs() []provider.ToolSpec {
+	if r.skillsVisible {
+		return r.deps.Tools.Specs()
+	}
+	return r.deps.Tools.SpecsWithout(skills.ToolLoadSkill)
+}
+
+// gateSkillCall answers a load_skill call without dispatching it when the
+// model may not make it: the tool is not offered this turn (no skills), or
+// the turn already loaded MaxSkillLoadsPerTurn distinct skills. The count
+// comes from persisted tool messages, so it survives a crash and resume.
+func (r *run) gateSkillCall(c provider.ToolCall) (tools.Result, bool) {
+	if c.Name != skills.ToolLoadSkill {
+		return tools.Result{}, false
+	}
+	if !r.skillsVisible {
+		return tools.Result{Content: fmt.Sprintf("unknown tool %q", skills.ToolLoadSkill), IsError: true}, true
+	}
+	name := strings.TrimSpace(argString(c.Arguments, "name"))
+	if name != "" && !r.state.skills[name] && len(r.state.skills) >= MaxSkillLoadsPerTurn {
+		return tools.Result{
+			Content: fmt.Sprintf("skill load limit reached: at most %d different skills per turn. Continue with the skills you already loaded.", MaxSkillLoadsPerTurn),
+			IsError: true,
+		}, true
+	}
+	return tools.Result{}, false
 }
 
 // toolFailure ends the turn for a Go error from a tool. The error text is
