@@ -107,8 +107,9 @@ func (e *bprevEnv) routerFor(h *BuilderHandler) http.Handler {
 	r := chi.NewRouter()
 	r.Route("/dashboard", func(r chi.Router) {
 		r.Use(SecurityHeaders)
-		r.Get("/api/builder/sessions/{id}/preview", h.PreviewProxy)
-		r.Handle("/api/builder/sessions/{id}/preview/*", http.HandlerFunc(h.PreviewProxy))
+		r.Get("/api/builder/sessions/{id}/p/{token}", h.PreviewProxy)
+		r.Get("/api/builder/sessions/{id}/p/{token}/", h.PreviewProxy)
+		r.Handle("/api/builder/sessions/{id}/p/{token}/*", http.HandlerFunc(h.PreviewProxy))
 	})
 	return r
 }
@@ -122,8 +123,11 @@ func (e *bprevEnv) tokenFor(t *testing.T, sessionID, userID string) string {
 	return tok
 }
 
-func (e *bprevEnv) previewPath(rest string) string {
-	return "/dashboard/api/builder/sessions/" + e.sess.ID + "/preview" + rest
+// previewPath is the token-in-path URL of the session's preview: tok is the
+// raw token (it is path-safe: base64url and ".") and rest starts with "/" or is
+// empty.
+func (e *bprevEnv) previewPath(tok, rest string) string {
+	return "/dashboard/api/builder/sessions/" + e.sess.ID + "/p/" + tok + rest
 }
 
 func (e *bprevEnv) fetch(method, target string, headers map[string]string) *httptest.ResponseRecorder {
@@ -160,13 +164,13 @@ func assertPreviewHeaders(t *testing.T, w *httptest.ResponseRecorder) {
 	if h.Get("X-Content-Type-Options") != "nosniff" || h.Get("Referrer-Policy") != "no-referrer" || h.Get("Cache-Control") != "no-store" {
 		t.Errorf("hardening headers missing: %v", h)
 	}
-	if h.Get("Access-Control-Allow-Origin") != "" || h.Get("Access-Control-Allow-Credentials") != "" {
-		t.Errorf("upstream CORS headers leaked: %v", h)
+	// The sandboxed page has an opaque origin, so its crossorigin module script
+	// and stylesheet need a wildcard ACAO; credentials must never be allowed.
+	if h.Get("Access-Control-Allow-Origin") != "*" || h.Get("Access-Control-Allow-Credentials") != "" {
+		t.Errorf("CORS headers = %v, want ACAO * and no credentials", h)
 	}
-	for _, c := range h.Values("Set-Cookie") {
-		if !strings.HasPrefix(c, previewCookieName+"=") {
-			t.Errorf("a cookie other than the preview-token one was set: %q", c)
-		}
+	if got := h.Values("Set-Cookie"); len(got) != 0 {
+		t.Errorf("the preview must never set a cookie, got %q", got)
 	}
 }
 
@@ -189,7 +193,7 @@ func TestPreviewProxy_RejectsMissingForgedAndForeignTokens(t *testing.T) {
 		name  string
 		token string
 	}{
-		{"no token", ""},
+		{"empty token", ""},
 		{"garbage", "not-a-token"},
 		{"truncated", valid[:len(valid)-3]},
 		{"signed with another secret", foreignSigned},
@@ -199,11 +203,8 @@ func TestPreviewProxy_RejectsMissingForgedAndForeignTokens(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			target := e.previewPath("/index.html")
-			if tc.token != "" {
-				target += "?pt=" + url.QueryEscape(tc.token)
-			}
-			w := e.fetch(http.MethodGet, target, nil)
+			// An empty token is a request for /p//index.html.
+			w := e.fetch(http.MethodGet, e.previewPath(url.PathEscape(tc.token), "/index.html"), nil)
 			if w.Code != http.StatusUnauthorized {
 				t.Fatalf("want 401, got %d: %s", w.Code, w.Body.String())
 			}
@@ -211,9 +212,6 @@ func TestPreviewProxy_RejectsMissingForgedAndForeignTokens(t *testing.T) {
 				t.Error("upstream content served without a valid token")
 			}
 			assertPreviewHeaders(t, w)
-			if len(w.Header().Values("Set-Cookie")) != 0 {
-				t.Error("no cookie may be issued for a rejected token")
-			}
 		})
 	}
 	if n := len(e.upstreamCalls()); n != 0 {
@@ -233,7 +231,7 @@ func mustSignRequest(t *testing.T, s *builder.Signer, sessionID string) string {
 func TestPreviewProxy_ExpiredTokenIs401(t *testing.T) {
 	e := newBPrevEnv(t)
 	tok := e.tokenFor(t, e.sess.ID, e.owner.ID)
-	target := e.previewPath("/index.html") + "?pt=" + url.QueryEscape(tok)
+	target := e.previewPath(tok, "/index.html")
 
 	if w := e.fetch(http.MethodGet, target, nil); w.Code != http.StatusOK {
 		t.Fatalf("fresh token: want 200, got %d: %s", w.Code, w.Body.String())
@@ -242,16 +240,15 @@ func TestPreviewProxy_ExpiredTokenIs401(t *testing.T) {
 	if w := e.fetch(http.MethodGet, target, nil); w.Code != http.StatusUnauthorized {
 		t.Fatalf("expired token: want 401, got %d", w.Code)
 	}
-	// Same for the cookie form of the same token.
-	if w := e.fetch(http.MethodGet, e.previewPath("/assets/a.js"), map[string]string{"Cookie": previewCookieName + "=" + tok}); w.Code != http.StatusUnauthorized {
-		t.Fatalf("expired cookie token: want 401, got %d", w.Code)
+	if w := e.fetch(http.MethodGet, e.previewPath(tok, "/assets/a.js"), nil); w.Code != http.StatusUnauthorized {
+		t.Fatalf("expired token on an asset: want 401, got %d", w.Code)
 	}
 }
 
 func TestPreviewProxy_OwnershipAndSessionStateAreRechecked(t *testing.T) {
 	e := newBPrevEnv(t)
 	tok := e.tokenFor(t, e.sess.ID, e.owner.ID)
-	target := e.previewPath("/index.html") + "?pt=" + url.QueryEscape(tok)
+	target := e.previewPath(tok, "/index.html")
 
 	// The session changes hands (cannot happen through the API, but the token
 	// only proves who the owner WAS).
@@ -280,7 +277,7 @@ func TestPreviewProxy_OwnershipAndSessionStateAreRechecked(t *testing.T) {
 
 	// A malformed or unknown id never reaches the store or the builder.
 	n := len(e.upstreamCalls())
-	if w := e.fetch(http.MethodGet, "/dashboard/api/builder/sessions/not-a-uuid/preview/x?pt="+url.QueryEscape(tok), nil); w.Code != http.StatusNotFound {
+	if w := e.fetch(http.MethodGet, "/dashboard/api/builder/sessions/not-a-uuid/p/"+tok+"/x", nil); w.Code != http.StatusNotFound {
 		t.Errorf("bad id: want 404, got %d", w.Code)
 	}
 	if got := len(e.upstreamCalls()); got != n {
@@ -294,7 +291,7 @@ func TestPreviewProxy_ServesWithSandboxHeadersAndForwardsNoCredentials(t *testin
 	e := newBPrevEnv(t)
 	tok := e.tokenFor(t, e.sess.ID, e.owner.ID)
 
-	w := e.fetch(http.MethodGet, e.previewPath("/index.html")+"?pt="+url.QueryEscape(tok)+"&x=1", map[string]string{
+	w := e.fetch(http.MethodGet, e.previewPath(tok, "/index.html")+"?x=1", map[string]string{
 		"Cookie":          "zeep_session=dashboard-secret; other=1",
 		"Authorization":   "Bearer user-credential",
 		"X-Forwarded-For": "203.0.113.9",
@@ -319,67 +316,112 @@ func TestPreviewProxy_ServesWithSandboxHeadersAndForwardsNoCredentials(t *testin
 		t.Error("the builder did not get a valid, session-bound request token")
 	}
 
-	// Hand-off to the sub-resources: a cookie scoped to this session's preview.
-	cookies := w.Result().Cookies()
-	if len(cookies) != 1 {
-		t.Fatalf("want exactly the preview cookie, got %v", cookies)
-	}
-	ck := cookies[0]
-	if ck.Name != previewCookieName || ck.Value != tok || !ck.HttpOnly || !ck.Secure ||
-		ck.SameSite != http.SameSiteNoneMode || ck.Path != "/dashboard/api/builder/sessions/"+e.sess.ID+"/preview/" || ck.MaxAge <= 0 {
-		t.Errorf("preview cookie = %+v", ck)
-	}
-	if strings.Contains(w.Header().Get("Set-Cookie"), "evil") {
-		t.Error("the builder's Set-Cookie leaked through")
+	if len(w.Result().Cookies()) != 0 || w.Header().Get("Set-Cookie") != "" {
+		t.Errorf("no cookie may be set (the builder's evil one included): %v", w.Header().Values("Set-Cookie"))
 	}
 }
 
-func TestPreviewProxy_SubresourcesAuthenticateWithTheCookie(t *testing.T) {
+func TestPreviewProxy_SubresourcesCarryTheTokenInThePath(t *testing.T) {
 	e := newBPrevEnv(t)
 	tok := e.tokenFor(t, e.sess.ID, e.owner.ID)
 
-	w := e.fetch(http.MethodGet, e.previewPath("/assets/app.js"), map[string]string{"Cookie": previewCookieName + "=" + tok})
+	// What the browser does with ./assets/app.js against the document URL
+	// /p/{token}/: it requests /p/{token}/assets/app.js, no cookie, no query.
+	w := e.fetch(http.MethodGet, e.previewPath(tok, "/assets/app.js"), nil)
 	if w.Code != http.StatusOK || !strings.HasSuffix(w.Body.String(), "/preview/assets/app.js") {
 		t.Fatalf("got %d %q", w.Code, w.Body.String())
 	}
 	assertPreviewHeaders(t, w)
-	if len(w.Result().Cookies()) != 0 {
-		t.Error("the cookie is only issued in answer to a ?pt request")
+	c := e.upstreamCalls()
+	if len(c) != 1 || strings.Contains(c[0].path, tok) || c[0].rawQuery != "" {
+		t.Errorf("the token leaked upstream: %+v", c)
 	}
-	// The cookie form is bound to the session like the query form: replaying it
-	// against another session is a 401.
+
+	// The token is bound to the session: replaying it on another session is a 401.
 	other, _ := e.st.CreateSession(context.Background(), store.CreateSessionParams{
 		OwnerUserID: e.owner.ID, BackendAppID: e.appA, TemplateKind: store.TemplateDefault, TemplateVersion: "7",
 	})
-	req := httptest.NewRequest(http.MethodGet, "/dashboard/api/builder/sessions/"+other.ID+"/preview/assets/app.js", nil)
-	req.Header.Set("Cookie", previewCookieName+"="+tok)
-	rec := httptest.NewRecorder()
-	e.router.ServeHTTP(rec, req)
+	rec := e.fetch(http.MethodGet, "/dashboard/api/builder/sessions/"+other.ID+"/p/"+tok+"/assets/app.js", nil)
 	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("cookie replayed on another session: want 401, got %d", rec.Code)
+		t.Errorf("token replayed on another session: want 401, got %d", rec.Code)
 	}
-	// The dashboard session cookie alone is not a credential for this route.
-	if w := e.fetch(http.MethodGet, e.previewPath("/assets/app.js"), map[string]string{"Cookie": "zeep_session=abc"}); w.Code != http.StatusUnauthorized {
-		t.Errorf("dashboard cookie only: want 401, got %d", w.Code)
+	// Neither the dashboard cookie, the legacy query nor the legacy cookie is a credential.
+	for name, req := range map[string]*http.Request{
+		"dashboard cookie": reqWith(e.previewPath("bad", "/assets/app.js"), map[string]string{"Cookie": "zeep_session=abc"}),
+		"legacy ?pt=":      reqWith(e.previewPath("bad", "/assets/app.js")+"?pt="+tok, nil),
+		"legacy cookie":    reqWith(e.previewPath("bad", "/assets/app.js"), map[string]string{"Cookie": "orbit_preview=" + tok}),
+	} {
+		rec := httptest.NewRecorder()
+		e.router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("%s: want 401, got %d", name, rec.Code)
+		}
+	}
+}
+
+func reqWith(target string, headers map[string]string) *http.Request {
+	req := httptest.NewRequest(http.MethodGet, target, nil)
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	return req
+}
+
+func TestPreviewProxy_RedirectsTheBareTokenURLToTheTrailingSlash(t *testing.T) {
+	e := newBPrevEnv(t)
+	tok := e.tokenFor(t, e.sess.ID, e.owner.ID)
+
+	w := e.fetch(http.MethodGet, e.previewPath(tok, "")+"?x=1", nil)
+	if w.Code != http.StatusPermanentRedirect {
+		t.Fatalf("want 308, got %d", w.Code)
+	}
+	if loc := w.Header().Get("Location"); loc != e.previewPath(tok, "/") {
+		t.Errorf("Location = %q (the token path must be kept, the query dropped)", loc)
+	}
+	assertPreviewHeaders(t, w)
+	// An invalid token is a 401, never a redirect that reflects it.
+	if w := e.fetch(http.MethodGet, e.previewPath("garbage", ""), nil); w.Code != http.StatusUnauthorized {
+		t.Errorf("bad token on the bare URL: want 401, got %d", w.Code)
+	}
+	if n := len(e.upstreamCalls()); n != 0 {
+		t.Errorf("%d redirect requests reached the builder", n)
+	}
+}
+
+func TestRedactPreviewTokenPath(t *testing.T) {
+	const id = "3f1c2a9e-0000-4000-8000-000000000001"
+	base := "/dashboard/api/builder/sessions/" + id
+	for in, want := range map[string]string{
+		base + "/p/SECRET.TOKEN/":              base + "/p/***/",
+		base + "/p/SECRET.TOKEN":               base + "/p/***",
+		base + "/p/SECRET.TOKEN/assets/a.js":   base + "/p/***/assets/a.js",
+		base + "/preview-token":                base + "/preview-token",
+		base + "/events":                       base + "/events",
+		base + "/p":                            base + "/p",
+		"/dashboard/api/apps/x/p/SECRET/y":     "/dashboard/api/apps/x/p/SECRET/y",
+		"/api/builder/sessions/" + id + "/p/T": "/api/builder/sessions/" + id + "/p/T",
+	} {
+		if got := RedactPreviewTokenPath(in); got != want {
+			t.Errorf("RedactPreviewTokenPath(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
 
 func TestPreviewProxy_RootAndHeadAndMethods(t *testing.T) {
 	e := newBPrevEnv(t)
-	tok := url.QueryEscape(e.tokenFor(t, e.sess.ID, e.owner.ID))
+	tok := e.tokenFor(t, e.sess.ID, e.owner.ID)
 
-	for _, target := range []string{e.previewPath("") + "?pt=" + tok, e.previewPath("/") + "?pt=" + tok} {
-		w := e.fetch(http.MethodGet, target, nil)
-		if w.Code != http.StatusOK || w.Body.String() != "preview:/v1/sessions/"+e.sess.ID+"/preview/" {
-			t.Errorf("%s: got %d %q", target, w.Code, w.Body.String())
-		}
+	// The root only serves with the trailing slash (the bare URL redirects).
+	target := e.previewPath(tok, "/")
+	if w := e.fetch(http.MethodGet, target, nil); w.Code != http.StatusOK || w.Body.String() != "preview:/v1/sessions/"+e.sess.ID+"/preview/" {
+		t.Errorf("%s: got %d %q", target, w.Code, w.Body.String())
 	}
-	if w := e.fetch(http.MethodHead, e.previewPath("/index.html")+"?pt="+tok, nil); w.Code != http.StatusOK {
+	if w := e.fetch(http.MethodHead, e.previewPath(tok, "/index.html"), nil); w.Code != http.StatusOK {
 		t.Errorf("HEAD: got %d", w.Code)
 	}
 	n := len(e.upstreamCalls())
 	for _, m := range []string{http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch} {
-		req := httptest.NewRequest(m, e.previewPath("/index.html")+"?pt="+tok, nil)
+		req := httptest.NewRequest(m, e.previewPath(tok, "/index.html"), nil)
 		rec := httptest.NewRecorder()
 		e.router.ServeHTTP(rec, req)
 		// chi answers 405 for methods without a route; the handler itself would too.
@@ -388,7 +430,7 @@ func TestPreviewProxy_RootAndHeadAndMethods(t *testing.T) {
 		}
 	}
 	// Called directly (as another router might), the handler refuses them too.
-	req := httptest.NewRequest(http.MethodPost, e.previewPath("/index.html")+"?pt="+tok, nil)
+	req := httptest.NewRequest(http.MethodPost, e.previewPath(tok, "/index.html"), nil)
 	req = withURLParam(req, "id", e.sess.ID)
 	rec := httptest.NewRecorder()
 	e.h.PreviewProxy(rec, req)
@@ -403,7 +445,7 @@ func TestPreviewProxy_RootAndHeadAndMethods(t *testing.T) {
 
 func TestPreviewProxy_PathTraversalIsRejected(t *testing.T) {
 	e := newBPrevEnv(t)
-	tok := url.QueryEscape(e.tokenFor(t, e.sess.ID, e.owner.ID))
+	tok := e.tokenFor(t, e.sess.ID, e.owner.ID)
 
 	for _, rest := range []string{
 		"/../../etc/passwd",
@@ -416,7 +458,7 @@ func TestPreviewProxy_PathTraversalIsRejected(t *testing.T) {
 		"/a%00b",
 		"/..",
 	} {
-		w := e.fetch(http.MethodGet, e.previewPath(rest)+"?pt="+tok, nil)
+		w := e.fetch(http.MethodGet, e.previewPath(tok, rest), nil)
 		if w.Code != http.StatusBadRequest {
 			t.Errorf("%q: want 400, got %d: %s", rest, w.Code, w.Body.String())
 			continue
@@ -427,7 +469,7 @@ func TestPreviewProxy_PathTraversalIsRejected(t *testing.T) {
 		t.Errorf("%d traversal attempts reached the builder", n)
 	}
 	// Ordinary nested paths still work.
-	if w := e.fetch(http.MethodGet, e.previewPath("/assets/chunks/a-1b2c.js")+"?pt="+tok, nil); w.Code != http.StatusOK {
+	if w := e.fetch(http.MethodGet, e.previewPath(tok, "/assets/chunks/a-1b2c.js"), nil); w.Code != http.StatusOK {
 		t.Errorf("nested path: got %d", w.Code)
 	}
 }
@@ -459,9 +501,9 @@ func TestPreviewProxy_UpstreamFailureKeepsHeadersAndLeaksNothing(t *testing.T) {
 	e.mu.Lock()
 	e.upstreamDown = true
 	e.mu.Unlock()
-	tok := url.QueryEscape(e.tokenFor(t, e.sess.ID, e.owner.ID))
+	tok := e.tokenFor(t, e.sess.ID, e.owner.ID)
 
-	w := e.fetch(http.MethodGet, e.previewPath("/index.html")+"?pt="+tok, nil)
+	w := e.fetch(http.MethodGet, e.previewPath(tok, "/index.html"), nil)
 	if w.Code != http.StatusBadGateway || !strings.Contains(w.Body.String(), "preview is unavailable") {
 		t.Fatalf("got %d %q", w.Code, w.Body.String())
 	}
@@ -473,14 +515,14 @@ func TestPreviewProxy_UpstreamFailureKeepsHeadersAndLeaksNothing(t *testing.T) {
 
 func TestPreviewProxy_NotConfiguredIs503(t *testing.T) {
 	e := newBPrevEnv(t)
-	tok := url.QueryEscape(e.tokenFor(t, e.sess.ID, e.owner.ID))
+	tok := e.tokenFor(t, e.sess.ID, e.owner.ID)
 	for name, cfg := range map[string]BuilderHandlerConfig{
 		"no signer":  {Store: e.st, Sandbox: e.fake},
 		"no builder": {PreviewSigner: e.signer},
 	} {
 		h := NewBuilderHandler(e.pool, cfg)
 		rec := httptest.NewRecorder()
-		e.routerFor(h).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, e.previewPath("/index.html")+"?pt="+tok, nil))
+		e.routerFor(h).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, e.previewPath(tok, "/index.html"), nil))
 		if rec.Code != http.StatusServiceUnavailable {
 			t.Errorf("%s: want 503, got %d", name, rec.Code)
 		}
@@ -507,8 +549,8 @@ func TestMintPreviewToken_OwnerGetsAWorkingToken(t *testing.T) {
 	if d := time.Until(got.ExpiresAt); d < 9*time.Minute || d > builder.PreviewTokenTTL+time.Second {
 		t.Errorf("expires_at is %v away, want about %v", d, builder.PreviewTokenTTL)
 	}
-	wantPrefix := "/dashboard/api/builder/sessions/" + e.sess.ID + "/preview/?pt="
-	if !strings.HasPrefix(got.URL, wantPrefix) {
+	wantURL := "/dashboard/api/builder/sessions/" + e.sess.ID + "/p/" + got.Token + "/"
+	if got.URL != wantURL {
 		t.Errorf("url = %q", got.URL)
 	}
 

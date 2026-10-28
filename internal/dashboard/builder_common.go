@@ -161,7 +161,7 @@ func (h *BuilderHandler) writeError(w http.ResponseWriter, status int, msg strin
 func (h *BuilderHandler) serverError(w http.ResponseWriter, r *http.Request, err error) {
 	h.logger.Error("builder request failed",
 		zap.String("method", r.Method),
-		zap.String("path", r.URL.Path),
+		zap.String("path", RedactPreviewTokenPath(r.URL.Path)),
 		zap.Error(err),
 	)
 	h.writeError(w, http.StatusInternalServerError, builderInternalErrorMsg)

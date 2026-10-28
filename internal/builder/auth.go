@@ -24,7 +24,7 @@ const (
 	// path prefix; a leaked token is only useful for a minute.
 	RequestTokenTTL = 60 * time.Second
 
-	// PreviewTokenTTL is how long a browser preview token (?pt=) is valid.
+	// PreviewTokenTTL is how long a browser preview token (carried in the preview URL path, /p/{token}/) is valid.
 	PreviewTokenTTL = 10 * time.Minute
 
 	// maxTokenLen bounds the work done on attacker-controlled input before any
@@ -75,7 +75,7 @@ type RequestClaims struct {
 	ExpiresAt  int64  `json:"exp"`
 }
 
-// PreviewClaims is the signed payload of a preview token (iframe ?pt=). The
+// PreviewClaims is the signed payload of a preview token (carried in the iframe URL path). The
 // caller of VerifyPreview must compare SessionID and UserID against the
 // request it is serving.
 type PreviewClaims struct {

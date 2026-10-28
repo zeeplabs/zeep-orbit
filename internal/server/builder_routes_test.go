@@ -62,9 +62,9 @@ var builderConfigRoutes = []builderRoute{
 }
 
 var builderPreviewPaths = []string{
-	"/dashboard/api/builder/sessions/" + bSID + "/preview",
-	"/dashboard/api/builder/sessions/" + bSID + "/preview/",
-	"/dashboard/api/builder/sessions/" + bSID + "/preview/assets/app.js",
+	"/dashboard/api/builder/sessions/" + bSID + "/p/garbage-token",
+	"/dashboard/api/builder/sessions/" + bSID + "/p/garbage-token/",
+	"/dashboard/api/builder/sessions/" + bSID + "/p/garbage-token/assets/app.js",
 }
 
 func doReq(t *testing.T, base string, rt builderRoute, cookie *http.Cookie) (int, string) {
@@ -264,7 +264,8 @@ func TestServerBuilderRoutes_BuilderConfigured(t *testing.T) {
 			t.Errorf("GET %s with only the dashboard cookie: %d, want 401", p, code)
 		}
 	}
-	if code, _ := doReq(t, ts.URL, builderRoute{http.MethodGet, builderPreviewPaths[0] + "?pt=garbage"}, nil); code != http.StatusUnauthorized {
+	// The old query/cookie forms are gone: ?pt= is not a credential.
+	if code, _ := doReq(t, ts.URL, builderRoute{http.MethodGet, "/dashboard/api/builder/sessions/" + bSID + "/p/garbage-token/?pt=anything"}, nil); code != http.StatusUnauthorized {
 		t.Errorf("garbage preview token: %d, want 401", code)
 	}
 	// A genuine token for a session that does not exist is not served.
@@ -272,7 +273,7 @@ func TestServerBuilderRoutes_BuilderConfigured(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	code, body := doReq(t, ts.URL, builderRoute{http.MethodGet, builderPreviewPaths[0] + "?pt=" + tok}, nil)
+	code, body := doReq(t, ts.URL, builderRoute{http.MethodGet, "/dashboard/api/builder/sessions/" + bSID + "/p/" + tok + "/"}, nil)
 	if code == http.StatusOK || code == http.StatusServiceUnavailable {
 		t.Errorf("valid token for an unknown session: %d %s, want a rejection", code, body)
 	}
@@ -297,8 +298,8 @@ func TestServerBuilderRoutes_BuilderConfigured(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, p := range []string{"", "/", "/assets/app.js"} {
-		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/dashboard/api/builder/sessions/"+sess.ID+"/preview"+p+"?pt="+tok, nil)
+	for _, p := range []string{"/", "/assets/app.js"} {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/dashboard/api/builder/sessions/"+sess.ID+"/p/"+tok+p, nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatal(err)
@@ -307,6 +308,9 @@ func TestServerBuilderRoutes_BuilderConfigured(t *testing.T) {
 		resp.Body.Close()
 		if resp.StatusCode != http.StatusOK || string(b) != "preview-ok" {
 			t.Errorf("preview %q: %d %q, want 200 preview-ok", p, resp.StatusCode, b)
+		}
+		if len(resp.Header.Values("Set-Cookie")) != 0 {
+			t.Errorf("preview %q: no cookie may be set, got %q", p, resp.Header.Values("Set-Cookie"))
 		}
 		if csp := resp.Header.Get("Content-Security-Policy"); !strings.HasPrefix(csp, "sandbox ") || strings.Contains(csp, "allow-same-origin") {
 			t.Errorf("preview %q: CSP = %q, want the opaque-origin sandbox", p, csp)
@@ -361,8 +365,27 @@ func TestLogMiddleware_BuilderPathsNeverLogBodiesOrPreviewToken(t *testing.T) {
 	handler.ServeHTTP(httptest.NewRecorder(), req)
 	req = httptest.NewRequest(http.MethodGet, "/dashboard/api/builder/sessions/"+bSID+"/preview/?pt=preview-token-plaintext&x=1", nil)
 	handler.ServeHTTP(httptest.NewRecorder(), req)
+	// The token now travels in the path.
+	req = httptest.NewRequest(http.MethodGet, "/dashboard/api/builder/sessions/"+bSID+"/p/preview-token-plaintext/assets/app.js", nil)
+	handler.ServeHTTP(httptest.NewRecorder(), req)
 
-	for _, e := range buf.Recent(2, "", nil) {
+	entries := buf.Recent(3, "", nil)
+	if len(entries) != 3 {
+		t.Fatalf("got %d log entries, want 3", len(entries))
+	}
+	sawPath := false
+	for _, e := range entries {
+		if strings.Contains(e.Path, "preview-token-plaintext") {
+			t.Errorf("preview token leaked into the logged path: %q", e.Path)
+		}
+		if strings.HasSuffix(e.Path, "/p/***/assets/app.js") {
+			sawPath = true
+		}
+	}
+	if !sawPath {
+		t.Error("the token path segment must be logged as ***")
+	}
+	for _, e := range entries {
 		if e.ResBody != "" || e.ReqBody != "" {
 			t.Errorf("%s: builder bodies must not be captured: %+v", e.Path, e)
 		}

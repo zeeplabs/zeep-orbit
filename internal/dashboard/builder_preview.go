@@ -12,10 +12,19 @@ package dashboard
 // opaque origin and the browser does not send the dashboard cookie (SameSite
 // Strict, Path=/dashboard) with its requests. The proxy therefore authenticates
 // with a short-lived signed preview token (builder.Signer.SignPreview: HMAC,
-// 10 minutes, bound to session id + user id) instead. The token is accepted from
-// the `pt` query parameter (the iframe src) or from the path-scoped cookie the
-// proxy sets on a response to a `pt` request, because the sub-resources of the
-// page (JS, CSS) carry no query string.
+// 10 minutes, bound to session id + user id) instead.
+//
+// The token travels in the URL PATH, not in a cookie or the query string:
+//
+//	/dashboard/api/builder/sessions/{id}/p/{token}/...
+//
+// Cookies are not reliable from a sandboxed iframe (third-party cookie
+// blocking, Secure on plain http), and a query string is not inherited by the
+// page's sub-resources. The preview is built with a RELATIVE vite base ("./"),
+// so ./assets/x.js resolves against the document URL and inherits the token
+// segment. The document URL must therefore end with "/": /p/{token} is a 308
+// redirect to /p/{token}/. Because the token is in the path, request logs must
+// redact it (RedactPreviewTokenPath) and the proxy sends no Referer (no-referrer).
 //
 // What the proxy guarantees:
 //   - no valid token for THIS session and ITS current owner: 401, nothing is
@@ -47,17 +56,10 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/zeeplabs/zeep-orbit/internal/agent/store"
-	"github.com/zeeplabs/zeep-orbit/internal/agent/tools"
 	"github.com/zeeplabs/zeep-orbit/internal/builder"
 )
 
 const (
-	// previewTokenParam is the query parameter carrying the preview token.
-	previewTokenParam = "pt"
-	// previewCookieName is the path-scoped cookie that carries the token to the
-	// sub-resources of the preview page.
-	previewCookieName = "orbit_preview"
-
 	// previewCSP puts every preview response in an opaque origin.
 	previewCSP = "sandbox allow-scripts allow-forms allow-popups allow-modals"
 )
@@ -79,7 +81,8 @@ type BuilderPreviewToken struct {
 	// ExpiresAt is when the token stops working; reload the iframe with a new
 	// token before then.
 	ExpiresAt time.Time `json:"expires_at"`
-	// URL is the iframe src: the preview path with the token attached.
+	// URL is the iframe src: a same-origin absolute path that ends with
+	// "/p/<token>/".
 	URL string `json:"url"`
 }
 
@@ -103,11 +106,11 @@ func (h *BuilderHandler) MintPreviewToken(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, BuilderPreviewToken{
 		Token:     token,
 		ExpiresAt: h.now().Add(builder.PreviewTokenTTL).UTC(),
-		URL:       tools.DefaultPreviewBase(sess.ID) + "?" + previewTokenParam + "=" + url.QueryEscape(token),
+		URL:       "/dashboard/api/builder/sessions/" + sess.ID + "/p/" + url.PathEscape(token) + "/",
 	})
 }
 
-// PreviewProxy handles GET /dashboard/api/builder/sessions/{id}/preview/*. It
+// PreviewProxy handles GET /dashboard/api/builder/sessions/{id}/p/{token}/*. It
 // must be mounted OUTSIDE RequireAuth (see the file comment).
 func (h *BuilderHandler) PreviewProxy(w http.ResponseWriter, r *http.Request) {
 	pw := &previewWriter{ResponseWriter: w}
@@ -128,30 +131,26 @@ func (h *BuilderHandler) PreviewProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, fromQuery := previewTokenFromRequest(r)
-	if !h.previewAuthorized(r.Context(), w, r, id, token) {
+	if !h.previewAuthorized(r.Context(), w, r, id, chi.URLParam(r, "token")) {
 		return
 	}
-	if fromQuery {
-		// Sub-resources of the page carry no ?pt, so hand the browser the same
-		// token as a cookie that is only sent under this session's preview path.
-		pw.cookie = &http.Cookie{
-			Name: previewCookieName, Value: token, Path: tools.DefaultPreviewBase(id),
-			MaxAge: int(builder.PreviewTokenTTL / time.Second),
-			// The page lives in an opaque origin, so this is a cross-site request
-			// as far as the browser is concerned.
-			Secure: true, HttpOnly: true, SameSite: http.SameSiteNoneMode,
-		}
+
+	wild := chi.URLParam(r, "*")
+	if wild == "" && !strings.HasSuffix(r.URL.Path, "/") {
+		// Relative asset URLs need the document URL to end with "/".
+		http.Redirect(w, r, r.URL.EscapedPath()+"/", http.StatusPermanentRedirect)
+		return
 	}
 
-	rest, ok := cleanPreviewPath(chi.URLParam(r, "*"))
+	rest, ok := cleanPreviewPath(wild)
 	if !ok {
 		h.writeError(w, http.StatusBadRequest, "invalid preview path")
 		return
 	}
 
 	// A fresh request: only the method, a clean path and the context go
-	// upstream. No query (the token), no Cookie, no Authorization.
+	// upstream. No token (it is in the incoming path only), no query, no
+	// Cookie, no Authorization.
 	up := r.Clone(r.Context())
 	up.URL = &url.URL{Path: rest}
 	up.RequestURI = ""
@@ -159,16 +158,20 @@ func (h *BuilderHandler) PreviewProxy(w http.ResponseWriter, r *http.Request) {
 	h.sandbox.Preview(id).ServeHTTP(w, up)
 }
 
-// previewTokenFromRequest returns the preview token: the `pt` query parameter
-// first, then the path-scoped cookie. fromQuery tells which one it was.
-func previewTokenFromRequest(r *http.Request) (token string, fromQuery bool) {
-	if t := r.URL.Query().Get(previewTokenParam); t != "" {
-		return t, true
+// RedactPreviewTokenPath replaces the token segment of a preview path
+// (.../sessions/{id}/p/{token}/...) with "***" so it never reaches a log. Any
+// other path is returned unchanged.
+func RedactPreviewTokenPath(path string) string {
+	if !strings.HasPrefix(path, "/dashboard/api/builder/sessions/") {
+		return path
 	}
-	if c, err := r.Cookie(previewCookieName); err == nil {
-		return c.Value, false
+	// ["", dashboard, api, builder, sessions, {id}, p, {token}, ...]
+	parts := strings.Split(path, "/")
+	if len(parts) < 8 || parts[6] != "p" {
+		return path
 	}
-	return "", false
+	parts[7] = "***"
+	return strings.Join(parts, "/")
 }
 
 // previewAuthorized verifies token for session id and answers 401/500 itself
@@ -245,7 +248,6 @@ func cleanPreviewPath(wild string) (string, bool) {
 // an earlier middleware) set can weaken them.
 type previewWriter struct {
 	http.ResponseWriter
-	cookie      *http.Cookie
 	wroteHeader bool
 }
 
@@ -258,13 +260,14 @@ func (p *previewWriter) WriteHeader(status int) {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "no-referrer")
 		h.Set("Cache-Control", "no-store")
-		// Never let upstream set cookies on the Orbit origin; the only one
-		// allowed is the proxy's own preview-token cookie.
+		// Never let upstream set cookies on the Orbit origin.
 		h.Del("Set-Cookie")
-		if p.cookie != nil {
-			h.Add("Set-Cookie", p.cookie.String())
-		}
-		h.Del("Access-Control-Allow-Origin")
+		// The page runs in an opaque origin (Origin: null) and Vite marks its
+		// module script and stylesheet `crossorigin`, so the browser makes CORS
+		// requests and blocks them without this header. A wildcard (never with
+		// credentials) is enough: the files are static build output and the token
+		// in the URL path is the only credential.
+		h.Set("Access-Control-Allow-Origin", "*")
 		h.Del("Access-Control-Allow-Credentials")
 	}
 	p.ResponseWriter.WriteHeader(status)

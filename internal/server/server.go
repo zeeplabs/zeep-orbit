@@ -450,16 +450,16 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Get("/api/builder/sessions/{id}/download.zip", builderH.DownloadZip)
 		// Preview: deliberately NOT behind RequireAuth. The iframe is a
 		// sandboxed opaque origin that cannot carry the dashboard cookie; the
-		// handler authenticates the short-lived HMAC preview token (?pt= or the
-		// path-scoped cookie) and re-checks the session owner. No limiter: an
+		// handler authenticates the short-lived HMAC preview token carried in
+		// the path (/p/{token}/...) and re-checks the session owner. No limiter: an
 		// unauthenticated flood fails the token MAC before touching the
 		// database, and an IP key would be the load balancer's address for
 		// every user behind it. GET and HEAD only; the handler answers 405 for
 		// the rest. Registered with and without the trailing slash.
 		for _, m := range []string{http.MethodGet, http.MethodHead} {
-			r.MethodFunc(m, "/api/builder/sessions/{id}/preview", builderH.PreviewProxy)
-			r.MethodFunc(m, "/api/builder/sessions/{id}/preview/", builderH.PreviewProxy)
-			r.MethodFunc(m, "/api/builder/sessions/{id}/preview/*", builderH.PreviewProxy)
+			r.MethodFunc(m, "/api/builder/sessions/{id}/p/{token}", builderH.PreviewProxy)
+			r.MethodFunc(m, "/api/builder/sessions/{id}/p/{token}/", builderH.PreviewProxy)
+			r.MethodFunc(m, "/api/builder/sessions/{id}/p/{token}/*", builderH.PreviewProxy)
 		}
 		r.With(dashboard.RequireAuth(pool)).Get("/api/changelog", dashboard.ChangelogHandler)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/version-check", dashboard.VersionCheckHandler)
@@ -543,7 +543,7 @@ func logMiddleware(logger *zap.Logger, buf *dashboard.RingBuffer) func(http.Hand
 			status := cw.Status()
 			method := r.Method
 			contentType := r.Header.Get("Content-Type")
-			logPath := redactWebhookToken(r.URL.Path)
+			logPath := dashboard.RedactPreviewTokenPath(redactWebhookToken(r.URL.Path))
 
 			logger.Info("request",
 				zap.String("method", method),
@@ -622,8 +622,9 @@ func isBuilderPath(path string) bool {
 	return strings.HasPrefix(path, "/dashboard/api/builder/")
 }
 
-// redactBuilderQuery hides the preview token (?pt=) that the iframe URL
-// carries, so it never lands in the log buffer. Other paths pass through.
+// redactBuilderQuery hides the legacy preview token query (?pt=) from the log
+// buffer, defensively: the token now travels in the path (see
+// dashboard.RedactPreviewTokenPath), but a stale client may still send it.
 func redactBuilderQuery(path, rawQuery string) string {
 	if rawQuery == "" || !isBuilderPath(path) {
 		return rawQuery

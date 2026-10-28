@@ -2089,7 +2089,7 @@ export interface BuilderProposalResult {
 export interface BuilderPreviewToken {
   token: string
   expires_at: string
-  /** The iframe src: same-origin path with ?pt=<token>. Mint a new one before expires_at (10 minutes). */
+  /** The iframe src: same-origin path ending in /p/<token>/ (the token is in the path, not a cookie). Mint a new one before expires_at (10 minutes). */
   url: string
 }
 
