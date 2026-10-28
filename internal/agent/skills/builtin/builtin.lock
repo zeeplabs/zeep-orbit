@@ -1,0 +1,3 @@
+# name version sha256-of-SKILL.md
+# Regenerate after editing a built-in (and bumping its `version`):
+#   go test ./internal/agent/skills -run TestBuiltinLint -update-lock
