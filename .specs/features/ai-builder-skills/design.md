@@ -202,6 +202,27 @@ Unknown / disabled / deleted name → `Result{IsError:true, Content:"skill not a
 | Prompt-cache effect of an index that changes between turns | **[Provável]** minor; the index only changes on admin actions. |
 | `Registry.SpecsWithout` + loop filter touches the shared registry path | **[Certo]** small, covered by the "no skills" regression test. |
 
+### Validation results (S16, 2026-10-28, local stack, throwaway database, OpenAI `gpt-4.1` through the maintainer's local provider config)
+
+| Check | Result |
+| --- | --- |
+| Six built-ins listed first, locked, enabled by default; index 1348 of 8000 characters | Pass |
+| `POST` with a built-in name and `DELETE` of a built-in | 409 `skill_builtin_readonly` on both; the drawer of a built-in has no edit or delete control | Pass |
+| Upload dialog: a file with a credential, a file named `orbit-mine`, a valid file with `allowed-tools` | Inline localized error for the first two; the third is created (201) with an `allowed-tools` warning, and the key is not stored | Pass |
+| Toggle off and on; index meter follows | Pass |
+| Upload of a second version from the drawer; history shows v2 and v1 | Pass |
+| Real session, task about an invoice screen, custom skill `invoice-layout` enabled | The agent called `load_skill` first (event `skill_loaded`: `invoice-layout`, custom, v2), then wrote the page and all four builds passed | Pass |
+| Real session, unrelated one-line text change | No skill loaded | Pass |
+| Skill disabled, new session with an invoice task | `invoice-layout` not loaded; the agent loaded two built-ins (`orbit-frontend-design`, `orbit-react-patterns`) | Pass |
+| Role `admin` on the skills routes | 403; unauthenticated 401 | Pass |
+| Timeline shows "Used skill invoice-layout" | Pass (English). Portuguese not seen: the browser profile kept the English user language; the key exists in both locale files |
+
+Observations (not defects of this feature):
+
+- **A skill already loaded stays in that session's history.** Disabling it blocks new loads from the next turn on, but a follow-up turn in the same session still saw the text it had loaded earlier and answered from it. This is how history works; deleting a skill does not rewrite past turns.
+- **The unrelated-task session failed its builds** (typecheck, lint, build) because the agent never ran `run_build` with step `install` on the fresh workspace and ended on `limit_reached` (`max_fix_iterations`). It is unrelated to skills (no skill was involved) and was not reproduced in the other two sessions, which installed after the first failed typecheck. Worth a follow-up in the builder core prompt or the template: install before the first typecheck.
+- The raw `load_skill` tool call showed as its own timeline row next to "Used skill X"; the raw row is now hidden.
+
 ## 11. Rollout
 
 No env var, Helm, compose, k8s or CI change. DDL is additive and idempotent. Docs: CHANGELOG `[Unreleased]`, `docs/docs/ai-frontend-builder.md` (skills section, upload format, limits), README only if a feature-table row changes (then mirror in the 3 translations). Core prompt change ships with the binary; existing sessions pick it up on their next turn.
