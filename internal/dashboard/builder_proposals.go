@@ -214,6 +214,13 @@ func (h *BuilderHandler) ConfirmProposal(w http.ResponseWriter, r *http.Request)
 			kind = op.Kind
 			payload["kind"] = op.Kind
 
+			// Policies decide who can read and write rows: admin only, like
+			// the dashboard. Checked before applying so an editor gets a clear
+			// 403 and the proposal stays open to reject.
+			if op.Kind == "add_policy" && !role.CanManage() {
+				return nil, ErrForbidden
+			}
+
 			_, aerr := h.dashboard.applyEditOperation(ctx, user, sess.BackendAppID, op, builderAuditOrigin)
 			switch {
 			case aerr == nil:
@@ -233,7 +240,11 @@ func (h *BuilderHandler) ConfirmProposal(w http.ResponseWriter, r *http.Request)
 				userMsg = msg
 				payload["applied"] = false
 				res.IsError = true
-				res.Content = "The proposal was NOT applied: " + msg + " Nothing was changed. Propose a corrected change, or ask the user."
+				if builderPolicyPartial(aerr) {
+					res.Content = "The proposal was only partly applied: " + msg + " Call orbit_get_app_schema to see what exists, then propose the missing part."
+				} else {
+					res.Content = "The proposal was NOT applied: " + msg + " Nothing was changed. Propose a corrected change, or ask the user."
+				}
 				return res, nil
 			}
 		})
@@ -356,7 +367,20 @@ func builderApplyErrorMessage(err error) (msg string, safe bool) {
 	var typeErr *provisioner.TypeChangeError
 	var colErr *provisioner.ColumnConstraintError
 	var fkErr *provisioner.ForeignKeyViolationError
+	var pe *policyApplyError
+	var polErr *provisioner.ValidationError
 	switch {
+	case errors.As(err, &pe):
+		inner, ok := builderApplyErrorMessage(pe.Err)
+		if !ok {
+			return "", false
+		}
+		if pe.Created > 0 {
+			return fmt.Sprintf("%d of %d policies were created before policy %q failed: %s", pe.Created, pe.Total, pe.Policy, inner), true
+		}
+		return fmt.Sprintf("policy %q could not be created: %s", pe.Policy, inner), true
+	case errors.As(err, &polErr):
+		return polErr.Error(), true
 	case errors.Is(err, ErrNotFound):
 		return "the table or column the change refers to does not exist.", true
 	case errors.Is(err, ErrColumnAlreadyHasReference):
@@ -367,6 +391,10 @@ func builderApplyErrorMessage(err error) (msg string, safe bool) {
 		return "that column already exists; adding a foreign key to (or recreating) an existing column is not supported. Use a differently named column.", true
 	case errors.Is(err, ErrIndexAlreadyExists):
 		return "an index with that name already exists on this table; use a different index name.", true
+	case errors.Is(err, ErrPolicyAlreadyExists):
+		return "a policy for that action already exists on this table.", true
+	case errors.Is(err, ErrTableNotFound):
+		return "the table the change refers to does not exist.", true
 	case errors.As(err, &valErr):
 		return valErr.Error(), true
 	case errors.As(err, &typeErr):

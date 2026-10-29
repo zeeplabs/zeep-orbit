@@ -245,7 +245,7 @@ func TestBuilderTools_ProposeBackendChange_ValidOperations(t *testing.T) {
 	if k, ok := e.reg.Kind(ToolProposeBackendChange); !ok || k != tools.KindProposal {
 		t.Fatalf("propose_backend_change must be KindProposal, got %v (registered=%v)", k, ok)
 	}
-	for _, kind := range []string{"add_table", "add_column", "add_index", "add_reference", "add_foreign_key", "remove_foreign_key", "set_rls_mode", "toggle_auth"} {
+	for _, kind := range []string{"add_table", "add_column", "add_index", "add_reference", "add_foreign_key", "remove_foreign_key", "set_rls_mode", "toggle_auth", "add_policy"} {
 		args := validProposals[kind]
 		res, err := e.call(t, ToolProposeBackendChange, args)
 		if err != nil || res.IsError {
@@ -268,6 +268,7 @@ var validProposals = map[string]string{
 	"remove_foreign_key": `{"operation":{"kind":"remove_foreign_key","remove_foreign_key":{"table":"tasks","column":"owner_ref"}}}`,
 	"set_rls_mode":       `{"operation":{"kind":"set_rls_mode","set_rls_mode":{"table":"tasks","mode":"owner"}}}`,
 	"toggle_auth":        `{"operation":{"kind":"toggle_auth","toggle_auth":{"email_enabled":true}}}`,
+	"add_policy":         `{"operation":{"kind":"add_policy","add_policy":{"table":"tasks","template":"owner_only","roles":["member"],"actions":["select"]}}}`,
 }
 
 func TestBuilderTools_ProposeBackendChange_MalformedIsToolError(t *testing.T) {

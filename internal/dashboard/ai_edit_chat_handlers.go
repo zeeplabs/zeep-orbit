@@ -433,6 +433,15 @@ func (h *Handler) applyEditOperation(ctx context.Context, user *DashboardUser, a
 		}
 		return editChatConfirmResponse{Applied: true, Kind: op.Kind, App: app}, nil
 
+	case "add_policy":
+		if op.AddPolicy == nil {
+			return editChatConfirmResponse{}, fmt.Errorf("dashboard: add_policy operation missing its policy")
+		}
+		if err := h.applyAddPolicy(ctx, user, appID, op.AddPolicy, origin); err != nil {
+			return editChatConfirmResponse{}, err
+		}
+		return editChatConfirmResponse{Applied: true, Kind: op.Kind}, nil
+
 	default:
 		return editChatConfirmResponse{}, fmt.Errorf("dashboard: unknown edit operation kind %q", op.Kind)
 	}

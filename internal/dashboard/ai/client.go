@@ -152,13 +152,27 @@ type PlanAuthOp struct {
 	EmailEnabled bool `json:"email_enabled"`
 }
 
+// PlanPolicyOp is the propose_add_policy tool call's arguments (ai-builder-
+// backend BBE-11): a row policy (or set) built from one of the named policy
+// templates. Which of Roles, Actions, Column and Value a template needs is
+// checked by policytemplates.Resolve; this struct only carries them. Used by
+// the AI Frontend Builder only; the edit chat has no such tool.
+type PlanPolicyOp struct {
+	Table    string   `json:"table"`
+	Template string   `json:"template"`
+	Roles    []string `json:"roles,omitempty"`
+	Actions  []string `json:"actions,omitempty"`
+	Column   string   `json:"column,omitempty"`
+	Value    string   `json:"value,omitempty"`
+}
+
 // EditOperation is the structured shape produced by exactly one of the 6
 // propose_* edit-mode tool calls — exactly one field besides Kind is
 // non-nil, matching Kind (design.md Data Models). This is what
 // EditChatConfirm (ai-edit-chat spec T8) switches on to call exactly one
 // *ForUser handler.
 type EditOperation struct {
-	Kind             string                  `json:"kind"` // "add_table" | "add_column" | "add_index" | "add_reference" | "add_foreign_key" | "remove_foreign_key" | "set_rls_mode" | "toggle_auth"
+	Kind             string                  `json:"kind"` // "add_table" | "add_column" | "add_index" | "add_reference" | "add_foreign_key" | "remove_foreign_key" | "set_rls_mode" | "toggle_auth" | "add_policy"
 	AddTable         *PlanTable              `json:"add_table,omitempty"`
 	AddColumn        *PlanColumnOp           `json:"add_column,omitempty"`
 	AddIndex         *PlanIndexOp            `json:"add_index,omitempty"`
@@ -167,6 +181,7 @@ type EditOperation struct {
 	RemoveForeignKey *PlanRemoveForeignKeyOp `json:"remove_foreign_key,omitempty"`
 	SetRLSMode       *PlanRLSOp              `json:"set_rls_mode,omitempty"`
 	ToggleAuth       *PlanAuthOp             `json:"toggle_auth,omitempty"`
+	AddPolicy        *PlanPolicyOp           `json:"add_policy,omitempty"`
 }
 
 // ErrMalformedEditOp mirrors ErrMalformedPlan for the edit-mode tool calls —
@@ -399,13 +414,23 @@ func parseEditOperation(toolName, rawArgs string) (*EditOperation, error) {
 		}
 		return &EditOperation{Kind: "toggle_auth", ToggleAuth: &op}, nil
 
+	case "propose_add_policy":
+		var op PlanPolicyOp
+		if err := json.Unmarshal([]byte(rawArgs), &op); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrMalformedEditOp, err)
+		}
+		if op.Table == "" || op.Template == "" {
+			return nil, ErrMalformedEditOp
+		}
+		return &EditOperation{Kind: "add_policy", AddPolicy: &op}, nil
+
 	default:
 		return nil, fmt.Errorf("ai: unknown edit tool %q", toolName)
 	}
 }
 
 // ParseEditOperation validates one propose_* style call (toolName is one of
-// the eight propose_* names, rawArgs the operation's own JSON payload) into
+// the nine propose_* names, rawArgs the operation's own JSON payload) into
 // an EditOperation with the exact required-field checks the edit chat uses.
 // The builder agent's propose_backend_change reuses it so both surfaces
 // accept the same operations. A malformed payload returns an error wrapping

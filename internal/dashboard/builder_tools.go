@@ -179,6 +179,9 @@ func (b *builderTools) proposeBackendChange(ctx context.Context, call tools.Call
 	if !role.Effective() {
 		return tools.Result{}, tools.ToolErrorf("%s", builderAppUnavailableMsg)
 	}
+	if op.Kind == "add_policy" && !role.CanManage() {
+		return tools.Result{}, tools.ToolErrorf("%s", builderPolicyAdminMsg)
+	}
 	return tools.Result{Content: fmt.Sprintf(
 		"Proposal %q recorded and sent to the user for confirmation. It has NOT been applied. Stop here and wait: the user will confirm or reject it in the dashboard.", op.Kind)}, nil
 }
@@ -190,7 +193,7 @@ const proposeBackendChangeSchema = `{
       "type": "object",
       "description": "Exactly one backend operation. Set \"kind\" and the payload under the key named like the kind.",
       "properties": {
-        "kind": {"type": "string", "enum": ["add_table", "add_column", "add_index", "add_reference", "add_foreign_key", "remove_foreign_key", "set_rls_mode", "toggle_auth"]},
+        "kind": {"type": "string", "enum": ["add_table", "add_column", "add_index", "add_reference", "add_foreign_key", "remove_foreign_key", "set_rls_mode", "toggle_auth", "add_policy"]},
         "add_table": {"type": "object", "properties": {"name": {"type": "string"}, "columns": {"type": "array", "items": {"$ref": "#/$defs/column"}}}, "required": ["name", "columns"]},
         "add_column": {"type": "object", "properties": {"table": {"type": "string"}, "column": {"$ref": "#/$defs/column"}}, "required": ["table", "column"]},
         "add_index": {"type": "object", "properties": {"table": {"type": "string"}, "name": {"type": "string"}, "columns": {"type": "array", "items": {"type": "string"}}, "unique": {"type": "boolean"}}, "required": ["table", "name", "columns"]},
@@ -198,7 +201,8 @@ const proposeBackendChangeSchema = `{
         "add_foreign_key": {"type": "object", "properties": {"table": {"type": "string"}, "column": {"type": "string"}, "ref_table": {"type": "string"}, "ref_column": {"type": "string"}, "on_delete": {"type": "string"}}, "required": ["table", "column", "ref_table", "ref_column"]},
         "remove_foreign_key": {"type": "object", "properties": {"table": {"type": "string"}, "column": {"type": "string"}}, "required": ["table", "column"]},
         "set_rls_mode": {"type": "object", "properties": {"table": {"type": "string"}, "mode": {"type": "string"}}, "required": ["table", "mode"]},
-        "toggle_auth": {"type": "object", "properties": {"email_enabled": {"type": "boolean"}}, "required": ["email_enabled"]}
+        "toggle_auth": {"type": "object", "properties": {"email_enabled": {"type": "boolean"}}, "required": ["email_enabled"]},
+        "add_policy": {"type": "object", "description": "A row policy from a named template: owner_only (roles, actions), open_read (roles), read_only (roles), value_match (roles, column, value) or open_read_owner_write (roles). The table needs an access mode set first (set_rls_mode). Needs the admin role on the app.", "properties": {"table": {"type": "string"}, "template": {"type": "string", "enum": ["owner_only", "open_read", "read_only", "value_match", "open_read_owner_write"]}, "roles": {"type": "array", "items": {"type": "string"}}, "actions": {"type": "array", "items": {"type": "string", "enum": ["select", "insert", "update", "delete"]}}, "column": {"type": "string"}, "value": {"type": "string"}}, "required": ["table", "template"]}
       },
       "required": ["kind"]
     }
@@ -213,7 +217,7 @@ const proposeBackendChangeSchema = `{
 // builderOperationKinds are the accepted EditOperation kinds.
 var builderOperationKinds = map[string]bool{
 	"add_table": true, "add_column": true, "add_index": true, "add_reference": true,
-	"add_foreign_key": true, "remove_foreign_key": true, "set_rls_mode": true, "toggle_auth": true,
+	"add_foreign_key": true, "remove_foreign_key": true, "set_rls_mode": true, "toggle_auth": true, "add_policy": true,
 }
 
 // ParseBuilderProposal validates the raw arguments of a propose_backend_change
@@ -272,6 +276,13 @@ func ParseBuilderProposal(raw json.RawMessage) (*ai.EditOperation, error) {
 	op, err := ai.ParseEditOperation("propose_"+kind, string(payload))
 	if err != nil {
 		return nil, tools.ToolErrorf("invalid operation: %q is malformed or missing required fields", kind)
+	}
+	if kind == "add_policy" {
+		// Resolve now so a wrong template or a missing input is fixed by the
+		// model before the user is asked anything.
+		if _, err := resolveBuilderPolicies(op.AddPolicy); err != nil {
+			return nil, tools.ToolErrorf("invalid operation: add_policy: %s", builderPolicyInputMessage(err))
+		}
 	}
 	return op, nil
 }
