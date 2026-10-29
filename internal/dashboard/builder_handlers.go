@@ -143,12 +143,18 @@ func (h *BuilderHandler) Status(w http.ResponseWriter, r *http.Request) {
 }
 
 type createBuilderSessionRequest struct {
-	// BackendAppID is the Orbit backend app the project talks to.
+	// Backend selects the backend: {"mode":"new"} makes the builder create an
+	// empty app together with the session, {"mode":"existing","app_id":...}
+	// uses one the caller can see.
+	Backend *builderBackendRequest `json:"backend"`
+	// BackendAppID is the legacy form of Backend{existing}: the Orbit backend
+	// app the project talks to. Still accepted when Backend is absent.
 	BackendAppID string `json:"backend_app_id"`
 	// TemplateID is a github_templates id from GET /api/builder/templates;
 	// empty selects the built-in default template.
 	TemplateID string `json:"template_id"`
-	// Title is optional; it defaults to the backend app's name.
+	// Title is optional; it defaults to the backend app's name ("Untitled
+	// app" for a new backend).
 	Title string `json:"title"`
 	// Locale is the language of the user's UI (e.g. "pt-BR"); it defaults to
 	// the first tag of Accept-Language, then "en". The agent replies in it.
@@ -248,8 +254,12 @@ func (h *BuilderHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req.BackendAppID = strings.TrimSpace(req.BackendAppID)
-	if !looksLikeUUID(req.BackendAppID) {
+	mode, backendID, err := resolveBuilderBackend(req.Backend, req.BackendAppID)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if mode == builderBackendModeExisting && !looksLikeUUID(backendID) {
 		h.writeError(w, http.StatusBadRequest, "backend_app_id must be a valid app id")
 		return
 	}
@@ -269,16 +279,32 @@ func (h *BuilderHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	}
 	templateID := strings.TrimSpace(req.TemplateID)
 
-	// AFB-11: the caller needs at least viewer on the backend app. GetApp
-	// answers ErrNotFound both for a missing app and for no access.
-	app, _, err := GetApp(r.Context(), h.pool, req.BackendAppID, user)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			h.writeError(w, http.StatusNotFound, "app not found")
+	// backendName is the app the generated project is wired to. An existing
+	// backend must already be visible to the caller (AFB-11: at least viewer;
+	// GetApp answers ErrNotFound both for a missing app and for no access). A
+	// new backend only gets its name now; the app is created further down,
+	// after every cheap check, so a rejected request leaves nothing behind.
+	var (
+		app         *AppRow
+		backendName string
+	)
+	if mode == builderBackendModeExisting {
+		app, _, err = GetApp(r.Context(), h.pool, backendID, user)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				h.writeError(w, http.StatusNotFound, "app not found")
+				return
+			}
+			h.serverError(w, r, err)
 			return
 		}
-		h.serverError(w, r, err)
-		return
+		backendName = app.Name
+	} else {
+		if h.dashboard == nil {
+			h.writeError(w, http.StatusServiceUnavailable, builderNotConfiguredMsg)
+			return
+		}
+		backendName = deriveBuilderAppName(title, randomSuffix())
 	}
 
 	health, ok := h.requireAvailable(w, r)
@@ -291,7 +317,7 @@ func (h *BuilderHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		h.serverError(w, r, errors.New("cannot determine the public API base URL for the generated project"))
 		return
 	}
-	config := renderOrbitConfig(apiURL, app.Name)
+	config := renderOrbitConfig(apiURL, backendName)
 
 	ctx, cancel := context.WithTimeout(r.Context(), builderInitTimeout)
 	defer cancel()
@@ -299,13 +325,19 @@ func (h *BuilderHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	// Template resolution. For a company template the archive is downloaded
 	// and its first entry read now, so an unusable template creates no row.
 	params := store.CreateSessionParams{
-		OwnerUserID:  user.ID,
-		BackendAppID: app.ID,
-		Title:        title,
-		Locale:       locale,
+		OwnerUserID:   user.ID,
+		Title:         title,
+		Locale:        locale,
+		BackendOrigin: store.BackendOriginExisting,
+	}
+	if app != nil {
+		params.BackendAppID = app.ID
 	}
 	if params.Title == "" {
-		params.Title = app.Name
+		params.Title = backendName
+		if app == nil {
+			params.Title = builderDefaultSessionTitle
+		}
 	}
 	var tt *templateTar
 	if templateID == "" {
@@ -327,6 +359,25 @@ func (h *BuilderHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		if params.TemplateVersion == "" {
 			params.TemplateVersion = "unknown"
 		}
+	}
+
+	// New backend: create the empty app now. Any failure from here on removes
+	// it again (BBE-02); sessionCommitted turns the removal off once the
+	// session is fully created.
+	sessionCommitted := false
+	if mode == builderBackendModeNew {
+		created, cerr := h.createBuilderBackend(ctx, user, backendName, r.RemoteAddr)
+		if cerr != nil {
+			h.serverError(w, r, cerr)
+			return
+		}
+		params.BackendAppID = created.ID
+		params.BackendOrigin = store.BackendOriginBuilder
+		defer func() {
+			if !sessionCommitted {
+				h.removeCreatedBackend(ctx, user, created, r.RemoteAddr)
+			}
+		}()
 	}
 
 	// Pin the persona + rules in force now; later edits do not change this
@@ -369,10 +420,11 @@ func (h *BuilderHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		h.serverError(w, r, err)
 		return
 	}
+	sessionCommitted = true
 	writeJSON(w, http.StatusCreated, newBuilderSessionView(created))
 
 	h.audit(r.Context(), user, "builder.session.create", created.ID, created.Title,
-		map[string]string{"backend_app_id": created.BackendAppID, "template_kind": created.TemplateKind}, r.RemoteAddr)
+		map[string]string{"backend_app_id": created.BackendAppID, "backend_origin": created.BackendOrigin, "template_kind": created.TemplateKind}, r.RemoteAddr)
 }
 
 // resolveGitHubTemplate finds the builder-enabled company template, downloads
