@@ -45,9 +45,10 @@ interface NewBuilderSessionDialogProps {
   apps: AppDef[]
 }
 
-// NewBuilderSessionDialog — ai-frontend-builder T35 (AFB-03/04). "Create with AI" entry point of
-// AppsPage: picks the backend app + base template (+ optional title), creates the builder session
-// and navigates to /builder/:sessionId. The form is mounted only while the dialog is open, so its
+// NewBuilderSessionDialog — ai-frontend-builder T35 (AFB-03/04), ai-builder-backend B03. "Create
+// with AI" entry point of AppsPage: picks the backend (a new one the AI designs, the default, or an
+// existing app) + base template (+ optional title), creates the builder session and navigates to
+// /builder/:sessionId. The form is mounted only while the dialog is open, so its
 // state resets on every open and the templates request is not issued until it is needed.
 export function NewBuilderSessionDialog({ open, onOpenChange, apps }: NewBuilderSessionDialogProps) {
   const { t } = useTranslation()
@@ -90,6 +91,8 @@ function NewBuilderSessionForm({ apps, create, onCancel, onCreated }: FormProps)
   const templatesQuery = useBuilderTemplates()
   const templates = templatesQuery.data ?? []
 
+  // New backend is the default: the AI designs the data with the screens (ai-builder-backend BBE-01).
+  const [mode, setMode] = useState<'new' | 'existing'>('new')
   const [appId, setAppId] = useState<string>(apps.length === 1 ? apps[0].id : '')
   const [templateChoice, setTemplateChoice] = useState<string>('')
   const [title, setTitle] = useState('')
@@ -103,9 +106,10 @@ function NewBuilderSessionForm({ apps, create, onCancel, onCreated }: FormProps)
         ? templateKey(templates[0])
         : ''
 
-  const appMissing = !appId
+  const existing = mode === 'existing'
+  const appMissing = existing && !appId
   const templateMissing = !selectedTemplateKey
-  const noApps = apps.length === 0
+  const noApps = existing && apps.length === 0
   const pending = create.isPending
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -116,7 +120,7 @@ function NewBuilderSessionForm({ apps, create, onCancel, onCreated }: FormProps)
     const trimmedTitle = title.trim()
     create.mutate(
       {
-        backend_app_id: appId,
+        backend: existing ? { mode: 'existing', app_id: appId } : { mode: 'new' },
         // Absent template_id selects the built-in default template.
         ...(selectedTemplateKey !== DEFAULT_TEMPLATE_KEY ? { template_id: selectedTemplateKey } : {}),
         ...(trimmedTitle ? { title: trimmedTitle } : {}),
@@ -134,7 +138,40 @@ function NewBuilderSessionForm({ apps, create, onCancel, onCreated }: FormProps)
 
   return (
     <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
-      {/* Backend app */}
+      {/* Backend choice */}
+      <fieldset className="flex flex-col gap-2" disabled={pending}>
+        <legend className="mb-1 text-[13px] font-medium text-[var(--text-primary)]">
+          {t('builder.newSession.backendLegend')}
+        </legend>
+        {(['new', 'existing'] as const).map((value) => (
+          <label
+            key={value}
+            htmlFor={`builder-backend-${value}`}
+            className="flex cursor-pointer items-start gap-3 rounded-[10px] border border-[var(--border)] px-3 py-2.5 has-[:checked]:border-[var(--primary)] has-[:checked]:bg-[var(--primary-tint)] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--primary)]"
+          >
+            <input
+              id={`builder-backend-${value}`}
+              type="radio"
+              name="builder-backend"
+              value={value}
+              checked={mode === value}
+              onChange={() => setMode(value)}
+              className="mt-1"
+            />
+            <span className="flex flex-col gap-0.5">
+              <span className="text-[13px] font-medium text-[var(--text-primary)]">
+                {t(value === 'new' ? 'builder.newSession.backendNew' : 'builder.newSession.backendExisting')}
+              </span>
+              <span className="text-[12px] text-[var(--text-tertiary)]">
+                {t(value === 'new' ? 'builder.newSession.backendNewHint' : 'builder.newSession.backendExistingHint')}
+              </span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+
+      {/* Backend app (existing backend only) */}
+      {existing && (
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="builder-app">{t('builder.newSession.appLabel')}</Label>
         {noApps ? (
@@ -171,6 +208,7 @@ function NewBuilderSessionForm({ apps, create, onCancel, onCreated }: FormProps)
           </>
         )}
       </div>
+      )}
 
       {/* Template */}
       <div className="flex flex-col gap-1.5">
@@ -232,7 +270,7 @@ function NewBuilderSessionForm({ apps, create, onCancel, onCreated }: FormProps)
           maxLength={MAX_TITLE_LENGTH}
           disabled={pending}
           autoComplete="off"
-          placeholder={t('builder.newSession.titlePlaceholder')}
+          placeholder={t(existing ? 'builder.newSession.titlePlaceholder' : 'builder.newSession.titlePlaceholderNew')}
           aria-describedby="builder-title-hint"
         />
         <p id="builder-title-hint" className="text-[12px] text-[var(--text-tertiary)]">

@@ -148,6 +148,12 @@ export default function BuilderPage() {
               <Icon name="database" size={14} />
               {t('builder.page.backendApp')}
             </Link>
+            {session.backend_origin === 'builder' && (
+              <span className="inline-flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
+                <Icon name="auto_awesome" size={14} />
+                {t('builder.page.backendCreated')}
+              </span>
+            )}
           </span>
         }
         actions={

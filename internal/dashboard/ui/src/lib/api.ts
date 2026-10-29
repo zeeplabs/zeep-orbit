@@ -1987,6 +1987,8 @@ export interface BuilderTurn {
 export interface BuilderSession {
   id: string
   backend_app_id: string
+  /** 'builder' when the AI builder created the backend app together with the session. */
+  backend_origin: 'existing' | 'builder'
   title: string
   template_kind: 'default' | 'github'
   template_id: string | null
@@ -2009,10 +2011,15 @@ export interface BuilderSessionDetail extends BuilderSession {
 }
 
 /** Body of POST /builder/sessions. Empty/absent template_id selects the built-in default template. */
+export type BuilderBackendChoice = { mode: 'new' } | { mode: 'existing'; app_id: string }
+
 export interface CreateBuilderSessionInput {
-  backend_app_id: string
+  /** 'new' makes the builder create an empty backend app with the session. */
+  backend?: BuilderBackendChoice
+  /** Legacy form of `backend: { mode: 'existing' }`; do not combine with `backend`. */
+  backend_app_id?: string
   template_id?: string
-  /** Defaults to the backend app's name; max 120 characters. */
+  /** Defaults to the backend app's name ('Untitled app' for a new backend); max 120 characters. */
   title?: string
   /** BCP-47-ish tag ('pt-BR'); defaults to Accept-Language, then 'en'. The agent replies in it. */
   locale?: string
@@ -2763,6 +2770,8 @@ export function useCreateBuilderSession(): UseMutationResult<
       apiFetch<BuilderSession>(`${BUILDER_BASE}/sessions`, jsonRequest('POST', input)),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: builderKeys.sessions() })
+      // A new-backend session also created an app.
+      qc.invalidateQueries({ queryKey: ['apps'] })
     },
     onError: (error) => {
       toast.error(error.message)
