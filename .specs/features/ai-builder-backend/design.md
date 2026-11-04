@@ -76,6 +76,8 @@ Operation objects are exactly the `operation` object of `propose_backend_change`
 
 The handler returns the same "recorded and sent for confirmation" text. No schema change happens in the tool.
 
+Implementation note (B05): the validator works on `[]AppTableRow` from `GetApp` (not on `orbit_get_app_schema`'s trimmed view) so each step can reuse `validateTableInput`, the same identifier, type, duplicate, reference and index checks the dashboard runs. The tool is registered in B06 with the confirm path. `system_config.require_rls_default` is not modeled by the validator: a table declared `public` could still be created restricted by that setting; B06 must handle it at apply time.
+
 **Confirm (BBE-08)** in `ConfirmProposal`, branch on `p.Name`:
 - `propose_backend_change`: unchanged.
 - `propose_backend_plan`: re-parse with `ParseBuilderPlan` **without** the live-schema simulation being trusted blindly (it runs again against the schema at confirm time, because the schema may have changed while the card was open; a failure there is a 400 with "the schema changed, ask the agent to re-plan" and the turn stays paused so the user can reject).

@@ -235,8 +235,16 @@ func ParseBuilderProposal(raw json.RawMessage) (*ai.EditOperation, error) {
 	if len(args.Operation) == 0 || string(args.Operation) == "null" {
 		return nil, tools.ToolErrorf("invalid arguments: \"operation\" is required")
 	}
+	return parseBuilderOperation(args.Operation)
+}
+
+// parseBuilderOperation validates one operation object ({"kind": ..., "<kind>":
+// {...}}) into an ai.EditOperation. It is shared by the single-change tool and
+// by every entry of a plan (propose_backend_plan), so both accept exactly the
+// same operations.
+func parseBuilderOperation(operation json.RawMessage) (*ai.EditOperation, error) {
 	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(args.Operation, &fields); err != nil || fields == nil {
+	if err := json.Unmarshal(operation, &fields); err != nil || fields == nil {
 		return nil, tools.ToolErrorf("invalid arguments: \"operation\" must be an object")
 	}
 	var kind string
