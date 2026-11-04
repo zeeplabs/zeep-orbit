@@ -78,6 +78,8 @@ The handler returns the same "recorded and sent for confirmation" text. No schem
 
 Implementation note (B05): the validator works on `[]AppTableRow` from `GetApp` (not on `orbit_get_app_schema`'s trimmed view) so each step can reuse `validateTableInput`, the same identifier, type, duplicate, reference and index checks the dashboard runs. The tool is registered in B06 with the confirm path. `system_config.require_rls_default` is not modeled by the validator: a table declared `public` could still be created restricted by that setting; B06 must handle it at apply time.
 
+Implementation note (B06): `Validate` takes `require_rls_default` and simulates `resolveTableRLS` for each new table; a table declared `public` while the default applies is refused with a tool error (the agent cannot opt a table out of the operator's default). Both the tool and confirm load it from `GetSystemConfig`.
+
 **Confirm (BBE-08)** in `ConfirmProposal`, branch on `p.Name`:
 - `propose_backend_change`: unchanged.
 - `propose_backend_plan`: re-parse with `ParseBuilderPlan` **without** the live-schema simulation being trusted blindly (it runs again against the schema at confirm time, because the schema may have changed while the card was open; a failure there is a 400 with "the schema changed, ask the agent to re-plan" and the turn stays paused so the user can reject).

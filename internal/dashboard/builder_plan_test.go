@@ -165,7 +165,7 @@ func TestBuilderPlanValidate_Accepts(t *testing.T) {
 				t.Fatalf("parse: %v", err)
 			}
 			authEmail := !strings.Contains(name, "auth toggled")
-			if err := plan.Validate(bplExisting(), authEmail); err != nil {
+			if err := plan.Validate(bplExisting(), authEmail, false); err != nil {
 				t.Fatalf("validate: %v", err)
 			}
 		})
@@ -225,7 +225,7 @@ func TestBuilderPlanValidate_Rejects(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parse: %v", err)
 			}
-			msg := toolMsg(t, plan.Validate(bplExisting(), true))
+			msg := toolMsg(t, plan.Validate(bplExisting(), true, false))
 			if !strings.Contains(msg, tc.want) {
 				t.Errorf("error %q does not mention %q", msg, tc.want)
 			}
@@ -238,9 +238,68 @@ func TestBuilderPlanValidate_RestrictedModeNeedsEmailAuth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	msg := toolMsg(t, plan.Validate(bplExisting(), false))
+	msg := toolMsg(t, plan.Validate(bplExisting(), false, false))
 	if !strings.Contains(msg, "toggle_auth") {
 		t.Errorf("the error must tell the model to enable email auth first: %q", msg)
+	}
+}
+
+// With require_rls_default on, a new table is created restricted, so the agent
+// cannot declare it public; without email auth the default does not apply.
+func TestBuilderPlanValidate_RequireRLSDefault(t *testing.T) {
+	public, err := ParseBuilderPlan(json.RawMessage(bplPlan("x", bplTable("a", "public", "r"))))
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg := toolMsg(t, public.Validate(bplExisting(), true, true))
+	if !strings.Contains(msg, "restricted by default") || !strings.Contains(msg, "operations[0]") {
+		t.Errorf("error = %q", msg)
+	}
+	if err := public.Validate(bplExisting(), false, true); err != nil {
+		t.Errorf("without email auth the default does not apply: %v", err)
+	}
+	owner, err := ParseBuilderPlan(json.RawMessage(bplPlan("x", bplTable("a", "owner", "r"), bplMode("a", "owner"))))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := owner.Validate(bplExisting(), true, true); err != nil {
+		t.Errorf("owner under the default: %v", err)
+	}
+}
+
+// The plan schema is valid JSON, takes its operation from propose_backend_change
+// (same kinds) and requires the access declaration on add_table.
+func TestProposeBackendPlanSchema(t *testing.T) {
+	var s struct {
+		Properties struct {
+			Operations struct {
+				MaxItems int `json:"maxItems"`
+				Items    struct {
+					Properties struct {
+						Kind     struct{ Enum []string } `json:"kind"`
+						AddTable struct {
+							Required []string `json:"required"`
+						} `json:"add_table"`
+					} `json:"properties"`
+				} `json:"items"`
+			} `json:"operations"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal(proposeBackendPlanSchema, &s); err != nil {
+		t.Fatalf("schema is not valid JSON: %v", err)
+	}
+	ops := s.Properties.Operations
+	if ops.MaxItems != builderPlanMaxOps {
+		t.Errorf("maxItems = %d", ops.MaxItems)
+	}
+	if len(ops.Items.Properties.Kind.Enum) != len(builderOperationKinds) {
+		t.Errorf("kinds = %v, want the %d builder kinds", ops.Items.Properties.Kind.Enum, len(builderOperationKinds))
+	}
+	if req := strings.Join(ops.Items.Properties.AddTable.Required, ","); !strings.Contains(req, "access") || !strings.Contains(req, "access_reason") {
+		t.Errorf("add_table required = %s", req)
+	}
+	if strings.Contains(proposeBackendChangeSchema, "access_reason") {
+		t.Error("building the plan schema must not change propose_backend_change's schema")
 	}
 }
 
@@ -254,7 +313,7 @@ func TestBuilderPlanValidate_DoesNotModifyTheTables(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_ = plan.Validate(tables, true)
+	_ = plan.Validate(tables, true, false)
 	after, _ := json.Marshal(tables)
 	if !reflect.DeepEqual(before, after) {
 		t.Errorf("Validate changed its input:\n%s\n%s", before, after)

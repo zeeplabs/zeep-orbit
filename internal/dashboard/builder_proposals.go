@@ -1,7 +1,8 @@
 package dashboard
 
 // builder_proposals.go — confirm / reject a schema proposal (ai-frontend-builder
-// T27, AFB-12). A turn that called propose_backend_change is paused in
+// T27, AFB-12; plans: ai-builder-backend B06). A turn that called
+// propose_backend_change or propose_backend_plan is paused in
 // 'awaiting_confirmation' (internal/agent loop); these routes are how the owner
 // resolves it. Methods of *BuilderHandler, mounted by the router under
 // /dashboard behind RequireAuth (and the AI chat limiter, they mutate):
@@ -27,6 +28,12 @@ package dashboard
 // A proposal the app refuses (validation, duplicate name, ...) is not a server
 // failure: the safe message goes to the user (400) AND to the model as an error
 // tool result, and the turn resumes so the agent can adapt.
+//
+// A plan is re-validated against the schema at confirm time (it may have
+// changed while the card was open; a plan that no longer fits is a 400 and the
+// turn stays paused so the user can reject it), then applied in order, stopping
+// at the first failure. It is not atomic: the model is told which operations
+// were applied, which one failed and which were not touched.
 
 import (
 	"context"
@@ -40,6 +47,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/zeeplabs/zeep-orbit/internal/agent/store"
+	"github.com/zeeplabs/zeep-orbit/internal/agent/tools"
 	"github.com/zeeplabs/zeep-orbit/internal/provisioner"
 )
 
@@ -54,6 +62,7 @@ const (
 	builderProposalBusyMsg     = "proposal is being resolved, try again in a moment"
 	builderForbiddenMsg        = "forbidden"
 	builderBackendNotFoundMsg  = "backend app not found"
+	builderPlanStaleMsg        = "the backend schema changed since this plan was proposed; reject it and ask the agent to re-plan"
 	builderProposalRejectedMsg = "The user rejected this proposal (rejected by user). It was NOT applied. Do not retry the same change; ask the user what they want instead, or continue without it."
 )
 
@@ -86,8 +95,9 @@ func (h *BuilderHandler) resolveProposal(ctx context.Context, userID, sessionID,
 type BuilderProposalView struct {
 	ToolCallID string `json:"tool_call_id"`
 	Name       string `json:"name"`
-	// Operation is the model's propose_backend_change arguments: {"operation":
-	// {"kind": ..., "<kind>": {...}}}. Schema names only; no row data.
+	// Operation is the model's arguments: for propose_backend_change
+	// {"operation": {"kind": ..., "<kind>": {...}}}, for propose_backend_plan
+	// {"summary": ..., "operations": [...]}. Schema names only; no row data.
 	Operation json.RawMessage `json:"operation"`
 }
 
@@ -104,6 +114,10 @@ func newBuilderProposalView(t *store.Turn) *BuilderProposalView {
 	return &BuilderProposalView{ToolCallID: p.ToolCallID, Name: p.Name, Operation: p.Arguments}
 }
 
+// errBuilderPlanStale: the stored plan no longer validates against the schema
+// at confirm time. Nothing is applied and the turn stays paused (400).
+var errBuilderPlanStale = errors.New("dashboard: builder plan no longer matches the schema")
+
 // builderProposalResult is the body of the confirm and reject routes.
 type builderProposalResult struct {
 	// Applied is true when the change was applied (or had been before).
@@ -111,6 +125,9 @@ type builderProposalResult struct {
 	// Rejected is true for a rejected proposal.
 	Rejected bool   `json:"rejected,omitempty"`
 	Kind     string `json:"kind,omitempty"`
+	// AppliedCount and Total describe a confirmed plan (kind "plan").
+	AppliedCount int `json:"applied_count,omitempty"`
+	Total        int `json:"total,omitempty"`
 	// AlreadyResolved marks a repeated request that did nothing.
 	AlreadyResolved bool             `json:"already_resolved,omitempty"`
 	Turn            *BuilderTurnView `json:"turn,omitempty"`
@@ -189,6 +206,8 @@ func (h *BuilderHandler) ConfirmProposal(w http.ResponseWriter, r *http.Request)
 		kind     string
 		userMsg  string // set when the app refused the change (400)
 		applyErr error  // unexpected failure (500, turn stays paused)
+		plan     *BuilderPlan
+		outcome  builderPlanOutcome
 	)
 	resolved, err := h.resolveProposal(r.Context(), user.ID, sess.ID, turn.ID,
 		func(ctx context.Context, p store.PendingProposal) (*store.ProposalResolution, error) {
@@ -196,6 +215,43 @@ func (h *BuilderHandler) ConfirmProposal(w http.ResponseWriter, r *http.Request)
 			payload := map[string]any{"tool_call_id": p.ToolCallID}
 			res.EventPayload = payload
 
+			if p.Name == ToolProposeBackendPlan {
+				kind = "plan"
+				payload["kind"] = "plan"
+				var perr error
+				plan, perr = ParseBuilderPlan(p.Arguments)
+				if perr != nil {
+					userMsg = "the proposal is malformed."
+					res.IsError, res.Content = true, "The plan could not be applied: it is malformed."
+					payload["applied"] = false
+					return res, nil
+				}
+				if err := h.revalidatePlan(ctx, user, sess.BackendAppID, plan, role); err != nil {
+					return nil, err
+				}
+				var aerr error
+				outcome, aerr = h.dashboard.applyBuilderPlan(ctx, user, sess.BackendAppID, plan)
+				if aerr != nil {
+					if !errors.Is(aerr, ErrForbidden) {
+						applyErr = aerr
+					}
+					return nil, aerr
+				}
+				applied = outcome.FailedIndex < 0
+				payload["applied"] = applied
+				payload["applied_count"] = outcome.Applied
+				payload["total"] = len(plan.Ops)
+				payload["ops"] = builderPlanEventOps(plan)
+				payload["public_tables"] = builderPlanPublicTables(plan, outcome.Applied)
+				res.Content = builderPlanResultText(plan, outcome)
+				if !applied {
+					payload["failed_index"] = outcome.FailedIndex
+					res.IsError = true
+					userMsg = fmt.Sprintf("applied %d of %d operations; operation %d (%s) failed: %s",
+						outcome.Applied, len(plan.Ops), outcome.FailedIndex+1, builderOpLabel(plan.Ops[outcome.FailedIndex].Op), outcome.FailedMsg)
+				}
+				return res, nil
+			}
 			if p.Name != ToolProposeBackendChange {
 				userMsg = "the proposal is not a backend change."
 				res.IsError, res.Content = true, "The proposal could not be applied: it is not a backend change."
@@ -263,6 +319,14 @@ func (h *BuilderHandler) ConfirmProposal(w http.ResponseWriter, r *http.Request)
 	case errors.Is(err, ErrForbidden):
 		h.writeError(w, http.StatusForbidden, builderForbiddenMsg)
 		return
+	case errors.Is(err, errBuilderPlanStale):
+		msg := builderPlanStaleMsg
+		var stale *builderPlanStaleError
+		if errors.As(err, &stale) {
+			msg += " (" + stale.reason + ")"
+		}
+		h.writeError(w, http.StatusBadRequest, msg)
+		return
 	default:
 		if applyErr != nil {
 			err = applyErr
@@ -274,16 +338,61 @@ func (h *BuilderHandler) ConfirmProposal(w http.ResponseWriter, r *http.Request)
 	if h.poke != nil {
 		h.poke()
 	}
-	h.audit(r.Context(), user, "builder.proposal.confirm", sess.ID, sess.Title,
-		map[string]any{"turn_seq": turn.Seq, "kind": kind, "applied": applied}, r.RemoteAddr)
+	details := map[string]any{"turn_seq": turn.Seq, "kind": kind, "applied": applied}
+	if plan != nil {
+		// Kinds and counts only: never table contents or column defaults.
+		details["total"] = len(plan.Ops)
+		details["applied_count"] = outcome.Applied
+		details["kinds"] = builderPlanKindCounts(plan)
+	}
+	h.audit(r.Context(), user, "builder.proposal.confirm", sess.ID, sess.Title, details, r.RemoteAddr)
 
 	if userMsg != "" {
 		h.writeError(w, http.StatusBadRequest, userMsg)
 		return
 	}
 	view := newBuilderTurnView(resolved)
-	writeJSON(w, http.StatusOK, builderProposalResult{Applied: true, Kind: kind, Turn: &view})
+	result := builderProposalResult{Applied: true, Kind: kind, Turn: &view}
+	if plan != nil {
+		result.AppliedCount, result.Total = outcome.Applied, len(plan.Ops)
+	}
+	writeJSON(w, http.StatusOK, result)
 }
+
+// revalidatePlan checks a stored plan again at confirm time: the role it needs
+// (admin for add_policy, checked before anything runs) and the schema, which
+// may have changed while the card was open. A plan that no longer fits is
+// errBuilderPlanStale; nothing is applied and the turn stays paused.
+func (h *BuilderHandler) revalidatePlan(ctx context.Context, user *DashboardUser, appID string, plan *BuilderPlan, role AppRole) error {
+	for _, po := range plan.Ops {
+		if po.Op.Kind == "add_policy" && !role.CanManage() {
+			return ErrForbidden
+		}
+	}
+	app, _, err := GetApp(ctx, h.pool, appID, user)
+	if err != nil {
+		return fmt.Errorf("dashboard: builder: load app to revalidate plan: %w", err)
+	}
+	sysCfg, err := GetSystemConfig(ctx, h.pool)
+	if err != nil {
+		return fmt.Errorf("dashboard: builder: load system config to revalidate plan: %w", err)
+	}
+	if err := plan.Validate(app.Tables, app.AuthEmailEnabled, sysCfg.RequireRLSDefault); err != nil {
+		var te *tools.ToolError
+		if errors.As(err, &te) {
+			return &builderPlanStaleError{reason: te.Msg}
+		}
+		return errBuilderPlanStale
+	}
+	return nil
+}
+
+// builderPlanStaleError is errBuilderPlanStale with the validator's reason,
+// which is a model-facing tool message and safe to show.
+type builderPlanStaleError struct{ reason string }
+
+func (e *builderPlanStaleError) Error() string { return errBuilderPlanStale.Error() + ": " + e.reason }
+func (e *builderPlanStaleError) Unwrap() error { return errBuilderPlanStale }
 
 // RejectProposal handles POST .../turns/{turn}/reject.
 func (h *BuilderHandler) RejectProposal(w http.ResponseWriter, r *http.Request) {

@@ -314,7 +314,7 @@ func TestLintLock(t *testing.T) {
 
 func TestKnownToolName(t *testing.T) {
 	for _, ok := range []string{"read_file", "write_file", "edit_file", "list_dir", "run_build", "get_build_logs",
-		"propose_backend_change", "load_skill", "orbit_get_app_schema", "orbit_list_auth_providers"} {
+		"propose_backend_change", "propose_backend_plan", "load_skill", "orbit_get_app_schema", "orbit_list_auth_providers"} {
 		if !KnownToolName(ok) {
 			t.Errorf("%s should be known", ok)
 		}

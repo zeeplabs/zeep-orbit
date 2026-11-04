@@ -88,6 +88,7 @@ B12 credential guard (independent, P2)        B13 docs + CHANGELOG (last)       
 - **Where**: `internal/dashboard/builder_proposals.go`, `builder_plan.go`.
 - **Done when**: integration tests: all applied; failure in the middle reports exactly the split; schema drift gives 400 with the turn still paused; RBAC loss; concurrent double confirm applies once; reject applies nothing; audit has no row data; `propose_backend_change` tests still green.
 - **Requirements**: BBE-07, BBE-08, BBE-09, BBE-10. **Depends**: B05. **Tests**: integration. **Gate**: Full.
+- **Status**: Done. Notes: (1) `system_config.require_rls_default` is modeled by `Validate` (third argument): with it on and email auth on, a table declared `public` is refused, so the agent cannot opt out of the operator default. (2) The confirmed-plan event payload already carries `public_tables` for B09. (3) `proposal_confirmed` is not in `builderEventFields`, so the events API serves only its scalars (`kind`, `applied`, `applied_count`, `total`, `failed_index`); B08 must whitelist `ops` to show them. (4) A 400 for a plan that no longer fits the schema appends the validator's (model-safe) reason. (5) An unexpected error in the middle of a plan leaves the operations before it applied and the turn paused (500), like the single-change path; a later confirm then fails revalidation and the user rejects.
 
 ### B07 — Approval mode `auto` (P2)
 - **What**: setting wired into the plan handler; `Result.Resolved` (or the alternative chosen after reading `loop.go:453`) so the loop does not pause; inline apply through the same routine; only for `backend_origin = builder`; audit `builder.proposal.auto`; a test asserts the kinds allowed in auto are additive only.
@@ -102,7 +103,7 @@ B12 credential guard (independent, P2)        B13 docs + CHANGELOG (last)       
 - **Requirements**: BBE-07, BBE-08. **Depends**: B06. **Gate**: Frontend.
 
 ### B09 — Publish check on undeclared open tables
-- **What**: record `public_tables` in the confirmed-plan event payload (B06 emits it; add here if B06 is already done); `undeclaredOpenTables` (table metadata plus confirmed-plan events, no row reads) and the decision table of design §7 in `Publish`; `409 backend_open_tables` only under `block` for builder backends; `warnings.open_tables` otherwise. First **[verify]** `system_config.require_rls_default` and how session events are queried.
+- **What**: read `public_tables` from the confirmed-plan event payload (emitted by B06); `undeclaredOpenTables` (table metadata plus confirmed-plan events, no row reads) and the decision table of design §7 in `Publish`; `409 backend_open_tables` only under `block` for builder backends; `warnings.open_tables` otherwise. First **[verify]** `system_config.require_rls_default` and how session events are queried.
 - **Where**: `internal/dashboard/builder_publish.go`, new `builder_publish_gate.go`.
 - **Done when**: unit tests for the decision table; integration tests for builder + warn (default), builder + block, existing; a table declared public by a confirmed plan is not listed; a table from the single-op tool is listed; a partially applied plan only declares tables that were applied; no row read (asserted by query inspection or by using only metadata functions).
 - **Requirements**: BBE-13, BBE-14. **Depends**: B01. **Tests**: unit + integration. **Gate**: Full.

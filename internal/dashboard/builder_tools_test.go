@@ -212,6 +212,7 @@ func TestBuilderTools_OwnerLostAccess_ToolError(t *testing.T) {
 		{ToolOrbitGetAppSchema, `{}`},
 		{ToolOrbitListAuthProviders, `{}`},
 		{ToolProposeBackendChange, valid},
+		{ToolProposeBackendPlan, `{"summary":"x","operations":[{"kind":"add_column","add_column":{"table":"tasks","column":{"name":"done","type":"boolean"}}}]}`},
 	} {
 		res, err := e.call(t, tc.tool, tc.args)
 		if err != nil {
@@ -336,5 +337,19 @@ func TestRegisterBuilderTools_RequiresDeps(t *testing.T) {
 	}
 	if err := RegisterBuilderTools(tools.NewRegistry(), BuilderToolDeps{}); err == nil {
 		t.Fatal("missing pool/session reader must be rejected")
+	}
+}
+
+func TestBuilderTools_ProposeBackendPlan_Registered(t *testing.T) {
+	e := newBuilderToolsEnv(t)
+	if k, ok := e.reg.Kind(ToolProposeBackendPlan); !ok || k != tools.KindProposal {
+		t.Fatalf("propose_backend_plan must be KindProposal, got %v (registered=%v)", k, ok)
+	}
+	res, err := e.call(t, ToolProposeBackendPlan, `{"summary":"done flag","operations":[{"kind":"add_column","add_column":{"table":"tasks","column":{"name":"done","type":"boolean"}}}]}`)
+	if err != nil || res.IsError {
+		t.Fatalf("want success, got res=%+v err=%v", res, err)
+	}
+	if !strings.Contains(res.Content, "NOT been applied") {
+		t.Fatalf("result must tell the model nothing was applied: %s", res.Content)
 	}
 }

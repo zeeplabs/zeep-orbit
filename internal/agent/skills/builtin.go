@@ -128,11 +128,13 @@ var registeredToolNames = map[string]bool{
 	tools.ToolRunBuild:       true,
 	tools.ToolGetBuildLogs:   true,
 	"propose_backend_change": true,
+	"propose_backend_plan":   true,
 	ToolLoadSkill:            true,
 }
 
 // KnownToolName reports whether name is a tool the builder registers:
-// workspace tools, orbit_* read tools, propose_backend_change or load_skill.
+// workspace tools, orbit_* read tools, propose_backend_change, propose_backend_plan or
+// load_skill.
 func KnownToolName(name string) bool {
 	return registeredToolNames[name] || strings.HasPrefix(name, "orbit_")
 }

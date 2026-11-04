@@ -55,7 +55,8 @@ type BuilderToolDeps struct {
 }
 
 // RegisterBuilderTools registers orbit_get_app_schema,
-// orbit_list_auth_providers and propose_backend_change on reg.
+// orbit_list_auth_providers, propose_backend_change and propose_backend_plan on
+// reg.
 func RegisterBuilderTools(reg *tools.Registry, deps BuilderToolDeps) error {
 	if reg == nil {
 		return errors.New("dashboard: builder tools: registry is required")
@@ -100,6 +101,13 @@ func (b *builderTools) tools() []tools.Tool {
 			Schema:      json.RawMessage(proposeBackendChangeSchema),
 			Kind:        tools.KindProposal,
 			Handler:     b.proposeBackendChange,
+		},
+		{
+			Name:        ToolProposeBackendPlan,
+			Description: "Propose several backend changes as one ordered plan (at most 30 operations), for example every table a new feature needs. It does NOT apply anything: the turn pauses until the user confirms or rejects the whole plan in the dashboard. Each operation has the same shape as in propose_backend_change; order them so each one only uses tables and columns that exist or that an earlier operation creates. Every add_table must declare \"access\" (public, owner or policy) and a one-line \"access_reason\"; owner needs a set_rls_mode \"owner\" for that table later in the plan, policy needs set_rls_mode \"policy\" plus at least one add_policy.",
+			Schema:      proposeBackendPlanSchema,
+			Kind:        tools.KindProposal,
+			Handler:     b.proposeBackendPlan,
 		},
 	}
 }

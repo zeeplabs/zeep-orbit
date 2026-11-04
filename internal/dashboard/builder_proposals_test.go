@@ -47,6 +47,11 @@ func newBPropEnv(t *testing.T) *bpropEnv {
 	ctx := context.Background()
 
 	e.dash = NewHandler(e.pool, registry.New(), zap.NewNop())
+	// newBHEnv resets zeep_system but not the app's own schema: drop it so
+	// tables and Postgres policies of an earlier run cannot leak into this one.
+	if _, err := e.pool.Exec(ctx, `DROP SCHEMA IF EXISTS `+schemaNameForDB("bprop_app")+` CASCADE`); err != nil {
+		t.Fatalf("drop app schema: %v", err)
+	}
 	app, err := e.dash.CreateAppForUser(ctx, e.owner, AppRequestBody{Name: "bprop_app"}, "test")
 	if err != nil {
 		t.Fatalf("create backend app: %v", err)
@@ -85,6 +90,12 @@ func (e *bpropEnv) useHandler(extra BuilderHandlerConfig) {
 // turn paused on a proposal with the given propose_backend_change arguments.
 func (e *bpropEnv) awaiting(t *testing.T, owner *DashboardUser, args string) (*store.Session, *store.Turn) {
 	t.Helper()
+	return e.awaitingTool(t, owner, ToolProposeBackendChange, args)
+}
+
+// awaitingTool is awaiting for any proposal tool (propose_backend_plan too).
+func (e *bpropEnv) awaitingTool(t *testing.T, owner *DashboardUser, tool, args string) (*store.Session, *store.Turn) {
+	t.Helper()
 	ctx := context.Background()
 	sess, err := e.st.CreateSession(ctx, store.CreateSessionParams{
 		OwnerUserID: owner.ID, BackendAppID: e.appID, Title: "t", TemplateKind: store.TemplateDefault, TemplateVersion: "7",
@@ -112,11 +123,11 @@ func (e *bpropEnv) awaiting(t *testing.T, owner *DashboardUser, args string) (*s
 		}
 	}
 	lease := store.Lease{TurnID: turn.ID, Owner: "w1"}
-	calls := `[{"id":"call_1","name":"propose_backend_change","arguments":` + args + `}]`
+	calls := `[{"id":"call_1","name":"` + tool + `","arguments":` + args + `}]`
 	if _, err := e.st.AppendMessage(ctx, lease, store.NewMessage{Role: store.RoleAssistant, ToolCalls: json.RawMessage(calls)}); err != nil {
 		t.Fatalf("AppendMessage: %v", err)
 	}
-	pending := `{"tool_call_id":"call_1","name":"propose_backend_change","arguments":` + args + `}`
+	pending := `{"tool_call_id":"call_1","name":"` + tool + `","arguments":` + args + `}`
 	if err := e.st.FinishTurn(ctx, lease, store.FinishParams{Status: store.TurnAwaitingConfirmation, PendingProposal: json.RawMessage(pending)}); err != nil {
 		t.Fatalf("FinishTurn: %v", err)
 	}

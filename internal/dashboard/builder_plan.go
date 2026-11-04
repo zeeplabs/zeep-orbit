@@ -5,8 +5,8 @@ package dashboard
 // ordered list of the same operations propose_backend_change takes, approved
 // by the user once. This file validates a plan; it applies nothing.
 //
-// The tool is registered together with its confirm path (B06), so no build of
-// the product shows the model a proposal the user cannot confirm.
+// Confirm (builder_proposals.go) re-parses and re-validates the stored plan
+// against the schema at that moment, then applies it with applyBuilderPlan.
 
 import (
 	"context"
@@ -34,6 +34,49 @@ const (
 	builderAccessPolicy     = "policy"
 	builderAccessPolicyMode = "policy"
 )
+
+// proposeBackendPlanSchema is the JSON schema of propose_backend_plan. Its
+// operation object is taken from propose_backend_change's schema, plus the
+// access declaration of add_table, so the two tools cannot drift apart.
+var proposeBackendPlanSchema = buildProposeBackendPlanSchema()
+
+func buildProposeBackendPlanSchema() json.RawMessage {
+	var change struct {
+		Properties struct {
+			Operation map[string]any `json:"operation"`
+		} `json:"properties"`
+		Defs map[string]any `json:"$defs"`
+	}
+	if err := json.Unmarshal([]byte(proposeBackendChangeSchema), &change); err != nil {
+		panic("dashboard: propose_backend_change schema: " + err.Error())
+	}
+	operation := change.Properties.Operation
+	operation["description"] = "One backend operation, shaped as in propose_backend_change."
+	addTable := operation["properties"].(map[string]any)["add_table"].(map[string]any)
+	props := addTable["properties"].(map[string]any)
+	props["access"] = map[string]any{
+		"type": "string", "enum": []string{builderAccessPublic, builderAccessOwner, builderAccessPolicy},
+		"description": "Who can see the rows: public (anyone with access to the app reads every row), owner (each user sees only their own rows) or policy (row policies decide).",
+	}
+	props["access_reason"] = map[string]any{"type": "string", "maxLength": builderAccessReasonMax, "description": "One line saying why the table has that access."}
+	addTable["required"] = []string{"name", "columns", "access", "access_reason"}
+
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"summary":    map[string]any{"type": "string", "maxLength": builderPlanMaxSummary, "description": "One or two sentences saying what this plan builds."},
+			"operations": map[string]any{"type": "array", "minItems": 1, "maxItems": builderPlanMaxOps, "items": operation},
+		},
+		"required":             []string{"summary", "operations"},
+		"additionalProperties": false,
+		"$defs":                change.Defs,
+	}
+	raw, err := json.Marshal(schema)
+	if err != nil {
+		panic("dashboard: propose_backend_plan schema: " + err.Error())
+	}
+	return raw
+}
 
 // BuilderPlanOp is one operation of a plan. Access and AccessReason are set
 // for add_table only: the agent's declared decision about who can see the
@@ -143,10 +186,11 @@ func parseTableAccess(operation json.RawMessage) (access, reason string, err err
 // does to it. tables is not modified; authEmail is the app's current email
 // auth flag. Nothing is written.
 //
-// It does not model system_config.require_rls_default, which can give a new
-// table a restricted access mode when none is requested; apply-time behavior
-// for that case is covered with the apply path (B06).
-func (p *BuilderPlan) Validate(tables []AppTableRow, authEmail bool) error {
+// requireRLSDefault is system_config.require_rls_default: with it on (and email
+// auth on at that point of the plan) a new table is created restricted, exactly
+// as CreateAppTableForUser does, so a table declared public is refused. The
+// agent cannot opt a table out of the operator's default.
+func (p *BuilderPlan) Validate(tables []AppTableRow, authEmail, requireRLSDefault bool) error {
 	state := make([]AppTableRow, len(tables))
 	copy(state, tables)
 
@@ -188,7 +232,11 @@ func (p *BuilderPlan) Validate(tables []AppTableRow, authEmail bool) error {
 
 		switch op.Kind {
 		case "add_table":
-			row := AppTableRow{Name: op.AddTable.Name, Columns: planColumnsToConfig(op.AddTable.Columns)}
+			row := AppTableRow{Name: op.AddTable.Name, Columns: planColumnsToConfig(op.AddTable.Columns),
+				RLS: resolveTableRLS("", requireRLSDefault, authEmail)}
+			if row.RLS != "" && po.Access == builderAccessPublic {
+				return fail("this server creates new tables restricted by default, so table %q cannot be public; declare owner or policy and set its access mode", row.Name)
+			}
 			if err := validateTableInput(row, authEmail, state); err != nil {
 				return fail("%s", err.Error())
 			}
@@ -371,9 +419,137 @@ func (b *builderTools) proposeBackendPlan(ctx context.Context, call tools.Call) 
 			return tools.Result{}, tools.ToolErrorf("%s", builderPolicyAdminMsg)
 		}
 	}
-	if err := plan.Validate(app.Tables, app.AuthEmailEnabled); err != nil {
+	sysCfg, err := GetSystemConfig(ctx, b.deps.Pool)
+	if err != nil {
+		return tools.Result{}, fmt.Errorf("dashboard: builder tools: load system config for plan: %w", err)
+	}
+	if err := plan.Validate(app.Tables, app.AuthEmailEnabled, sysCfg.RequireRLSDefault); err != nil {
 		return tools.Result{}, err
 	}
 	return tools.Result{Content: fmt.Sprintf(
 		"Plan recorded (%d operations) and sent to the user for confirmation. It has NOT been applied. Stop here and wait: the user will confirm or reject the whole plan in the dashboard.", len(plan.Ops))}, nil
+}
+
+// builderPlanOutcome is what applying a plan did: how many operations ran,
+// and the position and safe message of the one that failed, if any.
+type builderPlanOutcome struct {
+	Applied     int
+	FailedIndex int // -1 when every operation applied
+	FailedMsg   string
+}
+
+// applyBuilderPlan applies the operations in order through the edit chat's
+// path and stops at the first failure. It is not atomic: operations before
+// the failing one stay applied (spec assumption 5). A failure the app reports
+// with a safe message ends in the outcome; any other error (infrastructure,
+// lost access) is returned as is, with the outcome of what ran before it.
+func (h *Handler) applyBuilderPlan(ctx context.Context, user *DashboardUser, appID string, plan *BuilderPlan) (builderPlanOutcome, error) {
+	out := builderPlanOutcome{FailedIndex: -1}
+	for i, po := range plan.Ops {
+		if _, err := h.applyEditOperation(ctx, user, appID, po.Op, builderAuditOrigin); err != nil {
+			if errors.Is(err, ErrForbidden) {
+				return out, err
+			}
+			msg, safe := builderApplyErrorMessage(err)
+			if !safe {
+				return out, err
+			}
+			out.FailedIndex, out.FailedMsg = i, msg
+			return out, nil
+		}
+		out.Applied++
+	}
+	return out, nil
+}
+
+// builderOpTable is the table an operation targets ("" for toggle_auth).
+func builderOpTable(op *ai.EditOperation) string {
+	switch {
+	case op.AddTable != nil:
+		return op.AddTable.Name
+	case op.AddColumn != nil:
+		return op.AddColumn.Table
+	case op.AddIndex != nil:
+		return op.AddIndex.Table
+	case op.AddReference != nil:
+		return op.AddReference.Table
+	case op.AddForeignKey != nil:
+		return op.AddForeignKey.Table
+	case op.RemoveForeignKey != nil:
+		return op.RemoveForeignKey.Table
+	case op.SetRLSMode != nil:
+		return op.SetRLSMode.Table
+	case op.AddPolicy != nil:
+		return op.AddPolicy.Table
+	}
+	return ""
+}
+
+// builderOpLabel names an operation for the model: "add_table notes".
+func builderOpLabel(op *ai.EditOperation) string {
+	if t := builderOpTable(op); t != "" {
+		return op.Kind + " " + t
+	}
+	return op.Kind
+}
+
+// builderPlanResultText is the tool result the model gets after a confirmed
+// plan ran (design §4): what was applied, what failed and what was not touched.
+func builderPlanResultText(plan *BuilderPlan, out builderPlanOutcome) string {
+	labels := make([]string, 0, out.Applied)
+	for _, po := range plan.Ops[:out.Applied] {
+		labels = append(labels, builderOpLabel(po.Op))
+	}
+	total := len(plan.Ops)
+	if out.FailedIndex < 0 {
+		return fmt.Sprintf("The user confirmed the plan and all %d operations were applied: %s. The backend schema changed: call orbit_get_app_schema to see it before writing code that uses it.",
+			total, strings.Join(labels, ", "))
+	}
+	var b strings.Builder
+	if out.Applied > 0 {
+		fmt.Fprintf(&b, "The user confirmed the plan. Applied %d of %d operations: %s.\n", out.Applied, total, strings.Join(labels, ", "))
+	} else {
+		fmt.Fprintf(&b, "The user confirmed the plan. None of its %d operations were applied.\n", total)
+	}
+	n := out.FailedIndex + 1
+	fmt.Fprintf(&b, "Operation %d (%s) failed: %s ", n, builderOpLabel(plan.Ops[out.FailedIndex].Op), out.FailedMsg)
+	if n == total {
+		fmt.Fprintf(&b, "Operation %d was NOT applied.\n", n)
+	} else {
+		fmt.Fprintf(&b, "Operations %d to %d were NOT applied.\n", n, total)
+	}
+	b.WriteString("Call orbit_get_app_schema, then propose a plan for the remaining changes only.")
+	return b.String()
+}
+
+// builderPlanEventOps is the timeline view of a plan: kinds and tables only,
+// never column defaults or row data.
+func builderPlanEventOps(plan *BuilderPlan) []map[string]string {
+	ops := make([]map[string]string, 0, len(plan.Ops))
+	for _, po := range plan.Ops {
+		ops = append(ops, map[string]string{"kind": po.Op.Kind, "table": builderOpTable(po.Op)})
+	}
+	return ops
+}
+
+// builderPlanPublicTables lists the tables the plan declared public among the
+// first applied operations: the publish check (B09) reads it from the
+// confirmed-plan event to tell a deliberately public table from a forgotten one.
+func builderPlanPublicTables(plan *BuilderPlan, applied int) []string {
+	out := []string{}
+	for _, po := range plan.Ops[:applied] {
+		if po.Op.Kind == "add_table" && po.Access == builderAccessPublic {
+			out = append(out, po.Op.AddTable.Name)
+		}
+	}
+	return out
+}
+
+// builderPlanKindCounts counts the operations of a plan by kind, for the audit.
+func builderPlanKindCounts(plan *BuilderPlan) map[string]int {
+	counts := map[string]int{}
+	for _, po := range plan.Ops {
+		counts[po.Op.Kind]++
+	}
+	return counts
 }
