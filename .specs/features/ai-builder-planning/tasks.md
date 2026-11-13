@@ -11,7 +11,7 @@ Commits only when the user asks (AGENTS.md §2); one commit per task when author
 **Spec**: `.specs/features/ai-builder-planning/spec.md`
 **Design**: `.specs/features/ai-builder-planning/design.md`
 **Parent**: `.specs/features/ai-frontend-builder/`
-**Status**: Approved by the maintainer on 2026-11-13 with the defaults of design §12. In execution on `feat/ai-frontend-builder`. Done: P01–P10. The DDL of P01 is still shown and confirmed before it is applied.
+**Status**: Approved by the maintainer on 2026-11-13 with the defaults of design §12. In execution on `feat/ai-frontend-builder`. Done: P01–P11. The DDL of P01 is still shown and confirmed before it is applied.
 
 ---
 
@@ -122,6 +122,7 @@ P11 docs + CHANGELOG (last)        P12 local end-to-end run        P13 real-mode
 - **What**: `docs/docs/ai-frontend-builder.md` (briefing, plan, brief, milestones, the setting, the estimate and its limits, limitations of design §11); README feature line and the three translations if the feature table changes; CHANGELOG entries are added by each task, this task reviews them and states the behavior change of the default.
 - **Done when**: Docusaurus build green; translations mirrored.
 - **Requirements**: all. **Depends**: P10.
+- **Status**: Done 2026-11-13. `docs/docs/ai-frontend-builder.md` gains a "Planning" section (the setting and its three values, the behavior change on upgrade, the `required` → `off` transition, plan mode and its tool set, questions and their bounds, the plan card and its size limits, brief versions, the prompt section and `ORBIT_BRIEF.md`, milestones and "Continue", "Plan first", the estimate with its method and limits, data and audit, the API), the planning row in the settings table, the two tools in the tool list and three known limitations (revert keeps the brief, question rounds count per turn, real providers and a history with tools that are not offered). README: the AI Frontend Builder row mentions the plan and the section gains a "Plan before building" bullet, mirrored in the three translations. CHANGELOG: the planning entry is retitled and opens with the behavior change of the default. Docusaurus build green.
 
 ### P12 — Local end-to-end run
 - **What**: scripted mock model on the local stack: zero-question path, three rounds then the bound, skip, revise, back to questions, approve and build, continue to the last milestone, plan first, `off`, `suggested`, restart of the server with a pending round, budget ending during the briefing. Screenshots of the cards in both languages.

@@ -96,7 +96,7 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/myapp/tasks
 | **Custom Domains**       | Configure custom domain + DNS CNAME for each frontend    |
 | **Sync Credentials**     | Per-app deploy keys for local↔repo sync                  |
 | **Recent Deploys**       | Live list of the latest Render deploys across your frontend apps |
-| **AI Frontend Builder**  | Describe a frontend in a chat, preview it live against your backend app, then publish it (opt-in, needs the builder service) |
+| **AI Frontend Builder**  | Describe a frontend in a chat, approve the plan it proposes, preview it live against your backend app, then publish it (opt-in, needs the builder service) |
 
 ### Platform
 
@@ -312,6 +312,7 @@ Once connected, deploy keys are managed automatically per frontend app, and repo
 The AI Frontend Builder lets a user describe a frontend in a chat and watch it run in a live preview that is already wired to one of their backend apps. When it looks right, the user publishes it through the same GitHub + Render pipeline as any other frontend app, or downloads the source as a ZIP.
 
 - **Off by default.** It runs only when `BUILDER_URL` is set on Orbit and a superadmin enables it under **Integrations → AI Builder**. With `BUILDER_URL` empty, no worker starts and the builder routes answer `503`.
+- **Plan before building.** By default a new session starts with a few questions and a build plan for the user to approve. The approved plan is kept as the session's brief, and the app is built one milestone at a time, with an estimated token and cost range from past builds. A superadmin can make planning optional or turn it off.
 - **Your own LLM.** A superadmin configures an `openai`, `anthropic` or `openai_compatible` provider (the latter takes a base URL, for example Ollama, vLLM, Azure OpenAI or a gateway) and sets token budgets, plus optional cost budgets from a price table they maintain. Tokens and cost are shown per step, per session and in a usage report. The key stays in Orbit; the builder never receives it.
 - **Isolated execution.** The agent loop runs in Orbit. A separate builder service runs the generated code and `npm install`, with no route to Postgres or the internet; an npm registry proxy is its only way out. The Docker socket is never mounted. How strong the isolation is depends on the platform: Kubernetes `NetworkPolicy` needs a CNI that enforces it, and Easypanel/Swarm isolation has not been verified.
 - **Backend changes need approval.** The agent reads the linked backend app's schema, and any table, column or policy change is a proposal the user must confirm.

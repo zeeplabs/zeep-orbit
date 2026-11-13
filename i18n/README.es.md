@@ -94,7 +94,7 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/miapp/tareas
 | **Dominios personalizados** | Configura dominio propio + DNS CNAME para cada frontend |
 | **Credenciales de sincronización** | Deploy keys por app para sincronizar local↔repo   |
 | **Deploys recientes**    | Lista en vivo de los últimos deploys en Render de tus apps frontend |
-| **AI Frontend Builder**  | Describe un frontend en un chat, míralo en un preview en vivo conectado a tu app backend y publícalo (opcional, requiere el servicio builder) |
+| **AI Frontend Builder**  | Describe un frontend en un chat, aprueba el plan que propone, míralo en un preview en vivo conectado a tu app backend y publícalo (opcional, requiere el servicio builder) |
 
 ### Plataforma
 
@@ -310,6 +310,7 @@ Una vez conectado, las deploy keys se gestionan automáticamente por app fronten
 El AI Frontend Builder permite que un usuario describa un frontend en un chat y lo vea funcionando en un preview en vivo, ya conectado a una de sus apps backend. Cuando el resultado esté bien, el usuario lo publica por el mismo pipeline GitHub + Render de cualquier app frontend, o descarga el código fuente en ZIP.
 
 - **Apagado por defecto.** Solo funciona cuando `BUILDER_URL` está definida en Orbit y un superadmin lo habilita en **Integraciones → AI Builder**. Con `BUILDER_URL` vacía, no se inicia ningún worker y las rutas del builder responden `503`.
+- **Plan antes de construir.** Por defecto, una sesión nueva empieza con algunas preguntas y un plan de construcción que el usuario aprueba. El plan aprobado queda como el brief de la sesión, y la app se construye una etapa a la vez, con un rango estimado de tokens y coste basado en construcciones anteriores. Un superadmin puede hacer la planificación opcional o desactivarla.
 - **Tu propio LLM.** Un superadmin configura un proveedor `openai`, `anthropic` u `openai_compatible` (este admite una base URL, por ejemplo Ollama, vLLM, Azure OpenAI o un gateway) y define los límites de tokens, además de límites de coste opcionales basados en una tabla de precios que él mantiene. Los tokens y el coste se muestran por paso, por sesión y en un informe de uso. La clave queda en Orbit; el builder nunca la recibe.
 - **Ejecución aislada.** El loop del agente corre en Orbit. Un servicio builder separado ejecuta el código generado y el `npm install`, sin ruta hacia Postgres ni hacia internet; un proxy de registry npm es la única salida. El socket de Docker nunca se monta. La fuerza del aislamiento depende de la plataforma: la `NetworkPolicy` de Kubernetes requiere un CNI que la aplique, y el aislamiento en Easypanel/Swarm no se ha verificado.
 - **Los cambios en el backend requieren aprobación.** El agente lee el schema de la app backend vinculada, y cualquier cambio de tabla, columna o policy es una propuesta que el usuario debe confirmar.

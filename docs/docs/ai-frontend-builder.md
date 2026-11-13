@@ -27,7 +27,7 @@ Three pieces, all built from this repository:
 - **The registry proxy is the builder's only way out.** It forwards `GET` and `HEAD` requests to the npm upstreams you configure and injects private-registry credentials, so the builder never sees them.
 - **`docker.sock` is never mounted** in any Orbit or builder container, in any shipped manifest.
 - **Turns are queued in Postgres.** A message creates a turn. Any Orbit replica can claim it (row lease, `FOR UPDATE SKIP LOCKED`), so a session survives a replica restart and is never run by two replicas at once. The browser polls an append-only event log with a cursor; there is no streaming.
-- **Everything the agent can do is a fixed tool.** `list_dir`, `read_file`, `write_file`, `edit_file`, `run_build` (`install`, `typecheck`, `lint`, `build` only), `get_build_logs`, `orbit_get_app_schema`, `orbit_list_auth_providers` and `propose_backend_change`. There is no shell tool.
+- **Everything the agent can do is a fixed tool.** `list_dir`, `read_file`, `write_file`, `edit_file`, `run_build` (`install`, `typecheck`, `lint`, `build` only), `get_build_logs`, `orbit_get_app_schema`, `orbit_list_auth_providers` and `propose_backend_change`, plus `ask_user` and `propose_build_plan` while [planning](#planning) is on. There is no shell tool.
 - **Backend changes need confirmation.** The two Orbit read tools are scoped to the session's linked backend app and run with the session owner's permissions. When the agent wants a new table, column or policy, it emits a proposal and the turn pauses. The user confirms or rejects it; a confirmed proposal is applied through the same path as "Edit with AI" (same validation and RBAC, audit origin `ai_builder`) and requires write access on the backend app.
 - **One commit per turn.** After each turn the builder commits the changes, and Orbit stores an incremental `git bundle` of that commit in Postgres (`builder_snapshots`). The builder volume is a cache: if it is lost, Orbit restores the session from those snapshots.
 - **Reverting** restores the working copy to the state after an earlier turn as a *new* commit (history is not rewritten), rebuilds the preview, and makes no model call, so it spends no tokens.
@@ -157,6 +157,7 @@ After deployment, a superadmin completes setup in the dashboard, under **Integra
    | Max steps per turn | `40` | 1 to 200 |
    | Max fix iterations (failed builds per turn) | `3` | 1 to 20 |
    | Max seconds per turn | `600` | 10 to 3600 |
+   | Planning | `required` | `required`, `suggested` or `off` (see [Planning](#planning)) |
 
    Token budgets count every token of a call: input, cached input, cache write and output. **Both token budgets must be greater than zero.** With either one at `0`, the builder reports itself unavailable (`budget_not_configured`) and **Create with AI** is disabled; sending a message to an existing session is refused the same way. If a cap is set back to `0` while a turn is already running, that turn's next model call is refused and the turn ends with a `budget_exceeded` event. The budget is checked before each model call, against what was already recorded, so the call that crosses the limit is the last one. The monthly budget counts the calendar month in UTC. A settings change applies to the next turn without restarting Orbit.
 
@@ -175,6 +176,75 @@ After deployment, a superadmin completes setup in the dashboard, under **Integra
    - **Changes apply on the next turn.** Skills are resolved at the start of every turn and are not pinned to a session (unlike the persona), so turning a skill off or deleting it takes effect for running sessions on their next message. The timeline shows which skills the agent used.
    - **Privacy.** The text of a skill is sent to the configured model provider whenever the agent loads it. Do not put secrets or personal data in a skill. Uploads that contain a recognizable credential (private key, `sk-` and similar API keys, AWS, GitHub, Slack or Google tokens, JWTs) are rejected; this check is a safety net, not a guarantee. Skill changes are audit-logged (`builder.skill.create`, `version`, `enable`, `disable`, `delete`) with the name, version, hash and size, never the text.
    - **API.** `GET`/`POST /dashboard/api/builder/skills` and `GET`/`PATCH`/`DELETE /dashboard/api/builder/skills/{name}`, superadmin only. Errors carry a machine `reason`; validation failures (`400`, `skill_invalid`) add `fields` with one code per field.
+
+## Planning
+
+Before it writes code, the agent can ask the user a few questions and propose a build plan. The approved plan becomes the session's **brief**: the agent reads it on every later turn, and the app is built one milestone at a time. The goal is fewer wrong guesses on the first build, which are the most expensive turns.
+
+### The setting
+
+A superadmin sets **Planning** in **Integrations**, **AI Builder** (`planning_mode` in `PUT /dashboard/api/builder/settings`).
+
+| Value | New session | Later in the session | "Plan first" switch |
+|-------|-------------|----------------------|---------------------|
+| `required` (default) | Starts with questions and a plan to approve. No code is written before the plan is approved. | The agent may ask or propose a plan before a large or unclear change. | Shown |
+| `suggested` | Starts building as before. The agent plans first when the request is new, large or unclear. | Same as `required`. | Shown |
+| `off` | Starts building as before. | The planning tools are not offered. | Hidden |
+
+:::note Behavior change on upgrade
+`required` is also the default for installations that already used the builder: after the upgrade, **new** sessions start with the questions. Sessions that already exist keep building as before, and have no brief until a plan is approved in them. Set **Planning** to `suggested` or `off` to keep the previous behavior.
+:::
+
+Switching from `required` to `off` while a session is still in its questions moves that session to building on its next message. The answers stay in the conversation, which the agent reads, but no brief is created from them. A turn already paused on a question or a plan finishes as it started.
+
+### Questions
+
+While planning, a turn runs in **plan mode**: the agent is offered only the read tools (`list_dir`, `read_file`, `get_build_logs`, `orbit_get_app_schema`, `orbit_list_auth_providers`, and `load_skill` when skills are enabled) and the two planning tools. It cannot change files, run a build or propose a backend change. This is enforced by the agent loop, which refuses any other tool call without running it, not only by the prompt. With an existing backend app, the agent is told to read its schema before asking.
+
+`ask_user` shows a card in the chat with 1 to 4 questions, each with 2 to 5 options (single or multiple choice). The card always adds a text field and **Decide for me**; a question left blank is also decided by the agent. **Send answers** sends the round; **Start building now** sends what was picked and ends the questions, and the agent then proposes the plan with what it has, listing the open points as assumptions.
+
+The agent may ask at most 3 rounds in a plan-mode turn and 1 round in a build turn. Over that, the call is refused and the agent is told to propose the plan. "Back to questions" on the plan card allows one more round.
+
+### Build plan
+
+`propose_build_plan` shows the plan as a card: a summary, the screens, the data (each table with who can read it), the look, the agent's **assumptions** (set apart, because the user did not decide them), what is not included, 1 to 8 numbered milestones and an estimate of the cost (below). A table readable by anyone without signing in, or with no declared access, is highlighted. The data list is intent in words: tables are created later through a backend proposal, which the user confirms as usual.
+
+- **Build this** approves the plan. It is stored as the next brief version and the same turn goes on to build the first milestone that is not done, with no other message.
+- **Ask for changes** sends the user's words (up to 2000 characters) back to the agent, which proposes a new plan.
+- **Back to questions** asks for one more round of questions, then a new plan.
+
+A plan's arguments must fit in 8 KiB and its compact form in 6000 characters; over either limit the call is refused and the agent shortens the plan. The brief in the prompt is therefore never cut.
+
+### Brief and milestones
+
+- **Versions.** Each approval stores a new version of the brief (`builder_briefs`). The newest one is the brief. A session with a brief has a **Brief** button in its header, with the milestones built (for example "Brief · 1/3"), that opens the brief, the state of each milestone and the older versions, read-only. To change the brief, ask the agent in the chat: it proposes a revised plan, which the user approves as a new version.
+- **In the prompt.** The brief is added to the agent's prompt as `APP BRIEF`, after the company rules, the template guide and the skills index, with lower priority than Orbit's core rules and the company standards. The current milestone and the progress go in the session context.
+- **In the code.** Build turns write the brief to `ORBIT_BRIEF.md` at the root of the project, next to `ORBIT_AGENT.md`, when the file differs from the brief. It ships in the downloaded ZIP and is not part of the built site.
+- **One milestone per turn.** The agent is told to build one milestone, stop and say what is next. After a turn, **Continue: \<next milestone\>** builds the next one. A milestone is done when a turn that built it ends `completed`, or when a revised plan marks it as already built. A turn that fails or hits a limit leaves it pending, and **Continue** offers it again. A turn the agent ends early still counts as done; the user corrects it in words.
+- **Plan first.** In a session that is already building, the **Plan first** switch next to the message box sends the next message as a plan-mode turn: questions and a plan, and no code written until it is approved.
+
+### Estimate
+
+The plan card shows a range of tokens and, when the data allows it, of cost, for one milestone and for the milestones of the plan not yet built. It is computed by the server from the completed build turns of the installation in the last 90 days, for the provider and model configured now: the 25th to 75th percentile per turn. Under 10 such turns the card says there is no estimate yet; under 10 turns with a price for every call, it shows tokens only. Cost uses only turns after the last currency change.
+
+- The figures come from every user of the installation, aggregated. A user can therefore infer the typical cost of a build on the installation.
+- The first build of an app usually costs more than a later milestone, and the estimate uses one distribution for both.
+- It is an estimate from past builds, not a quote and not a budget.
+
+### Data and audit
+
+Answers and plans are chat content: they are sent to the configured model provider and stored with the conversation, like messages. They are not written to the audit log. Answering a round, approving and revising a plan are audited without their text (`builder.questions.answer`, `builder.plan.approve` with the version and the number of milestones, `builder.plan.revise`). Model calls of plan-mode turns are recorded with the purpose `planning` and count toward the budgets like any other call.
+
+### API
+
+All routes are owner-only, under `/dashboard/api/builder/sessions/{id}`. The three `POST` routes are rate-limited like `confirm` and require the `tool_call_id` of the card the user acted on: a card that was replaced answers `409`, and a repeated request answers `200` with `already_resolved`.
+
+- `POST .../turns/{turn}/answers` with `{tool_call_id, answers: [{id, choices, text, decide}], skip}`.
+- `POST .../turns/{turn}/plan/approve` with `{tool_call_id}`.
+- `POST .../turns/{turn}/plan/revise` with `{tool_call_id, feedback, more_questions}`; `feedback` is required unless `more_questions`.
+- `GET .../turns/{turn}/plan/estimate`: `{available, sample_turns, currency, milestones, milestone, plan}`, each range with `tokens_low`, `tokens_high`, `cost_micros_low` and `cost_micros_high` (`null` without a price).
+- `GET .../brief` (`version: 0` when there is none) and `GET .../brief/versions/{v}`.
+- `POST .../messages` accepts `plan_first` (refused when planning is `off`) and `milestone` (only the next pending milestone of the brief, otherwise `400`). The session detail carries `phase`, `brief_version`, `milestones_total`, `milestones_done` and `next_milestone`; each turn carries `mode`, `brief_version` and `milestone`.
 
 ## Usage and cost
 
@@ -341,6 +411,9 @@ Registry proxy (`zeep-registry-proxy`):
 - **Anthropic provider, first version.** The model's thinking blocks are not sent back between steps, and prompt caching is not requested, so cached input and cache write stay at zero for this provider.
 - **Cost covers the builder only.** The "Build with AI" backend chat is not recorded in the usage report.
 - **Publishing needs GitHub and Render.** Other publish targets are not supported.
+- **Reverting does not revert the brief.** Restoring an earlier turn keeps every brief version and the milestone progress. `ORBIT_BRIEF.md` is restored with the code, and the next build turn writes the current brief again.
+- **Question rounds per turn.** The limit of question rounds counts per turn. If a planning turn ends early (a budget or an error), the next message starts with a new allowance.
+- **Planning and real providers.** A plan-first turn in a session that already built has calls to write tools in its history while those tools are not offered. Both adapters send that history unchanged; how each real provider endpoint handles it has been checked against test doubles only.
 
 ## Troubleshooting
 
