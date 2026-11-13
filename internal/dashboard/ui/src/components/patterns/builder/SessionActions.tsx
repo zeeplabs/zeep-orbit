@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -29,6 +29,8 @@ interface SessionActionsProps {
   publishEvent: PublishEvent | undefined
   /** The builder cannot run actions right now (unavailable). Archived is read from the session. */
   unavailable: boolean
+  /** Rendered before Publish, in the same row (the brief button). */
+  leading?: ReactNode
 }
 
 /** Publish + Download ZIP, with the reason when Publish is not available and its outcome. */
@@ -39,6 +41,7 @@ export function SessionActions({
   build,
   publishEvent,
   unavailable,
+  leading,
 }: SessionActionsProps) {
   const { t } = useTranslation()
   const publish = usePublishBuilderSession(sessionId)
@@ -101,6 +104,7 @@ export function SessionActions({
   return (
     <div className="flex flex-col items-end gap-1.5">
       <div className="flex flex-wrap items-center justify-end gap-2">
+        {leading}
         <Button
           type="button"
           // aria-disabled (not disabled) keeps the button focusable so the reason is reachable.

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
 import { ChatMarkdown } from '@/components/patterns/ChatMarkdown'
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { Icon } from '@/components/ui/icon'
 import { cn } from '@/lib/utils'
@@ -10,6 +11,8 @@ import {
   builderKeys,
   classifyBuilderError,
   useSendBuilderMessage,
+  type BuilderMilestoneRef,
+  type BuilderPlanningMode,
   type BuilderSessionDetail,
   type BuilderSessionUsageDetail,
   type BuilderTurn,
@@ -47,6 +50,8 @@ interface ChatPanelProps {
   blockedReason: string | null
   /** The builder cannot run actions (archived / unavailable): proposals and restores are inert. */
   actionsDisabled: boolean
+  /** builder_settings.planning_mode from the status; '' while unknown. 'off' hides the planning UI. */
+  planningMode: BuilderPlanningMode | ''
   onRestore: (turnSeq: number) => void
 }
 
@@ -58,6 +63,7 @@ export function ChatPanel({
   active,
   blockedReason,
   actionsDisabled,
+  planningMode,
   onRestore,
 }: ChatPanelProps) {
   const { t } = useTranslation()
@@ -136,7 +142,14 @@ export function ChatPanel({
       <div className="sr-only" role="status">
         {liveMessage}
       </div>
-      <Composer sessionId={sessionId} blockedReason={blockedReason} briefing={session.phase === 'briefing'} />
+      <Composer
+        sessionId={sessionId}
+        blockedReason={blockedReason}
+        briefing={session.phase === 'briefing' && planningMode !== 'off'}
+        planFirstAvailable={session.phase === 'building' && (planningMode === 'required' || planningMode === 'suggested')}
+        nextMilestone={session.phase === 'building' ? session.next_milestone : null}
+        milestonesTotal={session.milestones_total}
+      />
     </section>
   )
 }
@@ -341,13 +354,19 @@ interface ComposerProps {
   blockedReason: string | null
   /** No plan was approved yet: the assistant asks and proposes a plan before it builds. */
   briefing: boolean
+  /** Offer the "Plan first" switch (a session that is building, planning not off). */
+  planFirstAvailable: boolean
+  /** The next pending milestone of the brief: offers "Continue: <title>". */
+  nextMilestone: BuilderMilestoneRef | null
+  milestonesTotal: number
 }
 
-function Composer({ sessionId, blockedReason, briefing }: ComposerProps) {
+function Composer({ sessionId, blockedReason, briefing, planFirstAvailable, nextMilestone, milestonesTotal }: ComposerProps) {
   const { t } = useTranslation()
   const qc = useQueryClient()
   const send = useSendBuilderMessage(sessionId)
   const [value, setValue] = useState('')
+  const [planFirst, setPlanFirst] = useState(false)
   const [turnActiveNotice, setTurnActiveNotice] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const refocus = useRef(false)
@@ -367,29 +386,73 @@ function Composer({ sessionId, blockedReason, briefing }: ComposerProps) {
     wasBlocked.current = blocked
   }, [blocked])
 
+  const onSendError = (error: Error) => {
+    // 409 "turn already in progress": the screen was stale. Keep the draft and resync.
+    if (classifyBuilderError(error).kind === 'turn_active') {
+      setTurnActiveNotice(true)
+      void qc.invalidateQueries({ queryKey: builderKeys.session(sessionId) })
+      void qc.invalidateQueries({ queryKey: builderKeys.events(sessionId) })
+    }
+  }
+
+  const withPlanFirst = planFirstAvailable && planFirst
   const submit = () => {
     const content = value.trim()
     if (!content || blocked || send.isPending) return
     setTurnActiveNotice(false)
-    send.mutate(content, {
+    send.mutate(withPlanFirst ? { content, plan_first: true } : { content }, {
       onSuccess: () => {
         setValue('')
+        setPlanFirst(false)
         refocus.current = true
       },
-      onError: (error) => {
-        // 409 "turn already in progress": the screen was stale. Keep the draft and resync.
-        if (classifyBuilderError(error).kind === 'turn_active') {
-          setTurnActiveNotice(true)
-          void qc.invalidateQueries({ queryKey: builderKeys.session(sessionId) })
-          void qc.invalidateQueries({ queryKey: builderKeys.events(sessionId) })
-        }
-      },
+      onError: onSendError,
     })
   }
 
+  // The message is the user's side of the conversation, in their language; the server checks that
+  // `milestone` is still the next pending one.
+  const continueMilestone = () => {
+    if (!nextMilestone || blocked || send.isPending) return
+    setTurnActiveNotice(false)
+    send.mutate(
+      {
+        content: t('builder.page.continue.message', { n: nextMilestone.index, title: nextMilestone.title }),
+        milestone: nextMilestone.index,
+      },
+      { onError: onSendError },
+    )
+  }
+
   const hintId = `builder-composer-hint-${sessionId}`
+  const switchId = `builder-plan-first-${sessionId}`
+  let hint = t('builder.page.chat.hintKeys')
+  if (blockedReason) hint = blockedReason
+  else if (turnActiveNotice) hint = t('builder.page.chat.turnActive')
+  else if (withPlanFirst) hint = t('builder.page.chat.planFirstHint')
   return (
     <div className="flex flex-col gap-2 border-t p-3" style={{ borderColor: 'var(--border)' }}>
+      {nextMilestone && !blocked && (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={continueMilestone}
+          disabled={send.isPending}
+          className="h-auto min-h-9 justify-start gap-2 whitespace-normal py-1.5 text-left"
+        >
+          {send.isPending && send.variables?.milestone ? (
+            <Icon name="progress_activity" size={16} className="shrink-0 animate-spin" />
+          ) : (
+            <Icon name="play_arrow" size={16} className="shrink-0" />
+          )}
+          <span className="flex min-w-0 flex-col">
+            <span className="break-words">{t('builder.page.continue.button', { title: nextMilestone.title })}</span>
+            <span className="text-[11.5px] font-normal" style={{ color: 'var(--text-tertiary)' }}>
+              {t('builder.page.continue.position', { n: nextMilestone.index, total: milestonesTotal })}
+            </span>
+          </span>
+        </Button>
+      )}
       <div className="flex items-end gap-2">
         <Textarea
           ref={textareaRef}
@@ -403,7 +466,13 @@ function Composer({ sessionId, blockedReason, briefing }: ComposerProps) {
           }}
           aria-label={t('builder.page.chat.composerLabel')}
           aria-describedby={hintId}
-          placeholder={t(briefing ? 'builder.page.chat.placeholderBriefing' : 'builder.page.chat.placeholder')}
+          placeholder={t(
+            briefing
+              ? 'builder.page.chat.placeholderBriefing'
+              : withPlanFirst
+                ? 'builder.page.chat.placeholderPlanFirst'
+                : 'builder.page.chat.placeholder',
+          )}
           rows={2}
           maxLength={MAX_MESSAGE_CHARS}
           className="flex-1 resize-none"
@@ -424,9 +493,25 @@ function Composer({ sessionId, blockedReason, briefing }: ComposerProps) {
           )}
         </Button>
       </div>
-      <p id={hintId} className="text-[11.5px]" style={{ color: 'var(--text-tertiary)' }}>
-        {blockedReason ?? (turnActiveNotice ? t('builder.page.chat.turnActive') : t('builder.page.chat.hintKeys'))}
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+        <p id={hintId} className="min-w-0 flex-1 text-[11.5px]" style={{ color: 'var(--text-tertiary)' }}>
+          {hint}
+        </p>
+        {planFirstAvailable && (
+          <div className="flex shrink-0 items-center gap-2">
+            <Switch
+              id={switchId}
+              checked={planFirst}
+              onCheckedChange={setPlanFirst}
+              disabled={blocked || send.isPending}
+              aria-describedby={hintId}
+            />
+            <label htmlFor={switchId} className="cursor-pointer text-[12px] font-medium" style={{ color: 'var(--text-secondary)' }}>
+              {t('builder.page.chat.planFirst')}
+            </label>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

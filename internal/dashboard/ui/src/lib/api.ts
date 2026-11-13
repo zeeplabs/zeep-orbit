@@ -1914,10 +1914,18 @@ export type BuilderUnavailableReason =
   | 'budget_not_configured' // a token cap is 0 (unset): every turn would end budget_exceeded
   | 'builder_unreachable' // builder health probe failed
 
+/**
+ * builder_settings.planning_mode: 'required' starts new sessions with questions and a plan,
+ * 'suggested' lets the agent decide, 'off' never offers planning.
+ */
+export type BuilderPlanningMode = 'required' | 'suggested' | 'off'
+
 export interface BuilderStatus {
   available: boolean
   provider_configured: boolean
   reason: BuilderUnavailableReason
+  /** The planning setting, readable by any user. Empty when the builder is not wired. */
+  planning_mode: BuilderPlanningMode | ''
 }
 
 // -- Sessions / turns --
@@ -2021,8 +2029,20 @@ export interface BuilderSession {
   updated_at: string
 }
 
+/** One milestone of the session's brief (index is 1-based). */
+export interface BuilderMilestoneRef {
+  index: number
+  title: string
+}
+
 export interface BuilderSessionDetail extends BuilderSession {
   turns: BuilderTurn[]
+  /** Current brief version; 0 when the session has no brief. */
+  brief_version: number
+  milestones_total: number
+  milestones_done: number
+  /** The first milestone not done yet; null with no brief or when every milestone is done. */
+  next_milestone: BuilderMilestoneRef | null
 }
 
 // -- Usage and cost (ai-builder-costs C08) --
@@ -2342,6 +2362,35 @@ export interface BuilderPlanEstimate {
   plan: BuilderEstimateRange | null
 }
 
+/**
+ * GET /sessions/{id}/brief: the current brief (the newest approved plan), its milestone progress
+ * and the versions, newest first. `version` is 0 and `plan` null when there is none. `plan` is the
+ * stored propose_build_plan arguments: read it with parsePlan, never trust its shape.
+ */
+export interface BuilderBrief {
+  version: number
+  plan: unknown
+  created_at: string | null
+  milestones: (BuilderMilestoneRef & { done: boolean })[]
+  versions: { version: number; created_at: string }[]
+}
+
+/** GET /sessions/{id}/brief/versions/{v}: one stored version. */
+export interface BuilderBriefVersion {
+  version: number
+  plan: unknown
+  created_at: string
+}
+
+/** Body of POST /sessions/{id}/messages. */
+export interface SendBuilderMessageInput {
+  content: string
+  /** "Plan first": a plan-mode turn in a session that is already building. Refused when planning is off. */
+  plan_first?: boolean
+  /** "Continue": the next pending milestone of the brief (1-based); 400 when it is not. */
+  milestone?: number
+}
+
 // -- Preview / publish --
 
 /** Body of POST /builder/sessions/{id}/preview-token. Keep `token` out of logs and visible URLs. */
@@ -2409,6 +2458,7 @@ export interface BuilderSettings {
   /** Money caps in micros (1 unit = 1,000,000). 0 = no money cap. */
   session_cost_cap_micros: number
   user_monthly_cost_cap_micros: number
+  planning_mode: BuilderPlanningMode
   updated_by: string | null
   updated_at: string | null
   /** false until the first save (defaults shown). */
@@ -2433,6 +2483,7 @@ export interface BuilderSettingsUpdate {
   cost_currency?: string
   session_cost_cap_micros?: number
   user_monthly_cost_cap_micros?: number
+  planning_mode?: BuilderPlanningMode
 }
 
 /** Largest money cap the server accepts, in micros (builderMaxCostCapMicros). */
@@ -2737,6 +2788,8 @@ export const builderKeys = {
   sessionUsage: (id: string) => ['builder', 'session-usage', id] as const,
   planEstimate: (id: string, turn: string, toolCallId: string) =>
     ['builder', 'plan-estimate', id, turn, toolCallId] as const,
+  brief: (id: string) => ['builder', 'brief', id] as const,
+  briefVersion: (id: string, version: number) => ['builder', 'brief', id, 'version', version] as const,
   usageReport: (range: BuilderUsageRange, groupBy: BuilderUsageGroupBy) =>
     ['builder', 'usage-report', range.from, range.to, range.userId ?? null, groupBy] as const,
   templates: () => ['builder', 'templates'] as const,
@@ -3238,26 +3291,32 @@ export function useDeleteBuilderSession(): UseMutationResult<void, Error, string
 function invalidateBuilderSession(qc: ReturnType<typeof useQueryClient>, sessionId: string): void {
   qc.invalidateQueries({ queryKey: builderKeys.session(sessionId) })
   qc.invalidateQueries({ queryKey: builderKeys.events(sessionId) })
+  // An approval adds a brief version and a finished milestone turn moves the progress.
+  qc.invalidateQueries({ queryKey: builderKeys.brief(sessionId) })
 }
 
-/** Enqueues a chat turn (202 with the new pending turn). 409 when a turn is already in progress. */
+/**
+ * Enqueues a chat turn (202 with the new pending turn). 409 when a turn is already in progress;
+ * 400 when `milestone` is not the next pending one (the brief changed: the session is refetched).
+ */
 export function useSendBuilderMessage(
   sessionId: string,
-): UseMutationResult<BuilderTurn, Error, string> {
+): UseMutationResult<BuilderTurn, Error, SendBuilderMessageInput> {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (content: string) =>
+    mutationFn: (input: SendBuilderMessageInput) =>
       apiFetch<BuilderTurn>(
         `${builderSessionPath(sessionId)}/messages`,
-        jsonRequest('POST', { content }),
+        jsonRequest('POST', input),
       ),
     onSuccess: () => {
       invalidateBuilderSession(qc, sessionId)
       qc.invalidateQueries({ queryKey: builderKeys.sessions() })
     },
-    onError: (error) => {
+    onError: (error, input) => {
       // BuilderPage shows a localized inline notice for a concurrent turn (409).
       if (classifyBuilderError(error).kind === 'turn_active') return
+      if (input.milestone) invalidateBuilderSession(qc, sessionId)
       toast.error(error.message)
     },
   })
@@ -3415,6 +3474,29 @@ export function useBuilderPlanEstimate(
     enabled: Boolean(sessionId && turnId && toolCallId),
     staleTime: 5 * 60 * 1000,
     retry: false,
+  })
+}
+
+/** The session's brief, its milestone progress and its versions (owner only). Fetched while `enabled`. */
+export function useBuilderBrief(sessionId: string, enabled = true): UseQueryResult<BuilderBrief> {
+  return useQuery({
+    queryKey: builderKeys.brief(sessionId),
+    queryFn: () => apiFetch<BuilderBrief>(`${builderSessionPath(sessionId)}/brief`),
+    enabled: Boolean(sessionId) && enabled,
+  })
+}
+
+/** One stored brief version, read-only. A stored version never changes, so it is never stale. */
+export function useBuilderBriefVersion(
+  sessionId: string,
+  version: number | null,
+): UseQueryResult<BuilderBriefVersion> {
+  return useQuery({
+    queryKey: builderKeys.briefVersion(sessionId, version ?? 0),
+    queryFn: () =>
+      apiFetch<BuilderBriefVersion>(`${builderSessionPath(sessionId)}/brief/versions/${version ?? 0}`),
+    enabled: Boolean(sessionId) && version !== null && version > 0,
+    staleTime: Infinity,
   })
 }
 

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { EmptyState, ErrorState, LoadingState, ProviderTabs, StatusPill } from '@/components/patterns'
@@ -23,6 +24,7 @@ import {
 } from '@/lib/api'
 import type {
   AIProviderKind,
+  BuilderPlanningMode,
   BuilderPrompt,
   BuilderPromptVersion,
   BuilderSettings,
@@ -74,7 +76,14 @@ type LimitErrorKind = 'required' | 'integer' | 'range'
 interface SettingsForm {
   enabled: boolean
   provider: AIProviderKind
+  planningMode: BuilderPlanningMode
   limits: Record<LimitKey, string>
+}
+
+const PLANNING_MODES: BuilderPlanningMode[] = ['required', 'suggested', 'off']
+
+function parsePlanningMode(value: string): BuilderPlanningMode {
+  return value === 'suggested' || value === 'off' ? value : 'required'
 }
 
 function parseProvider(value: string): AIProviderKind {
@@ -84,7 +93,12 @@ function parseProvider(value: string): AIProviderKind {
 function toForm(settings: BuilderSettings): SettingsForm {
   const limits = {} as Record<LimitKey, string>
   for (const { key } of LIMIT_FIELDS) limits[key] = String(settings[key])
-  return { enabled: settings.enabled, provider: parseProvider(settings.provider), limits }
+  return {
+    enabled: settings.enabled,
+    provider: parseProvider(settings.provider),
+    planningMode: parsePlanningMode(settings.planning_mode),
+    limits,
+  }
 }
 
 /** Validates one limit; returns the number to send or the error kind. Never yields NaN. */
@@ -99,7 +113,11 @@ function parseLimit(field: LimitField, raw: string): { value: number } | { error
 }
 
 function buildUpdate(form: SettingsForm): { update: BuilderSettingsUpdate; errors: Partial<Record<LimitKey, LimitErrorKind>> } {
-  const update: BuilderSettingsUpdate = { enabled: form.enabled, provider: form.provider }
+  const update: BuilderSettingsUpdate = {
+    enabled: form.enabled,
+    provider: form.provider,
+    planning_mode: form.planningMode,
+  }
   const errors: Partial<Record<LimitKey, LimitErrorKind>> = {}
   for (const field of LIMIT_FIELDS) {
     const parsed = parseLimit(field, form.limits[field.key])
@@ -114,6 +132,7 @@ function sameForm(a: SettingsForm, b: SettingsForm): boolean {
   return (
     a.enabled === b.enabled &&
     a.provider === b.provider &&
+    a.planningMode === b.planningMode &&
     LIMIT_FIELDS.every(({ key }) => a.limits[key].trim() === b.limits[key].trim())
   )
 }
@@ -296,6 +315,33 @@ function GeneralSection() {
           ]}
         />
         <ProviderSummary provider={form.provider} />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="builder-planning-mode" className="text-[12px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
+          {t('settings.aiBuilder.planning.title')}
+        </Label>
+        <p className="text-[12.5px]" style={{ color: 'var(--text-secondary)' }}>
+          {t('settings.aiBuilder.planning.desc')}
+        </p>
+        <Select
+          value={form.planningMode}
+          onValueChange={(value) => setForm({ ...form, planningMode: parsePlanningMode(value) })}
+        >
+          <SelectTrigger id="builder-planning-mode" className="w-full sm:w-[320px]" aria-describedby="builder-planning-mode-hint">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PLANNING_MODES.map((mode) => (
+              <SelectItem key={mode} value={mode}>
+                {t(`settings.aiBuilder.planning.mode.${mode}`)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p id="builder-planning-mode-hint" className="text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
+          {t(`settings.aiBuilder.planning.modeDesc.${form.planningMode}`)}
+        </p>
       </div>
 
       <fieldset className="flex flex-col gap-4 border-0 p-0">

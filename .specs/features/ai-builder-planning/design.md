@@ -273,6 +273,13 @@ Every string in `en.json` and `pt-BR.json`.
 - A table whose access is not one of the four values is drawn as a warning, like `public`.
 - A plan sent back is shown in the history as a note on the user's side (changes asked, or more questions), not as a timeline row: the timeline of a finished turn is collapsed, and it is the user's action. The user's words are chat content and are not in the event, so the note does not show them.
 
+**Changed in P10:**
+
+- The brief hooks are `useBuilderBrief` (fetched only while the drawer is open, refetched when the session's brief version or progress moves) and `useBuilderBriefVersion` (a stored version never changes). `useSendBuilderMessage` takes `{content, plan_first?, milestone?}`.
+- The Brief button sits in the header row with Publish and Download and shows the milestones built ("Brief · 1/3"). The drawer draws the current plan with the done marks of the server's progress, not the plan's own `done`, and shows an older version with a notice that it is not the current brief.
+- With `off`, only the "Plan first" switch and the briefing placeholder are hidden. A session that already has a brief keeps the Brief button and "Continue": the server accepts `milestone` in every mode, and the brief is still in the prompt.
+- "Continue" is offered while the session is building, has a `next_milestone` and the composer is not blocked. "Plan first" is offered while the session is building and the mode is `required` or `suggested`; it is off again after each message.
+
 ## 11. Edge cases against the design
 
 | Case | Behavior |

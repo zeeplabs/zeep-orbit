@@ -7,6 +7,7 @@ import { ConfirmDialog } from '@/components/patterns/ConfirmDialog'
 import { EmptyState, ErrorState } from '@/components/patterns/states'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Icon } from '@/components/ui/icon'
+import { BriefButton } from '@/components/patterns/builder/BriefDrawer'
 import { ChatPanel } from '@/components/patterns/builder/ChatPanel'
 import { PreviewPanel } from '@/components/patterns/builder/PreviewPanel'
 import { SessionActions } from '@/components/patterns/builder/SessionActions'
@@ -179,6 +180,7 @@ export default function BuilderPage() {
             build={build}
             publishEvent={publishEvent}
             unavailable={unavailable}
+            leading={<BriefButton sessionId={sessionId} session={session} />}
           />
         }
       />
@@ -224,6 +226,7 @@ export default function BuilderPage() {
             active={active}
             blockedReason={blockedReason}
             actionsDisabled={actionsDisabled}
+            planningMode={statusQuery.data?.planning_mode ?? ''}
             onRestore={setRestoreSeq}
           />
         </div>
