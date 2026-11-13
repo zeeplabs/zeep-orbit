@@ -128,7 +128,7 @@ func (o *OpenAI) Chat(ctx context.Context, req ChatRequest) (ChatResponse, error
 	var lastErr error
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		if attempt > 0 {
-			if err := o.sleep(ctx, o.retryDelay(lastErr, attempt-1)); err != nil {
+			if err := o.sleep(ctx, retryDelayFor(o.backoffBase, lastErr, attempt-1)); err != nil {
 				return ChatResponse{}, &ErrProvider{Err: err}
 			}
 		}
@@ -153,17 +153,6 @@ func retryable(err error) bool {
 	}
 	var pe *ErrProvider
 	return errors.As(err, &pe) && pe.Status >= 500
-}
-
-// retryDelay is the provider's Retry-After when it gave one, otherwise
-// exponential backoff from backoffBase. failures is the count of failed
-// attempts minus one (0 for the first retry).
-func (o *OpenAI) retryDelay(err error, failures int) time.Duration {
-	var rl *ErrRateLimited
-	if errors.As(err, &rl) && rl.RetryAfter > 0 {
-		return rl.RetryAfter
-	}
-	return o.backoffBase << failures
 }
 
 // attempt performs one HTTP round-trip and classifies the outcome.

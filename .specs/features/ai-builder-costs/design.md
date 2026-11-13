@@ -133,6 +133,27 @@ Details that need care:
 - Base URL is fixed to the official endpoint. A custom base URL for this kind is not offered in v1 (gateways are reachable through `openai_compatible`).
 - Version header pinned to a constant; the model name comes from settings, never hardcoded.
 
+**Resolved in C06 (2026-11-13), against the Messages API reference bundled with the `claude-api` skill:**
+
+| Item | Result |
+| --- | --- |
+| Endpoint and headers | `POST /v1/messages` with `x-api-key`, `anthropic-version: 2026-10-21`, `Content-Type`. Confirmed. On this version the API rejects `temperature`, `top_p` and `top_k`; the adapter sends none. |
+| `system`, `tools[].input_schema`, `tool_use` (`id`, `name`, `input`), `tool_result` (`tool_use_id`, `content`) | Confirmed. All results of one assistant turn go in a single user message; the adapter merges any consecutive messages of one role. |
+| `max_tokens` | Required. Default 16000 when the caller sends 0 (the reference's figure for non-streaming calls). The adapter also applies a floor of 4096: thinking is always on in current models and counts toward `max_tokens`, so the 1200 of the compaction call could be spent before any text. **Inference, to check in C13.** |
+| Stop reasons | `end_turn`/`stop_sequence` → `stop`, `tool_use` → `tool_calls`, `max_tokens`/`model_context_window_exceeded` → `length`, `refusal` → `content_filter` (HTTP 200 with no usable content), others passed through. Confirmed as existing values. |
+| Usage | `input_tokens` excludes cache activity; `cache_read_input_tokens` and `cache_creation_input_tokens` are separate. Confirmed, mapped directly. |
+| Errors | 401 `authentication_error` and 403 `permission_error` → `ErrAuth`; 429 → `*ErrRateLimited` with `retry-after`; 500 and 529 `overloaded_error` retried. Confirmed. |
+| Context too long | 413 `request_too_large` → `ErrContextTooLong` (confirmed as "too many tokens in input"). The reference names no dedicated error type for a prompt over the context window, so the adapter also matches a 400 `invalid_request_error` whose message mentions the prompt length or the context window. **The exact message is not confirmed; to check in C13.** A miss fails the turn instead of compacting. |
+| Tool call ids | The API takes only letters, digits, `_` and `-`. Ids from another provider are rewritten the same way on the call and on its result, so a session can switch provider. |
+
+Decisions taken here:
+
+- **Thinking blocks are not replayed.** The neutral `Message` has no place for them. The reference allows a history without any thinking block; the cost is that the model answers each step without the reasoning of the previous steps. Keeping them needs an opaque per-provider field on `Message` and an append-only history (the reference rejects replayed thinking blocks after the history was edited, which our compaction does). Left for `ai-builder-economy`, together with prompt caching.
+- **No `cache_control` yet.** Request-level caching adds 25% to the input of a one-off call such as compaction, and the adapter cannot tell a loop step from a one-off call. It belongs in `ai-builder-economy` with a hint on `ChatRequest`. The usage mapping already reads the cache fields.
+- **No `fallbacks` parameter and no beta header.** The model comes from settings and may be one that rejects them. A refusal ends as `content_filter`.
+- **HTTP timeout of 10 minutes** for this adapter (the turn's deadline still applies), because a non-streaming reply of 16000 tokens with thinking can pass the 120 s used for OpenAI.
+- The config accepts a base URL (tests need it); C07 does not expose it.
+
 Settings: `ai_providers` accepts the kind `anthropic` (same store and handlers; the provider-kind validation list gains one value). `builder_settings.provider` accepts it. The settings UI adds the kind to the existing provider selector. `builder_runtime.go` builds the adapter for the selected kind. **[verify]** where the kind list is validated (`ai_provider_handlers.go`, `builder_settings.go`).
 
 Resume across providers (ABC-17): the stored history is neutral, so nothing is migrated. One real risk: tool call IDs produced by one provider are replayed to the other. Both accept opaque strings; the contract test replays an OpenAI-shaped history through the Anthropic adapter and the reverse. **[verify]** ID format constraints of each API.

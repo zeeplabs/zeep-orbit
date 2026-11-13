@@ -294,7 +294,7 @@ func caseUsagePresent(t *testing.T, p Provider) string {
 
 // contractEntry is one parsed CONTRACT_PROVIDERS element.
 type contractEntry struct {
-	Name    string // "openai" or "openai_compatible"
+	Name    string // "openai", "openai_compatible" or "anthropic"
 	Model   string
 	BaseURL string // empty means the adapter default
 	KeyEnv  string // env var holding the API key
@@ -334,8 +334,8 @@ func parseContractEntry(s string) (contractEntry, error) {
 	if !ok {
 		return contractEntry{}, errors.New("expected name:model")
 	}
-	if name != "openai" && name != "openai_compatible" {
-		return contractEntry{}, fmt.Errorf("unknown provider name %q (want openai or openai_compatible)", name)
+	if name != "openai" && name != "openai_compatible" && name != "anthropic" {
+		return contractEntry{}, fmt.Errorf("unknown provider name %q (want openai, openai_compatible or anthropic)", name)
 	}
 	e := contractEntry{Name: name, KeyEnv: "CONTRACT_KEY_" + strings.ToUpper(name)}
 	if i := strings.LastIndex(rest, "#"); i >= 0 {
@@ -354,6 +354,9 @@ func parseContractEntry(s string) (contractEntry, error) {
 	if e.Name == "openai_compatible" && e.BaseURL == "" {
 		return contractEntry{}, errors.New("openai_compatible requires @base_url")
 	}
+	if e.Name == "anthropic" && e.BaseURL != "" {
+		return contractEntry{}, errors.New("anthropic does not take @base_url")
+	}
 	return e, nil
 }
 
@@ -365,6 +368,13 @@ func buildContractProvider(e contractEntry, lookupEnv func(string) (string, bool
 	key, ok := lookupEnv(e.KeyEnv)
 	if !ok {
 		return nil, fmt.Sprintf("env var %s is not set", e.KeyEnv), nil
+	}
+	if e.Name == "anthropic" {
+		a, err := NewAnthropic(AnthropicConfig{APIKey: key, Model: e.Model})
+		if err != nil {
+			return nil, "", err
+		}
+		return a, "", nil
 	}
 	o, err := NewOpenAI(OpenAIConfig{Name: e.Name, BaseURL: e.BaseURL, APIKey: key, Model: e.Model})
 	if err != nil {
@@ -503,7 +513,148 @@ func newFakeProvider(t *testing.T) *OpenAI {
 	return p
 }
 
+// --- deterministic Anthropic Messages fake ---------------------------------
+
+type fakeAnthropicRequest struct {
+	Model     string `json:"model"`
+	MaxTokens int    `json:"max_tokens"`
+	Messages  []struct {
+		Role    string `json:"role"`
+		Content []struct {
+			Type      string          `json:"type"`
+			Text      string          `json:"text"`
+			ID        string          `json:"id"`
+			Name      string          `json:"name"`
+			Input     json.RawMessage `json:"input"`
+			ToolUseID string          `json:"tool_use_id"`
+			Content   string          `json:"content"`
+		} `json:"content"`
+	} `json:"messages"`
+	Tools []struct {
+		Name        string          `json:"name"`
+		InputSchema json.RawMessage `json:"input_schema"`
+	} `json:"tools"`
+}
+
+// newAnthropicContractFake answers by the same rules as newContractFake, in
+// the Messages wire format, and enforces what the real API enforces on the
+// request shape: the two headers, max_tokens, a first user message, strictly
+// alternating roles, non-empty content, tool_use input an object, and every
+// tool_use answered by a tool_result in the message right after it.
+func newAnthropicContractFake(t *testing.T) *httptest.Server {
+	t.Helper()
+	bad := func(w http.ResponseWriter, msg string) {
+		body, _ := json.Marshal(map[string]any{"type": "error", "error": map[string]string{"type": "invalid_request_error", "message": msg}})
+		writeJSON(w, http.StatusBadRequest, string(body))
+	}
+	return serve(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/messages" {
+			writeJSON(w, http.StatusNotFound, `{"type":"error","error":{"type":"not_found_error","message":"not found"}}`)
+			return
+		}
+		if r.Header.Get("x-api-key") != contractFakeKey {
+			writeJSON(w, http.StatusUnauthorized, `{"type":"error","error":{"type":"authentication_error","message":"bad key"}}`)
+			return
+		}
+		var req fakeAnthropicRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Model == "" || len(req.Messages) == 0 {
+			bad(w, "invalid request")
+			return
+		}
+		if r.Header.Get("anthropic-version") == "" || req.MaxTokens <= 0 {
+			bad(w, "anthropic-version and max_tokens are required")
+			return
+		}
+		var issued map[string]bool
+		for i, m := range req.Messages {
+			wantRole := "user"
+			if i%2 == 1 {
+				wantRole = "assistant"
+			}
+			if m.Role != wantRole || len(m.Content) == 0 {
+				bad(w, "roles must alternate starting with user, with non-empty content")
+				return
+			}
+			next := map[string]bool{}
+			for _, b := range m.Content {
+				switch {
+				case b.Type == "text" && b.Text != "":
+				case b.Type == "tool_use" && m.Role == "assistant" && b.ID != "" && b.Name != "" && isJSONObject(b.Input):
+					next[b.ID] = true
+				case b.Type == "tool_result" && m.Role == "user" && issued[b.ToolUseID]:
+					delete(issued, b.ToolUseID)
+				default:
+					bad(w, "invalid content block")
+					return
+				}
+			}
+			if len(issued) > 0 {
+				bad(w, "tool_use without a tool_result in the next message")
+				return
+			}
+			issued = next
+		}
+		if len(issued) > 0 {
+			bad(w, "conversation ends with an unanswered tool_use")
+			return
+		}
+		for _, tool := range req.Tools {
+			if tool.Name == "" || !isJSONObject(tool.InputSchema) {
+				bad(w, "invalid tool")
+				return
+			}
+		}
+
+		last := req.Messages[len(req.Messages)-1]
+		var text, result string
+		for _, b := range last.Content {
+			if b.Type == "tool_result" {
+				result += b.Content
+			} else {
+				text += b.Text
+			}
+		}
+		var content []map[string]any
+		stop := "end_turn"
+		switch {
+		case result != "":
+			content = []map[string]any{{"type": "text", "text": "The lookup returned: " + result}}
+		case len(req.Tools) > 0 && len(uniqueItemIDs(text)) > 0:
+			content = []map[string]any{{"type": "thinking", "thinking": "", "signature": "fake"}}
+			for i, id := range uniqueItemIDs(text) {
+				content = append(content, map[string]any{
+					"type": "tool_use", "id": fmt.Sprintf("toolu_fake_%d", i), "name": "lookup_item", "input": map[string]string{"id": id},
+				})
+			}
+			stop = "tool_use"
+		default:
+			content = []map[string]any{{"type": "text", "text": "Hello, happy to help."}}
+		}
+		body, _ := json.Marshal(map[string]any{
+			"type": "message", "role": "assistant", "content": content, "stop_reason": stop,
+			"usage": map[string]int{"input_tokens": 10 + len(req.Messages), "output_tokens": 5},
+		})
+		writeJSON(w, http.StatusOK, string(body))
+	})
+}
+
+func newFakeAnthropicProvider(t *testing.T) *Anthropic {
+	t.Helper()
+	srv := newAnthropicContractFake(t)
+	p, err := NewAnthropic(AnthropicConfig{BaseURL: srv.URL, APIKey: contractFakeKey, Model: "fake-claude"})
+	if err != nil {
+		t.Fatalf("NewAnthropic: %v", err)
+	}
+	p.sleep = (&sleepRecorder{}).sleep
+	return p
+}
+
 // --- CI tests --------------------------------------------------------------
+
+// The same table, against the Anthropic adapter.
+func TestContractFakeAnthropic(t *testing.T) {
+	runContract(t, newFakeAnthropicProvider(t))
+}
 
 func TestContractFake(t *testing.T) {
 	runContract(t, newFakeProvider(t))
@@ -563,7 +714,7 @@ func TestValidateCalls(t *testing.T) {
 func TestParseContractEntries(t *testing.T) {
 	got, err := parseContractEntries(
 		"openai:gpt-4.1-mini, openai_compatible:gemini-2.5-flash@https://generativelanguage.googleapis.com/v1beta/openai/#CONTRACT_KEY_GEMINI," +
-			"openai_compatible:llama3:8b@http://localhost:11434/v1")
+			"openai_compatible:llama3:8b@http://localhost:11434/v1,anthropic:claude-model")
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -571,13 +722,14 @@ func TestParseContractEntries(t *testing.T) {
 		{Name: "openai", Model: "gpt-4.1-mini", KeyEnv: "CONTRACT_KEY_OPENAI"},
 		{Name: "openai_compatible", Model: "gemini-2.5-flash", BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai/", KeyEnv: "CONTRACT_KEY_GEMINI"},
 		{Name: "openai_compatible", Model: "llama3:8b", BaseURL: "http://localhost:11434/v1", KeyEnv: "CONTRACT_KEY_OPENAI_COMPATIBLE"},
+		{Name: "anthropic", Model: "claude-model", KeyEnv: "CONTRACT_KEY_ANTHROPIC"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("entries =\n%+v\nwant\n%+v", got, want)
 	}
 
 	for _, bad := range []string{
-		"", " , ", "openai", "anthropic:m", "openai:", "openai_compatible:m",
+		"", " , ", "openai", "gemini:m", "openai:", "openai_compatible:m", "anthropic:m@http://x",
 		"openai_compatible:@http://x", "openai:m#bad-name",
 	} {
 		if _, err := parseContractEntries(bad); err == nil {
@@ -602,6 +754,12 @@ func TestBuildContractProvider(t *testing.T) {
 	// An empty but set key is allowed (local servers without auth).
 	if p, _, err = buildContractProvider(e, func(string) (string, bool) { return "", true }); err != nil || p == nil {
 		t.Fatalf("empty key: p=%v err=%v", p, err)
+	}
+
+	an, skip, err := buildContractProvider(contractEntry{Name: "anthropic", Model: "m", KeyEnv: "K"},
+		func(string) (string, bool) { return "secret-value", true })
+	if err != nil || skip != "" || an == nil || an.Name() != "anthropic" || an.Model() != "m" {
+		t.Fatalf("anthropic: p=%v skip=%q err=%v", an, skip, err)
 	}
 
 	bad := e

@@ -11,7 +11,7 @@ Commits only when the user asks (AGENTS.md §2); one commit per task when author
 **Spec**: `.specs/features/ai-builder-costs/spec.md`
 **Design**: `.specs/features/ai-builder-costs/design.md`
 **Parent**: `.specs/features/ai-frontend-builder/`
-**Status**: Approved by the maintainer on 2026-11-13, DDL of C01 included. In execution on `feat/ai-frontend-builder`. Done: C01–C05. Pending: C06–C13.
+**Status**: Approved by the maintainer on 2026-11-13, DDL of C01 included. In execution on `feat/ai-frontend-builder`. Done: C01–C06. Pending: C07–C13.
 
 ---
 
@@ -91,6 +91,7 @@ C12 docs + CHANGELOG (last)        C13 real-endpoint run (owner, needs keys)
 - **Where**: `internal/agent/provider/anthropic.go`, `anthropic_test.go`, `contract_test.go`.
 - **Done when**: `httptest` tests for request mapping (system, merged tool results, invalid tool arguments, `max_tokens` default), response mapping (text, tool calls, stop reasons, usage with and without cache fields), error mapping (auth, rate limit with `Retry-After`, context too long, generic), response size guard; the shared contract table passes for the new adapter; cross-provider history replay both ways; no key or header in any error string (asserted).
 - **Requirements**: ABC-16, ABC-17, ABC-18. **Depends**: C02. **Tests**: unit. **Gate**: Quick.
+- **Status**: Done 2026-11-13. `internal/agent/provider/anthropic.go` (stdlib HTTP, no SDK), `anthropic_test.go`, and a Messages-format fake in `contract_test.go` that enforces role alternation and tool_use/tool_result pairing; the shared contract table passes for the adapter and `CONTRACT_PROVIDERS` accepts `anthropic:<model>`. What was confirmed and what stays to check with a real key is in design §5 ("Resolved in C06"). Not confirmed: the wording of the prompt-too-long error and the effect of the `max_tokens` floor; both go to C13. Quick gate green.
 
 ### C07 — Provider kind `anthropic` in settings and runtime
 - **What**: accept the kind in `ai_providers` and `builder_settings.provider`; runtime builds the adapter; settings UI lists it; i18n.

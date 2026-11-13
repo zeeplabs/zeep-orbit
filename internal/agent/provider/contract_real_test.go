@@ -9,12 +9,13 @@
 //
 //	CONTRACT_PROVIDERS  comma-separated entries, each
 //	                    <name>:<model>[@<base_url>][#<KEYENV>]
-//	                    name      openai | openai_compatible (up to the FIRST ':')
+//	                    name      openai | openai_compatible | anthropic (up to the FIRST ':')
 //	                    model     between that ':' and the optional '@' (may contain ':')
-//	                    base_url  after the LAST '@'; required for openai_compatible
+//	                    base_url  after the LAST '@'; required for openai_compatible;
+//	                    not accepted for anthropic
 //	                    KEYENV    after the LAST '#': name of the env var holding the
 //	                              API key; default CONTRACT_KEY_<NAME uppercased>
-//	CONTRACT_KEY_OPENAI, CONTRACT_KEY_OPENAI_COMPATIBLE, ...  API keys. An entry whose
+//	CONTRACT_KEY_OPENAI, CONTRACT_KEY_OPENAI_COMPATIBLE, CONTRACT_KEY_ANTHROPIC, ...  API keys. An entry whose
 //	                    key env var is unset is skipped; set it to the empty string
 //	                    for local servers without auth. Keys are never printed.
 //
