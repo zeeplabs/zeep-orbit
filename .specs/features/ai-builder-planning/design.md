@@ -266,6 +266,13 @@ Every string in `en.json` and `pt-BR.json`.
 - The answered round in the history shows a blank answer as "Left to the assistant", on a skip too: `questions_answered` stores `""` for both "decide for me" and a blank, and the agent decides both.
 - The composer's blocked reason depends on the pending card; the screen-reader live text and the publish hint no longer name a backend change.
 
+**Changed in P09:**
+
+- The hooks are `useApproveBuilderPlan`, `useReviseBuilderPlan` and `useBuilderPlanEstimate`. The estimate query is keyed by the tool call, so a revised plan gets its own figures; it does not retry and shows no toast: the card says "no estimate available".
+- A plan the page cannot read (no milestone left after dropping items without a name) is not approvable from the card: it offers "Ask for changes" and "Back to questions" only.
+- A table whose access is not one of the four values is drawn as a warning, like `public`.
+- A plan sent back is shown in the history as a note on the user's side (changes asked, or more questions), not as a timeline row: the timeline of a finished turn is collapsed, and it is the user's action. The user's words are chat content and are not in the event, so the note does not show them.
+
 ## 11. Edge cases against the design
 
 | Case | Behavior |

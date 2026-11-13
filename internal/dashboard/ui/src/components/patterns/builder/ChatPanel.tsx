@@ -16,6 +16,7 @@ import {
   type BuilderTurnUsage,
 } from '@/lib/api'
 import { ActivityTimeline } from './ActivityTimeline'
+import { ApprovedPlanBlock, PlanCard, PlanRevisionNote } from './PlanCard'
 import { ProposalCard } from './ProposalCard'
 import { AnsweredRoundBlock, QuestionCard } from './QuestionCard'
 import { TurnUsageLine } from './UsageSummary'
@@ -220,6 +221,10 @@ function TurnBlock({ sessionId, session, view, usage, currency, active, actionsD
           </Bubble>
         ) : segment.kind === 'questions' ? (
           <AnsweredRoundBlock key={`q-${segment.id}`} round={segment.round} />
+        ) : segment.kind === 'plan' ? (
+          <ApprovedPlanBlock key={`p-${segment.id}`} approved={segment.approved} />
+        ) : segment.kind === 'revision' ? (
+          <PlanRevisionNote key={`r-${segment.id}`} moreQuestions={segment.moreQuestions} />
         ) : (
           <ActivityTimeline
             key={`a-${segment.id}`}
@@ -309,8 +314,15 @@ function PendingCard({ sessionId, turn, disabled }: { sessionId: string; turn: B
         />
       )
     case 'plan':
-      // The build plan card lands with ai-builder-planning P09.
-      return null
+      return (
+        <PlanCard
+          key={proposal.tool_call_id}
+          sessionId={sessionId}
+          turn={turn}
+          proposal={proposal}
+          disabled={disabled}
+        />
+      )
     default:
       return (
         <ProposalCard

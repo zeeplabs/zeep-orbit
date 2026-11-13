@@ -2,6 +2,7 @@ import {
   BUILDER_ASK_USER,
   BUILDER_PROPOSE_BUILD_PLAN,
   type BuilderEvent,
+  type BuilderPlan,
   type BuilderProposal,
   type BuilderQuestion,
   type BuilderTurn,
@@ -37,10 +38,22 @@ export interface AnsweredRound {
   skipped: boolean
 }
 
+/** A build plan the user approved, rebuilt from the `proposal` event and the `plan_approved` event. */
+export interface ApprovedPlan {
+  /** Null when the plan could not be read; the block then shows the version only. */
+  plan: BuilderPlan | null
+  version?: number
+  /** The milestone the build started on (1-based). */
+  milestone?: number
+}
+
 export type TurnSegment =
   | { kind: 'message'; id: number; content: string }
   | { kind: 'activity'; id: number; entries: ActivityEntry[] }
   | { kind: 'questions'; id: number; round: AnsweredRound }
+  | { kind: 'plan'; id: number; approved: ApprovedPlan }
+  /** The user sent a plan back. Their words are chat content, not in the event: only what they asked for. */
+  | { kind: 'revision'; id: number; moreQuestions: boolean }
 
 const PLANNING_TOOLS: readonly string[] = [BUILDER_ASK_USER, BUILDER_PROPOSE_BUILD_PLAN]
 
@@ -195,8 +208,9 @@ export function buildTurnViews(turns: BuilderTurn[], events: BuilderEvent[]): Tu
       let budgetReason: string | undefined
       let eventError: string | undefined
       let failedBuilds = 0
-      // The questions of each ask_user call of the turn, by tool call id.
+      // The questions of each ask_user call and the plan of each propose_build_plan call, by tool call id.
       const asked = new Map<string, BuilderQuestion[]>()
+      const proposed = new Map<string, BuilderPlan | null>()
 
       for (const event of list) {
         if (event.type === 'assistant_message') {
@@ -206,6 +220,24 @@ export function buildTurnViews(turns: BuilderTurn[], events: BuilderEvent[]): Tu
         }
         if (event.type === 'proposal' && event.payload.name === BUILDER_ASK_USER && event.payload.tool_call_id) {
           asked.set(event.payload.tool_call_id, parseQuestions(event.payload.operation) ?? [])
+          continue
+        }
+        if (event.type === 'proposal' && event.payload.name === BUILDER_PROPOSE_BUILD_PLAN && event.payload.tool_call_id) {
+          proposed.set(event.payload.tool_call_id, parsePlan(event.payload.operation))
+          continue
+        }
+        if (event.type === 'plan_approved') {
+          const id = event.payload.tool_call_id
+          const approved: ApprovedPlan = {
+            plan: (id && proposed.get(id)) || null,
+            version: event.payload.version,
+            milestone: event.payload.milestone,
+          }
+          segments.push({ kind: 'plan', id: event.id, approved })
+          continue
+        }
+        if (event.type === 'plan_revision_requested') {
+          segments.push({ kind: 'revision', id: event.id, moreQuestions: event.payload.more_questions === true })
           continue
         }
         if (event.type === 'questions_answered') {
@@ -472,6 +504,50 @@ export function parseQuestions(args: unknown): BuilderQuestion[] | null {
     questions.push({ id, title: str(q.title) || id, question, options, multiple: q.multiple === true })
   }
   return questions.length > 0 ? questions : null
+}
+
+function strings(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string' && v.trim() !== '') : []
+}
+
+/**
+ * Reads propose_build_plan arguments defensively, like parseQuestions: an item without its name
+ * (screen, table, milestone title) is dropped. Returns null when there is no milestone left, since
+ * the user would be approving a plan they cannot see.
+ */
+export function parsePlan(args: unknown): BuilderPlan | null {
+  const a = record(args)
+  const list = (value: unknown) => (Array.isArray(value) ? value.map(record) : [])
+  const milestones = list(a.milestones)
+    .map((m) => ({ title: str(m.title), deliverable: str(m.deliverable), done: m.done === true }))
+    .filter((m) => m.title !== '')
+  if (milestones.length === 0) return null
+  const look = record(a.look)
+  return {
+    summary: str(a.summary),
+    screens: list(a.screens)
+      .map((s) => ({ name: str(s.name), purpose: str(s.purpose) }))
+      .filter((s) => s.name !== ''),
+    data: list(a.data)
+      .map((d) => ({ table: str(d.table), holds: str(d.holds), access: str(d.access), access_note: str(d.access_note) || undefined }))
+      .filter((d) => d.table !== ''),
+    look: {
+      style: str(look.style) || undefined,
+      colors: str(look.colors) || undefined,
+      ui_language: str(look.ui_language) || undefined,
+      reference: str(look.reference) || undefined,
+    },
+    assumptions: strings(a.assumptions),
+    out_of_scope: strings(a.out_of_scope),
+    milestones,
+  }
+}
+
+const PLAN_ACCESS = ['public', 'signed_in', 'owner', 'role'] as const
+
+/** The access of a plan table as a known code, or 'unknown' (drawn as a warning, like 'public'). */
+export function planAccess(access: string): string {
+  return knownCode(access, PLAN_ACCESS, 'unknown')
 }
 
 /** Only https URLs from server data become links (never javascript:/data:). */

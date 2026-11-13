@@ -2288,6 +2288,60 @@ export interface BuilderPlanningResult {
   turn?: BuilderTurn
 }
 
+/** planning.MaxFeedbackChars: the text sent with "Ask for changes". */
+export const BUILDER_FEEDBACK_MAX_CHARS = 2000
+
+/** How a table of a build plan is reached (planning.DataEntry.Access). */
+export type BuilderPlanAccess = 'public' | 'signed_in' | 'owner' | 'role'
+
+/** The propose_build_plan arguments (planning.Plan). Words only: tables are created later, by a backend plan. */
+export interface BuilderPlan {
+  summary: string
+  screens: { name: string; purpose: string }[]
+  data: { table: string; holds: string; access: BuilderPlanAccess | string; access_note?: string }[]
+  look: { style?: string; colors?: string; ui_language?: string; reference?: string }
+  assumptions: string[]
+  out_of_scope: string[]
+  /** `done` only on a revision of an approved plan: what is already built. */
+  milestones: { title: string; deliverable: string; done?: boolean }[]
+}
+
+/** Body of POST .../turns/{turn}/plan/approve. */
+export interface ApproveBuilderPlanInput {
+  /** pending_proposal.tool_call_id of the plan the user approved. */
+  tool_call_id: string
+}
+
+/** Body of POST .../turns/{turn}/plan/revise. `feedback` is required unless `more_questions`. */
+export interface ReviseBuilderPlanInput {
+  tool_call_id: string
+  feedback: string
+  /** "Back to questions": one more round of questions, then a new plan. */
+  more_questions: boolean
+}
+
+/** A token range and, when the sample is priced, a cost range in micros of `currency`. */
+export interface BuilderEstimateRange {
+  tokens_low: number
+  tokens_high: number
+  cost_micros_low: number | null
+  cost_micros_high: number | null
+}
+
+/**
+ * GET .../turns/{turn}/plan/estimate: percentiles of past build turns of the installation. The
+ * page formats it and computes nothing. `milestone` and `plan` are null when `available` is false.
+ */
+export interface BuilderPlanEstimate {
+  available: boolean
+  sample_turns: number
+  currency: string
+  /** Milestones of the plan not marked done: the factor of the whole-plan range. */
+  milestones: number
+  milestone: BuilderEstimateRange | null
+  plan: BuilderEstimateRange | null
+}
+
 // -- Preview / publish --
 
 /** Body of POST /builder/sessions/{id}/preview-token. Keep `token` out of logs and visible URLs. */
@@ -2681,6 +2735,8 @@ export const builderKeys = {
   session: (id: string) => ['builder', 'session', id] as const,
   events: (id: string) => ['builder', 'events', id] as const,
   sessionUsage: (id: string) => ['builder', 'session-usage', id] as const,
+  planEstimate: (id: string, turn: string, toolCallId: string) =>
+    ['builder', 'plan-estimate', id, turn, toolCallId] as const,
   usageReport: (range: BuilderUsageRange, groupBy: BuilderUsageGroupBy) =>
     ['builder', 'usage-report', range.from, range.to, range.userId ?? null, groupBy] as const,
   templates: () => ['builder', 'templates'] as const,
@@ -3230,7 +3286,7 @@ export function useRevertBuilderSession(
 function builderTurnPath(
   sessionId: string,
   turn: string | number,
-  action: 'confirm' | 'reject' | 'answers',
+  action: 'confirm' | 'reject' | 'answers' | 'plan/approve' | 'plan/revise' | 'plan/estimate',
 ): string {
   return `${builderSessionPath(sessionId)}/turns/${encodeURIComponent(String(turn))}/${action}`
 }
@@ -3300,6 +3356,65 @@ export function useAnswerBuilderQuestions(
     onError: (error) => {
       toast.error(error.message)
     },
+  })
+}
+
+/**
+ * Approves the build plan a turn is paused on. The plan becomes the next brief version and the
+ * same turn resumes in build mode on its first milestone: no other message is needed. A 409
+ * means the plan was replaced or already resolved, so the session is refreshed on error too.
+ */
+export function useApproveBuilderPlan(
+  sessionId: string,
+): UseMutationResult<BuilderPlanningResult, Error, { turn: string | number; input: ApproveBuilderPlanInput }> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ turn, input }) =>
+      apiFetch<BuilderPlanningResult>(builderTurnPath(sessionId, turn, 'plan/approve'), jsonRequest('POST', input)),
+    onSettled: () => {
+      invalidateBuilderSession(qc, sessionId)
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+/**
+ * Sends the plan back: with the user's words ("Ask for changes") or for one more round of
+ * questions (`more_questions`). The turn resumes and the agent proposes again.
+ */
+export function useReviseBuilderPlan(
+  sessionId: string,
+): UseMutationResult<BuilderPlanningResult, Error, { turn: string | number; input: ReviseBuilderPlanInput }> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ turn, input }) =>
+      apiFetch<BuilderPlanningResult>(builderTurnPath(sessionId, turn, 'plan/revise'), jsonRequest('POST', input)),
+    onSettled: () => {
+      invalidateBuilderSession(qc, sessionId)
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+/**
+ * The estimate of the build plan a turn is paused on. Keyed by the tool call, so a revised plan
+ * (other milestones) gets its own figures. The card shows "no estimate" on error: no toast.
+ */
+export function useBuilderPlanEstimate(
+  sessionId: string,
+  turnId: string,
+  toolCallId: string,
+): UseQueryResult<BuilderPlanEstimate> {
+  return useQuery({
+    queryKey: builderKeys.planEstimate(sessionId, turnId, toolCallId),
+    queryFn: () => apiFetch<BuilderPlanEstimate>(builderTurnPath(sessionId, turnId, 'plan/estimate')),
+    enabled: Boolean(sessionId && turnId && toolCallId),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
   })
 }
 
