@@ -327,6 +327,11 @@ type BuilderTurnView struct {
 	PendingProposal *BuilderProposalView `json:"pending_proposal,omitempty"`
 	CreatedAt       time.Time            `json:"created_at"`
 	FinishedAt      *time.Time           `json:"finished_at"`
+	// Mode is "plan" (only read and planning tools) or "build". BriefVersion
+	// and Milestone are set on a turn that builds a milestone of a brief.
+	Mode         string `json:"mode"`
+	BriefVersion *int   `json:"brief_version"`
+	Milestone    *int   `json:"milestone"`
 }
 
 func newBuilderTurnView(t *store.Turn) BuilderTurnView {
@@ -334,5 +339,6 @@ func newBuilderTurnView(t *store.Turn) BuilderTurnView {
 		ID: t.ID, Seq: t.Seq, Kind: t.Kind, Status: t.Status, CommitSHA: t.CommitSHA,
 		ErrorCode: t.ErrorCode, UserMessage: t.UserMessage, PendingProposal: newBuilderProposalView(t),
 		CreatedAt: t.CreatedAt, FinishedAt: t.FinishedAt,
+		Mode: t.Mode, BriefVersion: t.BriefVersion, Milestone: t.Milestone,
 	}
 }

@@ -224,6 +224,27 @@ func nextPending(states []MilestoneState) int {
 // NextPendingMilestone is nextPending for callers outside the package.
 func NextPendingMilestone(states []MilestoneState) int { return nextPending(states) }
 
+// ResolvedToolCall returns the payload of the latest eventType event of turnID
+// that resolved the tool call toolCallID, and whether there is one. The
+// planning routes use it to answer a repeated request as already resolved.
+// Internal (not owner-scoped): call it only for a turn of a session the caller
+// already authorized.
+func (s *Store) ResolvedToolCall(ctx context.Context, turnID, eventType, toolCallID string) (json.RawMessage, bool, error) {
+	var payload json.RawMessage
+	err := s.pool.QueryRow(ctx,
+		`SELECT payload FROM zeep_system.builder_events
+		 WHERE turn_id = $1 AND type = $2 AND payload->>'tool_call_id' = $3
+		 ORDER BY id DESC LIMIT 1`, turnID, eventType, toolCallID,
+	).Scan(&payload)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("builder store: resolved tool call: %w", err)
+	}
+	return payload, true, nil
+}
+
 // PlanningResolution is what the decide of AnswerQuestions and ReviseBuildPlan
 // returns.
 type PlanningResolution struct {
@@ -344,7 +365,7 @@ func (s *Store) ApproveBuildPlan(
 			return &resolution{ProposalResolution: ProposalResolution{
 				Content:      a.Content(b.Version),
 				EventType:    EventPlanApproved,
-				EventPayload: map[string]any{"version": b.Version, "milestones": a.Milestones, "milestone": a.Milestone},
+				EventPayload: map[string]any{"tool_call_id": p.ToolCallID, "version": b.Version, "milestones": a.Milestones, "milestone": a.Milestone},
 			}}, nil
 		})
 	if err != nil {

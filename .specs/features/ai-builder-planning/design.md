@@ -210,6 +210,15 @@ Changes to existing routes:
 - Settings: `planning_mode` in `GET/PUT /builder/settings` (superadmin; audited like the other settings).
 - Audit: `builder.plan.approve` with the version and the milestone count. Answers and plan text are chat content and are not audited, like messages.
 
+**Changed in P06:**
+
+- The three `POST` routes require `tool_call_id`: the id of the card the user acted on (`pending_proposal.tool_call_id`). A turn pauses several times, so without it a click on a card that was already replaced would answer the next round, or approve a revised plan the user has not seen. A different id is a 409 ("this card was replaced"). A repeated request for a call already resolved by the same route is a 200 with `already_resolved`, found by `store.ResolvedToolCall` on the event's `tool_call_id` (the three planning events carry it, including `plan_approved`). Any other request on a turn that is no longer paused is a 409.
+- The **[verify]** is answered: `ConfirmProposal` and `RejectProposal` never see a planning tool, because `store.ResolveProposal` refuses it with `ErrProposalKind`, now mapped to 409. The new routes map the same error to 409 for a backend proposal. `ConfirmProposal` still checks the backend role first, so a viewer gets 403 before the 409.
+- The brief fields (`brief_version`, `milestones_total`, `milestones_done`, `next_milestone`) are in the session detail (`GET /sessions/{id}`) only, not in the list, which would cost one progress query per session. The turn view gains `mode`, `brief_version` and `milestone`.
+- `messages` answers 400 for `plan_first` with `milestone`, and for `plan_first` when `planning_mode` is `off`.
+- Answering a round and revising a plan are audited too (`builder.questions.answer` with `skipped`, `builder.plan.revise` with `more_questions`), with no text, like `confirm` and `reject`.
+- A skip may carry answers: they are sent to the agent before the "do not ask again" text.
+
 ## 9. Estimate (ABP-08)
 
 Source: completed build-mode turns of the installation in the last 90 days, for the provider kind and model configured now. Per turn, the ledger gives total tokens and total cost.

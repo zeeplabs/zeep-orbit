@@ -312,7 +312,7 @@ func TestApproveBuildPlan_IsAtomicAndStartsTheBuild(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if last := events[len(events)-1]; last.Type != store.EventPlanApproved || !sameJSON(last.Payload, `{"version":1,"milestones":3,"milestone":1}`) {
+	if last := events[len(events)-1]; last.Type != store.EventPlanApproved || !sameJSON(last.Payload, `{"tool_call_id":"call_1","version":1,"milestones":3,"milestone":1}`) {
 		t.Errorf("last event: %s %s", last.Type, last.Payload)
 	}
 

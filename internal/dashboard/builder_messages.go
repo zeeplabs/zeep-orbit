@@ -45,6 +45,12 @@ const (
 
 type createBuilderMessageRequest struct {
 	Content string `json:"content"`
+	// PlanFirst asks for a plan-mode turn in a session that is already
+	// building ("Plan first"). Refused when planning_mode is off.
+	PlanFirst bool `json:"plan_first"`
+	// Milestone, when positive, is the milestone of the current brief this turn
+	// builds ("Continue"); it must be the next pending one.
+	Milestone int `json:"milestone"`
 }
 
 // CreateMessage handles POST /dashboard/api/builder/sessions/{id}/messages:
@@ -72,12 +78,33 @@ func (h *BuilderHandler) CreateMessage(w http.ResponseWriter, r *http.Request) {
 	case utf8.RuneCountInString(content) > builderMaxMessageRunes:
 		h.writeError(w, http.StatusBadRequest, "message is too long")
 		return
+	case req.Milestone < 0:
+		h.writeError(w, http.StatusBadRequest, "milestone must be positive")
+		return
+	case req.PlanFirst && req.Milestone > 0:
+		h.writeError(w, http.StatusBadRequest, "plan_first and milestone cannot be combined")
+		return
 	}
 	if _, ok := h.requireAvailable(w, r); !ok {
 		return
 	}
+	settings, err := GetBuilderSettings(r.Context(), h.pool)
+	if err != nil {
+		h.serverError(w, r, err)
+		return
+	}
+	planningOff := settings.PlanningMode == BuilderPlanningOff
+	if req.PlanFirst && planningOff {
+		h.writeError(w, http.StatusBadRequest, "planning is turned off")
+		return
+	}
 
-	turn, err := h.store.CreateTurn(r.Context(), user.ID, sess.ID, store.KindChat, content)
+	turn, err := h.store.CreateTurnWith(r.Context(), user.ID, sess.ID, store.KindChat, content,
+		store.TurnOptions{PlanFirst: req.PlanFirst, PlanningOff: planningOff, Milestone: req.Milestone})
+	if errors.Is(err, store.ErrMilestoneMismatch) {
+		h.writeError(w, http.StatusBadRequest, "milestone is not the next pending milestone of the brief")
+		return
+	}
 	if !h.turnCreated(w, r, turn, err) {
 		return
 	}
@@ -185,6 +212,7 @@ const (
 	efInt
 	efBool
 	efObject // an arbitrary JSON object, size-capped
+	efTexts  // an object of short strings (key -> text), each capped
 )
 
 type eventField struct {
@@ -207,6 +235,10 @@ var (
 	efObj  = eventField{kind: efObject, max: maxEventObjectBytes}
 )
 
+// efTextMap is an object whose keys match eventKeyPattern and whose values are
+// strings of at most n runes; other entries are dropped.
+func efTextMap(n int) eventField { return eventField{kind: efTexts, max: n} }
+
 // builderEventFields lists, per event type, the only payload keys that leave
 // the server. Everything else the loop might have stored is dropped: file
 // contents, tool arguments, provider or builder error text.
@@ -227,6 +259,11 @@ var builderEventFields = map[string]map[string]eventField{
 	"error":             {"code": efStr(64)},
 	"revert":            {"to_turn_seq": efNum, "sha": efStr(64), "changed": efFlag, "build": efStr(16)},
 	"turn_finished":     {"status": efStr(32), "sha": efStr(64)},
+	// Planning (builder_planning.go). Answers are capped when written, and again
+	// here.
+	"questions_answered":      {"tool_call_id": efStr(128), "skipped": efFlag, "answers": efTextMap(builderAnswerEventChars)},
+	"plan_approved":           {"tool_call_id": efStr(128), "version": efNum, "milestones": efNum, "milestone": efNum},
+	"plan_revision_requested": {"tool_call_id": efStr(128), "more_questions": efFlag},
 }
 
 var (
@@ -311,6 +348,20 @@ func cleanEventValue(v json.RawMessage, f eventField) (any, bool) {
 			return nil, false
 		}
 		return json.RawMessage(v), true
+	case efTexts:
+		var m map[string]json.RawMessage
+		if json.Unmarshal(v, &m) != nil || m == nil {
+			return nil, false
+		}
+		out := make(map[string]string, len(m))
+		for key, raw := range m {
+			var s string
+			if !eventKeyPattern.MatchString(key) || json.Unmarshal(raw, &s) != nil {
+				continue
+			}
+			out[key] = capEventString(s, f.max)
+		}
+		return out, true
 	}
 	return nil, false
 }

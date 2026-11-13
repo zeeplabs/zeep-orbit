@@ -624,6 +624,7 @@ func (h *BuilderHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 // BuilderSessionDetail is the body of GET /api/builder/sessions/{id}.
 type BuilderSessionDetail struct {
 	BuilderSessionView
+	builderBriefProgress
 	Turns []BuilderTurnView `json:"turns"`
 }
 
@@ -647,6 +648,10 @@ func (h *BuilderHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 	}
 	detail := BuilderSessionDetail{BuilderSessionView: newBuilderSessionView(sess), Turns: make([]BuilderTurnView, 0, len(turns))}
 	if detail.Usage, err = h.sessionUsageSummary(r.Context(), sess); err != nil {
+		h.serverError(w, r, err)
+		return
+	}
+	if detail.builderBriefProgress, err = h.briefProgress(r.Context(), sess.ID); err != nil {
 		h.serverError(w, r, err)
 		return
 	}

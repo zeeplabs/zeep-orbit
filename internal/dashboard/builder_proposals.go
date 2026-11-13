@@ -313,6 +313,9 @@ func (h *BuilderHandler) ConfirmProposal(w http.ResponseWriter, r *http.Request)
 	case errors.Is(err, store.ErrProposalBusy):
 		h.writeError(w, http.StatusConflict, builderProposalBusyMsg)
 		return
+	case errors.Is(err, store.ErrProposalKind):
+		h.writeError(w, http.StatusConflict, builderProposalIsPlanningMsg)
+		return
 	case errors.Is(err, store.ErrNotFound), errors.Is(err, store.ErrSessionArchived):
 		h.writeError(w, http.StatusNotFound, builderSessionNotFoundMsg)
 		return
@@ -416,6 +419,9 @@ func (h *BuilderHandler) RejectProposal(w http.ResponseWriter, r *http.Request) 
 		return
 	case errors.Is(err, store.ErrProposalBusy):
 		h.writeError(w, http.StatusConflict, builderProposalBusyMsg)
+		return
+	case errors.Is(err, store.ErrProposalKind):
+		h.writeError(w, http.StatusConflict, builderProposalIsPlanningMsg)
 		return
 	case errors.Is(err, store.ErrNotFound), errors.Is(err, store.ErrSessionArchived):
 		h.writeError(w, http.StatusNotFound, builderSessionNotFoundMsg)

@@ -11,7 +11,7 @@ Commits only when the user asks (AGENTS.md §2); one commit per task when author
 **Spec**: `.specs/features/ai-builder-planning/spec.md`
 **Design**: `.specs/features/ai-builder-planning/design.md`
 **Parent**: `.specs/features/ai-frontend-builder/`
-**Status**: Approved by the maintainer on 2026-11-13 with the defaults of design §12. In execution on `feat/ai-frontend-builder`. Done: P01–P05. The DDL of P01 is still shown and confirmed before it is applied.
+**Status**: Approved by the maintainer on 2026-11-13 with the defaults of design §12. In execution on `feat/ai-frontend-builder`. Done: P01–P06. The DDL of P01 is still shown and confirmed before it is applied.
 
 ---
 
@@ -88,6 +88,7 @@ P11 docs + CHANGELOG (last)        P12 local end-to-end run        P13 real-mode
 - **Where**: new `internal/dashboard/builder_planning.go`, `builder_messages.go`, `builder_proposals.go`, `builder_common.go`, `internal/server/server.go`.
 - **Done when**: integration tests: full path over HTTP with the mock model (message → questions → answers → plan → approve → build turn runs with the full tool set in the same turn); validation errors of the answers (English); skip; revise with and without `more_questions`; another user's session is 404; archived session; wrong pending tool is 409 both ways; double approve (second is 409 or the idempotent answer the proposal routes already give — match them); event payloads contain only whitelisted keys and capped text; `milestone` mismatch is 400.
 - **Requirements**: ABP-02, ABP-05, ABP-06, ABP-09, ABP-10, ABP-11, ABP-15. **Depends**: P05. **Tests**: integration. **Gate**: Full.
+- **Status**: Done 2026-11-13. New `internal/dashboard/builder_planning.go` (`AnswerQuestions`, `ApprovePlan`, `RevisePlan`, the brief progress of the session detail); `messages` takes `plan_first` and `milestone`; the planning events are whitelisted, with the answers served as a map of capped strings (new field kind); `confirm`/`reject` map `ErrProposalKind` to 409. Deviations, recorded in design §8: every route requires `tool_call_id` (a stale card is 409, a repeat is 200 `already_resolved`); the brief fields are in the detail only; the turn view gains `mode`, `brief_version`, `milestone`; answering and revising are audited without text. `TestBuilderPlanning_FullPathOverHTTP` runs `agent.RunTurn` with a scripted model through message → questions → answers → plan → approve → build, and checks that only the build step was offered the write tool and that it ran in the same turn. Full gate green.
 
 ### P07 — Brief API and the estimate
 - **What**: `GET brief`, `GET brief/versions/{v}`, `GET plan/estimate` (design §8, §9).
