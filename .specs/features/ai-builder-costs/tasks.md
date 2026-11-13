@@ -11,7 +11,7 @@ Commits only when the user asks (AGENTS.md §2); one commit per task when author
 **Spec**: `.specs/features/ai-builder-costs/spec.md`
 **Design**: `.specs/features/ai-builder-costs/design.md`
 **Parent**: `.specs/features/ai-frontend-builder/`
-**Status**: Approved by the maintainer on 2026-11-13, DDL of C01 included. In execution on `feat/ai-frontend-builder`. Done: C01–C11. Pending: C12–C13.
+**Status**: Approved by the maintainer on 2026-11-13, DDL of C01 included. In execution on `feat/ai-frontend-builder`. Done: C01–C12. Pending: C13 (real-endpoint run, needs the owner's keys).
 
 ---
 
@@ -131,6 +131,7 @@ C12 docs + CHANGELOG (last)        C13 real-endpoint run (owner, needs keys)
 ### C12 — Docs and CHANGELOG
 - **What**: `docs/docs/ai-frontend-builder.md` (providers, price table, currency, caps, usage page, what "no price set" means); `CHANGELOG.md` `[Unreleased]`; README feature table row and its three translations if the usage page is listed as a feature; update this file's status.
 - **Requirements**: all. **Depends**: C01 to C11. **Gate**: docs build + i18n JSON check.
+- **Status**: Done 2026-11-13. `docs/docs/ai-frontend-builder.md` gains the `anthropic` provider, the currency and cost budget settings, a **Usage and cost** section (model prices, "no price set", currency, cost budgets, where usage is shown, API) and the matching limitations and troubleshooting lines. The README feature table row is unchanged (the usage report is part of the builder, not a feature of its own); the "Your own LLM" bullet of the builder section now names `anthropic` and the cost tracking, mirrored in the three translations. The CHANGELOG entries were written with C01 to C11 and needed no change. Docs build green; no locale file changed.
 
 ### C13 — Real-endpoint run (owner)
 - **What**: run the opt-in contract test against OpenAI and Anthropic with the owner's keys; compare one call's recorded tokens and cost with the provider's usage page; record the result in the design notes. Closes parent task T02 as well.

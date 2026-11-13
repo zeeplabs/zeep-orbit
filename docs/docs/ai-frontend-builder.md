@@ -133,9 +133,10 @@ The release workflow publishes two images next to the main one, with the same ta
 
 After deployment, a superadmin completes setup in the dashboard, under **Integrations**. Until then the builder reports itself as unavailable and nobody can start a session.
 
-1. **Model provider** (the **AI** tab). The builder uses a provider row of the existing AI provider configuration. Two kinds are supported:
+1. **Model provider** (the **AI** tab). The builder uses a provider row of the existing AI provider configuration. Three kinds are supported:
    - `openai`: the OpenAI API, with an API key and a model.
    - `openai_compatible`: any server that speaks the OpenAI Chat Completions API (for example Ollama, vLLM, Azure OpenAI or a gateway). It needs a **base URL** and a model. The API key is optional for this kind.
+   - `anthropic`: the Anthropic Messages API, with an API key and a model. It has no base URL setting (a gateway is reached through `openai_compatible`).
 
    The key is encrypted at rest and never returned by the API (only `has_key`). Updating the model without sending the key keeps the stored key.
 
@@ -146,15 +147,20 @@ After deployment, a superadmin completes setup in the dashboard, under **Integra
    | Setting | Default | Allowed range |
    |---------|---------|---------------|
    | Enabled | off | |
-   | Model provider | `openai` | `openai` or `openai_compatible` |
+   | Model provider | `openai` | `openai`, `openai_compatible` or `anthropic` |
    | Context window (tokens) | `128000` | 4096 to 2000000 |
    | Session token budget | `0` (unset) | 0 to 10^12 |
    | Monthly token budget per user | `0` (unset) | 0 to 10^12 |
+   | Currency | `USD` | a three-letter ISO 4217 code |
+   | Session cost budget | `0` (no money limit) | an amount in the currency |
+   | Monthly cost budget per user | `0` (no money limit) | an amount in the currency |
    | Max steps per turn | `40` | 1 to 200 |
    | Max fix iterations (failed builds per turn) | `3` | 1 to 20 |
    | Max seconds per turn | `600` | 10 to 3600 |
 
-   Token budgets count input and output tokens. **Both budgets must be greater than zero.** With either one at `0`, the builder reports itself unavailable (`budget_not_configured`) and **Create with AI** is disabled; sending a message to an existing session is refused the same way. If a cap is set back to `0` while a turn is already running, that turn's next model call is refused and the turn ends with a `budget_exceeded` event. The budget is checked before each model call, against what was already recorded, so the call that crosses the limit is the last one. The monthly budget counts the calendar month in UTC. A settings change applies to the next turn without restarting Orbit.
+   Token budgets count every token of a call: input, cached input, cache write and output. **Both token budgets must be greater than zero.** With either one at `0`, the builder reports itself unavailable (`budget_not_configured`) and **Create with AI** is disabled; sending a message to an existing session is refused the same way. If a cap is set back to `0` while a turn is already running, that turn's next model call is refused and the turn ends with a `budget_exceeded` event. The budget is checked before each model call, against what was already recorded, so the call that crosses the limit is the last one. The monthly budget counts the calendar month in UTC. A settings change applies to the next turn without restarting Orbit.
+
+   The two cost budgets are optional and work the same way, in money: see [Usage and cost](#usage-and-cost). When usage reaches 80% of any budget, the session timeline shows a notice, once per session and budget.
 
 3. **Persona and rules** (the **AI Builder** tab). Company text added to every session, after Orbit's own core prompt. The core prompt takes precedence: a company rule cannot switch off confirmation of backend changes, key isolation or app scoping. Persona and rules together are limited to 8000 characters. Every save that changes the content creates a new version (author and time recorded, older versions kept and visible in the history). A session uses the version that was active when it was created; later edits apply only to sessions started afterwards. Saves are audit-logged with sizes and version ids, not the text.
 
@@ -169,6 +175,46 @@ After deployment, a superadmin completes setup in the dashboard, under **Integra
    - **Changes apply on the next turn.** Skills are resolved at the start of every turn and are not pinned to a session (unlike the persona), so turning a skill off or deleting it takes effect for running sessions on their next message. The timeline shows which skills the agent used.
    - **Privacy.** The text of a skill is sent to the configured model provider whenever the agent loads it. Do not put secrets or personal data in a skill. Uploads that contain a recognizable credential (private key, `sk-` and similar API keys, AWS, GitHub, Slack or Google tokens, JWTs) are rejected; this check is a safety net, not a guarantee. Skill changes are audit-logged (`builder.skill.create`, `version`, `enable`, `disable`, `delete`) with the name, version, hash and size, never the text.
    - **API.** `GET`/`POST /dashboard/api/builder/skills` and `GET`/`PATCH`/`DELETE /dashboard/api/builder/skills/{name}`, superadmin only. Errors carry a machine `reason`; validation failures (`400`, `skill_invalid`) add `fields` with one code per field.
+
+## Usage and cost
+
+Orbit records every model call the builder makes: the provider and model, what the call was for (a chat step or a history compaction), and its tokens in four classes (input at the full rate, cached input, cache write, output). The record holds counts and identifiers only, never prompt or reply text.
+
+### Model prices
+
+Orbit ships no prices and fetches none. A superadmin enters them under **Integrations**, **AI Builder**, in the **Model prices** card: one row per provider and model, with a price **per million tokens** for input and output and, optionally, for cached input and cache write. When one of the optional prices is empty, those tokens are charged at the input price. The card also lists the models used in the last 30 days that have no price.
+
+The cost of a call is computed once, when the call is recorded, and stored with it. Changing a price later affects only new calls; it does not rewrite history.
+
+**"No price set"** means the model of a call had no price row when the call was made. Such a call has no cost: it is not counted as zero, it does not stop the call, and it does not count toward the cost budgets. A total that mixes priced and unpriced calls is shown as the known amount plus the number of calls with no price, never as a full amount.
+
+The figures are estimates from your own price table. They are not an invoice: compare them with the provider's billing before relying on them.
+
+### Currency
+
+All prices and costs are in one currency for the installation, set in the **Costs** card (default `USD`). Changing the currency converts nothing: prices and costs already stored keep their numbers. The usage report shows a note when the currency changed inside or after the selected period.
+
+### Cost budgets
+
+The **Costs** card has two optional budgets in money, next to the token budgets: one per session and one per user per calendar month (UTC). `0` means no money limit. They are checked before each model call against the cost already recorded, so the call that crosses the limit is the last one. Calls with no price do not count, so a cost budget does not limit a model that has no price row; the card warns when a cost budget is set and the model in use has no price. The token budgets always apply.
+
+When a turn stops because of a budget, the chat says which one (session or month, tokens or cost).
+
+### Where it is shown
+
+- **In the chat.** Each finished step shows its tokens and cost in one line. Opening it shows the receipt: model calls, tokens by class, cost, working time, files changed, builds and the model.
+- **In the session.** A strip under the page header shows the session total and, for each budget that is set, how much of it is used.
+- **In the usage report** (`/dashboard/builder/usage`, linked from the apps page, from a session and from the **Costs** card). It shows a period of up to 366 days, grouped by day, model or session, with the totals, the share of tokens spent on history compaction and a CSV download with one line per model call. Days are counted in UTC. A superadmin sees every user's usage, can group by user and can select a user to see only theirs. Everyone else sees only their own usage.
+
+Usage per user is information about a person's activity. Only superadmins can read other users' usage, and a session's title is shown in the report only to the session's owner.
+
+### API
+
+- `GET`/`PUT`/`DELETE /dashboard/api/builder/prices` (superadmin): the price table. A price row has `provider`, `model`, `input_per_mtok`, `output_per_mtok` and the optional `cached_input_per_mtok` and `cache_write_per_mtok`, as decimal strings.
+- `GET /dashboard/api/builder/sessions/{id}/usage` (session owner): totals, budgets in use and one receipt per turn.
+- `GET /dashboard/api/builder/usage?from&to&group_by=day|user|model|session` and `GET /dashboard/api/builder/usage.csv?from&to`: the report and its export. `from` and `to` are UTC days (`YYYY-MM-DD`), both inclusive; the default is the last 30 days. A superadmin may add `user_id`; `group_by=user` is superadmin-only. The export is refused above 100000 rows.
+
+Money is carried as integer micros (1 unit of currency = 1,000,000 micros) in `cost_micros`; `null` means no price.
 
 ## Isolation model
 
@@ -291,7 +337,9 @@ Registry proxy (`zeep-registry-proxy`):
 - **Deleting a session that has an active turn archives it.** `DELETE /dashboard/api/builder/sessions/{id}` archives the session and destroys its workspace without waiting for the running turn. Published frontend apps are not touched.
 - **One turn at a time per session.** Sending a message while a turn is running is rejected.
 - **One builder replica.** Multiple builder instances and per-session containers are not supported.
-- **Provider support.** Only `openai` and `openai_compatible` are supported. Native Anthropic and Gemini adapters are not implemented. Gemini's OpenAI-compatible endpoint is documented by Google as beta; whether it handles tool calls correctly with this builder has not been verified here.
+- **Provider support.** `openai`, `openai_compatible` and `anthropic` are supported. A native Gemini adapter is not implemented. Gemini's OpenAI-compatible endpoint is documented by Google as beta; whether it handles tool calls correctly with this builder has not been verified here.
+- **Anthropic provider, first version.** The model's thinking blocks are not sent back between steps, and prompt caching is not requested, so cached input and cache write stay at zero for this provider.
+- **Cost covers the builder only.** The "Build with AI" backend chat is not recorded in the usage report.
 - **Publishing needs GitHub and Render.** Other publish targets are not supported.
 
 ## Troubleshooting
@@ -302,13 +350,14 @@ Registry proxy (`zeep-registry-proxy`):
 |----------|---------|---------------|
 | `not_configured` | Orbit has no builder wired: `BUILDER_URL` is empty. | Set `BUILDER_URL` and `BUILDER_SHARED_SECRET` on every Orbit replica and restart. In Compose, start with `--profile builder`. In Helm, set `builder.enabled=true`. With Kustomize, check that the Component is included in the overlay. |
 | `disabled` | The builder is wired, but **Enable AI Builder** is off in the settings. | A superadmin turns it on in **Integrations**, **AI Builder** tab. |
-| `provider_not_configured` | The model provider chosen in the builder settings is unusable. | In the **AI** tab, check the provider row: it must be enabled and have a model and, for `openai`, an API key; for `openai_compatible` it needs a base URL. |
+| `provider_not_configured` | The model provider chosen in the builder settings is unusable. | In the **AI** tab, check the provider row: it must be enabled and have a model and, for `openai`, an API key; for `openai_compatible` it needs a base URL; for `anthropic`, an API key. |
 | `budget_not_configured` | A token cap is `0` (unset), so every turn would end with `budget_exceeded`. | In the **AI Builder** tab, set both the per-session and the per-user monthly token caps to a value greater than zero. Until then the builder is unavailable and **Create with AI** is disabled. |
 | `builder_unreachable` | Orbit could not get a healthy answer from the builder. | Check that the builder container or pod is running, that `BUILDER_URL` resolves from Orbit, and that the network (Compose network, NetworkPolicy ingress from the Orbit pods on port 8081) lets Orbit through. A different `BUILDER_SHARED_SECRET` on the two sides makes every request fail with `401`, which also shows up as unreachable. The builder health endpoint requires a signed token, so a plain `curl` to it answers `401`; use the builder's logs instead. |
 
 Other symptoms:
 
-- **A turn ends right away with `budget_exceeded`.** A budget was reached or was set to `0` while the turn was running. Check the session budget and the monthly per-user budget; both must be greater than zero.
+- **A turn ends right away with `budget_exceeded`.** A budget was reached or was set to `0` while the turn was running. The chat names the budget that stopped the turn. Check the session and monthly token budgets (both must be greater than zero) and, if set, the cost budgets.
+- **The cost reads "no price set".** The model has no row in the **Model prices** card. Add one; calls already recorded keep no cost.
 - **A turn stays `queued`.** The builder is at capacity (`BUILDER_MAX_ACTIVE_SESSIONS`), or Orbit replicas are running their maximum number of turns (`BUILDER_WORKER_CONCURRENCY`). It starts when a slot frees up.
 - **A turn ends with a generic error.** Users see only a generic message by design; provider and builder error text is logged on the Orbit server, not returned. Look in Orbit's server logs.
 - **`npm install` fails with `E404` for a private package.** See the scoped-registry limitation under [Isolation model](#isolation-model), and check `REGISTRY_PROXY_UPSTREAMS` and the matching `REGISTRY_PROXY_TOKEN_<NAME>`.
