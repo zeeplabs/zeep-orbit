@@ -16,6 +16,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/zeeplabs/zeep-orbit/internal/agent/planning"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/provider"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/sandbox"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/skills"
@@ -65,8 +66,10 @@ type PromptInput struct {
 	// model is not offered load_skill.
 	SkillsIndex string
 	// Session is the session context (backend app, schema summary, file tree,
-	// locale).
+	// locale). Its Directive is set by the loop, which knows the turn.
 	Session SessionContext
+	// Brief is the session's current brief; nil when it has none.
+	Brief *BriefInput
 }
 
 // PromptSource builds the [PromptInput] of a session. It runs once per
@@ -85,6 +88,10 @@ type Deps struct {
 	Budget  BudgetChecker
 	Limits  Limits
 	Prompt  PromptSource
+	// PlanningEnabled offers the planning tools (ask_user, propose_build_plan)
+	// in build turns too. False means planning is turned off for the
+	// installation; a turn that is already in plan mode still gets them.
+	PlanningEnabled bool
 	// PreviewBase returns the URL path a session's preview is served under
 	// (vite --base); the revert turn's rebuild passes it like run_build does.
 	// Default tools.PreviewBuildBase: pass the same function the workspace
@@ -149,8 +156,12 @@ type run struct {
 	// skillsVisible: the skills index is in the prompt, so load_skill is
 	// offered to the model. Fixed per turn (the index is resolved once).
 	skillsVisible bool
-	msgs          []store.Message
-	state         turnState
+	// planMode: the turn only plans (see planning_loop.go). It is read from
+	// the turn row on every invocation, so the invocation that follows a plan
+	// approval runs in build mode.
+	planMode bool
+	msgs     []store.Message
+	state    turnState
 
 	// wrote: workspace files were written since the last checkpoint.
 	wrote bool
@@ -202,6 +213,7 @@ func RunTurn(ctx context.Context, deps Deps, lease store.Lease) error {
 		return store.ErrLeaseLost
 	}
 	r.turn = turn
+	r.planMode = turn.Mode == store.ModePlan
 	sess, err := deps.Store.GetSessionByID(ctx, turn.SessionID)
 	if err != nil {
 		return fmt.Errorf("agent: load session: %w", err)
@@ -263,8 +275,19 @@ func (r *run) run(ctx context.Context) (*outcome, error) {
 			return &outcome{status: store.TurnFailed, code: CodeInternal}, nil
 		}
 	}
-	r.system = BuildSystemPrompt(CorePrompt(), pin.Company, pin.TemplateGuide, pin.SkillsIndex, pin.Session)
+	brief := ""
+	if pin.Brief != nil && pin.Brief.Plan != nil {
+		brief = planning.RenderBrief(pin.Brief.Plan)
+	} else {
+		pin.Brief = nil
+	}
+	pin.Session.Directive = r.directive(pin.Brief)
+	r.system = BuildSystemPromptWithBrief(CorePrompt(), pin.Company, pin.TemplateGuide, pin.SkillsIndex, brief, pin.Session)
 	r.skillsVisible = strings.TrimSpace(pin.SkillsIndex) != ""
+
+	if err := r.syncBriefFile(ctx, tctx, pin.Brief); err != nil {
+		return nil, err
+	}
 
 	// Tool calls persisted by a previous attempt but not answered yet.
 	if len(r.state.pending) > 0 {
@@ -398,7 +421,7 @@ func (r *run) chat(ctx, tctx context.Context) (provider.ChatResponse, *outcome, 
 	if err := r.deps.Store.RecordUsage(ctx, store.UsageRecord{
 		UserID: r.sess.OwnerUserID, Feature: store.FeatureBuilder, SessionID: r.sess.ID, TurnID: r.turn.ID,
 		Provider: r.deps.Provider.Name(), Model: r.deps.Provider.Model(),
-		Purpose:     store.PurposeChat,
+		Purpose:     r.usagePurpose(),
 		InputTokens: resp.Usage.InputTokens, CachedInputTokens: resp.Usage.CachedInputTokens,
 		CacheWriteTokens: resp.Usage.CacheWriteTokens, OutputTokens: resp.Usage.OutputTokens,
 		Reported: resp.Usage.Reported,
@@ -481,14 +504,15 @@ func (r *run) runCalls(ctx, tctx context.Context, calls []provider.ToolCall) (*o
 		if err := r.emit(ctx, EventToolCall, map[string]any{"name": c.Name, "summary": toolSummary(c.Arguments)}); err != nil {
 			return nil, err
 		}
-		isBuild := c.Name == tools.ToolRunBuild
-		if isBuild {
+		res, gated := r.gatePlanning(c)
+		if !gated {
+			res, gated = r.gateSkillCall(c)
+		}
+		if !gated && c.Name == tools.ToolRunBuild {
 			if err := r.emit(ctx, EventBuildStarted, map[string]any{"step": argString(c.Arguments, "step")}); err != nil {
 				return nil, err
 			}
 		}
-
-		res, gated := r.gateSkillCall(c)
 		if !gated {
 			var err error
 			res, err = r.deps.Tools.Dispatch(tctx, tools.Call{ID: c.ID, Name: c.Name, Arguments: c.Arguments, SessionID: r.sess.ID, TurnID: r.turn.ID})
@@ -498,7 +522,7 @@ func (r *run) runCalls(ctx, tctx context.Context, calls []provider.ToolCall) (*o
 		}
 
 		if kind, ok := r.deps.Tools.Kind(c.Name); ok && !res.IsError &&
-			(kind == tools.KindProposal || kind == tools.KindExternalMutating) {
+			(kind == tools.KindProposal || kind == tools.KindExternalMutating || kind == tools.KindPlanning) {
 			return r.pauseForProposal(ctx, c)
 		}
 
@@ -569,16 +593,6 @@ func (r *run) emitResult(ctx context.Context, c provider.ToolCall, res tools.Res
 		}
 	}
 	return nil
-}
-
-// toolSpecs is what the model is offered: every registered tool, except
-// load_skill when no skills are enabled (the tool lives on the shared
-// registry, so the offer is decided per turn).
-func (r *run) toolSpecs() []provider.ToolSpec {
-	if r.skillsVisible {
-		return r.deps.Tools.Specs()
-	}
-	return r.deps.Tools.SpecsWithout(skills.ToolLoadSkill)
 }
 
 // gateSkillCall answers a load_skill call without dispatching it when the

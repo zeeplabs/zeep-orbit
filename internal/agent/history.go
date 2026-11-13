@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/zeeplabs/zeep-orbit/internal/agent/planning"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/provider"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/sandbox"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/store"
@@ -25,6 +26,12 @@ type toolMeta struct {
 	IsError     bool `json:"is_error"`
 	// Skill is the skill a successful load_skill call loaded (empty otherwise).
 	Skill string `json:"skill,omitempty"`
+	// QuestionsClosed marks the result of an ask_user round the user ended
+	// ("start building now"); QuestionsReopened marks the result of a build
+	// plan the user sent back to questions. Both are written by the store
+	// when the user decides.
+	QuestionsClosed   bool `json:"questions_closed,omitempty"`
+	QuestionsReopened bool `json:"questions_reopened,omitempty"`
 }
 
 type summaryMeta struct {
@@ -78,11 +85,19 @@ type turnState struct {
 	// assistant reply without tool calls (the model was done; only the final
 	// commit is missing).
 	lastAssistantNoTools bool
+	// questionRounds is the number of ask_user rounds the user answered in
+	// this turn; questionReopens the times the user sent a plan back to
+	// questions (each grants one more round); questionsClosed is true once the
+	// user ended the questions and has not reopened them since.
+	questionRounds  int
+	questionReopens int
+	questionsClosed bool
 }
 
 func analyzeTurn(msgs []store.Message, turnID string) turnState {
 	var st turnState
 	answered := map[string]bool{}
+	callNames := map[string]string{}
 	var lastAssistant *store.Message
 	for i := range msgs {
 		m := &msgs[i]
@@ -94,9 +109,27 @@ func analyzeTurn(msgs []store.Message, turnID string) turnState {
 			st.steps++
 			st.started = true
 			lastAssistant = m
+			for _, c := range parseAssistantCalls(*m) {
+				callNames[c.ID] = c.Name
+			}
 		case store.RoleTool:
 			answered[m.ToolCallID] = true
 			meta := parseToolMeta(*m)
+			if !meta.IsError {
+				switch callNames[m.ToolCallID] {
+				case planning.ToolAskUser:
+					if meta.QuestionsClosed {
+						st.questionsClosed = true
+					} else {
+						st.questionRounds++
+					}
+				case planning.ToolProposeBuildPlan:
+					if meta.QuestionsReopened {
+						st.questionReopens++
+						st.questionsClosed = false
+					}
+				}
+			}
 			if meta.BuildFailed {
 				st.failedBuilds++
 			}

@@ -130,7 +130,7 @@ Enforced twice, both in the loop and both tested:
 1. `toolSpecs()` filters by kind (new `Registry.SpecsWhere(func(Tool) bool)`).
 2. `runCalls` refuses a call of a kind the mode does not allow, without dispatching it, with an error result ("not available while planning: ask with ask_user or call propose_build_plan"). This is the real guarantee: a plan-first turn in an old session has `write_file` calls in its history, and a model can repeat a tool it was not offered.
 
-**[verify]** both adapters accept a history that contains calls to tools absent from the current `tools` list (OpenAI and Anthropic). Add a case to the shared contract table; if a provider refuses, the adapter drops nothing and the loop keeps offering the specs of tools present in the history but still refuses to run them.
+**Partly resolved in P04:** the shared contract table has the case `history_with_unoffered_tool` (a history with a call to a tool that is not in the request's tool list). Both adapters send the history unchanged and the case passes against both fakes; the fakes do not check tool names against the list, so the answer of the real OpenAI and Anthropic endpoints is still open and goes to P13. If a provider refuses, the fallback is to keep offering the specs of tools present in the history while the loop still refuses to run them.
 
 ### 4.4 Bounds (ABP-04, ABP-05, ABP-16)
 
@@ -174,11 +174,8 @@ The chat rebuilds an answered round from the `proposal` event (questions) plus `
 - `store.Session.Phase`, `store.Turn.Mode`, `BriefVersion`, `Milestone`; `Deps.PlanningEnabled` (from `planning_mode != off`, set in `prepareDeps`).
 - `runCalls` pauses on `KindPlanning` as on `KindProposal`.
 - Model calls of a plan-mode turn are recorded with `purpose = planning` (`store.PurposePlanning`, validated in Go; no DDL, as foreseen in costs design §2). Reports that sum all purposes are unchanged; a per-purpose breakdown belongs to `ai-builder-economy`.
-- `PromptInput` gains:
-  - `Brief string`: compact rendering of the current brief;
-  - `Directive string`: the per-turn instruction (mode, milestone progress, what this turn must do);
-  - `BriefFile string`: set only when the workspace copy differs from the current brief.
-- When `BriefFile` is set and the turn is in build mode, the loop writes `ORBIT_BRIEF.md` at the workspace root through `Builder.Op` with op id `brief-v<version>` before the first model call and marks the turn as having written, so the file is committed with the first checkpoint. The op id makes a resumed turn replay it instead of writing twice. **[verify]** the `FileOp` shape for a write and that a fixed op id is replayed across turns only when the content is the same (otherwise include a content hash in the id).
+- `PromptInput` gains `Brief *BriefInput` (`Version`, `Plan`, `Done`, `WorkspaceFile`): data, not rendered text. **Changed in P04:** the prompt source only knows the session, while the mode and the milestone belong to the turn, so the loop renders the brief (`planning.RenderBrief`), builds the directive (`SessionContext.Directive`) and decides whether the file is stale.
+- In a build turn, when `planning.RenderBriefFile(plan, version)` differs from `WorkspaceFile` (the content of `ORBIT_BRIEF.md` at HEAD), the loop writes the file through `Builder.Op` (`FileOp{Kind: write_file, Path, Content}`) before the first model call and marks the turn as having written, so it is committed with the next checkpoint. **Resolved in P04:** the builder remembers op ids for the whole session, so the id is `<turn id>:brief-v<version>`: a resumed turn replays the write, and a later turn that must write the same version again (after a revert) is not swallowed as a replay. A builder failure on this write is logged and the turn goes on.
 
 ## 7. Prompt (ABP-03, ABP-12, ABP-13)
 

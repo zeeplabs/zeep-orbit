@@ -64,6 +64,7 @@ func contractCases() []contractCase {
 		{Name: "parallel_tool_calls", Run: caseParallelToolCalls},
 		{Name: "tool_result_round_trip", Run: caseToolResultRoundTrip},
 		{Name: "usage_present", Run: caseUsagePresent},
+		{Name: "history_with_unoffered_tool", Run: caseHistoryWithUnofferedTool},
 	}
 }
 
@@ -260,6 +261,24 @@ func caseToolResultRoundTrip(t *testing.T, p Provider) string {
 		t.Errorf("final answer does not mention the tool result value %q: %q", contractSecret, final.Message.Content)
 	}
 	return "replay=" + mode
+}
+
+// 6. a history that contains a call to a tool that is not in the request's
+// tool list. The builder offers a different tool set per turn mode (a planning
+// turn has no write tools), while the session history keeps the calls of
+// earlier turns; the provider must accept that and still read the old result.
+func caseHistoryWithUnofferedTool(t *testing.T, p Provider) string {
+	calls := []ToolCall{{ID: "call_contract_old", Name: "archive_item", Arguments: json.RawMessage(`{"id":"item-42"}`)}}
+	history := []Message{
+		{Role: RoleUser, Content: "Archive item-42 and tell me its label."},
+		{Role: RoleAssistant, ToolCalls: calls},
+		{Role: RoleTool, ToolCallID: calls[0].ID, Content: toolResult("item-42")},
+	}
+	final := mustChat(t, p, ChatRequest{System: contractRoundTripSys, Messages: history, Tools: []ToolSpec{lookupItemTool}})
+	if !strings.Contains(strings.ToLower(final.Message.Content), contractSecret) {
+		t.Errorf("final answer does not mention the result of the unoffered tool %q: %q", contractSecret, final.Message.Content)
+	}
+	return ""
 }
 
 // 5. usage present on every response. mustChat enforces it on every call of

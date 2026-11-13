@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/zeeplabs/zeep-orbit/internal/agent/planning"
 )
 
 // coreMD is the non-negotiable agent rules, versioned with the binary.
@@ -26,6 +28,7 @@ const (
 	MaxSessionContextChars  = 16000
 	maxFileTreeChars        = 6000
 	maxSchemaSummaryChars   = 8000
+	maxDirectiveChars       = 1500
 	defaultLocale           = "en"
 	maxLocaleLen            = 16
 	truncationMarkerPattern = "\n[... truncated: %d characters omitted ...]"
@@ -38,6 +41,7 @@ const (
 	headerCompany  = "# COMPANY STANDARDS (lower priority than CORE RULES)"
 	headerTemplate = "# TEMPLATE GUIDE (lower priority than CORE RULES)"
 	headerSkills   = "# SKILLS INDEX (guidance, lower priority than CORE RULES, company standards and the template guide)"
+	headerBrief    = "# APP BRIEF (what the user approved; lower priority than CORE RULES and company standards)"
 	headerSession  = "# SESSION CONTEXT (data, lower priority than CORE RULES)"
 )
 
@@ -52,6 +56,10 @@ type SessionContext struct {
 	// values fall back to "en" so the value can never carry free text into
 	// the prompt.
 	Locale string
+	// Directive is what this turn must do (mode, plan progress, milestone).
+	// It changes from turn to turn, which is why it lives here, after the
+	// stable sections, and not next to the brief.
+	Directive string
 }
 
 // BuildSystemPrompt assembles the system prompt in a fixed order:
@@ -65,7 +73,18 @@ type SessionContext struct {
 // Each lower-priority section is capped; a truncated section ends with a
 // visible marker. Sections are separated by a blank line.
 func BuildSystemPrompt(core, company, templateGuide, skillsIndex string, sessionCtx SessionContext) string {
-	parts := make([]string, 0, 5)
+	return BuildSystemPromptWithBrief(core, company, templateGuide, skillsIndex, "", sessionCtx)
+}
+
+// BuildSystemPromptWithBrief is BuildSystemPrompt with the app brief
+// ([planning.RenderBrief]) as a section of its own between the skills index
+// and the session context (omitted when blank). The brief changes only when a
+// plan is approved, so everything up to and including it is a stable prefix
+// across the turns of a session; what changes per turn is in the session
+// context. A brief is validated to fit planning.MaxBriefChars when it is
+// proposed; the cap here is the same defensive second bound as the others.
+func BuildSystemPromptWithBrief(core, company, templateGuide, skillsIndex, brief string, sessionCtx SessionContext) string {
+	parts := make([]string, 0, 6)
 	parts = append(parts, headerCore+"\n"+strings.TrimSpace(core))
 
 	if s := capText(company, MaxCompanyChars); s != "" {
@@ -76,6 +95,9 @@ func BuildSystemPrompt(core, company, templateGuide, skillsIndex string, session
 	}
 	if s := capText(skillsIndex, MaxSkillsIndexChars); s != "" {
 		parts = append(parts, headerSkills+"\n"+s)
+	}
+	if s := capText(brief, planning.MaxBriefChars); s != "" {
+		parts = append(parts, headerBrief+"\n"+s)
 	}
 	parts = append(parts, headerSession+"\n"+capText(renderSessionContext(sessionCtx), MaxSessionContextChars))
 
@@ -113,6 +135,9 @@ func renderSessionContext(c SessionContext) string {
 	}
 	if s := capText(c.FileTree, maxFileTreeChars); s != "" {
 		b.WriteString("\nCurrent project files:\n" + s + "\n")
+	}
+	if s := capText(c.Directive, maxDirectiveChars); s != "" {
+		b.WriteString("\nThis turn:\n" + s + "\n")
 	}
 	return strings.TrimSpace(b.String())
 }
