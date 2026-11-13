@@ -148,11 +148,70 @@ func TestChatUsagePopulated(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Chat: %v", err)
 	}
-	if resp.Usage != (Usage{InputTokens: 123, OutputTokens: 45}) {
+	if resp.Usage != (Usage{InputTokens: 123, OutputTokens: 45, Reported: true}) {
 		t.Fatalf("usage = %+v", resp.Usage)
 	}
 	if resp.FinishReason != FinishLength {
 		t.Fatalf("finish = %q", resp.FinishReason)
+	}
+}
+
+// The token classes drive the cost: cached input is billed at another rate, so
+// it must be split out of prompt_tokens, which counts it too.
+func TestChatUsageTokenClasses(t *testing.T) {
+	cases := []struct {
+		name  string
+		usage string
+		want  Usage
+	}{
+		{
+			name:  "cached tokens are split out of prompt_tokens",
+			usage: `"usage":{"prompt_tokens":2006,"completion_tokens":300,"prompt_tokens_details":{"cached_tokens":1920}}`,
+			want:  Usage{InputTokens: 86, CachedInputTokens: 1920, OutputTokens: 300, Reported: true},
+		},
+		{
+			name:  "details present with nothing cached",
+			usage: `"usage":{"prompt_tokens":500,"completion_tokens":10,"prompt_tokens_details":{"cached_tokens":0}}`,
+			want:  Usage{InputTokens: 500, OutputTokens: 10, Reported: true},
+		},
+		{
+			name:  "details null",
+			usage: `"usage":{"prompt_tokens":500,"completion_tokens":10,"prompt_tokens_details":null}`,
+			want:  Usage{InputTokens: 500, OutputTokens: 10, Reported: true},
+		},
+		{
+			name:  "cached above prompt_tokens is clamped",
+			usage: `"usage":{"prompt_tokens":100,"completion_tokens":1,"prompt_tokens_details":{"cached_tokens":900}}`,
+			want:  Usage{InputTokens: 0, CachedInputTokens: 100, OutputTokens: 1, Reported: true},
+		},
+		{
+			name:  "no usage object means unknown, not zero",
+			usage: `"x":1`,
+			want:  Usage{},
+		},
+		{
+			name:  "usage null",
+			usage: `"usage":null`,
+			want:  Usage{},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := serve(t, func(w http.ResponseWriter, r *http.Request) {
+				writeJSON(w, 200, `{"choices":[{"message":{"content":"x"},"finish_reason":"stop"}],`+tc.usage+`}`)
+			})
+			p, _ := newTestProvider(t, srv)
+			resp, err := p.Chat(context.Background(), userHi)
+			if err != nil {
+				t.Fatalf("Chat: %v", err)
+			}
+			if resp.Usage != tc.want {
+				t.Fatalf("usage = %+v, want %+v", resp.Usage, tc.want)
+			}
+			if got, want := resp.Usage.Total(), tc.want.TotalInput()+tc.want.OutputTokens; got != want {
+				t.Fatalf("Total() = %d, want %d", got, want)
+			}
+		})
 	}
 }
 

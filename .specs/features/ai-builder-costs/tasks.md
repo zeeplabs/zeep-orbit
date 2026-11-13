@@ -11,7 +11,7 @@ Commits only when the user asks (AGENTS.md §2); one commit per task when author
 **Spec**: `.specs/features/ai-builder-costs/spec.md`
 **Design**: `.specs/features/ai-builder-costs/design.md`
 **Parent**: `.specs/features/ai-frontend-builder/`
-**Status**: Approved by the maintainer on 2026-11-13, DDL of C01 included. In execution on `feat/ai-frontend-builder`. Done: C01. Pending: C02–C13.
+**Status**: Approved by the maintainer on 2026-11-13, DDL of C01 included. In execution on `feat/ai-frontend-builder`. Done: C01, C02. Pending: C03–C13.
 
 ---
 
@@ -63,6 +63,7 @@ C12 docs + CHANGELOG (last)        C13 real-endpoint run (owner, needs keys)
 - **Where**: `internal/agent/provider/provider.go`, `openai.go`, `internal/agent/loop.go`, `compaction.go`.
 - **Done when**: unit tests for usage with details, without details, and with no usage object; existing contract tests green; cap behavior unchanged (a test asserts cached tokens count toward the token cap).
 - **Requirements**: ABC-01, ABC-05. **Tests**: unit. **Gate**: Quick.
+- **Status**: Done 2026-11-13. `Usage` has the four classes, `Reported`, `TotalInput()` and `Total()`. The OpenAI adapter reads `usage.prompt_tokens_details.cached_tokens` (field name confirmed in OpenAI's prompt caching guide) and subtracts it from `prompt_tokens`; that `prompt_tokens` includes the cached part is consistent with the documented example payload but is still to be checked against a real call in C13. The loop and compaction record `TotalInput()` so the token caps are unchanged until C04 stores the classes. Full gate green.
 
 ### C03 — Price store, cost function and price API
 - **What**: pure cost function with half-up rounding (design §3); price CRUD store; handlers and routes for `GET/PUT/DELETE prices`; currency in builder settings (partial update, validated as a 3-letter code); audit for price and currency changes; `unpriced_models`.

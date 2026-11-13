@@ -379,7 +379,7 @@ func (r *run) chat(ctx, tctx context.Context) (provider.ChatResponse, *outcome, 
 	if err := r.deps.Store.RecordUsage(ctx, store.UsageRecord{
 		UserID: r.sess.OwnerUserID, Feature: store.FeatureBuilder, SessionID: r.sess.ID, TurnID: r.turn.ID,
 		Provider: r.deps.Provider.Name(), Model: r.deps.Provider.Model(),
-		InputTokens: resp.Usage.InputTokens, OutputTokens: resp.Usage.OutputTokens,
+		InputTokens: resp.Usage.TotalInput(), OutputTokens: resp.Usage.OutputTokens,
 	}); err != nil {
 		return resp, nil, fmt.Errorf("record usage: %w", err)
 	}

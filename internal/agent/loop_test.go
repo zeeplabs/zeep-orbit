@@ -575,3 +575,19 @@ func TestRunTurn_UnknownTurnKindIsUnsupported(t *testing.T) {
 		t.Error("the provider must not be called for an unknown turn kind")
 	}
 }
+
+// Token caps count every input token. A token read from the provider's cache
+// is cheaper in money but must not make a token cap looser.
+func TestRunTurn_CachedTokensCountAsInputForTheCaps(t *testing.T) {
+	resp := textResp("done")
+	resp.Usage = provider.Usage{InputTokens: 100, CachedInputTokens: 900, CacheWriteTokens: 50, OutputTokens: 7, Reported: true}
+	h := newHarness(t, scriptStep{resp: resp})
+	h.mustRun()
+
+	if len(h.st.usage) != 1 {
+		t.Fatalf("usage records = %d, want 1", len(h.st.usage))
+	}
+	if got := h.st.usage[0]; got.InputTokens != 1050 || got.OutputTokens != 7 {
+		t.Errorf("recorded input/output = %d/%d, want 1050/7 (all input classes summed)", got.InputTokens, got.OutputTokens)
+	}
+}

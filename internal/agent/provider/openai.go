@@ -327,9 +327,14 @@ type oaResponse struct {
 		} `json:"message"`
 		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
-	Usage struct {
+	// Usage is a pointer because some compatible servers omit it.
+	Usage *struct {
 		PromptTokens     int `json:"prompt_tokens"`
 		CompletionTokens int `json:"completion_tokens"`
+		// PromptTokensDetails is absent on servers without prompt caching.
+		PromptTokensDetails *struct {
+			CachedTokens int `json:"cached_tokens"`
+		} `json:"prompt_tokens_details"`
 	} `json:"usage"`
 	// Error is raw because compatible servers disagree on its shape; some
 	// return it with a 200.
@@ -411,10 +416,7 @@ func parseResponse(status int, body []byte) (ChatResponse, error) {
 
 	msg := Message{Role: RoleAssistant, Content: choice.Message.Content}
 	resp := ChatResponse{
-		Usage: Usage{
-			InputTokens:  parsed.Usage.PromptTokens,
-			OutputTokens: parsed.Usage.CompletionTokens,
-		},
+		Usage:        oaUsage(parsed),
 		FinishReason: normalizeFinishReason(choice.FinishReason, len(calls) > 0),
 	}
 	if len(calls) > 0 {
@@ -453,4 +455,27 @@ func normalizeFinishReason(reason string, hasToolCalls bool) string {
 		return FinishStop
 	}
 	return reason
+}
+
+// oaUsage maps the Chat Completions usage object to the neutral token
+// classes. prompt_tokens counts every input token, cached ones included, and
+// prompt_tokens_details.cached_tokens is the part read from the prompt cache,
+// so the full-rate input is the difference. The API reports no cache-write
+// class. A cached count above prompt_tokens (a misbehaving server) is clamped
+// so the full-rate input never goes negative.
+func oaUsage(parsed oaResponse) Usage {
+	if parsed.Usage == nil {
+		return Usage{}
+	}
+	u := Usage{
+		InputTokens:  parsed.Usage.PromptTokens,
+		OutputTokens: parsed.Usage.CompletionTokens,
+		Reported:     true,
+	}
+	if d := parsed.Usage.PromptTokensDetails; d != nil && d.CachedTokens > 0 {
+		cached := min(d.CachedTokens, parsed.Usage.PromptTokens)
+		u.CachedInputTokens = cached
+		u.InputTokens = parsed.Usage.PromptTokens - cached
+	}
+	return u
 }

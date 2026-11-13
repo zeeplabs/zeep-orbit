@@ -100,10 +100,32 @@ type ToolSpec struct {
 	Schema json.RawMessage `json:"schema"`
 }
 
-// Usage is the token accounting the provider reported for one call.
+// Usage is the token accounting the provider reported for one call, split by
+// how the provider bills it. Adapters normalize the vendor's own split into
+// these classes, so one cost formula fits every provider.
 type Usage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
+	// InputTokens is the input billed at the full rate: neither read from
+	// nor written to the provider's prompt cache.
+	InputTokens int `json:"input_tokens"`
+	// CachedInputTokens is the input read from the provider's prompt cache.
+	CachedInputTokens int `json:"cached_input_tokens"`
+	// CacheWriteTokens is the input written to the provider's prompt cache.
+	CacheWriteTokens int `json:"cache_write_tokens"`
+	OutputTokens     int `json:"output_tokens"`
+	// Reported is false when the provider sent no usage at all, so the zeros
+	// mean "unknown", not "free".
+	Reported bool `json:"reported"`
+}
+
+// TotalInput is every input token of the call, whatever its billing class.
+func (u Usage) TotalInput() int {
+	return u.InputTokens + u.CachedInputTokens + u.CacheWriteTokens
+}
+
+// Total is every token of the call. Token caps and context estimates count
+// this, so a cached token is never cheaper for them.
+func (u Usage) Total() int {
+	return u.TotalInput() + u.OutputTokens
 }
 
 // ErrAuth means the provider rejected the credentials (HTTP 401/403). It is a
