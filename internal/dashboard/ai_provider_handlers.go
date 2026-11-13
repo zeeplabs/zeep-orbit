@@ -25,16 +25,21 @@ import (
 const (
 	aiProviderOpenAI           = "openai"
 	aiProviderOpenAICompatible = "openai_compatible"
+	aiProviderAnthropic        = "anthropic"
 )
 
 // aiProviderNames is the fixed set of provider names the API accepts —
 // the spec's 'openai' | 'gemini' | 'claude' enum (ai-build-chat design.md)
 // plus 'openai_compatible' (ai-frontend-builder AFB-01: any server speaking
-// the OpenAI Chat Completions wire format, with its own base URL). Any other
-// value is rejected as an unknown provider.
+// the OpenAI Chat Completions wire format, with its own base URL) and
+// 'anthropic' (ai-builder-costs ABC-15: the Anthropic Messages API, used by
+// the AI Frontend Builder only). 'claude' stays as the unimplemented
+// placeholder of the original enum. Any other value is rejected as an unknown
+// provider.
 var aiProviderNames = map[string]bool{
 	aiProviderOpenAI:           true,
 	aiProviderOpenAICompatible: true,
+	aiProviderAnthropic:        true,
 	"gemini":                   true,
 	"claude":                   true,
 }
@@ -42,7 +47,7 @@ var aiProviderNames = map[string]bool{
 // aiProviderImplemented reports whether provider has a functional
 // persistence path. gemini/claude do not yet (spec Out of Scope).
 func aiProviderImplemented(provider string) bool {
-	return provider == aiProviderOpenAI || provider == aiProviderOpenAICompatible
+	return provider == aiProviderOpenAI || provider == aiProviderOpenAICompatible || provider == aiProviderAnthropic
 }
 
 // GetAIProviderConfig handles GET /dashboard/api/ai-providers/{provider}.
@@ -148,13 +153,14 @@ func (h *Handler) UpsertAIProviderConfig(w http.ResponseWriter, r *http.Request)
 // 400 (msg != ""), or ok=false with msg=="" when it already wrote a response
 // (a store failure).
 //
-//   - openai: no base URL (the stock API). An explicit "" is accepted as a
-//     no-op so clients may send the field uniformly; anything else is a 400.
+//   - openai, anthropic: no base URL (the stock API). An explicit "" is
+//     accepted as a no-op so clients may send the field uniformly; anything
+//     else is a 400.
 //   - openai_compatible: a base URL is required. Absent keeps the stored one
 //     (merge-on-absent-key), so a model-only update works; an explicit "" tries
 //     to clear it and is rejected because the provider cannot work without it.
 func (h *Handler) prepareAIProviderBaseURL(w http.ResponseWriter, r *http.Request, provider string, body *aiProviderUpsertInput) (msg string, ok bool) {
-	if provider == aiProviderOpenAI {
+	if provider != aiProviderOpenAICompatible {
 		if body.BaseURL != nil {
 			if strings.TrimSpace(*body.BaseURL) != "" {
 				return "base_url is only supported by the openai_compatible provider", false

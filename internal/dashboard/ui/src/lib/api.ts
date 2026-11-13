@@ -1518,8 +1518,9 @@ export function useWebhookDeliveries(
 // ----------------------------------------------------------------------------
 
 // Provider kinds the backend persists today (ai_provider_handlers.go aiProviderImplemented).
-// gemini/claude are accepted names but answer {available: false} on GET and 501 on PUT.
-export type AIProviderKind = 'openai' | 'openai_compatible'
+// 'anthropic' is used by the AI Builder only. gemini/claude are accepted names but answer
+// {available: false} on GET and 501 on PUT.
+export type AIProviderKind = 'openai' | 'openai_compatible' | 'anthropic'
 
 // Mirrors AIProviderResponse (ai_providers_store.go). base_url is "" for 'openai' and for an
 // unconfigured provider; it is never a secret (credentials in the URL are rejected). The API
@@ -1537,8 +1538,8 @@ export interface AIProviderStatus {
 // Body of PUT /dashboard/api/ai-providers/{provider} (aiProviderUpsertInput). Merge-on-absent-key:
 //  - api_key: omit (or "") keeps the stored key; the key can only be replaced, not cleared.
 //  - base_url: only for 'openai_compatible', where it is required. Omit keeps the stored one;
-//    an explicit "" is rejected with 400 (the provider cannot work without it). For 'openai' send
-//    nothing, or "" (a non-empty value is a 400).
+//    an explicit "" is rejected with 400 (the provider cannot work without it). For 'openai' and
+//    'anthropic' send nothing, or "" (a non-empty value is a 400).
 //  - model is required (non-blank) and enabled is always sent.
 export interface AIProviderUpsertInput {
   model: string
@@ -2153,7 +2154,7 @@ export interface BuilderTemplate {
 
 // -- Settings (superadmin) --
 
-export type BuilderProviderKind = 'openai' | 'openai_compatible'
+export type BuilderProviderKind = 'openai' | 'openai_compatible' | 'anthropic'
 
 export interface BuilderSettings {
   enabled: boolean

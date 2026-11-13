@@ -634,6 +634,8 @@
   "settings.aiBuilder.providerForm.baseUrl": "Base URL",
   "settings.aiBuilder.providerForm.baseUrlHint": "Absolute http or https URL of the API, without credentials or query string. Link-local and cloud metadata addresses are rejected.",
   "settings.aiBuilder.providerForm.modelPlaceholder": "e.g. llama3.1:70b",
+  "settings.aiBuilder.providerForm.anthropicDesc": "The Anthropic API (Claude models). Used by the AI Builder only.",
+  "settings.aiBuilder.providerForm.anthropicModelPlaceholder": "e.g. claude-sonnet-5-5",
   "settings.aiBuilder.providerForm.baseUrlError.required": "The base URL is required for this provider.",
   "settings.aiBuilder.providerForm.baseUrlError.tooLong": "The base URL is too long.",
   "settings.aiBuilder.providerForm.baseUrlError.invalid": "Enter an absolute http or https URL without spaces.",

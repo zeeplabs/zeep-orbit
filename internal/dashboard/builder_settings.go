@@ -56,6 +56,7 @@ const (
 var builderProviders = map[string]bool{
 	aiProviderOpenAI:           true,
 	aiProviderOpenAICompatible: true,
+	aiProviderAnthropic:        true,
 }
 
 // requireBuilderAdmin resolves the caller and enforces superadmin. It writes
@@ -128,7 +129,7 @@ func validateBuilderSettingsInput(in *BuilderSettingsInput) error {
 	if in.Provider != nil {
 		p := strings.TrimSpace(*in.Provider)
 		if !builderProviders[p] {
-			return errors.New("provider must be 'openai' or 'openai_compatible'")
+			return errors.New("provider must be 'openai', 'openai_compatible' or 'anthropic'")
 		}
 		in.Provider = &p
 	}

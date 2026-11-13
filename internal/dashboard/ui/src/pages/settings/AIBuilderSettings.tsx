@@ -77,7 +77,7 @@ interface SettingsForm {
 }
 
 function parseProvider(value: string): AIProviderKind {
-  return value === 'openai_compatible' ? 'openai_compatible' : 'openai'
+  return value === 'openai_compatible' || value === 'anthropic' ? value : 'openai'
 }
 
 function toForm(settings: BuilderSettings): SettingsForm {
@@ -290,6 +290,7 @@ function GeneralSection() {
           items={[
             { key: 'openai', name: 'OpenAI', icon: 'bolt' },
             { key: 'openai_compatible', name: t('settings.aiBuilder.provider.openaiCompatible'), icon: 'hub' },
+            { key: 'anthropic', name: 'Anthropic', icon: 'diamond' },
           ]}
         />
         <ProviderSummary provider={form.provider} />

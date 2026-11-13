@@ -1250,8 +1250,9 @@ const OPENAI_MODEL_PRESETS = ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini'
 // openai_compatible (ai-frontend-builder AFB-01) is any server speaking the OpenAI chat API
 // at a custom base URL (Ollama, vLLM, a gateway...). Its model is free text (no preset
 // catalog) and base_url is required; the stored URL is shown back (it is not a secret).
+// anthropic (ai-builder-costs ABC-15) is the Anthropic API: free-text model, no base URL.
 function parseAIProviderKind(value: string | null): AIProviderKind {
-  return value === 'openai_compatible' ? 'openai_compatible' : 'openai'
+  return value === 'openai_compatible' || value === 'anthropic' ? value : 'openai'
 }
 
 function AIProviderTab() {
@@ -1312,6 +1313,9 @@ function AIProviderTab() {
   }, [provider])
 
   const isCompatible = provider === 'openai_compatible'
+  const isAnthropic = provider === 'anthropic'
+  // Only OpenAI has a preset catalog; the other kinds take the model as free text.
+  const freeTextModel = isCompatible || isAnthropic
 
   const handleSave = async () => {
     setMessage(null)
@@ -1375,8 +1379,8 @@ function AIProviderTab() {
             items={[
               { key: 'openai', name: 'OpenAI', icon: 'bolt' },
               { key: 'openai_compatible', name: t('settings.aiBuilder.providerForm.openaiCompatible'), icon: 'hub' },
+              { key: 'anthropic', name: 'Anthropic', icon: 'diamond' },
               { key: 'gemini', name: 'Gemini', icon: 'auto_awesome', disabled: true, badge: t('apps.soon') },
-              { key: 'claude', name: 'Claude', icon: 'diamond', disabled: true, badge: t('apps.soon') },
             ]}
           />
         </div>
@@ -1388,10 +1392,14 @@ function AIProviderTab() {
           <div className="flex items-center justify-between">
             <div>
               <div className="text-[15px] font-bold" style={{ color: 'var(--text-primary)' }}>
-                {isCompatible ? t('settings.aiBuilder.providerForm.openaiCompatible') : 'OpenAI'}
+                {isCompatible ? t('settings.aiBuilder.providerForm.openaiCompatible') : isAnthropic ? 'Anthropic' : 'OpenAI'}
               </div>
               <p className="mt-0.5 text-[12px]" style={{ color: 'var(--text-secondary)' }}>
-                {isCompatible ? t('settings.aiBuilder.providerForm.configDesc') : t('aiProvider.configDesc')}
+                {isCompatible
+                  ? t('settings.aiBuilder.providerForm.configDesc')
+                  : isAnthropic
+                    ? t('settings.aiBuilder.providerForm.anthropicDesc')
+                    : t('aiProvider.configDesc')}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -1445,14 +1453,18 @@ function AIProviderTab() {
               <Label htmlFor="ai-model" className="text-[12px] font-semibold">
                 {t('aiProvider.model')}
               </Label>
-              {isCompatible ? (
+              {freeTextModel ? (
                 <Input
                   id="ai-model"
                   autoComplete="off"
                   spellCheck={false}
                   value={model}
                   onChange={(e) => setModel(e.target.value)}
-                  placeholder={t('settings.aiBuilder.providerForm.modelPlaceholder')}
+                  placeholder={t(
+                    isAnthropic
+                      ? 'settings.aiBuilder.providerForm.anthropicModelPlaceholder'
+                      : 'settings.aiBuilder.providerForm.modelPlaceholder',
+                  )}
                 />
               ) : (
               <Select
@@ -1472,7 +1484,7 @@ function AIProviderTab() {
                 </SelectContent>
               </Select>
               )}
-              {!isCompatible && !(OPENAI_MODEL_PRESETS as readonly string[]).includes(model) && (
+              {!freeTextModel && !(OPENAI_MODEL_PRESETS as readonly string[]).includes(model) && (
                 <Input
                   aria-label={t('aiProvider.customModel')}
                   value={customModel}

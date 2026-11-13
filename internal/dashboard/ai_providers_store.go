@@ -199,14 +199,14 @@ var ErrAIProviderUnavailable = errors.New("dashboard: ai provider is not availab
 // build/edit chat), it returns the base URL and accepts a key-less
 // "openai_compatible" row. Rules:
 //   - the row must exist, be enabled and have a model;
-//   - "openai" requires a key; "openai_compatible" requires a base URL and
-//     the key is optional;
+//   - "openai" and "anthropic" require a key; "openai_compatible" requires a
+//     base URL and the key is optional;
 //   - any other provider name is rejected (gemini/claude are not implemented).
 //
 // The underlying cause (decrypt error, missing row) is wrapped under
 // ErrAIProviderUnavailable for logging, never for display.
 func ResolveAIProviderRuntime(ctx context.Context, pool *db.Pool, provider string) (*AIProviderRuntime, error) {
-	if provider != aiProviderOpenAI && provider != aiProviderOpenAICompatible {
+	if !aiProviderImplemented(provider) {
 		return nil, fmt.Errorf("%w: unsupported provider %q", ErrAIProviderUnavailable, provider)
 	}
 	var (
@@ -227,7 +227,7 @@ func ResolveAIProviderRuntime(ctx context.Context, pool *db.Pool, provider strin
 	if !enabled || model == "" {
 		return nil, fmt.Errorf("%w: %q is disabled or has no model", ErrAIProviderUnavailable, provider)
 	}
-	if provider == aiProviderOpenAI && apiKeyEncrypted == "" {
+	if provider != aiProviderOpenAICompatible && apiKeyEncrypted == "" {
 		return nil, fmt.Errorf("%w: %q has no key configured", ErrAIProviderUnavailable, provider)
 	}
 	if provider == aiProviderOpenAICompatible && baseURL == "" {

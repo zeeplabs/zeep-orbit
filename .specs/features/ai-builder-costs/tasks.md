@@ -11,7 +11,7 @@ Commits only when the user asks (AGENTS.md §2); one commit per task when author
 **Spec**: `.specs/features/ai-builder-costs/spec.md`
 **Design**: `.specs/features/ai-builder-costs/design.md`
 **Parent**: `.specs/features/ai-frontend-builder/`
-**Status**: Approved by the maintainer on 2026-11-13, DDL of C01 included. In execution on `feat/ai-frontend-builder`. Done: C01–C06. Pending: C07–C13.
+**Status**: Approved by the maintainer on 2026-11-13, DDL of C01 included. In execution on `feat/ai-frontend-builder`. Done: C01–C07. Pending: C08–C13.
 
 ---
 
@@ -98,6 +98,7 @@ C12 docs + CHANGELOG (last)        C13 real-endpoint run (owner, needs keys)
 - **Where**: `ai_provider_handlers.go`, `builder_settings.go`, `builder_runtime.go`, `AIBuilderSettings.tsx`, `api.ts`, locales.
 - **Done when**: integration tests for saving and selecting the kind and for an unknown kind (400); the base-URL field is not offered for this kind; frontend gate; mutation has `onError`.
 - **Requirements**: ABC-15. **Depends**: C06. **Tests**: integration. **Gate**: Full + Frontend.
+- **Status**: Done 2026-11-13. `anthropic` is accepted by the provider API (no base URL; key required at runtime), by `builder_settings.provider` and by the price table; `BuilderRuntime.resolveProvider` builds the Anthropic adapter with its own HTTP client (fixed official endpoint, 10 minute timeout). UI: an **Anthropic** tab in Integrations → AI (free-text model, no base URL field) in place of the disabled Claude placeholder, and the kind in the AI Builder provider selector. The legacy `claude` name stays as an unimplemented placeholder in the API. Checked in a browser on the local stack (form renders, no base URL field, no console or API errors); nothing was saved there. CHANGELOG entry added. Full and frontend gates green.
 
 ### C08 — Usage API
 - **What**: session usage with per-turn receipts; grouped report; CSV (design §6); cost fields on the session view.

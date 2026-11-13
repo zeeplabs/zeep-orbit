@@ -295,13 +295,21 @@ func (rt *BuilderRuntime) resolveProvider(ctx context.Context, name string) prov
 		rt.log.Warn("builder: model provider is not available", "provider", name, "err", err)
 		return unavailableProvider{}
 	}
-	p, err := provider.NewOpenAI(provider.OpenAIConfig{
-		Name:       prt.Provider,
-		BaseURL:    prt.BaseURL,
-		APIKey:     prt.APIKey,
-		Model:      prt.Model,
-		HTTPClient: rt.providerHTTP,
-	})
+	var p provider.Provider
+	if prt.Provider == aiProviderAnthropic {
+		// The official endpoint only (no operator-supplied URL), so the
+		// adapter's own client is used: it has the longer timeout this API
+		// needs and there is no address to guard.
+		p, err = provider.NewAnthropic(provider.AnthropicConfig{APIKey: prt.APIKey, Model: prt.Model})
+	} else {
+		p, err = provider.NewOpenAI(provider.OpenAIConfig{
+			Name:       prt.Provider,
+			BaseURL:    prt.BaseURL,
+			APIKey:     prt.APIKey,
+			Model:      prt.Model,
+			HTTPClient: rt.providerHTTP,
+		})
+	}
 	if err != nil {
 		rt.log.Warn("builder: model provider could not be built", "provider", name, "err", err)
 		return unavailableProvider{}
