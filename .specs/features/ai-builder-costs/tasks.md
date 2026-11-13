@@ -11,7 +11,7 @@ Commits only when the user asks (AGENTS.md §2); one commit per task when author
 **Spec**: `.specs/features/ai-builder-costs/spec.md`
 **Design**: `.specs/features/ai-builder-costs/design.md`
 **Parent**: `.specs/features/ai-frontend-builder/`
-**Status**: Approved by the maintainer on 2026-11-13, DDL of C01 included. In execution on `feat/ai-frontend-builder`. Done: C01, C02, C03. Pending: C04–C13.
+**Status**: Approved by the maintainer on 2026-11-13, DDL of C01 included. In execution on `feat/ai-frontend-builder`. Done: C01–C04. Pending: C05–C13.
 
 ---
 
@@ -77,6 +77,7 @@ C12 docs + CHANGELOG (last)        C13 real-endpoint run (owner, needs keys)
 - **Where**: `internal/agent/store/usage.go`, `loop.go`, `compaction.go`, fakes.
 - **Done when**: integration tests: priced call, unpriced call, zero-price call (cost 0, not NULL), price edited after the call leaves the row unchanged, session total equals the ledger sum; loop tests with fakes still green.
 - **Requirements**: ABC-02, ABC-03, ABC-04. **Depends**: C02, C03. **Tests**: integration + unit. **Gate**: Full.
+- **Status**: Done 2026-11-13. `UsageRecord` carries the three input classes, `Purpose` (`chat`, `compaction`; validated in Go) and `Reported`. `RecordUsage` reads the price of `(provider, model)` in its transaction and stores `cost_micros`: NULL with no price row, 0 with a zero price. `input_tokens` in the ledger is now only the full-rate input; `builder_sessions.tokens_in` and the monthly token cap sum all three input classes, so the token caps behave as before. A cost that does not fit the column is stored as NULL instead of failing a call whose tokens are already spent. Full gate green (27 packages).
 
 ### C05 — Money caps and the 80% warning
 - **What**: settings fields with partial-update semantics; `BudgetChecker` money caps and new errors; warning result and the `budget_warning` event, once per session and cap; event whitelisted in the events API.

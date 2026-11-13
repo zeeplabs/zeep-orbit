@@ -32,28 +32,57 @@ var (
 	ErrMonthlyCapReached = fmt.Errorf("%w: monthly token cap reached", ErrBudgetExceeded)
 )
 
-// UsageRecord is one LLM call's token usage.
+// Purposes of an LLM call (ai_usage_ledger.purpose). The column has no CHECK
+// constraint, so a new purpose needs no DDL, only a constant here.
+const (
+	PurposeChat       = "chat"
+	PurposeCompaction = "compaction"
+)
+
+func validPurpose(p string) bool {
+	return p == PurposeChat || p == PurposeCompaction
+}
+
+// UsageRecord is one LLM call's token usage. The three input classes do not
+// overlap: InputTokens is only what was billed at the full input rate.
 type UsageRecord struct {
-	UserID       string
-	Feature      string // FeatureBuilder
-	SessionID    string // optional; when set the session's token counters are updated too
-	TurnID       string // optional
-	Provider     string
-	Model        string
-	InputTokens  int
-	OutputTokens int
+	UserID            string
+	Feature           string // FeatureBuilder
+	SessionID         string // optional; when set the session's token counters are updated too
+	TurnID            string // optional
+	Provider          string
+	Model             string
+	Purpose           string // PurposeChat when empty
+	InputTokens       int    // billed at the full input rate
+	CachedInputTokens int    // read from the provider's prompt cache
+	CacheWriteTokens  int    // written to the provider's prompt cache
+	OutputTokens      int
+	Reported          bool // false when the provider sent no usage object
 }
 
 // RecordUsage appends one ledger row and, when SessionID is set, adds the
 // tokens to builder_sessions.tokens_in/out in the same transaction, so the
-// ledger and the session counter cannot diverge. ErrNotFound when SessionID
-// does not exist (the transaction is rolled back).
+// ledger and the session counter cannot diverge. tokens_in counts every input
+// class, cached or not, because the token caps are about volume, not price.
+//
+// The cost is computed here, from the price of (provider, model) as it is at
+// this moment, and stored on the row: a later price change never rewrites
+// history. A model with no price row gets cost_micros NULL ("no price set"),
+// which is different from a price of zero (cost 0).
+//
+// ErrNotFound when SessionID does not exist (the transaction is rolled back).
 func (s *Store) RecordUsage(ctx context.Context, r UsageRecord) error {
 	if r.UserID == "" || r.Feature == "" || r.Provider == "" || r.Model == "" {
 		return fmt.Errorf("%w: user, feature, provider and model are required", ErrInvalidArgument)
 	}
-	if r.InputTokens < 0 || r.OutputTokens < 0 {
+	if r.InputTokens < 0 || r.CachedInputTokens < 0 || r.CacheWriteTokens < 0 || r.OutputTokens < 0 {
 		return fmt.Errorf("%w: token counts must not be negative", ErrInvalidArgument)
+	}
+	if r.Purpose == "" {
+		r.Purpose = PurposeChat
+	}
+	if !validPurpose(r.Purpose) {
+		return fmt.Errorf("%w: unknown purpose", ErrInvalidArgument)
 	}
 	var sessionID, turnID any
 	if r.SessionID != "" {
@@ -74,7 +103,7 @@ func (s *Store) RecordUsage(ctx context.Context, r UsageRecord) error {
 			`UPDATE zeep_system.builder_sessions
 			 SET tokens_in = tokens_in + $2, tokens_out = tokens_out + $3
 			 WHERE id = $1`,
-			r.SessionID, r.InputTokens, r.OutputTokens,
+			r.SessionID, r.InputTokens+r.CachedInputTokens+r.CacheWriteTokens, r.OutputTokens,
 		)
 		if err != nil {
 			return fmt.Errorf("builder store: record usage: session: %w", err)
@@ -83,11 +112,17 @@ func (s *Store) RecordUsage(ctx context.Context, r UsageRecord) error {
 			return ErrNotFound
 		}
 	}
+	cost, err := callCost(ctx, tx, r)
+	if err != nil {
+		return err
+	}
 	if _, err := tx.Exec(ctx,
 		`INSERT INTO zeep_system.ai_usage_ledger
-		   (user_id, feature, session_id, turn_id, provider, model, input_tokens, output_tokens)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		   (user_id, feature, session_id, turn_id, provider, model, input_tokens, output_tokens,
+		    cached_input_tokens, cache_write_tokens, purpose, cost_micros, usage_reported)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
 		r.UserID, r.Feature, sessionID, turnID, r.Provider, r.Model, r.InputTokens, r.OutputTokens,
+		r.CachedInputTokens, r.CacheWriteTokens, r.Purpose, cost, r.Reported,
 	); err != nil {
 		return fmt.Errorf("builder store: record usage: ledger: %w", err)
 	}
@@ -95,6 +130,31 @@ func (s *Store) RecordUsage(ctx context.Context, r UsageRecord) error {
 		return fmt.Errorf("builder store: record usage: commit: %w", err)
 	}
 	return nil
+}
+
+// callCost prices one call inside the RecordUsage transaction. It returns nil
+// when the model has no price row, and also when the cost does not fit the
+// column (an absurd price must not fail a call whose tokens are already
+// spent; the row then reads as "no price set").
+func callCost(ctx context.Context, tx pgx.Tx, r UsageRecord) (*int64, error) {
+	var p Price
+	err := tx.QueryRow(ctx,
+		`SELECT (input_per_mtok * 1000000)::bigint, (cached_input_per_mtok * 1000000)::bigint,
+		        (cache_write_per_mtok * 1000000)::bigint, (output_per_mtok * 1000000)::bigint
+		 FROM zeep_system.ai_model_prices WHERE provider = $1 AND model = $2`,
+		r.Provider, r.Model,
+	).Scan(&p.Input, &p.CachedInput, &p.CacheWrite, &p.Output)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("builder store: record usage: price: %w", err)
+	}
+	cost, err := CostMicros(p, r.InputTokens, r.CachedInputTokens, r.CacheWriteTokens, r.OutputTokens)
+	if err != nil {
+		return nil, nil
+	}
+	return &cost, nil
 }
 
 // BudgetChecker enforces the session and per-user monthly token caps from
@@ -162,7 +222,8 @@ func (b *BudgetChecker) Check(ctx context.Context, userID, sessionID string) err
 	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
 	var monthlyUsed int64
 	err = b.pool.QueryRow(ctx,
-		`SELECT COALESCE(SUM(input_tokens::bigint + output_tokens::bigint), 0)
+		`SELECT COALESCE(SUM(input_tokens::bigint + cached_input_tokens::bigint
+		                     + cache_write_tokens::bigint + output_tokens::bigint), 0)
 		 FROM zeep_system.ai_usage_ledger
 		 WHERE user_id = $1 AND feature = $2 AND created_at >= $3 AND created_at < $4`,
 		userID, FeatureBuilder, monthStart, monthStart.AddDate(0, 1, 0),

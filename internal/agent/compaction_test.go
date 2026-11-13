@@ -6,6 +6,7 @@ package agent
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -101,6 +102,13 @@ func TestCompaction_AboveThresholdSummarizesOlderTurnsAndKeepsRecentVerbatim(t *
 	}
 	if len(h.st.usage) != 2 {
 		t.Errorf("usage records = %d, want the summarization call recorded too (2)", len(h.st.usage))
+	}
+	var purposes []string
+	for _, u := range h.st.usage {
+		purposes = append(purposes, u.Purpose)
+	}
+	if !slices.Contains(purposes, store.PurposeCompaction) || !slices.Contains(purposes, store.PurposeChat) {
+		t.Errorf("purposes = %v, want one compaction and one chat call", purposes)
 	}
 }
 
