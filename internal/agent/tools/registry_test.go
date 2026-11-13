@@ -457,3 +457,48 @@ func TestOpIDFor(t *testing.T) {
 		t.Error("two long call ids hashed to the same op id")
 	}
 }
+
+func TestSpecsWhereFiltersByKindInRegistrationOrder(t *testing.T) {
+	r := NewRegistry()
+	for _, tool := range []struct {
+		name string
+		kind Kind
+	}{
+		{"read_a", KindReadOnly}, {"write_a", KindWorkspace}, {"ask", KindPlanning},
+		{"propose", KindProposal}, {"read_b", KindReadOnly}, {"external", KindExternalMutating},
+	} {
+		if err := r.Register(Tool{
+			Name: tool.name, Schema: json.RawMessage(`{"type":"object"}`), Kind: tool.kind,
+			Handler: func(context.Context, Call) (Result, error) { return Result{}, nil },
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	names := func(specs []provider.ToolSpec) string {
+		var out []string
+		for _, s := range specs {
+			out = append(out, s.Name)
+		}
+		return strings.Join(out, ",")
+	}
+	got := names(r.SpecsWhere(func(t Tool) bool { return t.Kind == KindReadOnly || t.Kind == KindPlanning }))
+	if got != "read_a,ask,read_b" {
+		t.Fatalf("got %s", got)
+	}
+	if got := names(r.SpecsWhere(func(Tool) bool { return true })); got != names(r.Specs()) {
+		t.Fatalf("accept-all must equal Specs, got %s", got)
+	}
+	if got := r.SpecsWhere(func(Tool) bool { return false }); len(got) != 0 {
+		t.Fatalf("reject-all must be empty, got %v", got)
+	}
+	if k, ok := r.Kind("ask"); !ok || k != KindPlanning || k.String() != "planning" {
+		t.Fatalf("planning kind: %v %v", k, ok)
+	}
+	// One past the last kind is still refused.
+	if err := r.Register(Tool{
+		Name: "bad", Schema: json.RawMessage(`{"type":"object"}`), Kind: KindPlanning + 1,
+		Handler: func(context.Context, Call) (Result, error) { return Result{}, nil },
+	}); err == nil {
+		t.Fatal("an unknown kind must be refused")
+	}
+}

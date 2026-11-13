@@ -53,6 +53,10 @@ const (
 	// KindExternalMutating tools change something outside the workspace and
 	// pause the turn like a proposal.
 	KindExternalMutating
+	// KindPlanning tools ask the user or propose the build plan. They pause
+	// the turn like a proposal and are the only pausing tools offered while a
+	// turn is in plan mode.
+	KindPlanning
 )
 
 // String implements fmt.Stringer.
@@ -66,6 +70,8 @@ func (k Kind) String() string {
 		return "proposal"
 	case KindExternalMutating:
 		return "external_mutating"
+	case KindPlanning:
+		return "planning"
 	}
 	return "unknown"
 }
@@ -195,7 +201,7 @@ func (r *Registry) Register(t Tool) error {
 	if t.Handler == nil {
 		return fmt.Errorf("tools: tool %q has no handler", t.Name)
 	}
-	if t.Kind < KindReadOnly || t.Kind > KindExternalMutating {
+	if t.Kind < KindReadOnly || t.Kind > KindPlanning {
 		return fmt.Errorf("tools: tool %q has no valid kind", t.Name)
 	}
 	var schema map[string]any
@@ -240,6 +246,22 @@ func (r *Registry) SpecsWithout(names ...string) []provider.ToolSpec {
 			continue
 		}
 		t := r.tools[name]
+		out = append(out, provider.ToolSpec{Name: t.Name, Description: t.Description, Schema: t.Schema})
+	}
+	return out
+}
+
+// SpecsWhere is Specs restricted to the tools keep accepts, in registration
+// order. The loop uses it to offer only the kinds a turn's mode allows.
+func (r *Registry) SpecsWhere(keep func(Tool) bool) []provider.ToolSpec {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]provider.ToolSpec, 0, len(r.order))
+	for _, name := range r.order {
+		t := r.tools[name]
+		if !keep(t) {
+			continue
+		}
 		out = append(out, provider.ToolSpec{Name: t.Name, Description: t.Description, Schema: t.Schema})
 	}
 	return out

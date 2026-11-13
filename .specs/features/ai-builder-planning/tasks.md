@@ -11,7 +11,7 @@ Commits only when the user asks (AGENTS.md §2); one commit per task when author
 **Spec**: `.specs/features/ai-builder-planning/spec.md`
 **Design**: `.specs/features/ai-builder-planning/design.md`
 **Parent**: `.specs/features/ai-frontend-builder/`
-**Status**: Approved by the maintainer on 2026-11-13 with the defaults of design §12. In execution on `feat/ai-frontend-builder`. Done: P01. The DDL of P01 is still shown and confirmed before it is applied.
+**Status**: Approved by the maintainer on 2026-11-13 with the defaults of design §12. In execution on `feat/ai-frontend-builder`. Done: P01, P03. The DDL of P01 is still shown and confirmed before it is applied.
 
 ---
 
@@ -66,6 +66,7 @@ P11 docs + CHANGELOG (last)        P12 local end-to-end run        P13 real-mode
 - **Where**: new `internal/agent/planning/`, `internal/agent/tools/registry.go`.
 - **Done when**: table tests for every bound (question count, option count, lengths, duplicate ids, plan lists, `access` values, argument bytes, rendered size) with messages the model can act on; `RenderBrief` is byte-stable for the same plan (golden file) and never exceeds `MaxBriefChars` for a valid plan; registry tests for the new kind and filter; user text in answers cannot break the result format (newlines, quotes, very long text).
 - **Requirements**: ABP-02, ABP-04, ABP-07, ABP-14. **Tests**: unit. **Gate**: Quick.
+- **Status**: Done 2026-11-13. `internal/agent/planning`: `ParseQuestions`, `ParsePlan`, `NormalizeAnswers` (the design called it `ValidateAnswers`; it also returns one answer per question, in question order, with unanswered questions as "decide for me"), `RenderBrief`, `RenderBriefFile`, `RenderProgress`, the result texts and `Tools()`. `tools.KindPlanning` and `Registry.SpecsWhere`. Added beyond the design: per-item length bounds, `access_note` required for `role`, and `Clean`, which makes every text of the model or the user a single line so it cannot add lines to the brief or to a tool result. Text typed by the user is quoted in the results. No CHANGELOG entry: nothing is reachable until P04 to P06. Quick gate green.
 
 ### P04 — Loop: tool set, gates, prompt and the brief file
 - **What**: `toolSpecs()` and the `runCalls` gate by mode (design §4.3); pause on `KindPlanning`; question bounds, skip and reopen from `analyzeTurn` (§4.4); `purpose = planning` for plan-mode calls; brief section and directive in `BuildSystemPrompt` (§7); brief file write (§6); the "Planning" block in `prompts/core.md`. Resolve the two **[verify]** items of §4.3 and §6 and record the result in the design.
