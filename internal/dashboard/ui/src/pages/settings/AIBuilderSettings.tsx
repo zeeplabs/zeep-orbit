@@ -32,6 +32,7 @@ import type {
 import { formatDateTime } from '@/lib/format'
 import { roleAllowed } from '@/lib/roles'
 import { useCurrentRole } from '@/lib/useCurrentRole'
+import { BuilderCostsSection } from './BuilderCostsSection'
 import { BuilderSkillsSection } from './BuilderSkillsSection'
 import { Notice, SectionCard } from './builderSettingsParts'
 
@@ -176,6 +177,7 @@ export default function AIBuilderSettings() {
   return (
     <div className="flex max-w-3xl flex-col gap-6">
       <GeneralSection />
+      <BuilderCostsSection />
       <PromptSection />
       <BuilderSkillsSection />
       <TemplatesSection />

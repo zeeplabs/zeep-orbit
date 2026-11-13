@@ -11,7 +11,7 @@ Commits only when the user asks (AGENTS.md §2); one commit per task when author
 **Spec**: `.specs/features/ai-builder-costs/spec.md`
 **Design**: `.specs/features/ai-builder-costs/design.md`
 **Parent**: `.specs/features/ai-frontend-builder/`
-**Status**: Approved by the maintainer on 2026-11-13, DDL of C01 included. In execution on `feat/ai-frontend-builder`. Done: C01–C08. Pending: C09–C13.
+**Status**: Approved by the maintainer on 2026-11-13, DDL of C01 included. In execution on `feat/ai-frontend-builder`. Done: C01–C09. Pending: C10–C13.
 
 ---
 
@@ -112,6 +112,7 @@ C12 docs + CHANGELOG (last)        C13 real-endpoint run (owner, needs keys)
 - **Where**: new section file under `src/pages/settings/`, `api.ts`, locales.
 - **Done when**: frontend gate; i18n validated; all keys always sent on update; manual check on the local stack.
 - **Requirements**: ABC-06 to ABC-10, ABC-19. **Depends**: C03, C05. **Gate**: Frontend.
+- **Status**: Done 2026-11-13. `src/pages/settings/BuilderCostsSection.tsx` adds two cards to Integrations → AI Builder: **Costs** (currency with the no-conversion warning, the two money budgets typed as decimals and sent as micros, a warning when a budget is set and the model in use has no price) and **Model prices** (table, add/edit/delete, the "used with no price" list with a shortcut to price each model). `src/lib/money.ts` holds the shared money helpers (string to micros without floats, `Intl.NumberFormat` display). The three cost keys and the four price keys are always sent. Checked in a browser on the local stack: validation errors, save, the unpriced-model warning appearing and clearing, add, edit (key fields locked) and delete. Frontend gate green.
 
 ### C10 — Cost in the chat and session header
 - **What**: per-turn usage line and expandable receipt; session total and cap bar; `budget_warning` notice; the three display states of ABC-13; shared money formatter.

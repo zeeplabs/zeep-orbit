@@ -2166,6 +2166,12 @@ export interface BuilderSettings {
   max_steps_per_turn: number
   max_fix_iterations: number
   max_turn_seconds: number
+  /** ISO 4217 code that prices and stored costs are in. Changing it converts nothing. */
+  cost_currency: string
+  cost_currency_changed_at: string | null
+  /** Money caps in micros (1 unit = 1,000,000). 0 = no money cap. */
+  session_cost_cap_micros: number
+  user_monthly_cost_cap_micros: number
   updated_by: string | null
   updated_at: string | null
   /** false until the first save (defaults shown). */
@@ -2187,7 +2193,13 @@ export interface BuilderSettingsUpdate {
   max_steps_per_turn?: number
   max_fix_iterations?: number
   max_turn_seconds?: number
+  cost_currency?: string
+  session_cost_cap_micros?: number
+  user_monthly_cost_cap_micros?: number
 }
+
+/** Largest money cap the server accepts, in micros (builderMaxCostCapMicros). */
+export const BUILDER_MAX_COST_CAP_MICROS = 1_000_000_000_000_000
 
 /** Server-side bounds of the numeric settings (builder_settings.go), for form validation. */
 export const BUILDER_SETTINGS_LIMITS = {
@@ -2198,6 +2210,51 @@ export const BUILDER_SETTINGS_LIMITS = {
   max_fix_iterations: { min: 1, max: 20 },
   max_turn_seconds: { min: 10, max: 3600 },
 } as const
+
+// -- Model prices (superadmin) --
+
+/**
+ * One price row (builder_prices.go). Prices are decimal strings per million tokens, in the
+ * installation currency. A null cached-input or cache-write price bills that class at the
+ * input price.
+ */
+export interface BuilderModelPrice {
+  provider: BuilderProviderKind | string
+  model: string
+  input_per_mtok: string
+  cached_input_per_mtok: string | null
+  cache_write_per_mtok: string | null
+  output_per_mtok: string
+  updated_by: string | null
+  updated_at: string
+}
+
+/** A model used in the last 30 days that has no price row. */
+export interface BuilderUnpricedModel {
+  provider: string
+  model: string
+  calls: number
+}
+
+export interface BuilderPrices {
+  currency: string
+  prices: BuilderModelPrice[]
+  unpriced_models: BuilderUnpricedModel[]
+}
+
+/**
+ * Body of PUT /builder/prices. All four price keys are always sent: null clears an optional
+ * price (an omitted key would read as "keep" in other partial-update routes, so this one takes
+ * the whole row).
+ */
+export interface BuilderPriceInput {
+  provider: BuilderProviderKind
+  model: string
+  input_per_mtok: string
+  cached_input_per_mtok: string | null
+  cache_write_per_mtok: string | null
+  output_per_mtok: string
+}
 
 // -- Persona + rules (superadmin) --
 
@@ -2442,6 +2499,7 @@ export const builderKeys = {
   events: (id: string) => ['builder', 'events', id] as const,
   templates: () => ['builder', 'templates'] as const,
   settings: () => ['builder', 'settings'] as const,
+  prices: () => ['builder', 'prices'] as const,
   prompt: () => ['builder', 'prompt'] as const,
   skills: () => ['builder', 'skills'] as const,
   skill: (name: string, version?: number) => ['builder', 'skill', name, version ?? null] as const,
@@ -2578,6 +2636,15 @@ export function useBuilderSettings(
   })
 }
 
+/** Price table, installation currency and the models that are used but have no price. */
+export function useBuilderPrices(options: BuilderAdminQueryOptions = {}): UseQueryResult<BuilderPrices> {
+  return useQuery({
+    queryKey: builderKeys.prices(),
+    queryFn: () => apiFetch<BuilderPrices>(`${BUILDER_BASE}/prices`),
+    enabled: options.enabled ?? true,
+  })
+}
+
 /** The active persona + rules (the newest version; empty fields and id '' before the first save). */
 export function useBuilderPrompt(
   options: BuilderAdminQueryOptions = {},
@@ -2621,6 +2688,39 @@ export function useUpdateBuilderSettings(): UseMutationResult<
       qc.setQueryData(builderKeys.settings(), data)
       // enabled/provider decide the availability the status endpoint reports.
       qc.invalidateQueries({ queryKey: builderKeys.status() })
+      // The price table response carries the currency.
+      qc.invalidateQueries({ queryKey: builderKeys.prices() })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+/** Creates or replaces one price row. Costs already recorded keep the price they were computed with. */
+export function useUpsertBuilderPrice(): UseMutationResult<BuilderModelPrice, Error, BuilderPriceInput> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: BuilderPriceInput) =>
+      apiFetch<BuilderModelPrice>(`${BUILDER_BASE}/prices`, jsonRequest('PUT', input)),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: builderKeys.prices() })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+export function useDeleteBuilderPrice(): UseMutationResult<void, Error, { provider: string; model: string }> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ provider, model }: { provider: string; model: string }) => {
+      const qs = new URLSearchParams({ provider, model }).toString()
+      return apiFetch<void>(`${BUILDER_BASE}/prices?${qs}`, { method: 'DELETE' })
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: builderKeys.prices() })
     },
     onError: (error) => {
       toast.error(error.message)
