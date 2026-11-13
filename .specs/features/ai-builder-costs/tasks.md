@@ -11,7 +11,7 @@ Commits only when the user asks (AGENTS.md §2); one commit per task when author
 **Spec**: `.specs/features/ai-builder-costs/spec.md`
 **Design**: `.specs/features/ai-builder-costs/design.md`
 **Parent**: `.specs/features/ai-frontend-builder/`
-**Status**: Approved by the maintainer on 2026-11-13, DDL of C01 included. In execution on `feat/ai-frontend-builder`. Done: C01, C02. Pending: C03–C13.
+**Status**: Approved by the maintainer on 2026-11-13, DDL of C01 included. In execution on `feat/ai-frontend-builder`. Done: C01, C02, C03. Pending: C04–C13.
 
 ---
 
@@ -70,6 +70,7 @@ C12 docs + CHANGELOG (last)        C13 real-endpoint run (owner, needs keys)
 - **Where**: new `internal/agent/store/cost.go`, new `internal/dashboard/builder_prices.go` (+ store), `builder_settings*.go`, route registration.
 - **Done when**: table tests for the cost function (each class, fallbacks, zero price, rounding boundary, overflow guard); integration tests for RBAC (superadmin only), validation errors in English, audit rows with old and new values, model names containing `/`.
 - **Requirements**: ABC-06 to ABC-10. **Depends**: C01. **Tests**: unit + integration. **Gate**: Full.
+- **Status**: Done 2026-11-13. `internal/agent/store/cost.go` (`ParsePrice`, `FormatPrice`, `CostMicros`, integer arithmetic with one half-up rounding per call), `internal/dashboard/builder_prices.go` (store, handlers, audit, unpriced models), routes `GET/PUT/DELETE /api/builder/prices`. The settings store also gained the money cap fields here (same SQL statement as the currency), so C05 only has to enforce them. The price key is in the body/query, not the path (design §6). Price rows are accepted only for the provider kinds the builder knows; `anthropic` joins in C07.
 
 ### C04 — Cost on every recorded call
 - **What**: `UsageRecord` carries the token classes, `Purpose` and `Reported`; `RecordUsage` looks up the price in its transaction, stores `cost_micros` or `NULL`, updates session totals (or nothing, per C01's choice); loop passes `chat`, compaction passes `compaction`.

@@ -145,12 +145,12 @@ All under the existing builder routes, same auth middleware. Error strings in En
 | `GET /api/dashboard/builder/usage?from&to&group_by=day\|user\|model\|session` | superadmin: all users; others: own usage only (the `user` grouping is refused for non-superadmins) | grouped totals, currency, compaction share |
 | `GET /api/dashboard/builder/usage.csv?from&to` | same rule | one line per ledger row: timestamp, user id, session id, turn id, provider, model, purpose, token classes, cost |
 | `GET /api/dashboard/builder/prices` | superadmin | price rows plus `unpriced_models` (models seen in the ledger in the last 30 days with no price) |
-| `PUT /api/dashboard/builder/prices/{provider}/{model}` | superadmin | upsert; all four price keys always sent by the UI (null clears the optional ones) |
-| `DELETE /api/dashboard/builder/prices/{provider}/{model}` | superadmin | 204 |
+| `PUT /api/dashboard/builder/prices` | superadmin | upsert; `provider` and `model` in the body; all four price keys always sent by the UI (null clears the optional ones); prices are decimal strings |
+| `DELETE /api/dashboard/builder/prices?provider=&model=` | superadmin | 204, or 404 when the row does not exist |
 
 The session view (`builder_common.go`) gains `cost_micros`, `unpriced_calls`, `currency`, and the cap usage when caps apply. The turn receipt takes files changed and builds from the turn's events (`file_changed`, `build_*`), which already exist.
 
-Date ranges are capped (for example 366 days) and the CSV is streamed with a row limit, to keep one request from scanning the whole ledger. The model name in a path segment is URL-escaped; models containing `/` (common on OpenAI-compatible gateways) must round-trip, so the handler reads the raw path. **[verify]** chi wildcard behavior, or move the key to the body/query.
+Date ranges are capped (for example 366 days) and the CSV is streamed with a row limit, to keep one request from scanning the whole ledger. **Decided in C03:** the price key travels in the body (PUT) and the query string (DELETE), not in path segments, because model names contain `/` on many gateways. Prices travel as decimal strings in both directions, so no floating point touches money; money caps and costs travel as integer micros.
 
 ## 7. UI
 

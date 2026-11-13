@@ -42,6 +42,7 @@ const (
 	builderDefaultMaxTurnSeconds      = 600
 	builderDefaultApprovalMode        = BuilderApprovalAsk
 	builderDefaultPublishRLSGate      = BuilderRLSGateWarn
+	builderDefaultCostCurrency        = "USD"
 )
 
 // Backend approval modes (builder_settings.backend_approval_mode) and publish
@@ -70,6 +71,15 @@ type BuilderSettings struct {
 	BackendApprovalMode string `json:"backend_approval_mode"`
 	// PublishRLSGate: "warn" lists open tables on publish, "block" refuses.
 	PublishRLSGate string `json:"publish_rls_gate"`
+	// CostCurrency is the ISO 4217 code that prices and stored costs are in.
+	// Changing it does not convert stored costs; CostCurrencyChangedAt says
+	// when it last changed (nil: never).
+	CostCurrency          string     `json:"cost_currency"`
+	CostCurrencyChangedAt *time.Time `json:"cost_currency_changed_at"`
+	// Money caps in micros (1 unit of currency = 1,000,000). 0 means no money
+	// cap; the token caps above stay mandatory (ai-builder-costs ABC-19).
+	SessionCostCapMicros     int64 `json:"session_cost_cap_micros"`
+	UserMonthlyCostCapMicros int64 `json:"user_monthly_cost_cap_micros"`
 	// UpdatedBy and UpdatedAt are nil/zero while the row has never been saved.
 	UpdatedBy *string    `json:"updated_by"`
 	UpdatedAt *time.Time `json:"updated_at"`
@@ -90,6 +100,10 @@ type BuilderSettingsInput struct {
 	MaxTurnSeconds      *int    `json:"max_turn_seconds"`
 	BackendApprovalMode *string `json:"backend_approval_mode"`
 	PublishRLSGate      *string `json:"publish_rls_gate"`
+	CostCurrency        *string `json:"cost_currency"`
+	// Money caps in micros; 0 clears the cap.
+	SessionCostCapMicros     *int64 `json:"session_cost_cap_micros"`
+	UserMonthlyCostCapMicros *int64 `json:"user_monthly_cost_cap_micros"`
 }
 
 func defaultBuilderSettings() *BuilderSettings {
@@ -101,12 +115,14 @@ func defaultBuilderSettings() *BuilderSettings {
 		MaxTurnSeconds:      builderDefaultMaxTurnSeconds,
 		BackendApprovalMode: builderDefaultApprovalMode,
 		PublishRLSGate:      builderDefaultPublishRLSGate,
+		CostCurrency:        builderDefaultCostCurrency,
 	}
 }
 
 const builderSettingsCols = `enabled, provider, context_window_tokens, session_token_cap, user_monthly_token_cap,
 	max_steps_per_turn, max_fix_iterations, max_turn_seconds, backend_approval_mode, publish_rls_gate,
-	updated_by::text, updated_at`
+	updated_by::text, updated_at,
+	cost_currency, cost_currency_changed_at, session_cost_cap_micros, user_monthly_cost_cap_micros`
 
 func scanBuilderSettings(row pgx.Row) (*BuilderSettings, error) {
 	var (
@@ -116,7 +132,8 @@ func scanBuilderSettings(row pgx.Row) (*BuilderSettings, error) {
 	)
 	if err := row.Scan(&s.Enabled, &s.Provider, &s.ContextWindowTokens, &s.SessionTokenCap, &s.UserMonthlyTokenCap,
 		&s.MaxStepsPerTurn, &s.MaxFixIterations, &s.MaxTurnSeconds, &s.BackendApprovalMode, &s.PublishRLSGate,
-		&updatedBy, &updatedAt); err != nil {
+		&updatedBy, &updatedAt,
+		&s.CostCurrency, &s.CostCurrencyChangedAt, &s.SessionCostCapMicros, &s.UserMonthlyCostCapMicros); err != nil {
 		return nil, err
 	}
 	s.UpdatedBy = updatedBy
@@ -147,13 +164,15 @@ func UpsertBuilderSettings(ctx context.Context, pool *db.Pool, updatedBy string,
 		`INSERT INTO zeep_system.builder_settings
 		   (id, enabled, provider, context_window_tokens, session_token_cap, user_monthly_token_cap,
 		    max_steps_per_turn, max_fix_iterations, max_turn_seconds,
-		    backend_approval_mode, publish_rls_gate, updated_by, updated_at)
+		    backend_approval_mode, publish_rls_gate, updated_by, updated_at,
+		    cost_currency, session_cost_cap_micros, user_monthly_cost_cap_micros)
 		 VALUES (1,
 		   COALESCE($1::boolean, false), COALESCE($2::text, $9), COALESCE($3::int, $10),
 		   COALESCE($4::bigint, 0), COALESCE($5::bigint, 0),
 		   COALESCE($6::int, $11), COALESCE($7::int, $12), COALESCE($8::int, $13),
 		   COALESCE($15::text, $17), COALESCE($16::text, $18),
-		   $14::uuid, now())
+		   $14::uuid, now(),
+		   COALESCE($19::text, $22), COALESCE($20::bigint, 0), COALESCE($21::bigint, 0))
 		 ON CONFLICT (id) DO UPDATE SET
 		   enabled                = COALESCE($1::boolean, builder_settings.enabled),
 		   provider               = COALESCE($2::text,    builder_settings.provider),
@@ -166,7 +185,13 @@ func UpsertBuilderSettings(ctx context.Context, pool *db.Pool, updatedBy string,
 		   backend_approval_mode  = COALESCE($15::text,   builder_settings.backend_approval_mode),
 		   publish_rls_gate       = COALESCE($16::text,   builder_settings.publish_rls_gate),
 		   updated_by             = $14::uuid,
-		   updated_at             = now()
+		   updated_at             = now(),
+		   cost_currency_changed_at = CASE
+		     WHEN $19::text IS NOT NULL AND $19::text <> builder_settings.cost_currency THEN now()
+		     ELSE builder_settings.cost_currency_changed_at END,
+		   cost_currency                = COALESCE($19::text,   builder_settings.cost_currency),
+		   session_cost_cap_micros      = COALESCE($20::bigint, builder_settings.session_cost_cap_micros),
+		   user_monthly_cost_cap_micros = COALESCE($21::bigint, builder_settings.user_monthly_cost_cap_micros)
 		 RETURNING `+builderSettingsCols,
 		in.Enabled, in.Provider, in.ContextWindowTokens, in.SessionTokenCap, in.UserMonthlyTokenCap,
 		in.MaxStepsPerTurn, in.MaxFixIterations, in.MaxTurnSeconds,
@@ -174,6 +199,7 @@ func UpsertBuilderSettings(ctx context.Context, pool *db.Pool, updatedBy string,
 		builderDefaultMaxStepsPerTurn, builderDefaultMaxFixIterations, builderDefaultMaxTurnSeconds,
 		updatedBy,
 		in.BackendApprovalMode, in.PublishRLSGate, builderDefaultApprovalMode, builderDefaultPublishRLSGate,
+		in.CostCurrency, in.SessionCostCapMicros, in.UserMonthlyCostCapMicros, builderDefaultCostCurrency,
 	))
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: upsert builder settings: %w", err)

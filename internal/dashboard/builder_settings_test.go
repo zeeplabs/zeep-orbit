@@ -179,7 +179,7 @@ func TestBuilderSettings_PutCreatesRowAndPersistsCaps(t *testing.T) {
 		Enabled: true, Provider: "openai_compatible", ContextWindowTokens: 32000,
 		SessionTokenCap: 200000, UserMonthlyTokenCap: 5000000,
 		MaxStepsPerTurn: 25, MaxFixIterations: 2, MaxTurnSeconds: 300, Configured: true,
-		BackendApprovalMode: "ask", PublishRLSGate: "warn",
+		BackendApprovalMode: "ask", PublishRLSGate: "warn", CostCurrency: "USD",
 	}
 	got.UpdatedAt = nil
 	if got.UpdatedBy == nil || *got.UpdatedBy != super.ID {

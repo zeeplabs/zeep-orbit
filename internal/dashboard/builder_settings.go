@@ -34,12 +34,15 @@ const (
 	builderMinContextWindowTokens = 4096
 	builderMaxContextWindowTokens = 2_000_000
 	builderMaxTokenCap            = int64(1_000_000_000_000)
-	builderMinMaxSteps            = 1
-	builderMaxMaxSteps            = 200
-	builderMinMaxFixIterations    = 1
-	builderMaxMaxFixIterations    = 20
-	builderMinMaxTurnSeconds      = 10
-	builderMaxMaxTurnSeconds      = 3600
+	// builderMaxCostCapMicros is 1 billion units of currency, far above any
+	// real cap and well inside what a JSON number carries exactly.
+	builderMaxCostCapMicros    = int64(1_000_000_000_000_000)
+	builderMinMaxSteps         = 1
+	builderMaxMaxSteps         = 200
+	builderMinMaxFixIterations = 1
+	builderMaxMaxFixIterations = 20
+	builderMinMaxTurnSeconds   = 10
+	builderMaxMaxTurnSeconds   = 3600
 
 	// builderPromptBodyLimit bounds the raw PUT body: 8000 characters of
 	// 4-byte runes, JSON-escaped, with headroom.
@@ -118,7 +121,8 @@ func (h *Handler) UpsertBuilderSettingsConfig(w http.ResponseWriter, r *http.Req
 func validateBuilderSettingsInput(in *BuilderSettingsInput) error {
 	if in.Enabled == nil && in.Provider == nil && in.ContextWindowTokens == nil && in.SessionTokenCap == nil &&
 		in.UserMonthlyTokenCap == nil && in.MaxStepsPerTurn == nil && in.MaxFixIterations == nil && in.MaxTurnSeconds == nil &&
-		in.BackendApprovalMode == nil && in.PublishRLSGate == nil {
+		in.BackendApprovalMode == nil && in.PublishRLSGate == nil &&
+		in.CostCurrency == nil && in.SessionCostCapMicros == nil && in.UserMonthlyCostCapMicros == nil {
 		return errors.New("no settings to update")
 	}
 	if in.Provider != nil {
@@ -160,7 +164,35 @@ func validateBuilderSettingsInput(in *BuilderSettingsInput) error {
 		}
 		in.PublishRLSGate = &g
 	}
+	if v := in.CostCurrency; v != nil {
+		c := strings.ToUpper(strings.TrimSpace(*v))
+		if !validCurrencyCode(c) {
+			return errors.New("cost_currency must be a 3-letter ISO 4217 code, for example USD or BRL")
+		}
+		in.CostCurrency = &c
+	}
+	if v := in.SessionCostCapMicros; v != nil && (*v < 0 || *v > builderMaxCostCapMicros) {
+		return fmt.Errorf("session_cost_cap_micros must be between 0 and %d (0 = no cap)", builderMaxCostCapMicros)
+	}
+	if v := in.UserMonthlyCostCapMicros; v != nil && (*v < 0 || *v > builderMaxCostCapMicros) {
+		return fmt.Errorf("user_monthly_cost_cap_micros must be between 0 and %d (0 = no cap)", builderMaxCostCapMicros)
+	}
 	return nil
+}
+
+// validCurrencyCode reports whether c has the shape of an ISO 4217 code. The
+// code is only a label for the operator's own prices, so the list of real
+// currencies is not checked.
+func validCurrencyCode(c string) bool {
+	if len(c) != 3 {
+		return false
+	}
+	for _, r := range c {
+		if r < 'A' || r > 'Z' {
+			return false
+		}
+	}
+	return true
 }
 
 // builderPromptResponse is the API view of the active persona + rules. With no
