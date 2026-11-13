@@ -76,6 +76,10 @@ type BuilderStatus struct {
 	ProviderConfigured bool `json:"provider_configured"`
 	// Reason says why Available is false; empty when it is true.
 	Reason string `json:"reason"`
+	// PlanningMode is the planning setting ("required", "suggested", "off"),
+	// so the UI of any user knows whether to offer planning. Empty when the
+	// settings could not be read (builder not wired).
+	PlanningMode string `json:"planning_mode"`
 }
 
 // availability evaluates the builder gate in this order, cheapest first:
@@ -95,6 +99,7 @@ func (h *BuilderHandler) availability(ctx context.Context) (BuilderStatus, sandb
 	if err != nil {
 		return st, sandbox.Health{}, err
 	}
+	st.PlanningMode = settings.PlanningMode
 	if _, perr := ResolveAIProviderRuntime(ctx, h.pool, settings.Provider); perr == nil {
 		st.ProviderConfigured = true
 	} else if !errors.Is(perr, ErrAIProviderUnavailable) {

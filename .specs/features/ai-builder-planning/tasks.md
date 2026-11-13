@@ -11,7 +11,7 @@ Commits only when the user asks (AGENTS.md §2); one commit per task when author
 **Spec**: `.specs/features/ai-builder-planning/spec.md`
 **Design**: `.specs/features/ai-builder-planning/design.md`
 **Parent**: `.specs/features/ai-frontend-builder/`
-**Status**: Approved by the maintainer on 2026-11-13 with the defaults of design §12. In execution on `feat/ai-frontend-builder`. Done: none. The DDL of P01 is still shown and confirmed before it is applied.
+**Status**: Approved by the maintainer on 2026-11-13 with the defaults of design §12. In execution on `feat/ai-frontend-builder`. Done: P01. The DDL of P01 is still shown and confirmed before it is applied.
 
 ---
 
@@ -53,6 +53,7 @@ P11 docs + CHANGELOG (last)        P12 local end-to-end run        P13 real-mode
 - **Where**: `internal/dashboard/provisioner.go`, `builder_settings_store.go`, `builder_settings.go`, `builder_common.go`.
 - **Done when**: DDL diff shown and confirmed; provisioning twice on a database with the old tables works; old sessions read `phase = building` and old turns `mode = build`; **[verify]** no `SELECT *` on the altered tables; settings tests cover default, each value, an invalid value (400, English message) and absence of the key (unchanged).
 - **Requirements**: ABP-01, ABP-17. **Tests**: integration. **Gate**: Full.
+- **Status**: Done 2026-11-13. DDL confirmed by the maintainer and applied by the test suite on the local test database, which already had the old tables (provisioning runs once per test pool, so it ran many times). `planning_mode` is in the settings store and API and in `GET /api/builder/status` (`planning_mode`), so any user's UI can read it. No `SELECT *` on the altered tables (`grep` on the builder files and the agent store). Nothing reads the setting yet: session creation is wired in P05. Full gate green (27 packages).
 
 ### P02 — Store: phase, turn mode, briefs and the planning resolutions
 - **What**: `Session.Phase`; `Turn.Mode`, `BriefVersion`, `Milestone`; `CreateSession` takes the phase; `CreateTurn` takes options (`PlanFirst`, `Milestone`) and decides the mode inside its transaction, including the `off` transition of design §2; briefs store (insert version, current, by version, list, milestone progress query); `ResolveProposal` split so an extra step runs in its transaction; `AnswerQuestions`, `ApproveBuildPlan`, `ReviseBuildPlan` (design §5); `PurposePlanning`.

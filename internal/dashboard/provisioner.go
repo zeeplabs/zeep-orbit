@@ -970,6 +970,34 @@ func provisionZeepSystemOnce(ctx context.Context, pool *db.Pool) error {
 		   ADD COLUMN IF NOT EXISTS cost_currency_changed_at     TIMESTAMPTZ,
 		   ADD COLUMN IF NOT EXISTS session_cost_cap_micros      BIGINT NOT NULL DEFAULT 0 CHECK (session_cost_cap_micros >= 0),
 		   ADD COLUMN IF NOT EXISTS user_monthly_cost_cap_micros BIGINT NOT NULL DEFAULT 0 CHECK (user_monthly_cost_cap_micros >= 0)`,
+		// Planning mode (ai-builder-planning P01). All additive and defaulted:
+		// existing sessions stay in the building phase and existing turns in
+		// build mode. planning_mode defaults to 'required', so new sessions of
+		// an existing installation start with the briefing.
+		`ALTER TABLE zeep_system.builder_settings
+		   ADD COLUMN IF NOT EXISTS planning_mode TEXT NOT NULL DEFAULT 'required'
+		   CHECK (planning_mode IN ('required', 'suggested', 'off'))`,
+		`ALTER TABLE zeep_system.builder_sessions
+		   ADD COLUMN IF NOT EXISTS phase TEXT NOT NULL DEFAULT 'building'
+		   CHECK (phase IN ('briefing', 'building'))`,
+		// mode is fixed when the turn is created and changes only when a plan
+		// is approved. brief_version and milestone (1-based) say which
+		// milestone of which brief version the turn works on, if any.
+		`ALTER TABLE zeep_system.builder_turns
+		   ADD COLUMN IF NOT EXISTS mode          TEXT NOT NULL DEFAULT 'build' CHECK (mode IN ('plan', 'build')),
+		   ADD COLUMN IF NOT EXISTS brief_version INT,
+		   ADD COLUMN IF NOT EXISTS milestone     INT`,
+		// One row per approved build plan; the newest version is the session's
+		// brief. plan is the approved propose_build_plan arguments.
+		`CREATE TABLE IF NOT EXISTS zeep_system.builder_briefs (
+			session_id UUID        NOT NULL REFERENCES zeep_system.builder_sessions(id) ON DELETE CASCADE,
+			version    INT         NOT NULL,
+			plan       JSONB       NOT NULL,
+			turn_id    UUID,
+			created_by UUID        NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			PRIMARY KEY (session_id, version)
+		)`,
 	}
 
 	for _, stmt := range stmts {

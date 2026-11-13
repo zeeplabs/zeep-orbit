@@ -180,6 +180,7 @@ func TestBuilderSettings_PutCreatesRowAndPersistsCaps(t *testing.T) {
 		SessionTokenCap: 200000, UserMonthlyTokenCap: 5000000,
 		MaxStepsPerTurn: 25, MaxFixIterations: 2, MaxTurnSeconds: 300, Configured: true,
 		BackendApprovalMode: "ask", PublishRLSGate: "warn", CostCurrency: "USD",
+		PlanningMode: "required",
 	}
 	got.UpdatedAt = nil
 	if got.UpdatedBy == nil || *got.UpdatedBy != super.ID {
@@ -255,6 +256,44 @@ func TestBuilderSettings_BackendSettingsMergeAndDefault(t *testing.T) {
 	}
 }
 
+// planning_mode (ai-builder-planning P01) defaults to required, also for a
+// row saved before the column existed, takes each of its three values and
+// merges on absent key.
+func TestBuilderSettings_PlanningModeMergeAndDefault(t *testing.T) {
+	pool, h := builderSettingsTestPool(t)
+	super := mustCreateSuperadmin(t, pool)
+	put := func(body string) BuilderSettings {
+		t.Helper()
+		w := callBuilder(t, h.UpsertBuilderSettingsConfig, super, http.MethodPut, "/x", body)
+		if w.Code != http.StatusOK {
+			t.Fatalf("PUT %s: %d %s", body, w.Code, w.Body.String())
+		}
+		return decodeJSON[BuilderSettings](t, w)
+	}
+
+	got := decodeJSON[BuilderSettings](t, callBuilder(t, h.GetBuilderSettingsConfig, super, http.MethodGet, "/x", ""))
+	if got.PlanningMode != "required" || got.Configured {
+		t.Fatalf("unsaved settings must show planning_mode required: %+v", got)
+	}
+	if got = put(`{"enabled":true}`); got.PlanningMode != "required" {
+		t.Fatalf("first save must default to required: %+v", got)
+	}
+	for _, mode := range []string{"suggested", "off", "required"} {
+		if got = put(`{"planning_mode":"` + mode + `"}`); got.PlanningMode != mode || !got.Enabled {
+			t.Fatalf("planning_mode %s must apply and keep the rest: %+v", mode, got)
+		}
+	}
+	put(`{"planning_mode":" off "}`)
+	if got = put(`{"max_steps_per_turn":12}`); got.PlanningMode != "off" || got.MaxStepsPerTurn != 12 {
+		t.Errorf("an unrelated update must keep planning_mode: %+v", got)
+	}
+
+	w := callBuilder(t, h.UpsertBuilderSettingsConfig, super, http.MethodPut, "/x", `{"planning_mode":"sometimes"}`)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "planning_mode must be 'required', 'suggested' or 'off'") {
+		t.Errorf("invalid planning_mode: %d %s", w.Code, w.Body.String())
+	}
+}
+
 // Invalid values are 400 and never create or alter the row.
 func TestBuilderSettings_InvalidValuesRejected(t *testing.T) {
 	pool, h := builderSettingsTestPool(t)
@@ -279,6 +318,9 @@ func TestBuilderSettings_InvalidValuesRejected(t *testing.T) {
 		`{"backend_approval_mode":""}`,
 		`{"publish_rls_gate":"off"}`,
 		`{"publish_rls_gate":""}`,
+		`{"planning_mode":"always"}`,
+		`{"planning_mode":""}`,
+		`{"planning_mode":1}`,
 		`not json`,
 	} {
 		w := callBuilder(t, h.UpsertBuilderSettingsConfig, super, http.MethodPut, "/x", body)

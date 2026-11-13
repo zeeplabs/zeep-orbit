@@ -123,7 +123,8 @@ func validateBuilderSettingsInput(in *BuilderSettingsInput) error {
 	if in.Enabled == nil && in.Provider == nil && in.ContextWindowTokens == nil && in.SessionTokenCap == nil &&
 		in.UserMonthlyTokenCap == nil && in.MaxStepsPerTurn == nil && in.MaxFixIterations == nil && in.MaxTurnSeconds == nil &&
 		in.BackendApprovalMode == nil && in.PublishRLSGate == nil &&
-		in.CostCurrency == nil && in.SessionCostCapMicros == nil && in.UserMonthlyCostCapMicros == nil {
+		in.CostCurrency == nil && in.SessionCostCapMicros == nil && in.UserMonthlyCostCapMicros == nil &&
+		in.PlanningMode == nil {
 		return errors.New("no settings to update")
 	}
 	if in.Provider != nil {
@@ -177,6 +178,13 @@ func validateBuilderSettingsInput(in *BuilderSettingsInput) error {
 	}
 	if v := in.UserMonthlyCostCapMicros; v != nil && (*v < 0 || *v > builderMaxCostCapMicros) {
 		return fmt.Errorf("user_monthly_cost_cap_micros must be between 0 and %d (0 = no cap)", builderMaxCostCapMicros)
+	}
+	if v := in.PlanningMode; v != nil {
+		m := strings.TrimSpace(*v)
+		if m != BuilderPlanningRequired && m != BuilderPlanningSuggested && m != BuilderPlanningOff {
+			return errors.New("planning_mode must be 'required', 'suggested' or 'off'")
+		}
+		in.PlanningMode = &m
 	}
 	return nil
 }

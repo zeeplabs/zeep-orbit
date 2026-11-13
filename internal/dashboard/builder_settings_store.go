@@ -43,6 +43,16 @@ const (
 	builderDefaultApprovalMode        = BuilderApprovalAsk
 	builderDefaultPublishRLSGate      = BuilderRLSGateWarn
 	builderDefaultCostCurrency        = "USD"
+	builderDefaultPlanningMode        = BuilderPlanningRequired
+)
+
+// Planning modes (builder_settings.planning_mode), ai-builder-planning spec
+// ABP-17: "required" starts every new session with the briefing, "suggested"
+// lets the agent decide, "off" removes planning.
+const (
+	BuilderPlanningRequired  = "required"
+	BuilderPlanningSuggested = "suggested"
+	BuilderPlanningOff       = "off"
 )
 
 // Backend approval modes (builder_settings.backend_approval_mode) and publish
@@ -80,6 +90,8 @@ type BuilderSettings struct {
 	// cap; the token caps above stay mandatory (ai-builder-costs ABC-19).
 	SessionCostCapMicros     int64 `json:"session_cost_cap_micros"`
 	UserMonthlyCostCapMicros int64 `json:"user_monthly_cost_cap_micros"`
+	// PlanningMode: "required", "suggested" or "off" (see the constants).
+	PlanningMode string `json:"planning_mode"`
 	// UpdatedBy and UpdatedAt are nil/zero while the row has never been saved.
 	UpdatedBy *string    `json:"updated_by"`
 	UpdatedAt *time.Time `json:"updated_at"`
@@ -102,8 +114,9 @@ type BuilderSettingsInput struct {
 	PublishRLSGate      *string `json:"publish_rls_gate"`
 	CostCurrency        *string `json:"cost_currency"`
 	// Money caps in micros; 0 clears the cap.
-	SessionCostCapMicros     *int64 `json:"session_cost_cap_micros"`
-	UserMonthlyCostCapMicros *int64 `json:"user_monthly_cost_cap_micros"`
+	SessionCostCapMicros     *int64  `json:"session_cost_cap_micros"`
+	UserMonthlyCostCapMicros *int64  `json:"user_monthly_cost_cap_micros"`
+	PlanningMode             *string `json:"planning_mode"`
 }
 
 func defaultBuilderSettings() *BuilderSettings {
@@ -116,13 +129,15 @@ func defaultBuilderSettings() *BuilderSettings {
 		BackendApprovalMode: builderDefaultApprovalMode,
 		PublishRLSGate:      builderDefaultPublishRLSGate,
 		CostCurrency:        builderDefaultCostCurrency,
+		PlanningMode:        builderDefaultPlanningMode,
 	}
 }
 
 const builderSettingsCols = `enabled, provider, context_window_tokens, session_token_cap, user_monthly_token_cap,
 	max_steps_per_turn, max_fix_iterations, max_turn_seconds, backend_approval_mode, publish_rls_gate,
 	updated_by::text, updated_at,
-	cost_currency, cost_currency_changed_at, session_cost_cap_micros, user_monthly_cost_cap_micros`
+	cost_currency, cost_currency_changed_at, session_cost_cap_micros, user_monthly_cost_cap_micros,
+	planning_mode`
 
 func scanBuilderSettings(row pgx.Row) (*BuilderSettings, error) {
 	var (
@@ -133,7 +148,8 @@ func scanBuilderSettings(row pgx.Row) (*BuilderSettings, error) {
 	if err := row.Scan(&s.Enabled, &s.Provider, &s.ContextWindowTokens, &s.SessionTokenCap, &s.UserMonthlyTokenCap,
 		&s.MaxStepsPerTurn, &s.MaxFixIterations, &s.MaxTurnSeconds, &s.BackendApprovalMode, &s.PublishRLSGate,
 		&updatedBy, &updatedAt,
-		&s.CostCurrency, &s.CostCurrencyChangedAt, &s.SessionCostCapMicros, &s.UserMonthlyCostCapMicros); err != nil {
+		&s.CostCurrency, &s.CostCurrencyChangedAt, &s.SessionCostCapMicros, &s.UserMonthlyCostCapMicros,
+		&s.PlanningMode); err != nil {
 		return nil, err
 	}
 	s.UpdatedBy = updatedBy
@@ -165,14 +181,15 @@ func UpsertBuilderSettings(ctx context.Context, pool *db.Pool, updatedBy string,
 		   (id, enabled, provider, context_window_tokens, session_token_cap, user_monthly_token_cap,
 		    max_steps_per_turn, max_fix_iterations, max_turn_seconds,
 		    backend_approval_mode, publish_rls_gate, updated_by, updated_at,
-		    cost_currency, session_cost_cap_micros, user_monthly_cost_cap_micros)
+		    cost_currency, session_cost_cap_micros, user_monthly_cost_cap_micros, planning_mode)
 		 VALUES (1,
 		   COALESCE($1::boolean, false), COALESCE($2::text, $9), COALESCE($3::int, $10),
 		   COALESCE($4::bigint, 0), COALESCE($5::bigint, 0),
 		   COALESCE($6::int, $11), COALESCE($7::int, $12), COALESCE($8::int, $13),
 		   COALESCE($15::text, $17), COALESCE($16::text, $18),
 		   $14::uuid, now(),
-		   COALESCE($19::text, $22), COALESCE($20::bigint, 0), COALESCE($21::bigint, 0))
+		   COALESCE($19::text, $22), COALESCE($20::bigint, 0), COALESCE($21::bigint, 0),
+		   COALESCE($23::text, $24))
 		 ON CONFLICT (id) DO UPDATE SET
 		   enabled                = COALESCE($1::boolean, builder_settings.enabled),
 		   provider               = COALESCE($2::text,    builder_settings.provider),
@@ -191,7 +208,8 @@ func UpsertBuilderSettings(ctx context.Context, pool *db.Pool, updatedBy string,
 		     ELSE builder_settings.cost_currency_changed_at END,
 		   cost_currency                = COALESCE($19::text,   builder_settings.cost_currency),
 		   session_cost_cap_micros      = COALESCE($20::bigint, builder_settings.session_cost_cap_micros),
-		   user_monthly_cost_cap_micros = COALESCE($21::bigint, builder_settings.user_monthly_cost_cap_micros)
+		   user_monthly_cost_cap_micros = COALESCE($21::bigint, builder_settings.user_monthly_cost_cap_micros),
+		   planning_mode                = COALESCE($23::text,   builder_settings.planning_mode)
 		 RETURNING `+builderSettingsCols,
 		in.Enabled, in.Provider, in.ContextWindowTokens, in.SessionTokenCap, in.UserMonthlyTokenCap,
 		in.MaxStepsPerTurn, in.MaxFixIterations, in.MaxTurnSeconds,
@@ -200,6 +218,7 @@ func UpsertBuilderSettings(ctx context.Context, pool *db.Pool, updatedBy string,
 		updatedBy,
 		in.BackendApprovalMode, in.PublishRLSGate, builderDefaultApprovalMode, builderDefaultPublishRLSGate,
 		in.CostCurrency, in.SessionCostCapMicros, in.UserMonthlyCostCapMicros, builderDefaultCostCurrency,
+		in.PlanningMode, builderDefaultPlanningMode,
 	))
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: upsert builder settings: %w", err)
