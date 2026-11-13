@@ -8,6 +8,7 @@ package store_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -45,12 +46,12 @@ func TestBudget_UnderCapAllowedAndUsageRecorded(t *testing.T) {
 	sess := e.session(t, e.userA, e.appA)
 	bc := store.NewBudgetChecker(e.pool)
 
-	if err := bc.Check(ctx, e.userA, sess.ID); err != nil {
+	if _, err := bc.Check(ctx, e.userA, sess.ID); err != nil {
 		t.Fatalf("fresh session must be allowed: %v", err)
 	}
 	e.record(t, e.userA, sess.ID, 300, 100)
 	e.record(t, e.userA, sess.ID, 200, 50)
-	if err := bc.Check(ctx, e.userA, sess.ID); err != nil {
+	if _, err := bc.Check(ctx, e.userA, sess.ID); err != nil {
 		t.Fatalf("650/1000 must be allowed: %v", err)
 	}
 
@@ -83,15 +84,15 @@ func TestBudget_SessionCapReached(t *testing.T) {
 	bc := store.NewBudgetChecker(e.pool)
 
 	e.record(t, e.userA, s1.ID, 999, 0)
-	if err := bc.Check(ctx, e.userA, s1.ID); err != nil {
+	if _, err := bc.Check(ctx, e.userA, s1.ID); err != nil {
 		t.Fatalf("999/1000 must still be allowed: %v", err)
 	}
 	e.record(t, e.userA, s1.ID, 1, 0) // reaches the cap exactly
-	err := bc.Check(ctx, e.userA, s1.ID)
+	_, err := bc.Check(ctx, e.userA, s1.ID)
 	if !errors.Is(err, store.ErrSessionCapReached) || !errors.Is(err, store.ErrBudgetExceeded) {
 		t.Fatalf("want ErrSessionCapReached (wrapping ErrBudgetExceeded), got %v", err)
 	}
-	if err := bc.Check(ctx, e.userA, s2.ID); err != nil {
+	if _, err := bc.Check(ctx, e.userA, s2.ID); err != nil {
 		t.Errorf("another session must be unaffected: %v", err)
 	}
 }
@@ -107,15 +108,15 @@ func TestBudget_MonthlyCapReached(t *testing.T) {
 	bc := store.NewBudgetChecker(e.pool)
 
 	e.record(t, e.userA, s1.ID, 400, 100)
-	if err := bc.Check(ctx, e.userA, s2.ID); err != nil {
+	if _, err := bc.Check(ctx, e.userA, s2.ID); err != nil {
 		t.Fatalf("500/1000 must be allowed: %v", err)
 	}
 	e.record(t, e.userA, s2.ID, 300, 200) // total 1000 across two sessions
-	err := bc.Check(ctx, e.userA, s2.ID)
+	_, err := bc.Check(ctx, e.userA, s2.ID)
 	if !errors.Is(err, store.ErrMonthlyCapReached) || !errors.Is(err, store.ErrBudgetExceeded) {
 		t.Fatalf("want ErrMonthlyCapReached, got %v", err)
 	}
-	if err := bc.Check(ctx, e.userB, sB.ID); err != nil {
+	if _, err := bc.Check(ctx, e.userB, sB.ID); err != nil {
 		t.Errorf("another user must be unaffected: %v", err)
 	}
 }
@@ -141,12 +142,12 @@ func TestBudget_PreviousMonthNotCounted(t *testing.T) {
 	}
 	insertAt(time.Date(2026, time.February, 28, 23, 59, 59, 0, time.UTC), 5000) // previous month
 	insertAt(time.Date(2026, time.April, 1, 0, 0, 0, 0, time.UTC), 5000)        // next month
-	if err := bc.Check(ctx, e.userA, sess.ID); err != nil {
+	if _, err := bc.Check(ctx, e.userA, sess.ID); err != nil {
 		t.Fatalf("usage outside the current month must not count: %v", err)
 	}
 
 	insertAt(time.Date(2026, time.March, 1, 0, 0, 0, 0, time.UTC), 1000) // first instant of the month
-	if err := bc.Check(ctx, e.userA, sess.ID); !errors.Is(err, store.ErrMonthlyCapReached) {
+	if _, err := bc.Check(ctx, e.userA, sess.ID); !errors.Is(err, store.ErrMonthlyCapReached) {
 		t.Fatalf("usage at the month's first instant must count: got %v", err)
 	}
 }
@@ -160,17 +161,17 @@ func TestBudget_CapZeroBlocks(t *testing.T) {
 	bc := store.NewBudgetChecker(e.pool)
 
 	// No settings row yet.
-	if err := bc.Check(ctx, e.userA, sess.ID); !errors.Is(err, store.ErrBudgetNotConfigured) || !errors.Is(err, store.ErrBudgetExceeded) {
+	if _, err := bc.Check(ctx, e.userA, sess.ID); !errors.Is(err, store.ErrBudgetNotConfigured) || !errors.Is(err, store.ErrBudgetExceeded) {
 		t.Errorf("missing settings: want ErrBudgetNotConfigured, got %v", err)
 	}
 	for _, caps := range [][2]int64{{0, 0}, {0, 1000}, {1000, 0}} {
 		e.setCaps(t, caps[0], caps[1])
-		if err := bc.Check(ctx, e.userA, sess.ID); !errors.Is(err, store.ErrBudgetNotConfigured) {
+		if _, err := bc.Check(ctx, e.userA, sess.ID); !errors.Is(err, store.ErrBudgetNotConfigured) {
 			t.Errorf("caps %v: want ErrBudgetNotConfigured, got %v", caps, err)
 		}
 	}
 	e.setCaps(t, 1000, 1000)
-	if err := bc.Check(ctx, e.userA, sess.ID); err != nil {
+	if _, err := bc.Check(ctx, e.userA, sess.ID); err != nil {
 		t.Errorf("caps set: want allowed, got %v", err)
 	}
 }
@@ -186,7 +187,7 @@ func TestBudget_OnlyBuilderFeatureCounts(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.NewBudgetChecker(e.pool).Check(ctx, e.userA, sess.ID); err != nil {
+	if _, err := store.NewBudgetChecker(e.pool).Check(ctx, e.userA, sess.ID); err != nil {
 		t.Errorf("other features must not count toward the builder cap: %v", err)
 	}
 }
@@ -222,7 +223,7 @@ func TestRecordUsage_ValidationAndAtomicity(t *testing.T) {
 	if n != 0 {
 		t.Errorf("failed RecordUsage must leave no ledger row, found %d", n)
 	}
-	if err := store.NewBudgetChecker(e.pool).Check(ctx, e.userA, "00000000-0000-0000-0000-000000000000"); err == nil {
+	if _, err := store.NewBudgetChecker(e.pool).Check(ctx, e.userA, "00000000-0000-0000-0000-000000000000"); err == nil {
 		t.Errorf("Check on unknown session must error")
 	}
 }
@@ -397,13 +398,13 @@ func TestBudget_EveryInputClassCountsTowardTheCaps(t *testing.T) {
 	e.setCaps(t, 1000, 1_000_000)
 	a := e.session(t, e.userA, e.appA)
 	rec(a.ID)
-	if err := bc.Check(ctx, e.userA, a.ID); !errors.Is(err, store.ErrSessionCapReached) {
+	if _, err := bc.Check(ctx, e.userA, a.ID); !errors.Is(err, store.ErrSessionCapReached) {
 		t.Errorf("1000/1000 with cached tokens: want ErrSessionCapReached, got %v", err)
 	}
 
 	e.setCaps(t, 1_000_000, 1000)
 	b := e.session(t, e.userA, e.appA)
-	if err := bc.Check(ctx, e.userA, b.ID); !errors.Is(err, store.ErrMonthlyCapReached) {
+	if _, err := bc.Check(ctx, e.userA, b.ID); !errors.Is(err, store.ErrMonthlyCapReached) {
 		t.Errorf("monthly 1000/1000 with cached tokens: want ErrMonthlyCapReached, got %v", err)
 	}
 }
@@ -426,5 +427,196 @@ func TestRecordUsage_RejectsUnknownPurposeAndNegativeClasses(t *testing.T) {
 		if err := e.st.RecordUsage(ctx, r); !errors.Is(err, store.ErrInvalidArgument) {
 			t.Errorf("negative %s tokens: want ErrInvalidArgument, got %v", name, err)
 		}
+	}
+}
+
+// --- ai-builder-costs C05: money caps and the 80% warning (ABC-19, ABC-20) ---
+
+func (e *env) setCostCaps(t *testing.T, sessionMicros, monthlyMicros int64) {
+	t.Helper()
+	if _, err := e.pool.Exec(context.Background(),
+		`UPDATE zeep_system.builder_settings
+		 SET session_cost_cap_micros = $1, user_monthly_cost_cap_micros = $2 WHERE id = 1`,
+		sessionMicros, monthlyMicros); err != nil {
+		t.Fatalf("set cost caps: %v", err)
+	}
+	t.Cleanup(func() {
+		e.pool.Exec(context.Background(),
+			`UPDATE zeep_system.builder_settings SET session_cost_cap_micros = 0, user_monthly_cost_cap_micros = 0 WHERE id = 1`)
+	})
+}
+
+// spend records one call of model "cost-model" (1 unit per million tokens in
+// and out), so micros spent == tokens.
+func (e *env) spend(t *testing.T, sessionID, model string, tokens int) {
+	t.Helper()
+	if err := e.st.RecordUsage(context.Background(), store.UsageRecord{
+		UserID: e.userA, Feature: store.FeatureBuilder, SessionID: sessionID,
+		Provider: "openai", Model: model, InputTokens: tokens, Reported: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func warningCaps(ws []store.BudgetWarning) []string {
+	out := []string{}
+	for _, w := range ws {
+		out = append(out, w.Cap)
+	}
+	return out
+}
+
+// A money cap of 0 is no cap; a cap reached refuses the next call with its
+// own error; calls with no price never count toward a money cap.
+func TestBudget_CostCaps(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	e.setCaps(t, 100_000_000, 100_000_000)
+	e.setPrice(t, "openai", "cost-model", "1", nil, nil, "1")
+	bc := store.NewBudgetChecker(e.pool)
+	sess := e.session(t, e.userA, e.appA)
+
+	e.spend(t, sess.ID, "cost-model", 5000)
+	if ws, err := bc.Check(ctx, e.userA, sess.ID); err != nil || len(ws) != 0 {
+		t.Fatalf("no money cap set: want allowed without warnings, got %v / %v", ws, err)
+	}
+
+	e.setCostCaps(t, 5000, 0)
+	_, err := bc.Check(ctx, e.userA, sess.ID)
+	if !errors.Is(err, store.ErrSessionCostCapReached) || !errors.Is(err, store.ErrBudgetExceeded) {
+		t.Errorf("5000/5000 micros: want ErrSessionCostCapReached wrapping ErrBudgetExceeded, got %v", err)
+	}
+	if got := store.BudgetReason(err); got != store.BudgetCapSessionCost {
+		t.Errorf("reason = %q, want %q", got, store.BudgetCapSessionCost)
+	}
+	other := e.session(t, e.userA, e.appA)
+	if _, err := bc.Check(ctx, e.userA, other.ID); err != nil {
+		t.Errorf("another session of the same user must not be blocked by a session cost cap: %v", err)
+	}
+
+	e.setCostCaps(t, 0, 5000)
+	_, err = bc.Check(ctx, e.userA, other.ID)
+	if !errors.Is(err, store.ErrMonthlyCostCapReached) || store.BudgetReason(err) != store.BudgetCapMonthCost {
+		t.Errorf("month 5000/5000 micros: want ErrMonthlyCostCapReached, got %v", err)
+	}
+	sB := e.session(t, e.userB, e.appA)
+	if _, err := bc.Check(ctx, e.userB, sB.ID); err != nil {
+		t.Errorf("the monthly cost cap is per user: %v", err)
+	}
+
+	// Unpriced calls have no cost: a huge unpriced call does not move a money cap.
+	e.setCostCaps(t, 6000, 6000)
+	e.spend(t, sess.ID, "model-without-price", 1_000_000)
+	if _, err := bc.Check(ctx, e.userA, sess.ID); err != nil {
+		t.Errorf("unpriced usage must not count toward money caps: %v", err)
+	}
+}
+
+func TestBudgetReason(t *testing.T) {
+	for want, err := range map[string]error{
+		store.BudgetReasonNotConfigured: store.ErrBudgetNotConfigured,
+		store.BudgetCapSessionTokens:    store.ErrSessionCapReached,
+		store.BudgetCapMonthTokens:      store.ErrMonthlyCapReached,
+		store.BudgetCapSessionCost:      store.ErrSessionCostCapReached,
+		store.BudgetCapMonthCost:        store.ErrMonthlyCostCapReached,
+		"":                              store.ErrBudgetExceeded,
+	} {
+		if got := store.BudgetReason(err); got != want {
+			t.Errorf("BudgetReason(%v) = %q, want %q", err, got, want)
+		}
+	}
+}
+
+// Each cap warns from 80% up to (not including) 100%, with the numbers.
+func TestBudget_WarningsAtEightyPercent(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	e.setPrice(t, "openai", "cost-model", "1", nil, nil, "1")
+	bc := store.NewBudgetChecker(e.pool)
+
+	e.setCaps(t, 1000, 1_000_000)
+	sess := e.session(t, e.userA, e.appA)
+	e.spend(t, sess.ID, "cost-model", 799)
+	if ws, err := bc.Check(ctx, e.userA, sess.ID); err != nil || len(ws) != 0 {
+		t.Fatalf("799/1000: want no warning, got %v / %v", ws, err)
+	}
+	e.spend(t, sess.ID, "cost-model", 1)
+	ws, err := bc.Check(ctx, e.userA, sess.ID)
+	if err != nil || len(ws) != 1 || ws[0] != (store.BudgetWarning{Cap: store.BudgetCapSessionTokens, Used: 800, Limit: 1000}) {
+		t.Fatalf("800/1000: want one session_tokens warning with 800/1000, got %v / %v", ws, err)
+	}
+
+	// All four at once: 800 tokens and 800 micros against caps of 1000.
+	e.setCaps(t, 1000, 1000)
+	e.setCostCaps(t, 1000, 1000)
+	ws, err = bc.Check(ctx, e.userA, sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{store.BudgetCapSessionTokens, store.BudgetCapMonthTokens, store.BudgetCapSessionCost, store.BudgetCapMonthCost}
+	if got := warningCaps(ws); !slices.Equal(got, want) {
+		t.Errorf("warning caps = %v, want %v", got, want)
+	}
+}
+
+// One budget_warning event per session and cap, across turns; another cap
+// and another session still get theirs. A writer without the lease writes
+// nothing.
+func TestAppendBudgetWarning_OncePerSessionAndCap(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	sess := e.session(t, e.userA, e.appA)
+	w := store.BudgetWarning{Cap: store.BudgetCapSessionCost, Used: 800, Limit: 1000}
+
+	count := func(sessionID string) (n int) {
+		t.Helper()
+		if err := e.pool.QueryRow(ctx,
+			`SELECT count(*) FROM zeep_system.builder_events WHERE session_id = $1 AND type = $2`,
+			sessionID, store.EventBudgetWarning).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+
+	_, l1 := e.claimed(t, sess, "w")
+	if ok, err := e.st.AppendBudgetWarning(ctx, l1, w); err != nil || !ok {
+		t.Fatalf("first warning: ok=%v err=%v, want written", ok, err)
+	}
+	if ok, err := e.st.AppendBudgetWarning(ctx, l1, w); err != nil || ok {
+		t.Errorf("same cap, same turn: ok=%v err=%v, want not written", ok, err)
+	}
+	if err := e.st.FinishTurn(ctx, l1, store.FinishParams{Status: store.TurnCompleted}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, l2 := e.claimed(t, sess, "w")
+	if ok, err := e.st.AppendBudgetWarning(ctx, l2, store.BudgetWarning{Cap: w.Cap, Used: 900, Limit: 1000}); err != nil || ok {
+		t.Errorf("same cap, later turn: ok=%v err=%v, want not written", ok, err)
+	}
+	if ok, err := e.st.AppendBudgetWarning(ctx, l2, store.BudgetWarning{Cap: store.BudgetCapMonthTokens, Used: 8, Limit: 10}); err != nil || !ok {
+		t.Errorf("another cap: ok=%v err=%v, want written", ok, err)
+	}
+	stranger := store.Lease{TurnID: l2.TurnID, Owner: "someone-else"}
+	if ok, err := e.st.AppendBudgetWarning(ctx, stranger, store.BudgetWarning{Cap: store.BudgetCapMonthCost, Used: 8, Limit: 10}); err != nil || ok {
+		t.Errorf("without the lease: ok=%v err=%v, want not written", ok, err)
+	}
+	if n := count(sess.ID); n != 2 {
+		t.Errorf("budget_warning events = %d, want 2", n)
+	}
+
+	var payload string
+	if err := e.pool.QueryRow(ctx,
+		`SELECT payload::text FROM zeep_system.builder_events WHERE session_id = $1 AND type = $2 ORDER BY id LIMIT 1`,
+		sess.ID, store.EventBudgetWarning).Scan(&payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload != `{"cap": "session_cost", "used": 800, "limit": 1000}` {
+		t.Errorf("payload = %s, want only cap, used and limit", payload)
+	}
+
+	other := e.session(t, e.userA, e.appA)
+	_, l3 := e.claimed(t, other, "w")
+	if ok, err := e.st.AppendBudgetWarning(ctx, l3, w); err != nil || !ok {
+		t.Errorf("another session: ok=%v err=%v, want written", ok, err)
 	}
 }

@@ -30,7 +30,56 @@ var (
 	// ErrMonthlyCapReached: the user's tokens in+out this calendar month (UTC)
 	// reached the monthly cap.
 	ErrMonthlyCapReached = fmt.Errorf("%w: monthly token cap reached", ErrBudgetExceeded)
+	// ErrSessionCostCapReached: the session's recorded cost reached the
+	// session cost cap.
+	ErrSessionCostCapReached = fmt.Errorf("%w: session cost cap reached", ErrBudgetExceeded)
+	// ErrMonthlyCostCapReached: the user's recorded cost this calendar month
+	// (UTC) reached the monthly cost cap.
+	ErrMonthlyCostCapReached = fmt.Errorf("%w: monthly cost cap reached", ErrBudgetExceeded)
 )
+
+// The four caps, as they appear in the budget_warning and budget_exceeded
+// event payloads.
+const (
+	BudgetCapSessionTokens = "session_tokens"
+	BudgetCapMonthTokens   = "month_tokens"
+	BudgetCapSessionCost   = "session_cost"
+	BudgetCapMonthCost     = "month_cost"
+)
+
+// BudgetReasonNotConfigured is the BudgetReason of ErrBudgetNotConfigured.
+const BudgetReasonNotConfigured = "not_configured"
+
+// EventBudgetWarning is the event appended when usage crosses the warning
+// threshold of a cap.
+const EventBudgetWarning = "budget_warning"
+
+// BudgetWarning says a cap is at or above the warning threshold (80%) but not
+// reached yet. Used and Limit are tokens for the token caps and micros for
+// the cost caps.
+type BudgetWarning struct {
+	Cap   string `json:"cap"`
+	Used  int64  `json:"used"`
+	Limit int64  `json:"limit"`
+}
+
+// BudgetReason names the cap behind a budget error: one of the BudgetCap*
+// values, BudgetReasonNotConfigured, or "" for an error it does not know.
+func BudgetReason(err error) string {
+	switch {
+	case errors.Is(err, ErrBudgetNotConfigured):
+		return BudgetReasonNotConfigured
+	case errors.Is(err, ErrSessionCapReached):
+		return BudgetCapSessionTokens
+	case errors.Is(err, ErrMonthlyCapReached):
+		return BudgetCapMonthTokens
+	case errors.Is(err, ErrSessionCostCapReached):
+		return BudgetCapSessionCost
+	case errors.Is(err, ErrMonthlyCostCapReached):
+		return BudgetCapMonthCost
+	}
+	return ""
+}
 
 // Purposes of an LLM call (ai_usage_ledger.purpose). The column has no CHECK
 // constraint, so a new purpose needs no DDL, only a constant here.
@@ -157,8 +206,9 @@ func callCost(ctx context.Context, tx pgx.Tx, r UsageRecord) (*int64, error) {
 	return &cost, nil
 }
 
-// BudgetChecker enforces the session and per-user monthly token caps from
-// zeep_system.builder_settings.
+// BudgetChecker enforces the session and per-user monthly caps from
+// zeep_system.builder_settings: the token caps, which are mandatory, and the
+// cost caps, which are optional.
 type BudgetChecker struct {
 	pool *db.Pool
 	now  func() time.Time
@@ -182,26 +232,38 @@ func NewBudgetChecker(pool *db.Pool, opts ...BudgetOption) *BudgetChecker {
 }
 
 // Check reports whether another LLM call is allowed for userID on sessionID.
-// It returns nil when allowed, ErrBudgetNotConfigured when either cap is 0 or
-// the settings row is missing, ErrSessionCapReached when the session's tokens
-// (in + out) have reached the session cap, and ErrMonthlyCapReached when the
-// user's builder tokens this UTC calendar month have reached the monthly cap.
-// The cap is checked before the call, against what was already recorded: the
-// call that crosses the cap is the last one. ErrNotFound when the session does
-// not exist.
-func (b *BudgetChecker) Check(ctx context.Context, userID, sessionID string) error {
-	var sessionCap, monthlyCap int64
+//
+// Token caps: ErrBudgetNotConfigured when either is 0 or the settings row is
+// missing, ErrSessionCapReached when the session's tokens (in + out) have
+// reached the session cap, ErrMonthlyCapReached when the user's builder
+// tokens this UTC calendar month have reached the monthly cap.
+//
+// Cost caps: 0 means no cap. ErrSessionCostCapReached and
+// ErrMonthlyCostCapReached compare the recorded cost with the caps. Calls
+// with no price have no cost and do not count, so a cost cap only protects
+// models that have a price.
+//
+// Every cap is checked before the call, against what was already recorded:
+// the call that crosses a cap is the last one. ErrNotFound when the session
+// does not exist.
+//
+// When the call is allowed, the caps at or above 80% are returned as
+// warnings, in a fixed order.
+func (b *BudgetChecker) Check(ctx context.Context, userID, sessionID string) ([]BudgetWarning, error) {
+	var sessionCap, monthlyCap, sessionCostCap, monthlyCostCap int64
 	err := b.pool.QueryRow(ctx,
-		`SELECT session_token_cap, user_monthly_token_cap FROM zeep_system.builder_settings WHERE id = 1`,
-	).Scan(&sessionCap, &monthlyCap)
+		`SELECT session_token_cap, user_monthly_token_cap,
+		        COALESCE(session_cost_cap_micros, 0), COALESCE(user_monthly_cost_cap_micros, 0)
+		 FROM zeep_system.builder_settings WHERE id = 1`,
+	).Scan(&sessionCap, &monthlyCap, &sessionCostCap, &monthlyCostCap)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrBudgetNotConfigured
+			return nil, ErrBudgetNotConfigured
 		}
-		return fmt.Errorf("builder store: budget check: settings: %w", err)
+		return nil, fmt.Errorf("builder store: budget check: settings: %w", err)
 	}
 	if sessionCap <= 0 || monthlyCap <= 0 {
-		return ErrBudgetNotConfigured
+		return nil, ErrBudgetNotConfigured
 	}
 
 	var sessionUsed int64
@@ -210,29 +272,91 @@ func (b *BudgetChecker) Check(ctx context.Context, userID, sessionID string) err
 	).Scan(&sessionUsed)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
+			return nil, ErrNotFound
 		}
-		return fmt.Errorf("builder store: budget check: session usage: %w", err)
+		return nil, fmt.Errorf("builder store: budget check: session usage: %w", err)
 	}
 	if sessionUsed >= sessionCap {
-		return ErrSessionCapReached
+		return nil, ErrSessionCapReached
 	}
 
 	now := b.now().UTC()
 	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
-	var monthlyUsed int64
+	var monthlyUsed, monthlyCost int64
 	err = b.pool.QueryRow(ctx,
 		`SELECT COALESCE(SUM(input_tokens::bigint + cached_input_tokens::bigint
-		                     + cache_write_tokens::bigint + output_tokens::bigint), 0)
+		                     + cache_write_tokens::bigint + output_tokens::bigint), 0),
+		        COALESCE(SUM(cost_micros), 0)::bigint
 		 FROM zeep_system.ai_usage_ledger
 		 WHERE user_id = $1 AND feature = $2 AND created_at >= $3 AND created_at < $4`,
 		userID, FeatureBuilder, monthStart, monthStart.AddDate(0, 1, 0),
-	).Scan(&monthlyUsed)
+	).Scan(&monthlyUsed, &monthlyCost)
 	if err != nil {
-		return fmt.Errorf("builder store: budget check: monthly usage: %w", err)
+		return nil, fmt.Errorf("builder store: budget check: monthly usage: %w", err)
 	}
 	if monthlyUsed >= monthlyCap {
-		return ErrMonthlyCapReached
+		return nil, ErrMonthlyCapReached
 	}
-	return nil
+
+	var sessionCost int64
+	if sessionCostCap > 0 {
+		err = b.pool.QueryRow(ctx,
+			`SELECT COALESCE(SUM(cost_micros), 0)::bigint FROM zeep_system.ai_usage_ledger WHERE session_id = $1`,
+			sessionID,
+		).Scan(&sessionCost)
+		if err != nil {
+			return nil, fmt.Errorf("builder store: budget check: session cost: %w", err)
+		}
+		if sessionCost >= sessionCostCap {
+			return nil, ErrSessionCostCapReached
+		}
+	}
+	if monthlyCostCap > 0 && monthlyCost >= monthlyCostCap {
+		return nil, ErrMonthlyCostCapReached
+	}
+
+	var warnings []BudgetWarning
+	for _, c := range []BudgetWarning{
+		{BudgetCapSessionTokens, sessionUsed, sessionCap},
+		{BudgetCapMonthTokens, monthlyUsed, monthlyCap},
+		{BudgetCapSessionCost, sessionCost, sessionCostCap},
+		{BudgetCapMonthCost, monthlyCost, monthlyCostCap},
+	} {
+		// 80%, in integers: used/limit >= 4/5.
+		if c.Limit > 0 && c.Used*5 >= c.Limit*4 {
+			warnings = append(warnings, c)
+		}
+	}
+	return warnings, nil
+}
+
+// AppendBudgetWarning appends the budget_warning event of w on the leased
+// turn's session, unless the session already has one for the same cap: a
+// session is warned once per cap, whatever the number of turns and resumes.
+// It reports whether the event was written. A lost lease also reports false;
+// the caller's next leased write returns ErrLeaseLost.
+func (s *Store) AppendBudgetWarning(ctx context.Context, l Lease, w BudgetWarning) (bool, error) {
+	raw, err := marshalPayload(w)
+	if err != nil {
+		return false, err
+	}
+	var id int64
+	err = s.pool.QueryRow(ctx,
+		`INSERT INTO zeep_system.builder_events (session_id, turn_id, type, payload)
+		 SELECT t.session_id, t.id, $3::text, $4::jsonb
+		 FROM zeep_system.builder_turns t
+		 WHERE t.id = $1 AND t.lease_owner = $2 AND t.status = 'running'
+		   AND NOT EXISTS (
+		     SELECT 1 FROM zeep_system.builder_events e
+		     WHERE e.session_id = t.session_id AND e.type = $3::text AND e.payload->>'cap' = $5)
+		 RETURNING id`,
+		l.TurnID, l.Owner, EventBudgetWarning, raw, w.Cap,
+	).Scan(&id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("builder store: append budget warning: %w", err)
+	}
+	return true, nil
 }

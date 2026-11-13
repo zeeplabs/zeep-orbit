@@ -1,6 +1,10 @@
 package agent
 
-import "time"
+import (
+	"time"
+
+	"github.com/zeeplabs/zeep-orbit/internal/agent/store"
+)
 
 // Defaults match builder_settings (design, Data Models). They apply to any
 // field left at zero in [Limits].
@@ -87,6 +91,7 @@ const (
 	EventProposal         = "proposal"
 	EventLimitReached     = "limit_reached"
 	EventBudgetExceeded   = "budget_exceeded"
+	EventBudgetWarning    = store.EventBudgetWarning
 	EventError            = "error"
 	EventTurnFinished     = "turn_finished"
 )

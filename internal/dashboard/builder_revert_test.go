@@ -211,9 +211,9 @@ func (p neverProvider) Chat(context.Context, provider.ChatRequest) (provider.Cha
 
 type noBudget struct{ t *testing.T }
 
-func (b noBudget) Check(context.Context, string, string) error {
+func (b noBudget) Check(context.Context, string, string) ([]store.BudgetWarning, error) {
 	b.t.Error("a revert turn must not check the model budget")
-	return nil
+	return nil, nil
 }
 
 func archiveFiles(t *testing.T, sb sandbox.Sandbox, sessionID, sha string) map[string]string {

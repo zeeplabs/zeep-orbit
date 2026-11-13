@@ -142,7 +142,7 @@ func splitOlderTurns(base []store.Message, keepTurns int) (older, keep []store.M
 // summarize runs the one extra model call. It is subject to the same budget
 // check as any other call, and its usage is recorded.
 func (r *run) summarize(ctx, tctx context.Context, prev *store.Message, older []store.Message) (string, error) {
-	if err := r.deps.Budget.Check(tctx, r.sess.OwnerUserID, r.sess.ID); err != nil {
+	if _, err := r.deps.Budget.Check(tctx, r.sess.OwnerUserID, r.sess.ID); err != nil {
 		return "", fmt.Errorf("budget check before compaction: %w", err)
 	}
 	resp, err := r.deps.Provider.Chat(tctx, provider.ChatRequest{

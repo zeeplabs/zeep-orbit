@@ -36,6 +36,7 @@ type Store interface {
 	ListSnapshots(ctx context.Context, sessionID string) ([]store.Snapshot, error)
 	FinishTurn(ctx context.Context, l store.Lease, p store.FinishParams) error
 	RecordUsage(ctx context.Context, r store.UsageRecord) error
+	AppendBudgetWarning(ctx context.Context, l store.Lease, w store.BudgetWarning) (bool, error)
 }
 
 var (
@@ -46,10 +47,11 @@ var (
 )
 
 // BudgetChecker decides whether another model call is allowed. Errors that
-// wrap store.ErrBudgetExceeded end the turn with budget_exceeded.
+// wrap store.ErrBudgetExceeded end the turn with budget_exceeded. When the
+// call is allowed it also returns the caps that are close to being reached.
 // *store.BudgetChecker satisfies it.
 type BudgetChecker interface {
-	Check(ctx context.Context, userID, sessionID string) error
+	Check(ctx context.Context, userID, sessionID string) ([]store.BudgetWarning, error)
 }
 
 // PromptInput is the variable part of the system prompt of a session.
@@ -116,6 +118,7 @@ type outcome struct {
 	status string // a store.Turn* status
 	code   string // generic error code (failed)
 	limit  string // Limit* (limit_reached)
+	budget string // store.BudgetReason (budget_exceeded)
 	// commit asks for the final Builder.Commit + snapshot.
 	commit   bool
 	proposal json.RawMessage // awaiting_confirmation
@@ -151,6 +154,9 @@ type run struct {
 
 	// wrote: workspace files were written since the last checkpoint.
 	wrote bool
+	// warned: caps this run already tried to warn about, so the store is
+	// asked once per cap and turn (it keeps the once-per-session rule).
+	warned map[string]bool
 
 	// snapshot chain bookkeeping, loaded lazily on the first commit.
 	snapLoaded bool
@@ -310,15 +316,28 @@ func (r *run) checkLimits(ctx, tctx context.Context) (*outcome, error) {
 	return nil, nil
 }
 
-// checkBudget runs before every model call. When the cap is hit no call is
-// made.
+// checkBudget runs before every model call. When a cap is hit no call is
+// made. A cap that is close (store.BudgetWarning) gets one budget_warning
+// event per session.
 func (r *run) checkBudget(ctx, tctx context.Context) (*outcome, error) {
-	err := r.deps.Budget.Check(tctx, r.sess.OwnerUserID, r.sess.ID)
+	warnings, err := r.deps.Budget.Check(tctx, r.sess.OwnerUserID, r.sess.ID)
 	if err == nil {
+		for _, w := range warnings {
+			if r.warned[w.Cap] {
+				continue
+			}
+			if r.warned == nil {
+				r.warned = map[string]bool{}
+			}
+			r.warned[w.Cap] = true
+			if _, err := r.deps.Store.AppendBudgetWarning(ctx, r.lease, w); err != nil {
+				return nil, fmt.Errorf("append %s event: %w", EventBudgetWarning, err)
+			}
+		}
 		return nil, nil
 	}
 	if errors.Is(err, store.ErrBudgetExceeded) {
-		return &outcome{status: store.TurnBudgetExceeded, commit: true}, nil
+		return &outcome{status: store.TurnBudgetExceeded, budget: store.BudgetReason(err), commit: true}, nil
 	}
 	if out, cerr := r.ctxEnd(ctx, tctx); out != nil || cerr != nil {
 		return out, cerr
@@ -709,7 +728,11 @@ func (r *run) finish(ctx context.Context, out *outcome) error {
 			return err
 		}
 	case store.TurnBudgetExceeded:
-		if err := r.emit(ctx, EventBudgetExceeded, nil); err != nil {
+		var payload any
+		if out.budget != "" {
+			payload = map[string]any{"reason": out.budget}
+		}
+		if err := r.emit(ctx, EventBudgetExceeded, payload); err != nil {
 			return err
 		}
 	case store.TurnFailed:

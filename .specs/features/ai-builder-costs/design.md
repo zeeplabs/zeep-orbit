@@ -106,6 +106,8 @@ Prices are `NUMERIC(18,6)` per million tokens, so a price in micros per million 
 
 Warning: `Check` returns, besides the error, a small value listing caps that are at or above 80%. The loop appends a `budget_warning` event with `{cap: "session_tokens" | "month_tokens" | "session_cost" | "month_cost", used, limit}` only if the session has no earlier `budget_warning` event for that cap. **[verify]** how the loop can test "event already exists" cheaply (store method by type and payload key, or a per-run in-memory set plus a store check at turn start).
 
+**Decided in C05:** the rule is enforced by the store: `AppendBudgetWarning` inserts the event only when the session has no `budget_warning` with the same `cap` (one statement, `NOT EXISTS`), which also covers resumes and later turns. The loop keeps a per-run set only to avoid asking the store on every step. The `budget_exceeded` event carries `{reason}` with the same cap names plus `not_configured`.
+
 The event payload carries numbers only. `budget_warning` must be added to the event whitelist served by the events API (`builderEventFields`, see the note in `ai-builder-backend/tasks.md` B06).
 
 ## 5. Anthropic adapter (ABC-15 to ABC-18)

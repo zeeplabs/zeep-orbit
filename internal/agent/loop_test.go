@@ -242,6 +242,71 @@ func TestRunTurn_BudgetExceededMidTurnKeepsPartialWork(t *testing.T) {
 	}
 }
 
+// The budget_exceeded event says which cap ended the turn.
+func TestRunTurn_BudgetExceededCarriesTheReason(t *testing.T) {
+	h := newHarness(t)
+	h.bud.fn = func(int) error { return store.ErrSessionCostCapReached }
+	h.mustRun()
+
+	if fin := h.finished(); fin.Status != store.TurnBudgetExceeded {
+		t.Fatalf("status = %q, want budget_exceeded", fin.Status)
+	}
+	ev := h.st.eventsOf(EventBudgetExceeded)
+	if len(ev) != 1 || string(ev[0].Payload) != `{"reason":"session_cost"}` {
+		t.Errorf("budget_exceeded events = %v, want one with reason session_cost", ev)
+	}
+}
+
+// A cap close to its limit is reported on every budget check of the turn;
+// the loop asks the store once per cap, and the event is written once.
+func TestRunTurn_BudgetWarningOncePerCap(t *testing.T) {
+	h := newHarness(t,
+		scriptStep{resp: toolResp(writeCall("w1", "src/a.ts"))},
+		scriptStep{resp: toolResp(writeCall("w2", "src/b.ts"))},
+		scriptStep{resp: textResp("done")},
+	)
+	h.bud.warn = func(n int) []store.BudgetWarning {
+		ws := []store.BudgetWarning{{Cap: store.BudgetCapSessionTokens, Used: 800 + int64(n), Limit: 1000}}
+		if n >= 2 {
+			ws = append(ws, store.BudgetWarning{Cap: store.BudgetCapMonthCost, Used: 90, Limit: 100})
+		}
+		return ws
+	}
+	h.mustRun()
+
+	if fin := h.finished(); fin.Status != store.TurnCompleted {
+		t.Fatalf("status = %q, want completed (a warning never stops the turn)", fin.Status)
+	}
+	ev := h.st.eventsOf(EventBudgetWarning)
+	if len(ev) != 2 {
+		t.Fatalf("budget_warning events = %v, want 2 (one per cap)", ev)
+	}
+	if string(ev[0].Payload) != `{"cap":"session_tokens","used":801,"limit":1000}` {
+		t.Errorf("first warning = %s, want the numbers of the first check", ev[0].Payload)
+	}
+	if h.st.warnAsks != 2 {
+		t.Errorf("store asked %d times, want 2 (once per cap in the turn)", h.st.warnAsks)
+	}
+}
+
+// A session warned in an earlier turn is not warned again (resume or new
+// turn): the store refuses the duplicate and the turn goes on.
+func TestRunTurn_BudgetWarningNotRepeatedInLaterTurn(t *testing.T) {
+	h := newHarness(t, scriptStep{resp: textResp("done")})
+	h.st.warnedBefore = map[string]bool{store.BudgetCapSessionTokens: true}
+	h.bud.warn = func(int) []store.BudgetWarning {
+		return []store.BudgetWarning{{Cap: store.BudgetCapSessionTokens, Used: 900, Limit: 1000}}
+	}
+	h.mustRun()
+
+	if fin := h.finished(); fin.Status != store.TurnCompleted {
+		t.Fatalf("status = %q, want completed", fin.Status)
+	}
+	if ev := h.st.eventsOf(EventBudgetWarning); len(ev) != 0 {
+		t.Errorf("budget_warning events = %v, want none", ev)
+	}
+}
+
 func TestRunTurn_ProposalPausesWithoutCommit(t *testing.T) {
 	h := newHarness(t, scriptStep{resp: toolResp(
 		writeCall("w", "src/a.ts"),

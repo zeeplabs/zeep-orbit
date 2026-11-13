@@ -5,6 +5,7 @@ package agent
 // op_id idempotency, commit bundles), not the real implementations.
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -41,6 +42,9 @@ type fakeStore struct {
 
 	// hooks
 	afterUsage func(n int) // called after the n-th RecordUsage
+
+	warnedBefore map[string]bool // caps warned in earlier turns
+	warnAsks     int             // AppendBudgetWarning calls
 }
 
 func newFakeStore() *fakeStore {
@@ -198,6 +202,28 @@ func (f *fakeStore) RecordUsage(_ context.Context, r store.UsageRecord) error {
 		hook(n)
 	}
 	return nil
+}
+
+// AppendBudgetWarning keeps the store's rule: one warning per session and cap.
+// warnedBefore stands for warnings written by earlier turns of the session.
+func (f *fakeStore) AppendBudgetWarning(_ context.Context, l store.Lease, w store.BudgetWarning) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.warnAsks++
+	if err := f.checkLease(l); err != nil {
+		return false, nil
+	}
+	if f.warnedBefore[w.Cap] {
+		return false, nil
+	}
+	for _, e := range f.events {
+		if e.Type == EventBudgetWarning && bytes.Contains(e.Payload, []byte(`"cap":"`+w.Cap+`"`)) {
+			return false, nil
+		}
+	}
+	raw, _ := json.Marshal(w)
+	f.events = append(f.events, fakeEvent{Type: EventBudgetWarning, Payload: raw})
+	return true, nil
 }
 
 func (f *fakeStore) eventTypes() []string {
@@ -412,17 +438,24 @@ type fakeBudget struct {
 	calls int
 	// fn returns the result of the n-th check (1-based).
 	fn func(n int) error
+	// warn returns the warnings of the n-th check when it is allowed.
+	warn func(n int) []store.BudgetWarning
 }
 
-func (b *fakeBudget) Check(context.Context, string, string) error {
+func (b *fakeBudget) Check(context.Context, string, string) ([]store.BudgetWarning, error) {
 	b.mu.Lock()
 	b.calls++
 	n := b.calls
 	b.mu.Unlock()
-	if b.fn == nil {
-		return nil
+	if b.fn != nil {
+		if err := b.fn(n); err != nil {
+			return nil, err
+		}
 	}
-	return b.fn(n)
+	if b.warn != nil {
+		return b.warn(n), nil
+	}
+	return nil, nil
 }
 
 // ---- harness ----

@@ -11,7 +11,7 @@ Commits only when the user asks (AGENTS.md §2); one commit per task when author
 **Spec**: `.specs/features/ai-builder-costs/spec.md`
 **Design**: `.specs/features/ai-builder-costs/design.md`
 **Parent**: `.specs/features/ai-frontend-builder/`
-**Status**: Approved by the maintainer on 2026-11-13, DDL of C01 included. In execution on `feat/ai-frontend-builder`. Done: C01–C04. Pending: C05–C13.
+**Status**: Approved by the maintainer on 2026-11-13, DDL of C01 included. In execution on `feat/ai-frontend-builder`. Done: C01–C05. Pending: C06–C13.
 
 ---
 
@@ -84,6 +84,7 @@ C12 docs + CHANGELOG (last)        C13 real-endpoint run (owner, needs keys)
 - **Where**: `internal/agent/store/usage.go`, `loop.go`, `limits.go` (event constant), `builder_settings*.go`, `builder_common.go`.
 - **Done when**: tests: money cap 0 means no cap; cap reached ends the turn `budget_exceeded` with a distinguishable reason; unpriced calls do not count; warning emitted once at 80% for each cap kind and not again after a resume; token-cap tests unchanged.
 - **Requirements**: ABC-19, ABC-20. **Depends**: C04. **Tests**: unit (loop) + integration. **Gate**: Full.
+- **Status**: Done 2026-11-13. `BudgetChecker.Check` returns `([]BudgetWarning, error)`: money caps (`0` = none) with `ErrSessionCostCapReached` / `ErrMonthlyCostCapReached`; unpriced calls have no cost and do not count. `store.BudgetReason` names the cap, and the `budget_exceeded` event now carries `{reason}` (`session_tokens`, `month_tokens`, `session_cost`, `month_cost`, `not_configured`). Warning at 80% (integer comparison): the once-per-session-and-cap rule lives in the store (`AppendBudgetWarning`, insert guarded by `NOT EXISTS` on the session's events), and the loop keeps a per-run set so the store is asked once per cap and turn; this resolves the design §4 **[verify]**. `budget_warning` is whitelisted with `cap`, `used`, `limit` only. The settings fields were already done in C03. Full gate green (27 packages).
 
 ### C06 — Anthropic adapter  [P]
 - **What**: `anthropic.go` per design §5. Before coding, read the current Messages API reference through the `claude-api` skill and resolve every **[verify]** in design §5; record what was confirmed.

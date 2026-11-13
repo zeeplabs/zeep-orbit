@@ -201,7 +201,9 @@ func (b *fakeBuilder) Commit(context.Context, string, int, string) (sandbox.Comm
 
 type allowBudget struct{}
 
-func (allowBudget) Check(context.Context, string, string) error { return nil }
+func (allowBudget) Check(context.Context, string, string) ([]store.BudgetWarning, error) {
+	return nil, nil
+}
 
 func (e *env) deps(p provider.Provider, b sandbox.Sandbox) agent.Deps {
 	return agent.Deps{
