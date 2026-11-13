@@ -11,7 +11,7 @@ Commits only when the user asks (AGENTS.md §2); one commit per task when author
 **Spec**: `.specs/features/ai-builder-backend/spec.md`
 **Design**: `.specs/features/ai-builder-backend/design.md`
 **Parent**: `.specs/features/ai-frontend-builder/` (B14 depends on T42)
-**Status**: Draft, awaiting maintainer approval (2026-10-28). Nothing implemented.
+**Status**: In execution on `feat/ai-frontend-builder`. B01–B06 implemented and committed (`e74b230`, `50d3209`, `06d3319`, `4c6e763`, `c7f0414`, `4d48450`). Pending: B07–B13; B14 blocked on parent T42. Status line corrected on 2026-11-13 from the git history; it previously said nothing was implemented.
 
 ---
 
@@ -101,6 +101,7 @@ B12 credential guard (independent, P2)        B13 docs + CHANGELOG (last)       
 - **Where**: `internal/dashboard/ui/src/components/patterns/builder/*`, `src/lib/api.ts`, locales.
 - **Done when**: local UAT shows the card, confirm and reject, partial failure; operations listed as kind and table plus the access line, never values.
 - **Requirements**: BBE-07, BBE-08. **Depends**: B06. **Gate**: Frontend.
+- **Status**: Implemented 2026-11-13, not committed. `ProposalCard.tsx` renders plans (`summarizePlan` in `builderModel.ts`), the timeline shows `planApplied`/`planPartial` from `applied_count`/`total`. Frontend gate green; checked in headless Chromium on the local stack with a scripted model: card, confirm, "applied 2 of 2". **Not checked yet:** reject on a plan and a partial failure (needs a plan whose second operation fails at apply time). The failed operation is not named in the timeline yet (`failed_index` is served but unused).
 
 ### B09 — Publish check on undeclared open tables
 - **What**: read `public_tables` from the confirmed-plan event payload (emitted by B06); `undeclaredOpenTables` (table metadata plus confirmed-plan events, no row reads) and the decision table of design §7 in `Publish`; `409 backend_open_tables` only under `block` for builder backends; `warnings.open_tables` otherwise. First **[verify]** `system_config.require_rls_default` and how session events are queried.

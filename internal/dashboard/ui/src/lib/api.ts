@@ -2048,7 +2048,15 @@ export interface BuilderEventPayloads {
   }
   turn_finished: { status?: BuilderTurnStatus | string; sha?: string }
   // Written by the proposal and publish handlers; only short scalar fields are served.
-  proposal_confirmed: { tool_call_id?: string; applied?: boolean; kind?: string }
+  proposal_confirmed: {
+    tool_call_id?: string
+    applied?: boolean
+    kind?: string
+    // Plans only: how many operations were applied, out of how many, and where it stopped.
+    applied_count?: number
+    total?: number
+    failed_index?: number
+  }
   proposal_rejected: { tool_call_id?: string }
   skill_loaded: { name?: string; source?: string; version?: number }
   publish_started: { republish?: boolean }

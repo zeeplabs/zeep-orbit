@@ -98,13 +98,26 @@ function toEntry(event: BuilderEvent, fixAttempt: number): ActivityEntry | null 
       }
     case 'proposal':
       return { ...base, icon: 'rule', tone: 'warning', labelKey: 'proposal' }
-    case 'proposal_confirmed':
+    case 'proposal_confirmed': {
+      // A confirmed plan reports how far it got: it stops at the first operation that fails.
+      const { applied_count: appliedCount, total } = event.payload
+      if (event.payload.kind === 'plan' && typeof appliedCount === 'number' && typeof total === 'number') {
+        const complete = appliedCount >= total
+        return {
+          ...base,
+          icon: complete ? 'check_circle' : 'error',
+          tone: complete ? 'success' : 'danger',
+          labelKey: complete ? 'planApplied' : 'planPartial',
+          params: { applied: appliedCount, total },
+        }
+      }
       return {
         ...base,
         icon: 'check_circle',
         tone: 'success',
         labelKey: event.payload.applied ? 'proposalApplied' : 'proposalConfirmed',
       }
+    }
     case 'proposal_rejected':
       return { ...base, icon: 'cancel', tone: 'neutral', labelKey: 'proposalRejected' }
     case 'revert': {
@@ -249,7 +262,51 @@ function columnNames(value: unknown): string[] {
 
 /** Reads propose_backend_change arguments defensively: any field may be missing or mistyped. */
 export function summarizeProposal(proposal: BuilderProposal): ProposalSummary {
-  const op = record(record(proposal.operation).operation)
+  return summarizeOperation(record(record(proposal.operation).operation))
+}
+
+/** How a new table is reached, as declared by the agent in a plan. */
+export type PlanAccess = 'public' | 'owner' | 'policy'
+
+export interface PlanOperationSummary extends ProposalSummary {
+  /** Only on add_table: the access the agent declared, and its one-line reason. */
+  access?: PlanAccess
+  accessReason?: string
+  isTable: boolean
+}
+
+export interface PlanSummary {
+  summary: string
+  operations: PlanOperationSummary[]
+}
+
+/**
+ * Reads propose_backend_plan arguments ({summary, operations: [...]}) defensively. Returns null
+ * when the proposal is not a plan, so the caller falls back to the single-change card.
+ */
+export function summarizePlan(proposal: BuilderProposal): PlanSummary | null {
+  if (proposal.name !== 'propose_backend_plan') return null
+  const args = record(proposal.operation)
+  const ops = Array.isArray(args.operations) ? args.operations : []
+  return {
+    summary: str(args.summary),
+    operations: ops.map((raw) => {
+      const op = record(raw)
+      const base = summarizeOperation(op)
+      if (str(op.kind) !== 'add_table') return { ...base, isTable: false }
+      const body = record(op.add_table)
+      const access = str(body.access)
+      return {
+        ...base,
+        isTable: true,
+        access: access === 'public' || access === 'owner' || access === 'policy' ? access : undefined,
+        accessReason: str(body.access_reason),
+      }
+    }),
+  }
+}
+
+function summarizeOperation(op: Record<string, unknown>): ProposalSummary {
   const kind = str(op.kind)
   const body = record(op[kind])
   switch (kind) {
@@ -309,6 +366,9 @@ export function summarizeProposal(proposal: BuilderProposal): ProposalSummary {
       return { key: 'setRlsMode', params: { table: str(body.table), mode: str(body.mode) }, lines: [] }
     case 'toggle_auth':
       return { key: body.email_enabled ? 'enableAuth' : 'disableAuth', params: {}, lines: [] }
+    case 'add_policy':
+      // Table and template only: a policy's value is data, and the card shows names, never values.
+      return { key: 'addPolicy', params: { table: str(body.table), template: str(body.template) }, lines: [] }
     default:
       return { key: 'unknown', params: { kind: kind || '?' }, lines: [] }
   }
