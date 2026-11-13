@@ -1,6 +1,6 @@
 # AI Builder Planning Specification
 
-> Status: **Draft for review (2026-11-13). Requirements only; `design.md` and `tasks.md` are not written yet.** Child of `.specs/features/ai-frontend-builder/`. Requested by the maintainer on 2026-11-13: before it builds anything, the agent must lead the user to give as much information as it needs, through a strong planning step.
+> Status: **Approved by the maintainer on 2026-11-13 together with `design.md` and `tasks.md`. The two deviations from this spec are marked in the design (§2 and §5).** Child of `.specs/features/ai-frontend-builder/`. Requested by the maintainer on 2026-11-13: before it builds anything, the agent must lead the user to give as much information as it needs, through a strong planning step.
 
 ## Problem Statement
 
