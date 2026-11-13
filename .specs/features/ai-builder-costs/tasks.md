@@ -11,7 +11,7 @@ Commits only when the user asks (AGENTS.md §2); one commit per task when author
 **Spec**: `.specs/features/ai-builder-costs/spec.md`
 **Design**: `.specs/features/ai-builder-costs/design.md`
 **Parent**: `.specs/features/ai-frontend-builder/`
-**Status**: Approved by the maintainer on 2026-11-13, DDL of C01 included. In execution on `feat/ai-frontend-builder`. Done: C01–C07. Pending: C08–C13.
+**Status**: Approved by the maintainer on 2026-11-13, DDL of C01 included. In execution on `feat/ai-frontend-builder`. Done: C01–C08. Pending: C09–C13.
 
 ---
 
@@ -105,6 +105,7 @@ C12 docs + CHANGELOG (last)        C13 real-endpoint run (owner, needs keys)
 - **Where**: new `internal/dashboard/builder_usage.go` (+ store queries), `builder_common.go`, routes.
 - **Done when**: integration tests: totals equal ledger sums; receipts include files changed and builds from events; a non-owner gets 404; a non-superadmin cannot group by user or read others' rows; range cap enforced; CSV columns fixed and free of text content; deleted-session rows still counted.
 - **Requirements**: ABC-11 to ABC-14, ABC-22, ABC-23. **Depends**: C04. **Tests**: integration. **Gate**: Full.
+- **Status**: Done 2026-11-13. `internal/dashboard/builder_usage.go`: `GET /api/builder/sessions/{id}/usage` (totals, caps in use, one receipt per turn, calls outside a turn listed apart so totals always equal the sum), `GET /api/builder/usage` (grouped by day, user, model or session) and `GET /api/builder/usage.csv`. The session list and detail views carry a `usage` block (currency, calls, cost, unpriced calls; the detail also has the caps). What differs from the first draft of design §6 is recorded there ("Decided in C08"). Full gate green.
 
 ### C09 — Price table, currency and caps in settings UI
 - **What**: price editor (add, edit, delete, optional fields cleared with explicit null), unpriced-models hint, currency field with the no-conversion warning, money cap fields with a warning when the active model has no price.

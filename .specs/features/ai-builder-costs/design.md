@@ -175,6 +175,18 @@ The session view (`builder_common.go`) gains `cost_micros`, `unpriced_calls`, `c
 
 Date ranges are capped (for example 366 days) and the CSV is streamed with a row limit, to keep one request from scanning the whole ledger. **Decided in C03:** the price key travels in the body (PUT) and the query string (DELETE), not in path segments, because model names contain `/` on many gateways. Prices travel as decimal strings in both directions, so no floating point touches money; money caps and costs travel as integer micros.
 
+**Decided in C08 (2026-11-13):**
+
+- **Session usage is owner-only**, superadmin included. That is the access rule the session routes already have (`ownedSession`); the first draft of the table above said "owner or superadmin". A superadmin reads spend through the report, which has no chat content.
+- **Cost of a set of calls** is `cost_micros` (sum of the priced calls, `null` when none has a price) plus `unpriced_calls`. The three display states of ABC-13 come from those two numbers and `calls`. The API never returns a partial sum without the count of what is missing.
+- **Turn duration** is the time the agent worked: from each `turn_started` event to the `proposal` or `turn_finished` that ended that run. Time waiting for the user to answer a proposal is not counted. `null` while the turn runs.
+- **Files changed** counts distinct paths of the turn's `file_changed` events; **builds run** counts `build_started`, **builds failed** counts `build_failed`.
+- **Report dates** are `YYYY-MM-DD`, UTC days, both ends inclusive; default is the last 30 days; the range is capped at 366 days. Grouped rows are capped at 1,000 with a `truncated` flag; totals always cover the whole range.
+- **Report access**: a non-superadmin reads their own rows; `group_by=user` answers 403 and `user_id` of someone else answers 404. A superadmin may filter with `user_id`.
+- **Session titles in the report** are returned only to the session's owner, because a title can come from what the owner typed. A superadmin sees the session id and the "deleted" mark (session row gone or archived).
+- **CSV**: columns `created_at, user_id, session_id, turn_id, feature, provider, model, purpose, input_tokens, cached_input_tokens, cache_write_tokens, output_tokens, cost_micros, cost, usage_reported`. `cost` is `cost_micros` as a decimal; both are empty when the call has no price. An export over 100,000 rows is refused with a 400 asking for a narrower range, so a file is never silently incomplete. Free-text cells are guarded against spreadsheet formulas.
+- The report and the CSV read only the ledger, so they answer on a deployment whose builder is not wired.
+
 ## 7. UI
 
 - **Chat** (`ChatPanel.tsx`, `builderModel.ts`): a compact line under each finished turn, "12.4k tokens · $0.08", expandable into the receipt. When some calls have no price: "$0.08 + unpriced calls". When none has: "12.4k tokens · no price set".

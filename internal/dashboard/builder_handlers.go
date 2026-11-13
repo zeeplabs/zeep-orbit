@@ -8,7 +8,7 @@ package dashboard
 //	GET    /api/builder/status         Status          any authenticated user
 //	POST   /api/builder/sessions       CreateSession   >= viewer on the backend app
 //	GET    /api/builder/sessions       ListSessions    owner only
-//	GET    /api/builder/sessions/{id}  GetSession      owner only (+ turns)
+//	GET    /api/builder/sessions/{id}  GetSession      owner only (+ turns, usage)
 //	DELETE /api/builder/sessions/{id}  DeleteSession   owner only
 //
 // Status answers even when no builder is wired. Every other route answers
@@ -578,9 +578,27 @@ func (h *BuilderHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 		h.serverError(w, r, err)
 		return
 	}
+	settings, err := GetBuilderSettings(r.Context(), h.pool)
+	if err != nil {
+		h.serverError(w, r, err)
+		return
+	}
+	ids := make([]string, 0, len(sessions))
+	for i := range sessions {
+		ids = append(ids, sessions[i].ID)
+	}
+	usage, err := builderSessionsUsage(r.Context(), h.pool, ids)
+	if err != nil {
+		h.serverError(w, r, err)
+		return
+	}
 	out := make([]BuilderSessionView, 0, len(sessions))
 	for i := range sessions {
-		out = append(out, newBuilderSessionView(&sessions[i]))
+		v := newBuilderSessionView(&sessions[i])
+		u := usage[v.ID]
+		u.Currency = settings.CostCurrency
+		v.Usage = &u
+		out = append(out, v)
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -610,6 +628,10 @@ func (h *BuilderHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	detail := BuilderSessionDetail{BuilderSessionView: newBuilderSessionView(sess), Turns: make([]BuilderTurnView, 0, len(turns))}
+	if detail.Usage, err = h.sessionUsageSummary(r.Context(), sess); err != nil {
+		h.serverError(w, r, err)
+		return
+	}
 	for i := range turns {
 		detail.Turns = append(detail.Turns, newBuilderTurnView(&turns[i]))
 	}

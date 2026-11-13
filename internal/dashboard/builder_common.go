@@ -293,6 +293,9 @@ type BuilderSessionView struct {
 	TokensOut       int64     `json:"tokens_out"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
+	// Usage is the recorded cost of the session (builder_usage.go). Set by the
+	// list and detail routes only.
+	Usage *BuilderSessionUsage `json:"usage,omitempty"`
 }
 
 func newBuilderSessionView(s *store.Session) BuilderSessionView {
