@@ -65,6 +65,40 @@ func TestRunTurn_HappyPathEndsWithCommit(t *testing.T) {
 	}
 }
 
+// Some OpenAI-compatible servers omit tool call ids, and the adapter then
+// numbers them per response ("call_0" every time). The builder remembers
+// op_ids for the whole session, so a repeated id would make the second write
+// a replay of the first: the file would silently keep its old content.
+func TestRunTurn_RepeatedToolCallIDsGetDistinctOpIDs(t *testing.T) {
+	h := newHarness(t,
+		scriptStep{resp: toolResp(writeCall("call_0", "src/a.ts"))},
+		scriptStep{resp: toolResp(writeCall("call_0", "src/b.ts"))},
+		scriptStep{resp: toolResp(writeCall("call_0", "src/c.ts"), writeCall("call_0", "src/d.ts"))},
+		scriptStep{resp: textResp("done")},
+	)
+	h.mustRun()
+
+	ops := h.sb.opIDs()
+	seen := map[string]bool{}
+	for _, id := range ops {
+		if seen[id] {
+			t.Fatalf("op id %q reused in %v: the builder would replay instead of executing", id, ops)
+		}
+		seen[id] = true
+	}
+	if len(ops) != 4 {
+		t.Fatalf("builder ops = %v, want 4", ops)
+	}
+	// Every result must still pair with exactly one call.
+	results := map[string]int{}
+	for _, m := range h.st.messagesOf(store.RoleTool) {
+		results[m.ToolCallID]++
+	}
+	if len(results) != 4 {
+		t.Errorf("tool result ids = %v, want 4 distinct ids", results)
+	}
+}
+
 func TestRunTurn_ParallelToolCallsAllExecutedInOrder(t *testing.T) {
 	h := newHarness(t,
 		scriptStep{resp: toolResp(writeCall("a", "src/a.ts"), writeCall("b", "src/b.ts"), listCall("c"))},
@@ -72,8 +106,8 @@ func TestRunTurn_ParallelToolCallsAllExecutedInOrder(t *testing.T) {
 	)
 	h.mustRun()
 
-	if got := h.sb.opIDs(); strings.Join(got, ",") != "a,b," {
-		t.Errorf("op ids in builder order = %v, want [a b \"\"] (read-only ops carry no op_id)", got)
+	if got := h.sb.opIDs(); strings.Join(got, ",") != "turn-1:a,turn-1:b," {
+		t.Errorf("op ids in builder order = %v, want [turn-1:a turn-1:b \"\"] (turn-scoped; read-only ops carry no op_id)", got)
 	}
 	var ids []string
 	for _, m := range h.st.messagesOf(store.RoleTool) {
@@ -298,8 +332,8 @@ func TestRunTurn_ResumeAfterCrashResendsSameOpID(t *testing.T) {
 		t.Fatalf("status = %q, want completed", fin.Status)
 	}
 	ids := h.sb.opIDs()
-	if len(ids) != 2 || ids[0] != "call-7" || ids[1] != "call-7" {
-		t.Errorf("builder saw op ids %v, want call-7 twice (same op_id on resume)", ids)
+	if len(ids) != 2 || ids[0] != "turn-1:call-7" || ids[1] != "turn-1:call-7" {
+		t.Errorf("builder saw op ids %v, want turn-1:call-7 twice (same op_id on resume)", ids)
 	}
 	if h.prov.calls() != 2 {
 		t.Errorf("provider calls = %d, want 2: the persisted tool call must not be re-requested from the model", h.prov.calls())

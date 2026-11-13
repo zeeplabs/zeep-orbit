@@ -394,11 +394,22 @@ func (r *run) persistAssistant(ctx context.Context, resp provider.ChatResponse) 
 		calls = resp.ToolCalls
 	}
 	calls = append([]provider.ToolCall(nil), calls...)
+	// Tool call ids pair each call with its result and scope the builder's
+	// idempotency key, so they must be unique within the turn. Providers do
+	// not guarantee it: some compatible servers omit ids (the adapter then
+	// numbers them per response) or repeat them across responses. An empty or
+	// repeated id is replaced; the new id is persisted with the message, so
+	// it is stable across a resume.
+	used := r.turnCallIDs()
 	for i := range calls {
-		if calls[i].ID == "" {
-			// Persisted with the message, so the id is stable across a resume.
-			calls[i].ID = fmt.Sprintf("call_%d_%d", r.state.steps+1, i)
+		if calls[i].ID == "" || used[calls[i].ID] {
+			id := fmt.Sprintf("call_%d_%d", r.state.steps+1, i)
+			for n := 1; used[id]; n++ {
+				id = fmt.Sprintf("call_%d_%d_%d", r.state.steps+1, i, n)
+			}
+			calls[i].ID = id
 		}
+		used[calls[i].ID] = true
 	}
 	nm := store.NewMessage{Role: store.RoleAssistant, Content: resp.Message.Content}
 	if len(calls) > 0 {
@@ -422,6 +433,21 @@ func (r *run) persistAssistant(ctx context.Context, resp provider.ChatResponse) 
 	return calls, nil
 }
 
+// turnCallIDs returns the tool call ids already issued in this turn.
+func (r *run) turnCallIDs() map[string]bool {
+	used := map[string]bool{}
+	for i := range r.msgs {
+		m := &r.msgs[i]
+		if m.TurnID != r.turn.ID || m.Role != store.RoleAssistant {
+			continue
+		}
+		for _, c := range parseAssistantCalls(*m) {
+			used[c.ID] = true
+		}
+	}
+	return used
+}
+
 // runCalls executes one tool batch in order: each call is announced, executed,
 // and its result persisted before the next one. A successful proposal call
 // pauses the turn (nothing is committed; the result arrives later with the
@@ -443,7 +469,7 @@ func (r *run) runCalls(ctx, tctx context.Context, calls []provider.ToolCall) (*o
 		res, gated := r.gateSkillCall(c)
 		if !gated {
 			var err error
-			res, err = r.deps.Tools.Dispatch(tctx, tools.Call{ID: c.ID, Name: c.Name, Arguments: c.Arguments, SessionID: r.sess.ID})
+			res, err = r.deps.Tools.Dispatch(tctx, tools.Call{ID: c.ID, Name: c.Name, Arguments: c.Arguments, SessionID: r.sess.ID, TurnID: r.turn.ID})
 			if err != nil {
 				return r.toolFailure(ctx, tctx, c, err)
 			}

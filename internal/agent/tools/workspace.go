@@ -2,6 +2,8 @@ package tools
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -221,7 +223,7 @@ func (w *workspace) runBuild(ctx context.Context, call Call) (Result, error) {
 	if err := requireSession(call, true); err != nil {
 		return Result{}, err
 	}
-	res, err := w.sb.Build(ctx, call.SessionID, call.ID, step, w.previewBase(call.SessionID))
+	res, err := w.sb.Build(ctx, call.SessionID, opIDFor(call), step, w.previewBase(call.SessionID))
 	if err != nil {
 		return fail(err)
 	}
@@ -276,13 +278,34 @@ func (w *workspace) op(ctx context.Context, call Call, mutating bool, op sandbox
 	}
 	opID := ""
 	if mutating {
-		opID = call.ID
+		opID = opIDFor(call)
 	}
 	res, err := w.sb.Op(ctx, call.SessionID, opID, op)
 	if err != nil {
 		return fail(err)
 	}
 	return Result{Content: res.Output}, nil
+}
+
+// maxOpIDLen is the builder's op_id limit (internal/builder, maxOpIDLen).
+const maxOpIDLen = 128
+
+// opIDFor is the builder idempotency key of a mutating call. The builder
+// remembers op_ids for the whole session, while a model's tool call id is
+// only unique within a turn (the loop guarantees that much), so the key is
+// scoped by the turn. A replay after a crash carries the same turn and call
+// id and therefore the same key. A key over the builder's limit is replaced
+// by its hash.
+func opIDFor(call Call) string {
+	if call.TurnID == "" {
+		return call.ID
+	}
+	id := call.TurnID + ":" + call.ID
+	if len(id) <= maxOpIDLen {
+		return id
+	}
+	sum := sha256.Sum256([]byte(id))
+	return hex.EncodeToString(sum[:])
 }
 
 func requireSession(call Call, needID bool) error {

@@ -82,6 +82,10 @@ type Call struct {
 	Arguments json.RawMessage
 	// SessionID is the builder session the call runs against.
 	SessionID string
+	// TurnID is the turn the call belongs to. It scopes the builder op_id:
+	// tool call ids are only unique within a turn (some OpenAI-compatible
+	// servers omit them or repeat them across responses).
+	TurnID string
 }
 
 // Result is what the model is told about a call.

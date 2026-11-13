@@ -436,3 +436,24 @@ func TestSpecsWithoutOmitsNamedTools(t *testing.T) {
 		t.Fatalf("Specs changed: %s", got)
 	}
 }
+
+func TestOpIDFor(t *testing.T) {
+	if got := opIDFor(Call{ID: "call_0"}); got != "call_0" {
+		t.Errorf("without a turn = %q, want the bare call id", got)
+	}
+	a := opIDFor(Call{ID: "call_0", TurnID: "turn-a"})
+	b := opIDFor(Call{ID: "call_0", TurnID: "turn-b"})
+	if a == b {
+		t.Errorf("same call id in two turns gave the same op id %q", a)
+	}
+	if a != opIDFor(Call{ID: "call_0", TurnID: "turn-a"}) {
+		t.Error("op id is not stable for the same turn and call (a resume would run the call twice)")
+	}
+	long := opIDFor(Call{ID: strings.Repeat("x", 200), TurnID: "turn-a"})
+	if len(long) > maxOpIDLen {
+		t.Errorf("long op id has %d bytes, over the builder limit of %d", len(long), maxOpIDLen)
+	}
+	if long == opIDFor(Call{ID: strings.Repeat("x", 201), TurnID: "turn-a"}) {
+		t.Error("two long call ids hashed to the same op id")
+	}
+}
