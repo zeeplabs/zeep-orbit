@@ -136,6 +136,8 @@ type Session struct {
 	UpdatedAt       time.Time
 	// BackendOrigin is BackendOriginExisting or BackendOriginBuilder.
 	BackendOrigin string
+	// Phase is PhaseBriefing or PhaseBuilding (see planning.go).
+	Phase string
 }
 
 // Turn is a row of zeep_system.builder_turns.
@@ -155,6 +157,12 @@ type Turn struct {
 	UserMessage string
 	CreatedAt   time.Time
 	FinishedAt  *time.Time
+	// Mode is ModePlan or ModeBuild (see planning.go).
+	Mode string
+	// BriefVersion and Milestone (1-based) say which milestone of which brief
+	// version the turn builds; nil when it builds none.
+	BriefVersion *int
+	Milestone    *int
 }
 
 // Message is a row of zeep_system.builder_messages.
@@ -219,20 +227,23 @@ type CreateSessionParams struct {
 	Locale          string
 	// BackendOrigin defaults to BackendOriginExisting when empty.
 	BackendOrigin string
+	// Phase defaults to PhaseBuilding when empty. PhaseBriefing makes the
+	// session's turns run in plan mode until a build plan is approved.
+	Phase string
 }
 
 const sessionColumns = `id, owner_user_id, backend_app_id, title, template_kind, template_id,
 	template_version, prompt_version_id, locale, status, head_sha, head_turn_seq,
-	frontend_app_id, published_sha, tokens_in, tokens_out, created_at, updated_at, backend_origin`
+	frontend_app_id, published_sha, tokens_in, tokens_out, created_at, updated_at, backend_origin, phase`
 
 const turnColumns = `id, session_id, seq, kind, status, pending_proposal, commit_sha,
-	lease_owner, lease_until, error_code, created_at, finished_at`
+	lease_owner, lease_until, error_code, created_at, finished_at, mode, brief_version, milestone`
 
 func scanSession(row pgx.Row) (*Session, error) {
 	var s Session
 	err := row.Scan(&s.ID, &s.OwnerUserID, &s.BackendAppID, &s.Title, &s.TemplateKind, &s.TemplateID,
 		&s.TemplateVersion, &s.PromptVersionID, &s.Locale, &s.Status, &s.HeadSHA, &s.HeadTurnSeq,
-		&s.FrontendAppID, &s.PublishedSHA, &s.TokensIn, &s.TokensOut, &s.CreatedAt, &s.UpdatedAt, &s.BackendOrigin)
+		&s.FrontendAppID, &s.PublishedSHA, &s.TokensIn, &s.TokensOut, &s.CreatedAt, &s.UpdatedAt, &s.BackendOrigin, &s.Phase)
 	if err != nil {
 		return nil, err
 	}
@@ -242,7 +253,7 @@ func scanSession(row pgx.Row) (*Session, error) {
 func scanTurn(row pgx.Row) (*Turn, error) {
 	var t Turn
 	err := row.Scan(&t.ID, &t.SessionID, &t.Seq, &t.Kind, &t.Status, &t.PendingProposal, &t.CommitSHA,
-		&t.LeaseOwner, &t.LeaseUntil, &t.ErrorCode, &t.CreatedAt, &t.FinishedAt)
+		&t.LeaseOwner, &t.LeaseUntil, &t.ErrorCode, &t.CreatedAt, &t.FinishedAt, &t.Mode, &t.BriefVersion, &t.Milestone)
 	if err != nil {
 		return nil, err
 	}
@@ -271,12 +282,19 @@ func (s *Store) CreateSession(ctx context.Context, p CreateSessionParams) (*Sess
 	if origin != BackendOriginExisting && origin != BackendOriginBuilder {
 		return nil, fmt.Errorf("%w: backend origin must be %q or %q", ErrInvalidArgument, BackendOriginExisting, BackendOriginBuilder)
 	}
+	phase := p.Phase
+	if phase == "" {
+		phase = PhaseBuilding
+	}
+	if phase != PhaseBriefing && phase != PhaseBuilding {
+		return nil, fmt.Errorf("%w: phase must be %q or %q", ErrInvalidArgument, PhaseBriefing, PhaseBuilding)
+	}
 	sess, err := scanSession(s.pool.QueryRow(ctx,
 		`INSERT INTO zeep_system.builder_sessions
-		   (owner_user_id, backend_app_id, title, template_kind, template_id, template_version, prompt_version_id, locale, backend_origin)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		   (owner_user_id, backend_app_id, title, template_kind, template_id, template_version, prompt_version_id, locale, backend_origin, phase)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		 RETURNING `+sessionColumns,
-		p.OwnerUserID, p.BackendAppID, p.Title, p.TemplateKind, p.TemplateID, p.TemplateVersion, p.PromptVersionID, locale, origin,
+		p.OwnerUserID, p.BackendAppID, p.Title, p.TemplateKind, p.TemplateID, p.TemplateVersion, p.PromptVersionID, locale, origin, phase,
 	))
 	if err != nil {
 		return nil, fmt.Errorf("builder store: create session: %w", err)
@@ -365,10 +383,37 @@ func (s *Store) ArchiveSession(ctx context.Context, ownerUserID, sessionID strin
 // userMessage is not empty, records it as the user message of that turn. The
 // session row is locked to serialize seq allocation; the partial unique index
 // builder_turns_one_active_idx is what actually enforces "one active turn" and
-// is reported as ErrTurnActive.
+// is reported as ErrTurnActive. The turn runs in the mode the session's phase
+// gives it; see CreateTurnWith for the planning options.
 func (s *Store) CreateTurn(ctx context.Context, ownerUserID, sessionID, kind, userMessage string) (*Turn, error) {
+	return s.CreateTurnWith(ctx, ownerUserID, sessionID, kind, userMessage, TurnOptions{})
+}
+
+// TurnOptions are the planning options of a new chat turn. They are ignored
+// for revert turns, which always run in build mode.
+type TurnOptions struct {
+	// PlanFirst asks for a plan-mode turn in a session that is already
+	// building ("Plan first").
+	PlanFirst bool
+	// PlanningOff says planning is turned off for the installation: the turn
+	// runs in build mode whatever the rest says, and a session still in the
+	// briefing phase moves to building.
+	PlanningOff bool
+	// Milestone, when positive, is the 1-based milestone of the current brief
+	// this turn builds. It must be the next pending one (ErrMilestoneMismatch)
+	// and the turn must be a build turn.
+	Milestone int
+}
+
+// CreateTurnWith is CreateTurn with planning options. The mode is decided
+// under the session lock: plan when the session is in the briefing phase or
+// opts.PlanFirst is set, build otherwise.
+func (s *Store) CreateTurnWith(ctx context.Context, ownerUserID, sessionID, kind, userMessage string, opts TurnOptions) (*Turn, error) {
 	if kind != KindChat && kind != KindRevert {
 		return nil, fmt.Errorf("%w: unknown turn kind", ErrInvalidArgument)
+	}
+	if opts.Milestone < 0 {
+		return nil, fmt.Errorf("%w: milestone must be positive", ErrInvalidArgument)
 	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -376,11 +421,11 @@ func (s *Store) CreateTurn(ctx context.Context, ownerUserID, sessionID, kind, us
 	}
 	defer tx.Rollback(ctx)
 
-	var status string
+	var status, phase string
 	err = tx.QueryRow(ctx,
-		`SELECT status FROM zeep_system.builder_sessions WHERE id = $1 AND owner_user_id = $2 FOR UPDATE`,
+		`SELECT status, phase FROM zeep_system.builder_sessions WHERE id = $1 AND owner_user_id = $2 FOR UPDATE`,
 		sessionID, ownerUserID,
-	).Scan(&status)
+	).Scan(&status, &phase)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -391,11 +436,40 @@ func (s *Store) CreateTurn(ctx context.Context, ownerUserID, sessionID, kind, us
 		return nil, ErrSessionArchived
 	}
 
+	mode := ModeBuild
+	var briefVersion, milestone *int
+	if kind == KindChat {
+		switch {
+		case opts.PlanningOff:
+			if phase == PhaseBriefing {
+				if _, err := tx.Exec(ctx,
+					`UPDATE zeep_system.builder_sessions SET phase = 'building' WHERE id = $1`, sessionID); err != nil {
+					return nil, fmt.Errorf("builder store: create turn: leave briefing: %w", err)
+				}
+			}
+		case phase == PhaseBriefing || opts.PlanFirst:
+			mode = ModePlan
+		}
+		if opts.Milestone > 0 {
+			if mode != ModeBuild {
+				return nil, ErrMilestoneMismatch
+			}
+			brief, states, err := milestoneProgress(ctx, tx, sessionID)
+			if err != nil {
+				return nil, err
+			}
+			if brief == nil || nextPending(states) != opts.Milestone {
+				return nil, ErrMilestoneMismatch
+			}
+			briefVersion, milestone = &brief.Version, &opts.Milestone
+		}
+	}
+
 	turn, err := scanTurn(tx.QueryRow(ctx,
-		`INSERT INTO zeep_system.builder_turns (session_id, seq, kind)
-		 VALUES ($1, (SELECT COALESCE(MAX(seq), 0) + 1 FROM zeep_system.builder_turns WHERE session_id = $1), $2)
+		`INSERT INTO zeep_system.builder_turns (session_id, seq, kind, mode, brief_version, milestone)
+		 VALUES ($1, (SELECT COALESCE(MAX(seq), 0) + 1 FROM zeep_system.builder_turns WHERE session_id = $1), $2, $3, $4, $5)
 		 RETURNING `+turnColumns,
-		sessionID, kind,
+		sessionID, kind, mode, briefVersion, milestone,
 	))
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -533,7 +607,8 @@ func (s *Store) ClaimTurn(ctx context.Context, owner string, leaseTTL time.Durat
 func (s *Store) PeekClaimable(ctx context.Context) (*Turn, error) {
 	t, err := scanTurn(s.pool.QueryRow(ctx,
 		`SELECT t.id, t.session_id, t.seq, t.kind, t.status, t.pending_proposal, t.commit_sha,
-		        t.lease_owner, t.lease_until, t.error_code, t.created_at, t.finished_at
+		        t.lease_owner, t.lease_until, t.error_code, t.created_at, t.finished_at,
+		        t.mode, t.brief_version, t.milestone
 		 FROM zeep_system.builder_turns t
 		 JOIN zeep_system.builder_sessions s ON s.id = t.session_id
 		 WHERE s.status <> 'archived'

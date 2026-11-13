@@ -11,7 +11,7 @@ Commits only when the user asks (AGENTS.md §2); one commit per task when author
 **Spec**: `.specs/features/ai-builder-planning/spec.md`
 **Design**: `.specs/features/ai-builder-planning/design.md`
 **Parent**: `.specs/features/ai-frontend-builder/`
-**Status**: Approved by the maintainer on 2026-11-13 with the defaults of design §12. In execution on `feat/ai-frontend-builder`. Done: P01, P03. The DDL of P01 is still shown and confirmed before it is applied.
+**Status**: Approved by the maintainer on 2026-11-13 with the defaults of design §12. In execution on `feat/ai-frontend-builder`. Done: P01, P02, P03. The DDL of P01 is still shown and confirmed before it is applied.
 
 ---
 
@@ -60,6 +60,7 @@ P11 docs + CHANGELOG (last)        P12 local end-to-end run        P13 real-mode
 - **Where**: `internal/agent/store/store.go`, `proposals.go`, new `planning.go`, `usage.go`.
 - **Done when**: integration tests: mode per phase and per `PlanFirst`; milestone accepted only when it is the next pending one; approval is atomic (brief row, phase, turn mode, tool result, event, turn `pending`), verified by a failing extra step that leaves nothing behind; each resolution refuses the wrong pending tool with `ErrProposalNotPending`; two concurrent approvals yield one version; progress query for done-by-plan and done-by-turn; existing proposal tests unchanged.
 - **Requirements**: ABP-01, ABP-06, ABP-09, ABP-10, ABP-11. **Depends**: P01. **Tests**: integration. **Gate**: Full.
+- **Status**: Done 2026-11-13. `Session.Phase`, `Turn.Mode`/`BriefVersion`/`Milestone`; `CreateTurnWith` (`CreateTurn` keeps its signature) decides the mode under the session lock; `internal/agent/store/planning.go` has the briefs store, `MilestoneProgress` and `AnswerQuestions`, `ReviseBuildPlan`, `ApproveBuildPlan`, all through the same transaction as `ResolveProposal` (now a wrapper over an internal `resolve`). The store does not import the planning package: the handlers pass the result texts, and the two tool names are repeated as constants (equality is asserted in P04). New error `ErrProposalKind`: each resolution refuses the other kind of pending tool, including `ResolveProposal` for planning tools; its HTTP mapping is P06. Atomicity is tested with an approval whose tool message Postgres refuses after the brief row was written. Full gate green (27 packages).
 
 ### P03 — Planning package and the two tools  [P]
 - **What**: `internal/agent/planning`: argument types, `ParseQuestions`, `ParsePlan` with every bound of design §4, `RenderBrief`, `RenderBriefFile`, `ValidateAnswers` (answers against the asked questions), answer and resolution texts, tool specs and JSON Schemas. `tools.KindPlanning`, `Registry.SpecsWhere`.

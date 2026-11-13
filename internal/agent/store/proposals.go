@@ -90,11 +90,42 @@ type ProposalResolution struct {
 // returned unchanged, so the caller can tell its own failures apart from the
 // typed errors below. A nil resolution with a nil error is an invalid use.
 //
+// A turn paused on a planning tool (a question round or a build plan) is not
+// resolved here: it answers ErrProposalKind (see planning.go).
+//
 // Errors: ErrNotFound (turn or session is not the owner's), ErrSessionArchived,
-// ErrProposalNotPending, ErrProposalBusy.
+// ErrProposalNotPending, ErrProposalBusy, ErrProposalKind.
 func (s *Store) ResolveProposal(
 	ctx context.Context, ownerUserID, sessionID, turnID string,
 	decide func(ctx context.Context, p PendingProposal) (*ProposalResolution, error),
+) (*Turn, error) {
+	return s.resolve(ctx, ownerUserID, sessionID, turnID,
+		func(name string) bool { return !isPlanningTool(name) },
+		func(ctx context.Context, _ pgx.Tx, p PendingProposal) (*resolution, error) {
+			res, err := decide(ctx, p)
+			if err != nil || res == nil {
+				return nil, err
+			}
+			return &resolution{ProposalResolution: *res}, nil
+		})
+}
+
+// resolution is what the internal decide returns: the public outcome plus the
+// planning markers stored in the tool message metadata.
+type resolution struct {
+	ProposalResolution
+	questionsClosed   bool
+	questionsReopened bool
+}
+
+// resolve is the shared body of every proposal resolution. accept says whether
+// the parked tool is one this caller resolves; decide runs inside the
+// transaction and receives it, so a caller can change other rows atomically
+// with the resolution (it must leave the turn's status alone).
+func (s *Store) resolve(
+	ctx context.Context, ownerUserID, sessionID, turnID string,
+	accept func(toolName string) bool,
+	decide func(ctx context.Context, tx pgx.Tx, p PendingProposal) (*resolution, error),
 ) (*Turn, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -136,7 +167,11 @@ func (s *Store) ResolveProposal(
 		return nil, fmt.Errorf("builder store: resolve proposal: turn %s has no valid pending proposal", turnID)
 	}
 
-	res, err := decide(ctx, proposal)
+	if !accept(proposal.Name) {
+		return nil, ErrProposalKind
+	}
+
+	res, err := decide(ctx, tx, proposal)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +182,14 @@ func (s *Store) ResolveProposal(
 	if err != nil {
 		return nil, err
 	}
-	meta, err := json.Marshal(map[string]bool{"build_failed": false, "is_error": res.IsError})
+	metaFields := map[string]bool{"build_failed": false, "is_error": res.IsError}
+	if res.questionsClosed {
+		metaFields["questions_closed"] = true
+	}
+	if res.questionsReopened {
+		metaFields["questions_reopened"] = true
+	}
+	meta, err := json.Marshal(metaFields)
 	if err != nil {
 		return nil, fmt.Errorf("builder store: resolve proposal: marshal tool metadata: %w", err)
 	}

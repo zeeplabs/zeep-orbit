@@ -86,10 +86,12 @@ func BudgetReason(err error) string {
 const (
 	PurposeChat       = "chat"
 	PurposeCompaction = "compaction"
+	// PurposePlanning: a model call of a plan-mode turn (ai-builder-planning).
+	PurposePlanning = "planning"
 )
 
 func validPurpose(p string) bool {
-	return p == PurposeChat || p == PurposeCompaction
+	return p == PurposeChat || p == PurposeCompaction || p == PurposePlanning
 }
 
 // UsageRecord is one LLM call's token usage. The three input classes do not
