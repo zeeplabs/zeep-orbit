@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
 import { ChatMarkdown } from '@/components/patterns/ChatMarkdown'
@@ -11,11 +11,14 @@ import {
   classifyBuilderError,
   useSendBuilderMessage,
   type BuilderSessionDetail,
+  type BuilderSessionUsageDetail,
   type BuilderTurn,
+  type BuilderTurnUsage,
 } from '@/lib/api'
 import { ActivityTimeline } from './ActivityTimeline'
 import { ProposalCard } from './ProposalCard'
-import { knownCode, TURN_ERROR_CODES, TURN_LIMITS, type TurnView } from './builderModel'
+import { TurnUsageLine } from './UsageSummary'
+import { BUDGET_CAPS, knownCode, TURN_ERROR_CODES, TURN_LIMITS, type TurnView } from './builderModel'
 
 /** builderMaxMessageRunes in internal/dashboard/builder_messages.go. */
 const MAX_MESSAGE_CHARS = 8000
@@ -28,6 +31,8 @@ interface ChatPanelProps {
   sessionId: string
   session: BuilderSessionDetail
   turnViews: TurnView[]
+  /** Usage and cost of the session, one receipt per turn; undefined until it loads. */
+  usage: BuilderSessionUsageDetail | undefined
   active: boolean
   /** Why the composer and the actions are blocked right now (already translated), or null. */
   blockedReason: string | null
@@ -40,12 +45,14 @@ export function ChatPanel({
   sessionId,
   session,
   turnViews,
+  usage,
   active,
   blockedReason,
   actionsDisabled,
   onRestore,
 }: ChatPanelProps) {
   const { t } = useTranslation()
+  const usageByTurn = useMemo(() => new Map((usage?.turns ?? []).map((u) => [u.turn_id, u])), [usage])
   const scrollerRef = useRef<HTMLDivElement>(null)
   const stickRef = useRef(true)
 
@@ -109,6 +116,8 @@ export function ChatPanel({
             sessionId={sessionId}
             session={session}
             view={view}
+            usage={usageByTurn.get(view.turn.id)}
+            currency={usage?.currency ?? ''}
             active={active}
             actionsDisabled={actionsDisabled}
             onRestore={onRestore}
@@ -167,12 +176,15 @@ interface TurnBlockProps {
   sessionId: string
   session: BuilderSessionDetail
   view: TurnView
+  /** The turn's receipt; undefined when it made no model call or usage has not loaded. */
+  usage: BuilderTurnUsage | undefined
+  currency: string
   active: boolean
   actionsDisabled: boolean
   onRestore: (turnSeq: number) => void
 }
 
-function TurnBlock({ sessionId, session, view, active, actionsDisabled, onRestore }: TurnBlockProps) {
+function TurnBlock({ sessionId, session, view, usage, currency, active, actionsDisabled, onRestore }: TurnBlockProps) {
   const { t } = useTranslation()
   const { turn, segments } = view
   const live = isLiveTurn(turn)
@@ -236,7 +248,7 @@ function TurnBlock({ sessionId, session, view, active, actionsDisabled, onRestor
       )}
       {turn.status === 'budget_exceeded' && (
         <Notice tone="warning" icon="savings">
-          {t('builder.page.turn.budgetExceeded')}
+          {t(`builder.page.turn.budget.${knownCode(view.budgetReason, BUDGET_CAPS, 'unknown')}`)}
         </Notice>
       )}
       {turn.status === 'failed' && (
@@ -244,6 +256,8 @@ function TurnBlock({ sessionId, session, view, active, actionsDisabled, onRestor
           {t(`builder.page.turn.error.${knownCode(view.errorCode, TURN_ERROR_CODES, 'unknown')}`)}
         </Notice>
       )}
+
+      {!live && usage && usage.calls > 0 && <TurnUsageLine usage={usage} currency={currency} />}
 
       {canRestore && (
         <div className="flex justify-start">

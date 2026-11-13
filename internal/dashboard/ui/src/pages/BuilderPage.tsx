@@ -10,6 +10,7 @@ import { Icon } from '@/components/ui/icon'
 import { ChatPanel } from '@/components/patterns/builder/ChatPanel'
 import { PreviewPanel } from '@/components/patterns/builder/PreviewPanel'
 import { SessionActions } from '@/components/patterns/builder/SessionActions'
+import { SessionUsageStrip } from '@/components/patterns/builder/UsageSummary'
 import {
   buildTurnViews,
   knownCode,
@@ -23,6 +24,7 @@ import {
   isBuilderSessionActive,
   useBuilderEvents,
   useBuilderSession,
+  useBuilderSessionUsage,
   useBuilderStatus,
   useRevertBuilderSession,
   type BuilderEvent,
@@ -41,6 +43,7 @@ export default function BuilderPage() {
 
   const sessionQuery = useBuilderSession(sessionId)
   const eventsQuery = useBuilderEvents(sessionId)
+  const usageQuery = useBuilderSessionUsage(sessionId)
   const statusQuery = useBuilderStatus()
   const revert = useRevertBuilderSession(sessionId)
   const [restoreSeq, setRestoreSeq] = useState<number | null>(null)
@@ -197,12 +200,15 @@ export default function BuilderPage() {
         </div>
       )}
 
+      <SessionUsageStrip usage={usageQuery.data} />
+
       <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(340px,440px)_minmax(0,1fr)]">
         <div className="h-[70vh] min-h-[420px] lg:h-auto lg:min-h-0">
           <ChatPanel
             sessionId={sessionId}
             session={session}
             turnViews={turnViews}
+            usage={usageQuery.data}
             active={active}
             blockedReason={blockedReason}
             actionsDisabled={actionsDisabled}

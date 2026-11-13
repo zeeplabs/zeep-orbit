@@ -26,6 +26,8 @@ export interface TurnView {
   segments: TurnSegment[]
   /** limit_reached payload.limit of the turn, when it ended on a limit. */
   limit?: string
+  /** budget_exceeded payload.reason of the turn: the cap that stopped it. */
+  budgetReason?: string
   /** turn.error_code, falling back to the turn's last `error` event. */
   errorCode: string | null
 }
@@ -122,6 +124,13 @@ function toEntry(event: BuilderEvent, fixAttempt: number): ActivityEntry | null 
     }
     case 'proposal_rejected':
       return { ...base, icon: 'cancel', tone: 'neutral', labelKey: 'proposalRejected' }
+    case 'budget_warning': {
+      const { used, limit } = event.payload
+      const cap = knownCode(event.payload.cap, BUDGET_CAPS, 'unknown')
+      const percent =
+        typeof used === 'number' && typeof limit === 'number' && limit > 0 ? Math.floor((used * 100) / limit) : 80
+      return { ...base, icon: 'savings', tone: 'warning', labelKey: `budgetWarning.${cap}`, params: { percent } }
+    }
     case 'revert': {
       const seq = event.payload.to_turn_seq
       if (event.payload.changed === false) {
@@ -157,6 +166,7 @@ export function buildTurnViews(turns: BuilderTurn[], events: BuilderEvent[]): Tu
       const list = (byTurn.get(turn.id) ?? []).sort((a, b) => a.id - b.id)
       const segments: TurnSegment[] = []
       let limit: string | undefined
+      let budgetReason: string | undefined
       let eventError: string | undefined
       let failedBuilds = 0
 
@@ -167,6 +177,7 @@ export function buildTurnViews(turns: BuilderTurn[], events: BuilderEvent[]): Tu
           continue
         }
         if (event.type === 'limit_reached' && event.payload.limit) limit = event.payload.limit
+        if (event.type === 'budget_exceeded' && event.payload.reason) budgetReason = event.payload.reason
         if (event.type === 'error' && event.payload.code) eventError = event.payload.code
         if (event.type === 'build_failed') failedBuilds += 1
 
@@ -177,7 +188,7 @@ export function buildTurnViews(turns: BuilderTurn[], events: BuilderEvent[]): Tu
         else segments.push({ kind: 'activity', id: entry.id, entries: [entry] })
       }
 
-      return { turn, segments, limit, errorCode: turn.error_code ?? eventError ?? null }
+      return { turn, segments, limit, budgetReason, errorCode: turn.error_code ?? eventError ?? null }
     })
 }
 
@@ -410,6 +421,9 @@ export const TURN_ERROR_CODES = [
 ] as const
 
 export const TURN_LIMITS = ['max_steps', 'max_fix_iterations', 'max_turn_duration'] as const
+
+/** The caps of the budget_warning and budget_exceeded events (store.BudgetCap*). */
+export const BUDGET_CAPS = ['session_tokens', 'month_tokens', 'session_cost', 'month_cost'] as const
 
 export const PUBLISH_REASONS = [
   'github_not_configured',

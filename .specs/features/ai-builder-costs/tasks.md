@@ -11,7 +11,7 @@ Commits only when the user asks (AGENTS.md §2); one commit per task when author
 **Spec**: `.specs/features/ai-builder-costs/spec.md`
 **Design**: `.specs/features/ai-builder-costs/design.md`
 **Parent**: `.specs/features/ai-frontend-builder/`
-**Status**: Approved by the maintainer on 2026-11-13, DDL of C01 included. In execution on `feat/ai-frontend-builder`. Done: C01–C09. Pending: C10–C13.
+**Status**: Approved by the maintainer on 2026-11-13, DDL of C01 included. In execution on `feat/ai-frontend-builder`. Done: C01–C10. Pending: C11–C13.
 
 ---
 
@@ -119,6 +119,7 @@ C12 docs + CHANGELOG (last)        C13 real-endpoint run (owner, needs keys)
 - **Where**: `src/components/patterns/builder/*`, `builderModel.ts`, `api.ts`, locales.
 - **Done when**: frontend gate; manual check on the local stack with a priced model, an unpriced model and a mixed session.
 - **Requirements**: ABC-11 to ABC-14, ABC-20. **Depends**: C08. **Gate**: Frontend.
+- **Status**: Done 2026-11-13. `UsageSummary.tsx` (`TurnUsageLine`, `SessionUsageStrip`), `useBuilderSessionUsage` (polls every 5 s while the session is active, refetches once when it stops), `formatTokens` in `src/lib/money.ts`. The session strip sits under the page header and lists every cap that is set. `budget_warning` renders as a timeline entry with the percentage; the `budget_exceeded` notice now names the cap from the event's `reason`. Calls with no usage reported by the provider are flagged inside the receipt. Checked on the local stack with unpriced turns, a priced turn, the mixed session total, a warning at 82% and a turn stopped by the session token cap. Frontend gate green.
 
 ### C11 — Usage page
 - **What**: range picker, grouping selector, table, totals, CSV download; superadmin and own-usage variants.

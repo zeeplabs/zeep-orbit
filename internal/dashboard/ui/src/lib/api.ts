@@ -2003,12 +2003,87 @@ export interface BuilderSession {
   published_sha: string
   tokens_in: number
   tokens_out: number
+  /** Absent while the session has no recorded model call. */
+  usage?: BuilderSessionUsage
   created_at: string
   updated_at: string
 }
 
 export interface BuilderSessionDetail extends BuilderSession {
   turns: BuilderTurn[]
+}
+
+// -- Usage and cost (ai-builder-costs C08) --
+
+export type BuilderCapKind = 'session_tokens' | 'month_tokens' | 'session_cost' | 'month_cost'
+
+/** How much of one cap is used: tokens for the token caps, micros for the cost caps. */
+export interface BuilderCapUsage {
+  cap: BuilderCapKind | string
+  used: number
+  limit: number
+}
+
+/**
+ * Usage of a set of model calls. `cost_micros` is the sum of the calls that have a price (null
+ * when none has) and `unpriced_calls` says how many calls are missing from it, so a partial sum
+ * is never the full cost. The server computes every figure; the UI only formats them.
+ */
+export interface BuilderUsageTotals {
+  calls: number
+  input_tokens: number
+  cached_input_tokens: number
+  cache_write_tokens: number
+  output_tokens: number
+  total_tokens: number
+  cost_micros: number | null
+  unpriced_calls: number
+  /** Calls whose provider sent no usage: their tokens are missing from the counts. */
+  unreported_calls: number
+  compaction_calls: number
+  compaction_tokens: number
+  compaction_cost_micros: number | null
+}
+
+export interface BuilderUsageModel {
+  provider: BuilderProviderKind | string
+  model: string
+}
+
+/** The receipt of one turn. */
+export interface BuilderTurnUsage extends BuilderUsageTotals {
+  turn_id: string
+  seq: number
+  kind: BuilderTurnKind | string
+  status: BuilderTurnStatus | string
+  models: BuilderUsageModel[]
+  files_changed: number
+  builds_run: number
+  builds_failed: number
+  /** Time the agent worked, without the wait for a proposal answer. Null while the turn runs. */
+  duration_ms: number | null
+  created_at: string
+  finished_at: string | null
+}
+
+/** Body of GET /builder/sessions/{id}/usage (owner only). */
+export interface BuilderSessionUsageDetail {
+  currency: string
+  totals: BuilderUsageTotals
+  /** Only the caps that are set. */
+  caps: BuilderCapUsage[]
+  turns: BuilderTurnUsage[]
+  /** Calls that belong to no turn of the session. totals = sum of turns + unattributed. */
+  unattributed?: BuilderUsageTotals
+}
+
+/** The usage summary carried by the session views. */
+export interface BuilderSessionUsage {
+  currency: string
+  calls: number
+  cost_micros: number | null
+  unpriced_calls: number
+  caps?: BuilderCapUsage[]
 }
 
 /** Body of POST /builder/sessions. Empty/absent template_id selects the built-in default template. */
@@ -2039,7 +2114,9 @@ export interface BuilderEventPayloads {
   build_failed: { step?: string; tail?: string }
   proposal: { tool_call_id?: string; name?: string; operation?: BuilderProposalOperation }
   limit_reached: { limit?: BuilderLimitKind | string }
-  budget_exceeded: Record<string, never>
+  budget_exceeded: { reason?: BuilderCapKind | 'not_configured' | string }
+  /** Appended once per session and cap, when usage crosses 80% of it. */
+  budget_warning: { cap?: BuilderCapKind | string; used?: number; limit?: number }
   error: { code?: BuilderTurnErrorCode | string }
   revert: {
     to_turn_seq?: number
@@ -2497,6 +2574,7 @@ export const builderKeys = {
   sessions: () => ['builder', 'sessions'] as const,
   session: (id: string) => ['builder', 'session', id] as const,
   events: (id: string) => ['builder', 'events', id] as const,
+  sessionUsage: (id: string) => ['builder', 'session-usage', id] as const,
   templates: () => ['builder', 'templates'] as const,
   settings: () => ['builder', 'settings'] as const,
   prices: () => ['builder', 'prices'] as const,
@@ -2553,6 +2631,37 @@ export function useBuilderSession(sessionId: string): UseQueryResult<BuilderSess
       query.state.status !== 'error' && isBuilderSessionActive(query.state.data)
         ? BUILDER_POLL_INTERVAL_MS
         : false,
+  })
+}
+
+const BUILDER_USAGE_POLL_INTERVAL_MS = 5000
+
+/**
+ * Usage and cost of a session: totals, cap usage and one receipt per turn (owner only). Polls
+ * slowly while the session is active and refetches once when it goes inactive, so the figures
+ * of the turn that just ended are final. It reads the session through useBuilderSession (same
+ * cache entry, no extra request).
+ */
+export function useBuilderSessionUsage(sessionId: string): UseQueryResult<BuilderSessionUsageDetail> {
+  const qc = useQueryClient()
+  const session = useBuilderSession(sessionId)
+  const active = isBuilderSessionActive(session.data)
+
+  const wasActive = useRef(false)
+  useEffect(() => {
+    if (wasActive.current && !active && sessionId) {
+      void qc.invalidateQueries({ queryKey: builderKeys.sessionUsage(sessionId) })
+    }
+    wasActive.current = active
+  }, [active, sessionId, qc])
+
+  return useQuery({
+    queryKey: builderKeys.sessionUsage(sessionId),
+    queryFn: () => apiFetch<BuilderSessionUsageDetail>(`${builderSessionPath(sessionId)}/usage`),
+    enabled: Boolean(sessionId),
+    retry: (count, error) => !(error instanceof ApiError && error.status === 404) && count < 2,
+    refetchInterval: (query) =>
+      active && query.state.status !== 'error' ? BUILDER_USAGE_POLL_INTERVAL_MS : false,
   })
 }
 

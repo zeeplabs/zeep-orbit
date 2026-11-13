@@ -1,7 +1,7 @@
 import i18n from './i18n'
 
 /**
- * Money helpers of the AI Builder cost screens. The API carries money as integer micros
+ * Money and token-count helpers of the AI Builder cost screens. The API carries money as integer micros
  * (1 unit of currency = 1,000,000 micros) and prices as decimal strings; nothing here goes
  * through a float on the way in, so what the operator types is what is stored.
  */
@@ -50,4 +50,12 @@ export function formatMoney(micros: number, currency: string): string {
     // A currency code Intl does not accept: show the number and the code as typed.
     return `${decimalFromMicros(micros)} ${currency}`
   }
+}
+
+/** 12431 -> "12.4K" (compact, for one-line summaries) or "12,431" (full, for receipts). */
+export function formatTokens(count: number, compact = false): string {
+  return new Intl.NumberFormat(
+    i18n.language || 'en',
+    compact ? { notation: 'compact', maximumFractionDigits: 1 } : undefined,
+  ).format(count)
 }
