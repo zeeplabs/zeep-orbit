@@ -1,6 +1,6 @@
 <div align="center">
   <img src="../docs/static/img/orbit-logo.png" alt="Zeep Orbit" width="200" />
-  <p><strong>A plataforma completa para equipas de tecnologia.</strong></p>
+  <p><strong>Vibe coding como deve ser: aplicações criadas por IA sobre um backend a sério.</strong></p>
 
   <p>
     <a href="https://github.com/zeeplabs/zeep-orbit/actions"><img src="https://github.com/zeeplabs/zeep-orbit/actions/workflows/docker-publish.yml/badge.svg" alt="CI" /></a>
@@ -19,7 +19,7 @@
 
 ---
 
-O **Zeep Orbit** é uma plataforma open-source e self-hosted que dá à sua equipa tudo o que precisa para criar e publicar aplicações — APIs de backend, deployment de frontend, domínios personalizados e gestão de utilizadores — tudo a partir de um único dashboard. Sem serviços externos, sem lock-in. A sua infraestrutura, os seus dados.
+O **Zeep Orbit** é uma plataforma open-source e self-hosted para criar aplicações com IA como deve ser. Defina o schema da base de dados e obtenha um backend a sério para cada aplicação — schema PostgreSQL isolado, API REST, autenticação, row-level security e webhooks. Depois descreva o frontend num chat e deixe a IA construí-lo, já ligado a esse backend, e publique-o com um domínio personalizado — ou ligue um frontend que já tem. Tudo a partir de um único dashboard. Sem serviços externos, sem lock-in. A sua infraestrutura, os seus dados.
 
 <p align="center">
   <img src="../docs/static/img/diagram.svg" alt="Diagrama de Arquitetura" width="800" />

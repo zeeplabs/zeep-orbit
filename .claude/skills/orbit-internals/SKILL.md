@@ -5,7 +5,7 @@ description: Use when working ON zeep-orbit's own codebase — the Go backend (s
 
 # Zeep Orbit — internal codebase skill
 
-Zeep Orbit is a self-hosted BaaS: a Go backend (`cmd/zeep`, `internal/*`) plus a React/Vite/TS dashboard (`internal/dashboard/ui`), embedded into the Go binary via `go:embed` at build time. Every app gets its own Postgres schema; the Dashboard (or its MCP server) is the only way to define apps/tables/columns/policies — there is no YAML config file to author, that flow was removed for good (AGENTS.md).
+Zeep Orbit is a self-hosted platform for building apps with AI on a schema-driven backend: a Go backend (`cmd/zeep`, `internal/*`) plus a React/Vite/TS dashboard (`internal/dashboard/ui`), embedded into the Go binary via `go:embed` at build time. Every app gets its own Postgres schema; the Dashboard (or its MCP server) is the only way to define apps/tables/columns/policies — there is no YAML config file to author, that flow was removed for good (AGENTS.md).
 
 This file stays short. Load a reference by what the task touches — don't load all of them for a one-line fix.
 

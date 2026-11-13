@@ -28,7 +28,7 @@ func main() {
 
 	rootCmd := &cobra.Command{
 		Use:   "zeep",
-		Short: "zeep-orbit — self-hosted BaaS",
+		Short: "zeep-orbit — self-hosted platform for building apps with AI on a real backend",
 	}
 
 	rootCmd.PersistentFlags().StringVar(&dbOverride, "db", "", "override DATABASE_URL")
