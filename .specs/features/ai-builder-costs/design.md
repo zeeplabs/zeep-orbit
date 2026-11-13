@@ -49,10 +49,6 @@ CREATE INDEX IF NOT EXISTS ai_usage_ledger_session_idx
 CREATE INDEX IF NOT EXISTS ai_usage_ledger_created_idx
     ON zeep_system.ai_usage_ledger (created_at);
 
-ALTER TABLE zeep_system.builder_sessions
-    ADD COLUMN IF NOT EXISTS cost_micros     BIGINT NOT NULL DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS unpriced_calls  INT    NOT NULL DEFAULT 0;
-
 ALTER TABLE zeep_system.builder_settings
     ADD COLUMN IF NOT EXISTS cost_currency                TEXT   NOT NULL DEFAULT 'USD',
     ADD COLUMN IF NOT EXISTS cost_currency_changed_at     TIMESTAMPTZ,
@@ -63,7 +59,8 @@ ALTER TABLE zeep_system.builder_settings
 Notes:
 
 - Existing ledger rows read as `purpose = 'chat'`, zero cache tokens, `cost_micros = NULL`. No backfill.
-- `builder_sessions.cost_micros` and `unpriced_calls` are counters updated in the `RecordUsage` transaction, like `tokens_in/out`, so the session header needs no aggregate query. Existing sessions start at 0 cost with `unpriced_calls = 0`, which under-reports calls made before the upgrade. The session view therefore reports `cost_complete = false` when the session has ledger rows older than the feature. **Simpler alternative to decide in C01:** compute session totals from the ledger on read (one indexed query) and add no counters. Preferred if the query is cheap with the new index; it removes the divergence case entirely.
+- **Decided in C01 (2026-11-13): no cost counters on `builder_sessions`.** Session totals and receipts are read from the ledger through `ai_usage_ledger_session_idx`. Measured on the local Postgres 16 with 300,000 seeded rows over 300 sessions: the per-turn aggregate of a 1,000-call session ran in 2.6 ms (bitmap index scan). Reading from the ledger removes the case where a counter and the ledger disagree. The existing `tokens_in`/`tokens_out` counters stay as they are, because the token cap check uses them.
+- `purpose` has no CHECK constraint, so later purposes (for example planning) need no DDL; the value is validated in Go.
 - `provider` in the price table is the provider **kind** (`openai`, `openai_compatible`, `anthropic`), the same string the ledger stores.
 - No FK from the ledger to prices, by intent: deleting a price must not touch history.
 
@@ -97,7 +94,7 @@ P_cached defaults to P_in when NULL; P_write defaults to P_in when NULL
 
 Prices are `NUMERIC(18,6)` per million tokens, so a price in micros per million tokens is an exact integer and `tokens * price_micros_per_mtok / 1_000_000` is integer arithmetic with one rounding. The function is pure (`internal/agent/store/cost.go`) and table-tested, including the rounding boundary and the int64 range (tokens up to 2e9 times a price up to 1e12 micros per million stays inside `big.Int`, then is checked to fit int64).
 
-`RecordUsage` reads the price row inside its transaction (`SELECT ... FROM ai_model_prices WHERE provider = $1 AND model = $2`), computes the cost, inserts the ledger row, and updates the session counters. A missing row gives `cost_micros = NULL` and `unpriced_calls + 1`.
+`RecordUsage` reads the price row inside its transaction (`SELECT ... FROM ai_model_prices WHERE provider = $1 AND model = $2`), computes the cost, inserts the ledger row, and updates the session token counters as today. A missing row gives `cost_micros = NULL`; unpriced calls are counted from the ledger when read.
 
 ## 4. Budgets (ABC-19, ABC-20)
 

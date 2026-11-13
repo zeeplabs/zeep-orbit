@@ -11,7 +11,7 @@ Commits only when the user asks (AGENTS.md §2); one commit per task when author
 **Spec**: `.specs/features/ai-builder-costs/spec.md`
 **Design**: `.specs/features/ai-builder-costs/design.md`
 **Parent**: `.specs/features/ai-frontend-builder/`
-**Status**: Draft, awaiting maintainer approval (2026-11-13). Nothing implemented.
+**Status**: Approved by the maintainer on 2026-11-13, DDL of C01 included. In execution on `feat/ai-frontend-builder`. Done: C01. Pending: C02–C13.
 
 ---
 
@@ -56,6 +56,7 @@ C12 docs + CHANGELOG (last)        C13 real-endpoint run (owner, needs keys)
 - **Where**: `internal/dashboard/provisioner.go`.
 - **Done when**: DDL diff shown and confirmed; idempotent re-run on a database that already has the old tables; old rows read with the defaults; **[verify]** every `SELECT` on the altered tables uses explicit column lists.
 - **Requirements**: ABC-02, ABC-03, ABC-04, ABC-06, ABC-08, ABC-19. **Tests**: integration (provision twice). **Gate**: Full.
+- **Status**: Done 2026-11-13. DDL confirmed by the maintainer. Applied twice on a local database that already had the old tables (15 existing ledger rows read back with the defaults and `cost_micros` NULL). Totals are read from the ledger, no session counters (measurement in design §2). No `SELECT *` on the altered tables. Full gate result recorded in the commit.
 
 ### C02 — Token classes in the provider layer  [P]
 - **What**: extend `provider.Usage` (design §3) with `Total()`; OpenAI adapter maps cached tokens and sets `Reported`; replace hand-written `in + out` sums in the loop, compaction and store with the helper; **[verify]** the OpenAI usage field names in the current API reference.

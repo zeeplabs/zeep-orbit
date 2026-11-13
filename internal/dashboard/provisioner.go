@@ -928,6 +928,48 @@ func provisionZeepSystemOnce(ctx context.Context, pool *db.Pool) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS ai_usage_ledger_user_month_idx
 		 ON zeep_system.ai_usage_ledger (user_id, created_at)`,
+		// Cost accounting (ai-builder-costs C01). Token classes follow the
+		// provider's billing: input_tokens is input at the full rate,
+		// cached_input_tokens is read from the provider's prompt cache and
+		// cache_write_tokens is written to it. cost_micros is fixed when the
+		// call is recorded (1 unit of currency = 1,000,000 micros); NULL means
+		// no price was set for that model at the time, never zero. Rows from
+		// before this change keep NULL and are not backfilled.
+		`ALTER TABLE zeep_system.ai_usage_ledger
+		   ADD COLUMN IF NOT EXISTS cached_input_tokens INT     NOT NULL DEFAULT 0,
+		   ADD COLUMN IF NOT EXISTS cache_write_tokens  INT     NOT NULL DEFAULT 0,
+		   ADD COLUMN IF NOT EXISTS purpose             TEXT    NOT NULL DEFAULT 'chat',
+		   ADD COLUMN IF NOT EXISTS cost_micros         BIGINT,
+		   ADD COLUMN IF NOT EXISTS usage_reported      BOOLEAN NOT NULL DEFAULT true`,
+		// Session totals and receipts are read from the ledger, not from
+		// counters, so they cannot diverge from it.
+		`CREATE INDEX IF NOT EXISTS ai_usage_ledger_session_idx
+		 ON zeep_system.ai_usage_ledger (session_id, created_at) WHERE session_id IS NOT NULL`,
+		`CREATE INDEX IF NOT EXISTS ai_usage_ledger_created_idx
+		 ON zeep_system.ai_usage_ledger (created_at)`,
+		// Operator-maintained prices, per million tokens, in the installation
+		// currency (builder_settings.cost_currency). provider is the provider
+		// kind stored in the ledger. No FK from the ledger: deleting a price
+		// must not touch history. NULL cached/cache-write prices fall back to
+		// the input price.
+		`CREATE TABLE IF NOT EXISTS zeep_system.ai_model_prices (
+			provider              TEXT          NOT NULL,
+			model                 TEXT          NOT NULL,
+			input_per_mtok        NUMERIC(18,6) NOT NULL CHECK (input_per_mtok >= 0),
+			cached_input_per_mtok NUMERIC(18,6)          CHECK (cached_input_per_mtok >= 0),
+			cache_write_per_mtok  NUMERIC(18,6)          CHECK (cache_write_per_mtok >= 0),
+			output_per_mtok       NUMERIC(18,6) NOT NULL CHECK (output_per_mtok >= 0),
+			updated_by            UUID,
+			updated_at            TIMESTAMPTZ   NOT NULL DEFAULT now(),
+			PRIMARY KEY (provider, model)
+		)`,
+		// Money caps are optional (0 = no money cap); the token caps above
+		// stay mandatory. Changing the currency does not convert stored costs.
+		`ALTER TABLE zeep_system.builder_settings
+		   ADD COLUMN IF NOT EXISTS cost_currency                TEXT   NOT NULL DEFAULT 'USD',
+		   ADD COLUMN IF NOT EXISTS cost_currency_changed_at     TIMESTAMPTZ,
+		   ADD COLUMN IF NOT EXISTS session_cost_cap_micros      BIGINT NOT NULL DEFAULT 0 CHECK (session_cost_cap_micros >= 0),
+		   ADD COLUMN IF NOT EXISTS user_monthly_cost_cap_micros BIGINT NOT NULL DEFAULT 0 CHECK (user_monthly_cost_cap_micros >= 0)`,
 	}
 
 	for _, stmt := range stmts {
