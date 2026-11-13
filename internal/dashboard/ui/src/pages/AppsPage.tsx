@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation, Trans } from "react-i18next";
 import { toast } from "sonner";
-import { useApps, useDeleteApp, useAIProviderStatus, useBuilderStatus, AppDef, authFetch } from "../lib/api";
+import { useApps, useDeleteApp, useAIProviderStatus, useBuilderStatus, useBuilderSessions, AppDef, authFetch, type BuilderSession } from "../lib/api";
 import { BuildWithAIDrawer } from "@/components/patterns/BuildWithAIDrawer";
 import { NewBuilderSessionDialog } from "@/components/patterns/NewBuilderSessionDialog";
 import { Button } from "@/components/ui/button";
@@ -107,6 +107,40 @@ function SectionHeader({
       </span>
       {action && <div className="ml-auto">{action}</div>}
     </div>
+  );
+}
+
+// --- Builder session card: the way back into an app that is being built with AI ---
+
+function BuilderSessionCard({ session }: { session: BuilderSession }) {
+  const { t, i18n } = useTranslation();
+  const updated = new Date(session.updated_at).toLocaleString(i18n.language, { dateStyle: "medium", timeStyle: "short" });
+  return (
+    <Link
+      to={`/builder/${session.id}`}
+      className="flex h-full flex-col gap-3 rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-5 transition-colors hover:border-[var(--border-strong)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--primary)]"
+    >
+      <div className="flex min-w-0 items-center gap-2">
+        <Icon name="auto_awesome" size={18} className="shrink-0 text-[var(--accent)]" />
+        <span className="truncate text-[14.5px] font-bold text-[var(--text-primary)]">
+          {session.title.trim() || t("apps.builderSessionUntitled")}
+        </span>
+      </div>
+      <span className="text-xs text-[var(--text-tertiary)]">{t("apps.builderSessionUpdated", { date: updated })}</span>
+      <div className="mt-auto flex items-center justify-between gap-2">
+        {session.frontend_app_id ? (
+          <span className="rounded-full bg-[var(--sunken)] px-2 py-0.5 text-xs text-[var(--text-secondary)]">
+            {t("apps.builderSessionPublished")}
+          </span>
+        ) : (
+          <span />
+        )}
+        <span className="flex items-center gap-1 text-[12.5px] font-semibold text-[var(--primary)]">
+          {t("apps.builderSessionOpen")}
+          <Icon name="arrow_forward" size={14} />
+        </span>
+      </div>
+    </Link>
   );
 }
 
@@ -453,6 +487,9 @@ export default function AppsPage() {
   // With no frontend apps yet the section is only worth showing when a builder is deployed;
   // otherwise installs without a builder would get an empty section holding a dead button.
   const showBuilderEntry = !builderStatus.isLoading && !builderStatus.isError && builderReason !== "not_configured";
+  // Sessions being built with AI. Without this list a user who leaves the builder page can
+  // only come back through the URL: an unpublished session shows up nowhere else.
+  const builderSessions = useBuilderSessions(showBuilderEntry).data ?? [];
 
   // Frontend create modal
   const [showFeCreate, setShowFeCreate] = useState(false);
@@ -758,6 +795,17 @@ AFTER CLONE
             </div>
           )}
         </>
+      )}
+
+      {!isLoading && builderSessions.length > 0 && (
+        <div className="mt-10">
+          <SectionHeader icon="auto_awesome" label={t("apps.builderSection")} count={builderSessions.length} />
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,340px))] gap-4">
+            {builderSessions.map((session) => (
+              <BuilderSessionCard key={session.id} session={session} />
+            ))}
+          </div>
+        </div>
       )}
 
       {feError && !showGrid && !isLoading && (

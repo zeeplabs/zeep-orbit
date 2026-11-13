@@ -71,6 +71,8 @@ function toEntry(event: BuilderEvent, fixAttempt: number): ActivityEntry | null 
     case 'tool_call': {
       // A skill load has its own row (skill_loaded, with the skill's name); the raw call adds noise.
       if (event.payload.name === 'load_skill') return null
+      // Same for a backend proposal: the `proposal` row that follows says it in words.
+      if (event.payload.name === 'propose_backend_change' || event.payload.name === 'propose_backend_plan') return null
       const what = event.payload.summary || event.payload.name
       return what
         ? { ...base, icon: 'build', tone: 'neutral', labelKey: 'toolCall', params: { what } }

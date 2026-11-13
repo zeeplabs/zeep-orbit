@@ -2475,10 +2475,11 @@ export function useBuilderStatus(): UseQueryResult<BuilderStatus> {
 }
 
 /** The caller's own non-archived sessions, most recently updated first. */
-export function useBuilderSessions(): UseQueryResult<BuilderSession[]> {
+export function useBuilderSessions(enabled = true): UseQueryResult<BuilderSession[]> {
   return useQuery({
     queryKey: builderKeys.sessions(),
     queryFn: () => apiFetch<BuilderSession[]>(`${BUILDER_BASE}/sessions`),
+    enabled,
   })
 }
 
