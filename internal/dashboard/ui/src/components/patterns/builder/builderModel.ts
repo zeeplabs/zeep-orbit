@@ -1,4 +1,11 @@
-import type { BuilderEvent, BuilderProposal, BuilderTurn } from '@/lib/api'
+import {
+  BUILDER_ASK_USER,
+  BUILDER_PROPOSE_BUILD_PLAN,
+  type BuilderEvent,
+  type BuilderProposal,
+  type BuilderQuestion,
+  type BuilderTurn,
+} from '@/lib/api'
 
 // Pure view-model helpers of the AI builder page (ai-frontend-builder T36/T37). No React and no
 // i18n here: entries carry an i18n key + params and components call t(). Every `type` the
@@ -17,9 +24,25 @@ export interface ActivityEntry {
   detail?: string
 }
 
+/**
+ * An ask_user round the user already answered, rebuilt from the `proposal` event (the questions)
+ * and the `questions_answered` event (the answers).
+ */
+export interface AnsweredRound {
+  /** Empty when the questions could not be read; the answers are then listed by question id. */
+  questions: BuilderQuestion[]
+  /** Question id to the answer as the user gave it; '' is left to the assistant ("decide for me" or blank). */
+  answers: Record<string, string>
+  /** The user chose "Start building now". */
+  skipped: boolean
+}
+
 export type TurnSegment =
   | { kind: 'message'; id: number; content: string }
   | { kind: 'activity'; id: number; entries: ActivityEntry[] }
+  | { kind: 'questions'; id: number; round: AnsweredRound }
+
+const PLANNING_TOOLS: readonly string[] = [BUILDER_ASK_USER, BUILDER_PROPOSE_BUILD_PLAN]
 
 export interface TurnView {
   turn: BuilderTurn
@@ -75,6 +98,8 @@ function toEntry(event: BuilderEvent, fixAttempt: number): ActivityEntry | null 
       if (event.payload.name === 'load_skill') return null
       // Same for a backend proposal: the `proposal` row that follows says it in words.
       if (event.payload.name === 'propose_backend_change' || event.payload.name === 'propose_backend_plan') return null
+      // Planning calls are shown as their cards and, once answered, as read-only blocks.
+      if (event.payload.name && PLANNING_TOOLS.includes(event.payload.name)) return null
       const what = event.payload.summary || event.payload.name
       return what
         ? { ...base, icon: 'build', tone: 'neutral', labelKey: 'toolCall', params: { what } }
@@ -101,6 +126,7 @@ function toEntry(event: BuilderEvent, fixAttempt: number): ActivityEntry | null 
         detail: tail(event.payload.tail),
       }
     case 'proposal':
+      if (event.payload.name && PLANNING_TOOLS.includes(event.payload.name)) return null
       return { ...base, icon: 'rule', tone: 'warning', labelKey: 'proposal' }
     case 'proposal_confirmed': {
       // A confirmed plan reports how far it got: it stops at the first operation that fails.
@@ -169,11 +195,26 @@ export function buildTurnViews(turns: BuilderTurn[], events: BuilderEvent[]): Tu
       let budgetReason: string | undefined
       let eventError: string | undefined
       let failedBuilds = 0
+      // The questions of each ask_user call of the turn, by tool call id.
+      const asked = new Map<string, BuilderQuestion[]>()
 
       for (const event of list) {
         if (event.type === 'assistant_message') {
           const content = event.payload.content
           if (content && content.trim()) segments.push({ kind: 'message', id: event.id, content })
+          continue
+        }
+        if (event.type === 'proposal' && event.payload.name === BUILDER_ASK_USER && event.payload.tool_call_id) {
+          asked.set(event.payload.tool_call_id, parseQuestions(event.payload.operation) ?? [])
+          continue
+        }
+        if (event.type === 'questions_answered') {
+          const round: AnsweredRound = {
+            questions: (event.payload.tool_call_id && asked.get(event.payload.tool_call_id)) || [],
+            answers: event.payload.answers ?? {},
+            skipped: event.payload.skipped === true,
+          }
+          segments.push({ kind: 'questions', id: event.id, round })
           continue
         }
         if (event.type === 'limit_reached' && event.payload.limit) limit = event.payload.limit
@@ -391,6 +432,46 @@ function columnNamesOrStrings(value: unknown): string {
   if (!Array.isArray(value)) return ''
   const strings = value.filter((v): v is string => typeof v === 'string')
   return (strings.length > 0 ? strings : columnNames(value)).join(', ')
+}
+
+// -- Planning proposals (ai-builder-planning) --
+
+/** Which card a paused turn needs: the planning tools have their own, every other name is a backend change. */
+export type ProposalCardKind = 'questions' | 'plan' | 'backend'
+
+export function proposalCardKind(proposal: BuilderProposal): ProposalCardKind {
+  if (proposal.name === BUILDER_ASK_USER) return 'questions'
+  if (proposal.name === BUILDER_PROPOSE_BUILD_PLAN) return 'plan'
+  return 'backend'
+}
+
+/** The proposal the session is paused on, from the turn awaiting confirmation; undefined when none. */
+export function pendingProposal(turns: BuilderTurn[]): BuilderProposal | undefined {
+  return turns.find((t) => t.status === 'awaiting_confirmation' && t.pending_proposal)?.pending_proposal
+}
+
+/**
+ * Reads ask_user arguments ({questions: [...]}) defensively. The server validated them, but the
+ * stored event is still treated as untrusted: a question without an id, a text or two options is
+ * dropped. Returns null when nothing usable is left.
+ */
+export function parseQuestions(args: unknown): BuilderQuestion[] | null {
+  const raw = record(args).questions
+  if (!Array.isArray(raw)) return null
+  const questions: BuilderQuestion[] = []
+  for (const item of raw) {
+    const q = record(item)
+    const id = str(q.id)
+    const question = str(q.question)
+    const options = Array.isArray(q.options)
+      ? q.options
+          .map((o) => ({ label: str(record(o).label), description: str(record(o).description) || undefined }))
+          .filter((o) => o.label !== '')
+      : []
+    if (!id || !question || options.length < 2) continue
+    questions.push({ id, title: str(q.title) || id, question, options, multiple: q.multiple === true })
+  }
+  return questions.length > 0 ? questions : null
 }
 
 /** Only https URLs from server data become links (never javascript:/data:). */

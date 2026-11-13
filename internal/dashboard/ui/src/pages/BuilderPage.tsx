@@ -15,6 +15,8 @@ import {
   buildTurnViews,
   knownCode,
   latestPublishEvent,
+  pendingProposal,
+  proposalCardKind,
   summarizeBuild,
   UNAVAILABLE_REASONS,
 } from '@/components/patterns/builder/builderModel'
@@ -108,7 +110,17 @@ export default function BuilderPage() {
   if (archived) blockedReason = t('builder.page.chat.disabledArchived')
   else if (unavailableText) blockedReason = unavailableText
   else if (active) blockedReason = t('builder.page.chat.disabledRunning')
-  else if (session.status === 'awaiting_confirmation') blockedReason = t('builder.page.chat.disabledAwaiting')
+  else if (session.status === 'awaiting_confirmation') {
+    const pending = pendingProposal(session.turns)
+    const kind = pending ? proposalCardKind(pending) : 'backend'
+    blockedReason = t(
+      kind === 'questions'
+        ? 'builder.page.chat.disabledQuestions'
+        : kind === 'plan'
+          ? 'builder.page.chat.disabledPlan'
+          : 'builder.page.chat.disabledAwaiting',
+    )
+  }
 
   const actionsDisabled = archived || unavailable
 

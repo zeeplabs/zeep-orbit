@@ -1942,6 +1942,12 @@ export type BuilderTurnStatus =
 
 export type BuilderTurnKind = 'chat' | 'revert'
 
+/** 'plan' turns only read and plan (ask_user, propose_build_plan); 'build' turns write code. */
+export type BuilderTurnMode = 'plan' | 'build'
+
+/** 'briefing' until a build plan is approved, 'building' afterward. */
+export type BuilderSessionPhase = 'briefing' | 'building'
+
 /** Generic turn error codes (agent/limits.go, agent/revert.go). Open set: treat unknown as generic. */
 export type BuilderTurnErrorCode =
   | 'provider_unavailable'
@@ -1984,6 +1990,10 @@ export interface BuilderTurn {
   pending_proposal?: BuilderProposal
   created_at: string
   finished_at: string | null
+  mode: BuilderTurnMode | string
+  /** Set on a turn that builds a milestone of a brief: the brief version and the milestone (1-based). */
+  brief_version: number | null
+  milestone: number | null
 }
 
 export interface BuilderSession {
@@ -1998,6 +2008,7 @@ export interface BuilderSession {
   prompt_version_id: string | null
   locale: string
   status: BuilderSessionStatus
+  phase: BuilderSessionPhase | string
   head_sha: string
   head_turn_seq: number
   frontend_app_id: string | null
@@ -2177,6 +2188,11 @@ export interface BuilderEventPayloads {
     failed_index?: number
   }
   proposal_rejected: { tool_call_id?: string }
+  // Planning (ai-builder-planning). `answers` maps a question id to the answer, capped at 200
+  // characters; '' means "decide for me".
+  questions_answered: { tool_call_id?: string; skipped?: boolean; answers?: Record<string, string> }
+  plan_approved: { tool_call_id?: string; version?: number; milestones?: number; milestone?: number }
+  plan_revision_requested: { tool_call_id?: string; more_questions?: boolean }
   skill_loaded: { name?: string; source?: string; version?: number }
   publish_started: { republish?: boolean }
   publish_succeeded: { republish?: boolean; sha?: string }
@@ -2220,6 +2236,55 @@ export interface BuilderProposalResult {
   kind?: string
   /** A repeated request that did nothing. */
   already_resolved?: boolean
+  turn?: BuilderTurn
+}
+
+// -- Planning (ai-builder-planning) --
+
+/** The tool names of the planning proposals (internal/agent/planning). */
+export const BUILDER_ASK_USER = 'ask_user'
+export const BUILDER_PROPOSE_BUILD_PLAN = 'propose_build_plan'
+
+/** Limits of internal/agent/planning/planning.go. */
+export const BUILDER_ANSWER_MAX_CHARS = 500
+
+/** One option of an ask_user question. "Type your own answer" and "Decide for me" are added by the card. */
+export interface BuilderQuestionOption {
+  label: string
+  description?: string
+}
+
+/** One question of an ask_user round (planning.Question). */
+export interface BuilderQuestion {
+  id: string
+  title: string
+  question: string
+  options: BuilderQuestionOption[]
+  multiple?: boolean
+}
+
+/** The answer to one question (planning.Answer). An answer with no choice and no text counts as `decide`. */
+export interface BuilderAnswer {
+  id: string
+  choices: string[]
+  text: string
+  decide: boolean
+}
+
+/** Body of POST .../turns/{turn}/answers. */
+export interface AnswerBuilderQuestionsInput {
+  /** pending_proposal.tool_call_id of the card the user answered. */
+  tool_call_id: string
+  answers: BuilderAnswer[]
+  /** "Start building now": no more questions in this turn. Answers sent with it are kept. */
+  skip: boolean
+}
+
+/** Body of the planning routes (builderPlanningResult). */
+export interface BuilderPlanningResult {
+  already_resolved?: boolean
+  brief_version?: number
+  milestone?: number
   turn?: BuilderTurn
 }
 
@@ -3165,7 +3230,7 @@ export function useRevertBuilderSession(
 function builderTurnPath(
   sessionId: string,
   turn: string | number,
-  action: 'confirm' | 'reject',
+  action: 'confirm' | 'reject' | 'answers',
 ): string {
   return `${builderSessionPath(sessionId)}/turns/${encodeURIComponent(String(turn))}/${action}`
 }
@@ -3208,6 +3273,27 @@ export function useRejectBuilderTurn(
       apiFetch<BuilderProposalResult>(builderTurnPath(sessionId, turn, 'reject'), {
         method: 'POST',
       }),
+    onSettled: () => {
+      invalidateBuilderSession(qc, sessionId)
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+/**
+ * Answers the ask_user round a turn is paused on, or ends the questions ("Start building now",
+ * `skip`). The turn resumes on success. A 409 means the card was replaced or already answered,
+ * so the session is refreshed on error as well (onSettled); the card keeps what the user typed.
+ */
+export function useAnswerBuilderQuestions(
+  sessionId: string,
+): UseMutationResult<BuilderPlanningResult, Error, { turn: string | number; input: AnswerBuilderQuestionsInput }> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ turn, input }) =>
+      apiFetch<BuilderPlanningResult>(builderTurnPath(sessionId, turn, 'answers'), jsonRequest('POST', input)),
     onSettled: () => {
       invalidateBuilderSession(qc, sessionId)
     },

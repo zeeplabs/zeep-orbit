@@ -11,7 +11,7 @@ Commits only when the user asks (AGENTS.md §2); one commit per task when author
 **Spec**: `.specs/features/ai-builder-planning/spec.md`
 **Design**: `.specs/features/ai-builder-planning/design.md`
 **Parent**: `.specs/features/ai-frontend-builder/`
-**Status**: Approved by the maintainer on 2026-11-13 with the defaults of design §12. In execution on `feat/ai-frontend-builder`. Done: P01–P07. The DDL of P01 is still shown and confirmed before it is applied.
+**Status**: Approved by the maintainer on 2026-11-13 with the defaults of design §12. In execution on `feat/ai-frontend-builder`. Done: P01–P08. The DDL of P01 is still shown and confirmed before it is applied.
 
 ---
 
@@ -102,6 +102,7 @@ P11 docs + CHANGELOG (last)        P12 local end-to-end run        P13 real-mode
 - **Where**: `components/patterns/builder/`, `ChatPanel.tsx`, `builderModel.ts`, `api.ts`, both locale files.
 - **Done when**: frontend gate green; on the local stack: single and multiple choice, typed answer, "Decide for me", "Start building now", reload with a pending round, keyboard-only use, both languages; a failed request shows the toast and keeps the typed answers.
 - **Requirements**: ABP-02, ABP-05, ABP-06. **Depends**: P06. **Gate**: Frontend.
+- **Status**: Done 2026-11-13. New `QuestionCard.tsx` (`QuestionCard` and the read-only `AnsweredRoundBlock`); `ChatPanel` picks the card by `pending_proposal.name` (`PendingCard`, keyed by `tool_call_id` so a new round starts empty); `builderModel` reads the questions defensively (`parseQuestions`) and turns `proposal` (`ask_user`) plus `questions_answered` into a `questions` segment; the planning tool calls and proposals no longer show as backend rows in the timeline. `api.ts`: session `phase`, turn `mode`/`brief_version`/`milestone`, the three planning event payloads, the question and answer types, `useAnswerBuilderQuestions` (named like the other builder hooks; `onError` toast, session refreshed on settle). The composer placeholder changes in the briefing phase, and the blocked reason of the composer depends on the pending card. Two existing strings became generic because they named a backend change while a question card is pending: the screen-reader live text and the publish hint. A blank answer is shown as "Left to the assistant" in the history, on a skip too: the event stores `""` for both "decide for me" and a blank, and the agent decides both. A pending `propose_build_plan` shows no card until P09. Frontend gate green. Local stack with a scripted mock model (OpenAI-compatible, scratchpad only), Playwright headless: single choice, multiple choice and typed answer sent together; "Decide for me" disables the options of its question; two rounds then "Start building now" with nothing picked; reload with a pending round rebuilds the card; keyboard only (Space, arrows, Tab, Enter) answers and sends; a forced 500 shows the toast and keeps the choices and the text; English and pt-BR.
 
 ### P09 — UI: plan card
 - **What**: `PlanCard` with the estimate, approve / ask for changes / back to questions, approved plans in the history, `useApprovePlan`, `useRevisePlan`, `usePlanEstimate`.

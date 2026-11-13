@@ -17,8 +17,16 @@ import {
 } from '@/lib/api'
 import { ActivityTimeline } from './ActivityTimeline'
 import { ProposalCard } from './ProposalCard'
+import { AnsweredRoundBlock, QuestionCard } from './QuestionCard'
 import { TurnUsageLine } from './UsageSummary'
-import { BUDGET_CAPS, knownCode, TURN_ERROR_CODES, TURN_LIMITS, type TurnView } from './builderModel'
+import {
+  BUDGET_CAPS,
+  knownCode,
+  proposalCardKind,
+  TURN_ERROR_CODES,
+  TURN_LIMITS,
+  type TurnView,
+} from './builderModel'
 
 /** builderMaxMessageRunes in internal/dashboard/builder_messages.go. */
 const MAX_MESSAGE_CHARS = 8000
@@ -127,7 +135,7 @@ export function ChatPanel({
       <div className="sr-only" role="status">
         {liveMessage}
       </div>
-      <Composer sessionId={sessionId} blockedReason={blockedReason} />
+      <Composer sessionId={sessionId} blockedReason={blockedReason} briefing={session.phase === 'briefing'} />
     </section>
   )
 }
@@ -210,6 +218,8 @@ function TurnBlock({ sessionId, session, view, usage, currency, active, actionsD
           <Bubble key={`m-${segment.id}`} role="assistant">
             <ChatMarkdown content={segment.content} />
           </Bubble>
+        ) : segment.kind === 'questions' ? (
+          <AnsweredRoundBlock key={`q-${segment.id}`} round={segment.round} />
         ) : (
           <ActivityTimeline
             key={`a-${segment.id}`}
@@ -233,12 +243,7 @@ function TurnBlock({ sessionId, session, view, usage, currency, active, actionsD
       )}
 
       {turn.status === 'awaiting_confirmation' && turn.pending_proposal && (
-        <ProposalCard
-          sessionId={sessionId}
-          turn={turn}
-          proposal={turn.pending_proposal}
-          disabled={actionsDisabled}
-        />
+        <PendingCard sessionId={sessionId} turn={turn} disabled={actionsDisabled} />
       )}
 
       {turn.status === 'limit_reached' && (
@@ -285,7 +290,48 @@ function TurnBlock({ sessionId, session, view, usage, currency, active, actionsD
   )
 }
 
-function Composer({ sessionId, blockedReason }: { sessionId: string; blockedReason: string | null }) {
+/**
+ * The card of a paused turn, chosen by the proposal's tool name; a backend change is the default.
+ * Keyed by the tool call so a new round or a new plan starts from an empty card.
+ */
+function PendingCard({ sessionId, turn, disabled }: { sessionId: string; turn: BuilderTurn; disabled: boolean }) {
+  const proposal = turn.pending_proposal
+  if (!proposal) return null
+  switch (proposalCardKind(proposal)) {
+    case 'questions':
+      return (
+        <QuestionCard
+          key={proposal.tool_call_id}
+          sessionId={sessionId}
+          turn={turn}
+          proposal={proposal}
+          disabled={disabled}
+        />
+      )
+    case 'plan':
+      // The build plan card lands with ai-builder-planning P09.
+      return null
+    default:
+      return (
+        <ProposalCard
+          key={proposal.tool_call_id}
+          sessionId={sessionId}
+          turn={turn}
+          proposal={proposal}
+          disabled={disabled}
+        />
+      )
+  }
+}
+
+interface ComposerProps {
+  sessionId: string
+  blockedReason: string | null
+  /** No plan was approved yet: the assistant asks and proposes a plan before it builds. */
+  briefing: boolean
+}
+
+function Composer({ sessionId, blockedReason, briefing }: ComposerProps) {
   const { t } = useTranslation()
   const qc = useQueryClient()
   const send = useSendBuilderMessage(sessionId)
@@ -345,7 +391,7 @@ function Composer({ sessionId, blockedReason }: { sessionId: string; blockedReas
           }}
           aria-label={t('builder.page.chat.composerLabel')}
           aria-describedby={hintId}
-          placeholder={t('builder.page.chat.placeholder')}
+          placeholder={t(briefing ? 'builder.page.chat.placeholderBriefing' : 'builder.page.chat.placeholder')}
           rows={2}
           maxLength={MAX_MESSAGE_CHARS}
           className="flex-1 resize-none"

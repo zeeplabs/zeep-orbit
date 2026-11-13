@@ -260,6 +260,12 @@ cost_low,   cost_high   = the same over per-turn cost, using only turns in which
 
 Every string in `en.json` and `pt-BR.json`.
 
+**Changed in P08:**
+
+- The hook is `useAnswerBuilderQuestions`, named like the other builder hooks of `api.ts`.
+- The answered round in the history shows a blank answer as "Left to the assistant", on a skip too: `questions_answered` stores `""` for both "decide for me" and a blank, and the agent decides both.
+- The composer's blocked reason depends on the pending card; the screen-reader live text and the publish hint no longer name a backend change.
+
 ## 11. Edge cases against the design
 
 | Case | Behavior |
