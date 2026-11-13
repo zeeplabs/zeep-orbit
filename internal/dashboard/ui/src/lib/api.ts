@@ -3,6 +3,7 @@ import {
   useQuery,
   useMutation,
   useQueryClient,
+  keepPreviousData,
   UseQueryResult,
   UseMutationResult,
 } from '@tanstack/react-query'
@@ -2086,6 +2087,46 @@ export interface BuilderSessionUsage {
   caps?: BuilderCapUsage[]
 }
 
+export type BuilderUsageGroupBy = 'day' | 'user' | 'model' | 'session'
+
+/** One group of the usage report. */
+export interface BuilderUsageReportRow extends BuilderUsageTotals {
+  /** A UTC day (YYYY-MM-DD), a user id, "provider/model" or a session id ('' = outside a session). */
+  key: string
+  /** The user's email, or the session title when the caller owns the session. */
+  label: string | null
+  provider?: string
+  model?: string
+  /** The user or session no longer exists (or the session was archived); its usage still counts. */
+  deleted?: boolean
+}
+
+/** Response of GET /builder/usage. */
+export interface BuilderUsageReport {
+  from: string
+  to: string
+  timezone: string
+  group_by: BuilderUsageGroupBy
+  currency: string
+  /** When the installation currency last changed; amounts recorded before it are not converted. */
+  currency_changed_at: string | null
+  /** Covers the whole range, also when `rows` is truncated. */
+  totals: BuilderUsageTotals
+  rows: BuilderUsageReportRow[]
+  truncated: boolean
+}
+
+/** Range (UTC days, both inclusive) and scope of a usage report or export. */
+export interface BuilderUsageRange {
+  from: string
+  to: string
+  /** Superadmin only: limit to one user. Other users always read their own usage. */
+  userId?: string
+}
+
+/** Limits enforced by the server (internal/dashboard/builder_usage.go). */
+export const BUILDER_USAGE_LIMITS = { maxRangeDays: 366, defaultRangeDays: 30 } as const
+
 /** Body of POST /builder/sessions. Empty/absent template_id selects the built-in default template. */
 export type BuilderBackendChoice = { mode: 'new' } | { mode: 'existing'; app_id: string }
 
@@ -2575,6 +2616,8 @@ export const builderKeys = {
   session: (id: string) => ['builder', 'session', id] as const,
   events: (id: string) => ['builder', 'events', id] as const,
   sessionUsage: (id: string) => ['builder', 'session-usage', id] as const,
+  usageReport: (range: BuilderUsageRange, groupBy: BuilderUsageGroupBy) =>
+    ['builder', 'usage-report', range.from, range.to, range.userId ?? null, groupBy] as const,
   templates: () => ['builder', 'templates'] as const,
   settings: () => ['builder', 'settings'] as const,
   prices: () => ['builder', 'prices'] as const,
@@ -2663,6 +2706,60 @@ export function useBuilderSessionUsage(sessionId: string): UseQueryResult<Builde
     refetchInterval: (query) =>
       active && query.state.status !== 'error' ? BUILDER_USAGE_POLL_INTERVAL_MS : false,
   })
+}
+
+function builderUsageQuery(range: BuilderUsageRange): URLSearchParams {
+  const params = new URLSearchParams({ from: range.from, to: range.to })
+  if (range.userId) params.set('user_id', range.userId)
+  return params
+}
+
+/**
+ * Usage and cost of a date range, grouped. A superadmin reads everyone's usage; anyone else
+ * reads their own and gets a 403 for the 'user' grouping. The previous report stays on screen
+ * while the next one loads.
+ */
+export function useBuilderUsageReport(
+  range: BuilderUsageRange,
+  groupBy: BuilderUsageGroupBy,
+  enabled = true,
+): UseQueryResult<BuilderUsageReport> {
+  return useQuery({
+    queryKey: builderKeys.usageReport(range, groupBy),
+    queryFn: () => {
+      const params = builderUsageQuery(range)
+      params.set('group_by', groupBy)
+      return apiFetch<BuilderUsageReport>(`${BUILDER_BASE}/usage?${params}`)
+    },
+    enabled,
+    placeholderData: keepPreviousData,
+  })
+}
+
+/**
+ * Downloads the CSV export of a range: one line per recorded model call, with no prompt or
+ * reply text. Throws ApiError (for example 400 when the range has too many rows).
+ */
+export async function downloadBuilderUsageCSV(range: BuilderUsageRange): Promise<void> {
+  const res = await authFetch(`${BUILDER_BASE}/usage.csv?${builderUsageQuery(range)}`, {
+    credentials: 'include',
+  })
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`
+    try {
+      const body = await res.json()
+      message = body.error ?? message
+    } catch {
+    }
+    throw new ApiError(message, res.status)
+  }
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `ai-usage-${range.from}_${range.to}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 /** What useBuilderEvents returns: every event fetched so far (oldest first) and the cursor. */

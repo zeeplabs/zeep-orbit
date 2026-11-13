@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -158,7 +159,18 @@ function CostSettingsCard() {
   }
 
   return (
-    <SectionCard title={title} description={t('settings.aiBuilder.costs.desc')}>
+    <SectionCard
+      title={title}
+      description={t('settings.aiBuilder.costs.desc')}
+      action={
+        <Link
+          to="/builder/usage"
+          className="shrink-0 text-[13px] font-semibold text-[var(--primary)] underline-offset-2 hover:underline"
+        >
+          {t('builder.usage.link')}
+        </Link>
+      }
+    >
       <div className="flex flex-col gap-1.5 sm:max-w-[220px]">
         <Label htmlFor="builder-cost-currency" className="text-[12px] font-semibold">
           {t('settings.aiBuilder.costs.currency')}

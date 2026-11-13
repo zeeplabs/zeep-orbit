@@ -11,7 +11,7 @@ Commits only when the user asks (AGENTS.md §2); one commit per task when author
 **Spec**: `.specs/features/ai-builder-costs/spec.md`
 **Design**: `.specs/features/ai-builder-costs/design.md`
 **Parent**: `.specs/features/ai-frontend-builder/`
-**Status**: Approved by the maintainer on 2026-11-13, DDL of C01 included. In execution on `feat/ai-frontend-builder`. Done: C01–C10. Pending: C11–C13.
+**Status**: Approved by the maintainer on 2026-11-13, DDL of C01 included. In execution on `feat/ai-frontend-builder`. Done: C01–C11. Pending: C12–C13.
 
 ---
 
@@ -126,6 +126,7 @@ C12 docs + CHANGELOG (last)        C13 real-endpoint run (owner, needs keys)
 - **Where**: new page or settings section, `api.ts`, locales, navigation entry.
 - **Done when**: frontend gate; manual check as superadmin and as a regular user.
 - **Requirements**: ABC-22, ABC-23. **Depends**: C08. **Gate**: Frontend.
+- **Status**: Done 2026-11-13. `src/pages/BuilderUsagePage.tsx` at `/builder/usage`: period presets and two date fields (UTC days, kept in the URL with the grouping), totals tiles (cost in the three display states, tokens, calls, compaction share), the grouped table (client-side pages of 50) and the CSV download (`downloadBuilderUsageCSV`, errors as a toast). A superadmin gets the user grouping and can select a row to filter the report to that user; the filter is kept in memory, not in the URL, because it shows an email. There is no sidebar item: the page is linked from the "Being built with AI" section of the apps page, from the session usage strip and from the Costs settings card, so an installation without the builder gets no extra navigation and no status request on every page. Checked on the local stack as superadmin (four groupings, user filter, presets, invalid range, CSV) and as a member (own usage only, no user grouping; the API answers 403 for `group_by=user` and 404 for another user's report or CSV). Frontend gate green.
 
 ### C12 — Docs and CHANGELOG
 - **What**: `docs/docs/ai-frontend-builder.md` (providers, price table, currency, caps, usage page, what "no price set" means); `CHANGELOG.md` `[Unreleased]`; README feature table row and its three translations if the usage page is listed as a feature; update this file's status.

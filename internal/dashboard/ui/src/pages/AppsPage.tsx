@@ -799,7 +799,20 @@ AFTER CLONE
 
       {!isLoading && builderSessions.length > 0 && (
         <div className="mt-10">
-          <SectionHeader icon="auto_awesome" label={t("apps.builderSection")} count={builderSessions.length} />
+          <SectionHeader
+            icon="auto_awesome"
+            label={t("apps.builderSection")}
+            count={builderSessions.length}
+            action={
+              <Link
+                to="/builder/usage"
+                className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[var(--primary)] underline-offset-2 hover:underline"
+              >
+                <Icon name="receipt_long" size={16} />
+                {t("builder.usage.link")}
+              </Link>
+            }
+          />
           <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,340px))] gap-4">
             {builderSessions.map((session) => (
               <BuilderSessionCard key={session.id} session={session} />

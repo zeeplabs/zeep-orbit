@@ -1,5 +1,6 @@
 import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 import { Icon } from '@/components/ui/icon'
 import { formatMoney, formatTokens } from '@/lib/money'
 import type { BuilderCapUsage, BuilderSessionUsageDetail, BuilderTurnUsage, BuilderUsageTotals } from '@/lib/api'
@@ -10,7 +11,7 @@ import { BUDGET_CAPS, knownCode } from './builderModel'
 // the full cost, the known cost plus a marker that some calls have no price, or "no price set".
 
 /** The cost of a set of calls, never a partial sum presented as the full cost. */
-function useCostText(): (usage: BuilderUsageTotals, currency: string) => string {
+export function useCostText(): (usage: BuilderUsageTotals, currency: string) => string {
   const { t } = useTranslation()
   return (usage, currency) => {
     if (usage.cost_micros === null) return t('builder.page.usage.noPrice')
@@ -177,6 +178,13 @@ export function SessionUsageStrip({ usage }: { usage: BuilderSessionUsageDetail 
       {usage.caps.map((cap) => (
         <CapBar key={cap.cap} cap={cap} currency={usage.currency} />
       ))}
+      <Link
+        to="/builder/usage"
+        className="ml-auto font-medium underline-offset-2 hover:underline"
+        style={{ color: 'var(--primary)' }}
+      >
+        {t('builder.usage.link')}
+      </Link>
     </div>
   )
 }
