@@ -293,6 +293,9 @@ type BuilderSessionView struct {
 	TokensOut       int64     `json:"tokens_out"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
+	// Phase is "briefing" while the session only plans (no build plan was
+	// approved yet) and "building" afterward.
+	Phase string `json:"phase"`
 	// Usage is the recorded cost of the session (builder_usage.go). Set by the
 	// list and detail routes only.
 	Usage *BuilderSessionUsage `json:"usage,omitempty"`
@@ -307,6 +310,7 @@ func newBuilderSessionView(s *store.Session) BuilderSessionView {
 		FrontendAppID: s.FrontendAppID, BackendOrigin: s.BackendOrigin, PublishedSHA: s.PublishedSHA,
 		TokensIn: s.TokensIn, TokensOut: s.TokensOut,
 		CreatedAt: s.CreatedAt, UpdatedAt: s.UpdatedAt,
+		Phase: s.Phase,
 	}
 }
 

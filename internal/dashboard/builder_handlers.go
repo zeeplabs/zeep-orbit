@@ -396,6 +396,19 @@ func (h *BuilderHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		params.PromptVersionID = &prompt.ID
 	}
 
+	// With planning required, the session starts in the briefing phase: its
+	// turns only plan until the user approves a build plan (ABP-01). Read at
+	// creation, like the prompt version; a later change of the setting does
+	// not move existing sessions back.
+	settings, err := GetBuilderSettings(ctx, h.pool)
+	if err != nil {
+		h.serverError(w, r, err)
+		return
+	}
+	if settings.PlanningMode == BuilderPlanningRequired {
+		params.Phase = store.PhaseBriefing
+	}
+
 	sess, err := h.store.CreateSession(ctx, params)
 	if err != nil {
 		h.serverError(w, r, err)

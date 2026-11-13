@@ -41,6 +41,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/zeeplabs/zeep-orbit/internal/agent"
+	"github.com/zeeplabs/zeep-orbit/internal/agent/planning"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/provider"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/sandbox"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/skills"
@@ -65,6 +66,7 @@ const (
 	builderPromptScanTimeout = 20 * time.Second
 
 	maxGuideBytes      = 64 << 10
+	maxBriefFileBytes  = 32 << 10
 	maxScanEntries     = 5000
 	maxTreeDepth       = 3
 	maxTreeLines       = 300
@@ -187,8 +189,10 @@ func NewBuilderRuntime(pool *db.Pool, cfg BuilderRuntimeConfig) (*BuilderRuntime
 }
 
 // newBuilderToolRegistry builds the one tool registry the agent loop shares:
-// the workspace tools, the Orbit tools and load_skill. load_skill is always
-// registered; the loop only offers it to the model while skills are enabled.
+// the workspace tools, the Orbit tools, load_skill and the planning tools.
+// load_skill and the planning tools are always registered; the loop decides
+// per turn whether the model is offered them (skills enabled, turn mode,
+// planning setting).
 func newBuilderToolRegistry(pool *db.Pool, sb sandbox.Sandbox, st *store.Store, skillSrc skills.Source, log *slog.Logger) (*tools.Registry, error) {
 	reg := tools.NewRegistry(tools.WithLogger(log))
 	if err := tools.RegisterWorkspaceTools(reg, sb, tools.WorkspaceConfig{PreviewBase: tools.PreviewBuildBase}); err != nil {
@@ -199,6 +203,11 @@ func newBuilderToolRegistry(pool *db.Pool, sb sandbox.Sandbox, st *store.Store, 
 	}
 	if err := skills.RegisterTool(reg, skillSrc); err != nil {
 		return nil, fmt.Errorf("builder: register skills tool: %w", err)
+	}
+	for _, tool := range planning.Tools() {
+		if err := reg.Register(tool); err != nil {
+			return nil, fmt.Errorf("builder: register planning tools: %w", err)
+		}
 	}
 	return reg, nil
 }
@@ -282,6 +291,7 @@ func (rt *BuilderRuntime) prepareDeps(ctx context.Context, base agent.Deps) agen
 		MaxTurnDuration:     time.Duration(s.MaxTurnSeconds) * time.Second,
 		ContextWindowTokens: s.ContextWindowTokens,
 	}
+	base.PlanningEnabled = s.PlanningMode != BuilderPlanningOff
 	base.Provider = rt.resolveProvider(ctx, s.Provider)
 	return base
 }
@@ -336,8 +346,10 @@ func (unavailableProvider) Model() string { return "" }
 // the company rules. The skills index is resolved on every turn, not pinned
 // to the session, so disabling or deleting a skill applies to the next turn;
 // a database failure fails the turn here too, so company skills are never
-// silently dropped. The workspace-derived parts (template guide, file tree)
-// and the app name degrade to empty: the agent has tools to look at all three.
+// silently dropped; the brief is the user's approved plan, so failing to read
+// it fails the turn too. The workspace-derived parts (template guide, file
+// tree, the workspace copy of the brief) and the app name degrade to empty:
+// the agent has tools to look at them.
 func (rt *BuilderRuntime) promptSource(ctx context.Context, s *store.Session) (agent.PromptInput, error) {
 	in := agent.PromptInput{Session: agent.SessionContext{
 		BackendAppID: s.BackendAppID,
@@ -375,36 +387,88 @@ func (rt *BuilderRuntime) promptSource(ctx context.Context, s *store.Session) (a
 
 	sctx, cancel := context.WithTimeout(ctx, builderPromptScanTimeout)
 	defer cancel()
-	guide, tree, err := rt.scanWorkspace(sctx, s.ID)
+	scan, err := rt.scanWorkspace(sctx, s.ID)
 	if err != nil {
 		if ctx.Err() != nil {
 			return agent.PromptInput{}, ctx.Err()
 		}
 		rt.log.Warn("builder: workspace scan for the prompt failed", "session", s.ID, "err", err)
 	}
-	in.TemplateGuide = guide
-	in.Session.FileTree = tree
+	in.TemplateGuide = scan.guide
+	in.Session.FileTree = scan.tree
+
+	brief, err := rt.briefInput(ctx, s.ID, scan.brief)
+	if err != nil {
+		return agent.PromptInput{}, err
+	}
+	in.Brief = brief
 	return in, nil
+}
+
+// briefInput reads the session's current brief and milestone progress.
+// workspaceFile is the workspace copy of the brief, which the loop compares
+// with the current version. It returns nil when the session has no brief. A
+// stored plan that no longer validates (the bounds were tightened by an
+// upgrade) is logged and skipped: the turn runs without a brief.
+func (rt *BuilderRuntime) briefInput(ctx context.Context, sessionID, workspaceFile string) (*agent.BriefInput, error) {
+	brief, states, err := rt.store.MilestoneProgress(ctx, sessionID)
+	if err != nil || brief == nil {
+		return nil, err
+	}
+	plan, err := planning.ParsePlan(brief.Plan)
+	if err != nil {
+		rt.log.Error("builder: stored brief is not a valid plan", "session", sessionID, "version", brief.Version, "err", err)
+		return nil, nil
+	}
+	done := map[int]bool{}
+	for _, m := range states {
+		if m.Done {
+			done[m.Index] = true
+		}
+	}
+	return &agent.BriefInput{Version: brief.Version, Plan: plan, Done: done, WorkspaceFile: workspaceFile}, nil
 }
 
 // scanWorkspace reads the session's committed tree (HEAD) from the builder and
 // extracts the template guide (ORBIT_AGENT.md at the root, the default
-// template ships one) and a depth-limited file listing. On a read error it
-// returns whatever was gathered before it.
-func (rt *BuilderRuntime) scanWorkspace(ctx context.Context, sessionID string) (guide, tree string, err error) {
+// template ships one), the workspace copy of the brief (ORBIT_BRIEF.md at the
+// root) and a depth-limited file listing. On a read error it returns whatever
+// was gathered before it.
+func (rt *BuilderRuntime) scanWorkspace(ctx context.Context, sessionID string) (workspaceScan, error) {
 	rc, err := rt.sandbox.Archive(ctx, sessionID, "")
 	if err != nil {
-		return "", "", err
+		return workspaceScan{}, err
 	}
 	defer rc.Close()
-	return scanWorkspaceArchive(rc)
+	return scanWorkspaceFiles(rc)
+}
+
+// workspaceScan is what the prompt needs from the workspace archive.
+type workspaceScan struct {
+	guide string
+	tree  string
+	// brief is the content of planning.BriefFileName, "" when absent.
+	brief string
 }
 
 func scanWorkspaceArchive(r io.Reader) (guide, tree string, err error) {
+	scan, err := scanWorkspaceFiles(r)
+	return scan.guide, scan.tree, err
+}
+
+func scanWorkspaceFiles(r io.Reader) (scan workspaceScan, err error) {
 	var (
 		paths []string
 		seen  = map[string]bool{}
+		guide string
 	)
+	defer func() {
+		sort.Strings(paths)
+		if len(paths) > maxTreeLines {
+			paths = append(paths[:maxTreeLines], "... (more files not listed)")
+		}
+		scan.guide, scan.tree = guide, strings.Join(paths, "\n")
+	}()
 	add := func(p string) {
 		if !seen[p] {
 			seen[p] = true
@@ -440,6 +504,16 @@ func scanWorkspaceArchive(r io.Reader) (guide, tree string, err error) {
 				guide = strings.ToValidUTF8(string(b), "")
 			}
 		}
+		if name == planning.BriefFileName && scan.brief == "" {
+			// One byte over the cap is read on purpose: an oversized file then
+			// differs from any valid brief and gets rewritten.
+			b, rerr := io.ReadAll(io.LimitReader(tr, maxBriefFileBytes+1))
+			if rerr != nil {
+				err = rerr
+				break
+			}
+			scan.brief = string(b)
+		}
 		segs := strings.Split(name, "/")
 		if len(segs) > maxTreeDepth {
 			add(strings.Join(segs[:maxTreeDepth], "/") + "/")
@@ -447,9 +521,5 @@ func scanWorkspaceArchive(r io.Reader) (guide, tree string, err error) {
 			add(name)
 		}
 	}
-	sort.Strings(paths)
-	if len(paths) > maxTreeLines {
-		paths = append(paths[:maxTreeLines], "... (more files not listed)")
-	}
-	return guide, strings.Join(paths, "\n"), err
+	return scan, err
 }

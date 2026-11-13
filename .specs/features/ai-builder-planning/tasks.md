@@ -11,7 +11,7 @@ Commits only when the user asks (AGENTS.md §2); one commit per task when author
 **Spec**: `.specs/features/ai-builder-planning/spec.md`
 **Design**: `.specs/features/ai-builder-planning/design.md`
 **Parent**: `.specs/features/ai-frontend-builder/`
-**Status**: Approved by the maintainer on 2026-11-13 with the defaults of design §12. In execution on `feat/ai-frontend-builder`. Done: P01–P04. The DDL of P01 is still shown and confirmed before it is applied.
+**Status**: Approved by the maintainer on 2026-11-13 with the defaults of design §12. In execution on `feat/ai-frontend-builder`. Done: P01–P05. The DDL of P01 is still shown and confirmed before it is applied.
 
 ---
 
@@ -81,6 +81,7 @@ P11 docs + CHANGELOG (last)        P12 local end-to-end run        P13 real-mode
 - **Where**: `internal/dashboard/builder_runtime.go`, `builder_tools.go`, `builder_handlers.go`.
 - **Done when**: integration tests: session created under each `planning_mode`; prompt of a briefing session has no brief and has the planning directive; prompt after approval has the brief and the milestone directive; brief file content returned only when the archive copy differs; an existing-backend session's directive tells the agent to read the schema first.
 - **Requirements**: ABP-01, ABP-10, ABP-12, ABP-17. **Depends**: P04. **Tests**: integration. **Gate**: Full.
+- **Status**: Done 2026-11-13. The two tools are in the runtime registry and in the skills' list of known tool names; `prepareDeps` sets `PlanningEnabled` unless `planning_mode` is `off`; `CreateSession` starts the session in `briefing` when the mode is `required`, and the session view carries `phase`. `promptSource` returns `in.Brief` (current version, parsed plan, done milestones from `MilestoneProgress`, and the workspace copy of `ORBIT_BRIEF.md` read in the same archive scan as the guide and the tree, capped at 32 KiB). Two items of "Done when" landed in P04 rather than here: the directive (mode, progress, milestone, and "call `orbit_get_app_schema` first" in every plan turn, so it covers sessions on an existing backend) is built by the loop, and the "file differs" check is in `syncBriefFile`; P05 tests the inputs they read. A stored plan that no longer validates is logged and skipped. An unreadable workspace still gives the brief, with no workspace copy. Full gate green (28 packages).
 
 ### P06 — HTTP: answers, plan approval and revision
 - **What**: the three `POST` routes of design §8; `messages` accepts `plan_first` and `milestone`; `confirm`/`reject` and the new routes refuse each other's proposals with 409 (resolve the **[verify]** on `ConfirmProposal` first); events whitelisted (`questions_answered`, `plan_approved`, `plan_revision_requested`); session view fields; audit `builder.plan.approve`.
