@@ -699,6 +699,21 @@ AFTER CLONE
         />
       )}
 
+      {/* The frontend section (and its builder entry) only renders with apps; an empty
+          installation still needs a way into the builder, which can create its own backend. */}
+      {showEmpty && showBuilderEntry && (
+        <div className="mt-4 flex justify-center">
+          <TooltipProvider delayDuration={200}>
+            <CreateWithAIButton
+              loading={builderStatus.isLoading}
+              available={builderAvailable}
+              unavailableMessage={builderUnavailableMessage}
+              onClick={() => setShowNewBuilderSession(true)}
+            />
+          </TooltipProvider>
+        </div>
+      )}
+
       {showGrid && (
         <>
           {(apps?.length ?? 0) > 0 && (
