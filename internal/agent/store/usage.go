@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -361,4 +362,93 @@ func (s *Store) AppendBudgetWarning(ctx context.Context, l Lease, w BudgetWarnin
 		return false, fmt.Errorf("builder store: append budget warning: %w", err)
 	}
 	return true, nil
+}
+
+// Sample bounds of the build estimate (ai-builder-planning design §9).
+const (
+	// EstimateWindow is how far back the estimate looks.
+	EstimateWindow = 90 * 24 * time.Hour
+	// EstimateMinSample is the fewest turns a range is computed from: fewer
+	// completed turns give no estimate, fewer fully priced turns give tokens
+	// only.
+	EstimateMinSample = 10
+)
+
+// EstimateQuery selects the turns a build estimate is computed from.
+type EstimateQuery struct {
+	// Provider and Model are the provider kind and model configured now; a
+	// turn counts only when every one of its build calls used them.
+	Provider string
+	Model    string
+	// Since is the start of the window (now - EstimateWindow).
+	Since time.Time
+	// PricedSince excludes from the cost range the turns that started before
+	// it (the installation currency changed then, so older costs are in
+	// another currency). Nil when the currency never changed.
+	PricedSince *time.Time
+}
+
+// BuildEstimate is the spread of what one build turn spent on this
+// installation. The ranges are the 25th and 75th percentiles of the per-turn
+// totals. TokensLow/High are 0 and the cost range nil when the sample is under
+// EstimateMinSample; the cost range is also nil when the priced sample is.
+type BuildEstimate struct {
+	SampleTurns    int
+	PricedTurns    int
+	TokensLow      int64
+	TokensHigh     int64
+	CostMicrosLow  *int64
+	CostMicrosHigh *int64
+}
+
+// EstimateBuildTurn computes the build estimate from the ledger. The sample is
+// the completed build-mode turns of the builder created in the window, of every
+// user. Per turn it adds the calls that are not planning calls (a turn whose
+// plan was approved spent its first calls planning, which is not building), so
+// the range describes what building one milestone costs. A turn is left out
+// when any of its build calls used another provider or model, or did not report
+// usage (its tokens would read as zero). A turn is priced when every build call
+// has a cost and it started on or after q.PricedSince.
+func (s *Store) EstimateBuildTurn(ctx context.Context, q EstimateQuery) (*BuildEstimate, error) {
+	if q.Provider == "" || q.Model == "" {
+		return nil, fmt.Errorf("%w: provider and model are required", ErrInvalidArgument)
+	}
+	var (
+		out                                BuildEstimate
+		tokLow, tokHigh, costLow, costHigh *float64
+	)
+	err := s.pool.QueryRow(ctx,
+		`WITH per_turn AS (
+		   SELECT sum(l.input_tokens::bigint + l.cached_input_tokens + l.cache_write_tokens + l.output_tokens) AS tokens,
+		          sum(l.cost_micros) AS cost,
+		          bool_and(l.cost_micros IS NOT NULL)
+		            AND ($5::timestamptz IS NULL OR min(l.created_at) >= $5::timestamptz) AS priced
+		   FROM zeep_system.builder_turns t
+		   JOIN zeep_system.ai_usage_ledger l ON l.turn_id = t.id
+		   WHERE t.created_at >= $1 AND t.mode = $6 AND t.status = $7
+		     AND l.created_at >= $1 AND l.feature = $2 AND l.purpose <> $8
+		   GROUP BY t.id
+		   HAVING bool_and(l.provider = $3 AND l.model = $4 AND l.usage_reported)
+		 )
+		 SELECT count(*),
+		        count(*) FILTER (WHERE priced),
+		        percentile_cont(0.25) WITHIN GROUP (ORDER BY tokens),
+		        percentile_cont(0.75) WITHIN GROUP (ORDER BY tokens),
+		        percentile_cont(0.25) WITHIN GROUP (ORDER BY cost) FILTER (WHERE priced),
+		        percentile_cont(0.75) WITHIN GROUP (ORDER BY cost) FILTER (WHERE priced)
+		 FROM per_turn`,
+		q.Since, FeatureBuilder, q.Provider, q.Model, q.PricedSince, ModeBuild, TurnCompleted, PurposePlanning,
+	).Scan(&out.SampleTurns, &out.PricedTurns, &tokLow, &tokHigh, &costLow, &costHigh)
+	if err != nil {
+		return nil, fmt.Errorf("builder store: estimate build turn: %w", err)
+	}
+	if out.SampleTurns < EstimateMinSample || tokLow == nil || tokHigh == nil {
+		return &out, nil
+	}
+	out.TokensLow, out.TokensHigh = int64(math.Round(*tokLow)), int64(math.Round(*tokHigh))
+	if out.PricedTurns >= EstimateMinSample && costLow != nil && costHigh != nil {
+		lo, hi := int64(math.Round(*costLow)), int64(math.Round(*costHigh))
+		out.CostMicrosLow, out.CostMicrosHigh = &lo, &hi
+	}
+	return &out, nil
 }

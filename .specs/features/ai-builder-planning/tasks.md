@@ -11,7 +11,7 @@ Commits only when the user asks (AGENTS.md §2); one commit per task when author
 **Spec**: `.specs/features/ai-builder-planning/spec.md`
 **Design**: `.specs/features/ai-builder-planning/design.md`
 **Parent**: `.specs/features/ai-frontend-builder/`
-**Status**: Approved by the maintainer on 2026-11-13 with the defaults of design §12. In execution on `feat/ai-frontend-builder`. Done: P01–P06. The DDL of P01 is still shown and confirmed before it is applied.
+**Status**: Approved by the maintainer on 2026-11-13 with the defaults of design §12. In execution on `feat/ai-frontend-builder`. Done: P01–P07. The DDL of P01 is still shown and confirmed before it is applied.
 
 ---
 
@@ -95,6 +95,7 @@ P11 docs + CHANGELOG (last)        P12 local end-to-end run        P13 real-mode
 - **Where**: `internal/dashboard/builder_planning.go`, new store query in `internal/agent/store/usage.go`, `server.go`.
 - **Done when**: integration tests: no brief (`version: 0`); versions listed newest first; estimate with fewer than 10 turns (`available: false`); with 10 priced turns (range equals the percentiles of the seeded values); with unpriced calls in the sample (tokens only); turns before a currency change excluded from the cost; plan-mode turns and other models excluded; whole-plan range counts only milestones not done; the query plan on the 300,000-row seeded ledger of costs C01 is recorded in the design.
 - **Requirements**: ABP-08, ABP-13. **Depends**: P06. **Tests**: integration. **Gate**: Full.
+- **Status**: Done 2026-11-13. `GetBrief`, `GetBriefVersion` and `PlanEstimate` in `builder_planning.go`; `store.EstimateBuildTurn` in `usage.go` (one query: per-turn totals, then the four percentiles with `FILTER`). Deviations, recorded in design §9: the per-turn total leaves out `planning` calls (a turn whose plan was approved becomes a build turn), turns with unreported usage are left out, the route answers only for a turn paused on a build plan (409 otherwise) and returns the factor as `milestones`. Store tests seed turns and ledger rows with SQL (fewer than 10, the exact percentiles, an unpriced call, a currency change, and every exclusion: plan mode, not completed, outside the window, other model, other provider, other feature, unreported, mixed models, planning calls); handler tests cover no brief, two versions with progress done by plan and by turn, a stored version, the 404s, the 409s, no sample, the ranges and a disabled provider. Query plan on 300,000 seeded rows: 44 ms, recorded in the design. Full gate green.
 
 ### P08 — UI: question card
 - **What**: `QuestionCard`, card selection by proposal name, answered rounds in the history, briefing placeholder in the composer, `useAnswerQuestions`.

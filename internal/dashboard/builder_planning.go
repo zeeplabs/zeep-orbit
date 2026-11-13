@@ -9,6 +9,12 @@ package dashboard
 //	POST /api/builder/sessions/{id}/turns/{turn}/answers        AnswerQuestions
 //	POST /api/builder/sessions/{id}/turns/{turn}/plan/approve   ApprovePlan
 //	POST /api/builder/sessions/{id}/turns/{turn}/plan/revise    RevisePlan
+//	GET  /api/builder/sessions/{id}/turns/{turn}/plan/estimate  PlanEstimate
+//	GET  /api/builder/sessions/{id}/brief                       GetBrief
+//	GET  /api/builder/sessions/{id}/brief/versions/{v}          GetBriefVersion
+//
+// The GET routes (P07) are read-only and are not rate-limited, like the other
+// session reads.
 //
 // Owner only, like the other session routes. They change no backend app, so no
 // app role is checked: approving a plan starts a frontend build, as sending a
@@ -28,12 +34,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/planning"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/store"
+	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
 
 // Limits and public messages of the planning routes.
@@ -361,4 +372,212 @@ func (h *BuilderHandler) briefProgress(ctx context.Context, sessionID string) (b
 		}
 	}
 	return out, nil
+}
+
+// BuilderBriefMilestoneView is one milestone of the brief and whether it is done.
+type BuilderBriefMilestoneView struct {
+	Index int    `json:"index"`
+	Title string `json:"title"`
+	Done  bool   `json:"done"`
+}
+
+// BuilderBriefVersionView is one entry of the brief history.
+type BuilderBriefVersionView struct {
+	Version   int       `json:"version"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// BuilderBriefView is the body of GET .../brief: the current brief, its
+// progress and the version history. Version is 0 (and Plan null) when the
+// session has no brief.
+type BuilderBriefView struct {
+	Version    int                         `json:"version"`
+	Plan       json.RawMessage             `json:"plan"`
+	CreatedAt  *time.Time                  `json:"created_at"`
+	Milestones []BuilderBriefMilestoneView `json:"milestones"`
+	Versions   []BuilderBriefVersionView   `json:"versions"`
+}
+
+// BuilderBriefVersionDetail is the body of GET .../brief/versions/{v}.
+type BuilderBriefVersionDetail struct {
+	Version   int             `json:"version"`
+	Plan      json.RawMessage `json:"plan"`
+	CreatedAt time.Time       `json:"created_at"`
+}
+
+const builderBriefVersionNotFoundMsg = "brief version not found"
+
+// GetBrief handles GET /api/builder/sessions/{id}/brief.
+func (h *BuilderHandler) GetBrief(w http.ResponseWriter, r *http.Request) {
+	_, sess, ok := h.ownedSession(w, r, false)
+	if !ok {
+		return
+	}
+	brief, states, err := h.store.MilestoneProgress(r.Context(), sess.ID)
+	if err != nil {
+		h.serverError(w, r, err)
+		return
+	}
+	view := BuilderBriefView{Milestones: []BuilderBriefMilestoneView{}, Versions: []BuilderBriefVersionView{}}
+	if brief == nil {
+		writeJSON(w, http.StatusOK, view)
+		return
+	}
+	versions, err := h.store.ListBriefVersions(r.Context(), sess.ID)
+	if err != nil {
+		h.serverError(w, r, err)
+		return
+	}
+	view.Version, view.Plan, view.CreatedAt = brief.Version, brief.Plan, &brief.CreatedAt
+	for _, m := range states {
+		view.Milestones = append(view.Milestones, BuilderBriefMilestoneView{Index: m.Index, Title: m.Title, Done: m.Done})
+	}
+	for _, v := range versions {
+		view.Versions = append(view.Versions, BuilderBriefVersionView{Version: v.Version, CreatedAt: v.CreatedAt})
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+// GetBriefVersion handles GET /api/builder/sessions/{id}/brief/versions/{v}.
+func (h *BuilderHandler) GetBriefVersion(w http.ResponseWriter, r *http.Request) {
+	_, sess, ok := h.ownedSession(w, r, false)
+	if !ok {
+		return
+	}
+	v, err := strconv.Atoi(chi.URLParam(r, "v"))
+	if err != nil || v < 1 {
+		h.writeError(w, http.StatusNotFound, builderBriefVersionNotFoundMsg)
+		return
+	}
+	brief, err := h.store.GetBrief(r.Context(), sess.ID, v)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			h.writeError(w, http.StatusNotFound, builderBriefVersionNotFoundMsg)
+			return
+		}
+		h.serverError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, BuilderBriefVersionDetail{Version: brief.Version, Plan: brief.Plan, CreatedAt: brief.CreatedAt})
+}
+
+// BuilderEstimateRange is a token range and, when the sample is priced, a cost
+// range in micros of the installation currency.
+type BuilderEstimateRange struct {
+	TokensLow      int64  `json:"tokens_low"`
+	TokensHigh     int64  `json:"tokens_high"`
+	CostMicrosLow  *int64 `json:"cost_micros_low"`
+	CostMicrosHigh *int64 `json:"cost_micros_high"`
+}
+
+// BuilderPlanEstimate is the body of GET .../plan/estimate (design §9). The
+// frontend formats it and computes nothing. Milestone and Plan are null when
+// Available is false.
+type BuilderPlanEstimate struct {
+	Available   bool   `json:"available"`
+	SampleTurns int    `json:"sample_turns"`
+	Currency    string `json:"currency"`
+	// Milestones is the number of milestones of the plan that are not done:
+	// the factor of the whole-plan range.
+	Milestones int                   `json:"milestones"`
+	Milestone  *BuilderEstimateRange `json:"milestone"`
+	Plan       *BuilderEstimateRange `json:"plan"`
+}
+
+// PlanEstimate handles GET .../turns/{turn}/plan/estimate: the estimated range
+// of the first milestone and of the whole plan of the pending build plan,
+// from the build turns of the installation (store.EstimateBuildTurn). It uses
+// the turns of every user, as percentiles over a minimum sample (design §12,
+// decision 4).
+func (h *BuilderHandler) PlanEstimate(w http.ResponseWriter, r *http.Request) {
+	_, _, turn, ok := h.proposalRoute(w, r)
+	if !ok {
+		return
+	}
+	pending, found := store.ParsePendingProposal(turn.PendingProposal)
+	if turn.Status != store.TurnAwaitingConfirmation || !found {
+		h.writeError(w, http.StatusConflict, builderProposalNotPending)
+		return
+	}
+	if pending.Name != planning.ToolProposeBuildPlan {
+		h.writeError(w, http.StatusConflict, builderNotBuildPlanMsg)
+		return
+	}
+	plan, err := planning.ParsePlan(pending.Arguments)
+	if err != nil {
+		h.writeError(w, http.StatusBadRequest, builderPlanMalformedMsg)
+		return
+	}
+	settings, err := GetBuilderSettings(r.Context(), h.pool)
+	if err != nil {
+		h.serverError(w, r, err)
+		return
+	}
+	out := BuilderPlanEstimate{Currency: settings.CostCurrency}
+	for _, m := range plan.Milestones {
+		if !m.Done {
+			out.Milestones++
+		}
+	}
+	model, err := configuredAIModel(r.Context(), h.pool, settings.Provider)
+	if err != nil {
+		h.serverError(w, r, err)
+		return
+	}
+	if model == "" {
+		writeJSON(w, http.StatusOK, out)
+		return
+	}
+	est, err := h.store.EstimateBuildTurn(r.Context(), store.EstimateQuery{
+		Provider: settings.Provider, Model: model,
+		Since: h.now().Add(-store.EstimateWindow), PricedSince: settings.CostCurrencyChangedAt,
+	})
+	if err != nil {
+		h.serverError(w, r, err)
+		return
+	}
+	out.SampleTurns = est.SampleTurns
+	if est.SampleTurns < store.EstimateMinSample {
+		writeJSON(w, http.StatusOK, out)
+		return
+	}
+	out.Available = true
+	out.Milestone = &BuilderEstimateRange{
+		TokensLow: est.TokensLow, TokensHigh: est.TokensHigh,
+		CostMicrosLow: est.CostMicrosLow, CostMicrosHigh: est.CostMicrosHigh,
+	}
+	n := int64(out.Milestones)
+	out.Plan = &BuilderEstimateRange{
+		TokensLow: est.TokensLow * n, TokensHigh: est.TokensHigh * n,
+		CostMicrosLow: timesMicros(est.CostMicrosLow, n), CostMicrosHigh: timesMicros(est.CostMicrosHigh, n),
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// timesMicros is v*n, or nil when v is nil.
+func timesMicros(v *int64, n int64) *int64 {
+	if v == nil {
+		return nil
+	}
+	out := *v * n
+	return &out
+}
+
+// configuredAIModel returns the model of the enabled provider row named
+// provider, or "" when there is none. It reads no key.
+func configuredAIModel(ctx context.Context, pool *db.Pool, provider string) (string, error) {
+	if provider == "" {
+		return "", nil
+	}
+	var model string
+	err := pool.QueryRow(ctx,
+		`SELECT model FROM zeep_system.ai_providers WHERE provider = $1 AND enabled`, provider,
+	).Scan(&model)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("dashboard: builder estimate: provider model: %w", err)
+	}
+	return model, nil
 }

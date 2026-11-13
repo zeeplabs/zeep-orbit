@@ -236,6 +236,14 @@ cost_low,   cost_high   = the same over per-turn cost, using only turns in which
 - It uses turns of every user, as percentiles with a minimum sample. A member can therefore infer the typical cost of a build on the installation (decision 4 in §12).
 - Known limit: the first build of an app usually costs more than a later milestone, and this v1 uses one distribution. To be measured in the eval and refined in `ai-builder-economy`.
 
+**Changed in P07:**
+
+- The sample is defined per turn: a completed `build`-mode turn created in the window. Its total adds only the calls whose `purpose` is not `planning`: a turn whose plan was approved keeps going and becomes `build`, and its planning calls are not the cost of building a milestone. A turn is left out when any of those calls used another provider or model, or has `usage_reported = false` (its tokens would read as zero and pull the range down). A turn is priced when every one of those calls has a cost and its first call is on or after `cost_currency_changed_at`.
+- "The model configured now" is the model of the enabled `ai_providers` row named by `builder_settings.provider`, read without the key. No such row: `available: false`, `sample_turns: 0`.
+- The route answers only for a turn paused on `propose_build_plan` (409 otherwise, with the messages of the other planning routes; 400 when the stored plan no longer parses). The whole-plan factor is the number of milestones of that pending plan not marked `done`; the response carries it as `milestones`.
+- Query plan, measured on the local Postgres 16.15 with 300,000 ledger rows (300 sessions, 30,000 turns over 180 days, half of them in the window): 44 ms, parallel sequential scan of the ledger and hash join with the turns. A sequential scan is the right plan while the window holds a large share of the ledger; the cost grows with the ledger volume of the last 90 days and is the same for every session, so a cached value is the obvious step if it shows up in `ai-builder-economy`. No index was added.
+- `GET brief` and `GET brief/versions/{v}` are owner-scoped like `GET /sessions/{id}` (another user's or an archived session is 404); a version that is not a positive integer or does not exist is 404 `brief version not found`. The three GET routes are not rate-limited, like the other session reads.
+
 ## 10. Frontend
 
 | Piece | Where | Notes |
