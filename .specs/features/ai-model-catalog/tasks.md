@@ -10,7 +10,7 @@ One commit per finished task with a green gate (authorized by the maintainer for
 
 **Spec**: `.specs/features/ai-model-catalog/spec.md`
 **Design**: `.specs/features/ai-model-catalog/design.md`
-**Status**: Spec approved by the maintainer on 2026-11-13. In execution on `feat/ai-frontend-builder`.
+**Status**: Spec approved by the maintainer on 2026-11-13, DDL of M03 included. Done: M01–M08 on `feat/ai-frontend-builder`.
 
 ---
 
@@ -82,4 +82,4 @@ M03 DDL + USD (confirm DDL) ──► M05 prices API ────┘
 - **What**: on the local stack, the screens of M06 and one builder turn on `openai_compatible` (mock) to confirm nothing regressed; catalog pricing is covered by M02 tests (a real OpenAI/Anthropic turn needs the owner's key and is optional).
 - **Done when**: results recorded here.
 - **Requirements**: all. **Gate**: —.
-- **Status**: Pending.
+- **Status**: Done 2026-11-13. Local stack: `GET /builder/status` available, `GET /builder/catalog` 200 (USD, openai 13 models, anthropic 9). One planning turn on `openai_compatible`/`mock-model` reached its plan card; its call cost 3000 micros, matching the operator row (500×3 + 1000×0.30 + 80×15). Screens: see M06. A real OpenAI/Anthropic turn was not run (needs the owner's key; catalog pricing is covered by the M02 tests).
