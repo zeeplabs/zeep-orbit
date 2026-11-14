@@ -2,6 +2,8 @@
 
 > Status: **Draft for review (2026-11-13).** Child of `.specs/features/ai-frontend-builder/`. Read its `spec.md` first. This feature adds money to the usage accounting that today only counts tokens, adds the Anthropic API as a provider, and shows usage and cost per reply, per task, per session, per user and per month. Token-saving techniques (prompt layout for caching, model tiers, schema-driven generation, cost estimates before a run) are a separate, later spec (`ai-builder-economy`); this one only makes the spend measurable and visible.
 
+> **Superseded in part (2026-11-13)** by `.specs/features/ai-model-catalog/`: OpenAI and Anthropic prices now ship with Orbit (Goal 2 and the Out of Scope row on a bundled price list no longer hold), and costs are always in USD (Assumption 2 and the currency conversion row).
+
 ## Problem Statement
 
 The builder records input and output tokens per LLM call (`zeep_system.ai_usage_ledger`) and enforces two token caps (per session, per user per month). Nobody can see what a task cost: there is no price data, no cost column, no usage screen, and the chat shows no usage at all. Cached input tokens, which providers bill at a different rate, are not recorded, so even a correct price table would give a wrong cost. The only provider kinds are `openai` and `openai_compatible`; the Anthropic API needs its own adapter.

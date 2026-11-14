@@ -76,7 +76,7 @@ M03 DDL + USD (confirm DDL) ──► M05 prices API ────┘
 - **What**: `docs/docs/ai-frontend-builder.md` (provider models, Model prices, currency, `model_not_in_catalog`, API); CHANGELOG (rewrite the `0ae2140` entry into this feature, with the behavior changes: USD only, no custom model for OpenAI/Anthropic, builder unavailable on a non-catalog model); `RELEASE.md` catalog step; README rows if a feature row mentions model prices (and the three translations).
 - **Done when**: Docusaurus build passes; no doc still says Orbit ships no prices.
 - **Requirements**: AMC-12, AMC-13. **Tests**: none. **Gate**: docs build.
-- **Status**: Pending.
+- **Status**: Done 2026-11-13. Docusaurus build passes. Also aligned the earlier Unreleased cost-accounting entry of the CHANGELOG and marked the ai-builder-costs spec as superseded in part.
 
 ### M08 — Local check
 - **What**: on the local stack, the screens of M06 and one builder turn on `openai_compatible` (mock) to confirm nothing regressed; catalog pricing is covered by M02 tests (a real OpenAI/Anthropic turn needs the owner's key and is optional).

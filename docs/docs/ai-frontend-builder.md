@@ -138,7 +138,7 @@ After deployment, a superadmin completes setup in the dashboard, under **Integra
    - `openai_compatible`: any server that speaks the OpenAI Chat Completions API (for example Ollama, vLLM, Azure OpenAI or a gateway). It needs a **base URL** and a model. The API key is optional for this kind.
    - `anthropic`: the Anthropic Messages API, with an API key and a model. It has no base URL setting (a gateway is reached through `openai_compatible`).
 
-   For `openai` and `anthropic` the model is picked from a list of current models; **Custom** takes any other model ID.
+   For `openai` and `anthropic` the model is picked from Orbit's model catalog (see [Model prices](#model-prices)); the API refuses any other model with `model is not in the catalog`. A provider row left on a model outside the catalog (for example one saved before the catalog existed) keeps the builder unavailable with the reason `model_not_in_catalog` until a superadmin picks a catalog model. The "Build with AI" and "Edit with AI" drawers keep working with it.
 
    The key is encrypted at rest and never returned by the API (only `has_key`). Updating the model without sending the key keeps the stored key.
 
@@ -154,8 +154,8 @@ After deployment, a superadmin completes setup in the dashboard, under **Integra
    | Session token budget | `0` (unset) | 0 to 10^12 |
    | Monthly token budget per user | `0` (unset) | 0 to 10^12 |
    | Currency | `USD` | a three-letter ISO 4217 code |
-   | Session cost budget | `0` (no money limit) | an amount in the currency |
-   | Monthly cost budget per user | `0` (no money limit) | an amount in the currency |
+   | Session cost budget | `0` (no money limit) | an amount in USD |
+   | Monthly cost budget per user | `0` (no money limit) | an amount in USD |
    | Max steps per turn | `40` | 1 to 200 |
    | Max fix iterations (failed builds per turn) | `3` | 1 to 20 |
    | Max seconds per turn | `600` | 10 to 3600 |
@@ -254,23 +254,26 @@ Orbit records every model call the builder makes: the provider and model, what t
 
 ### Model prices
 
-Orbit ships no prices and fetches none. A superadmin enters them under **Integrations**, **AI Builder**, in the **Model prices** card: one row per provider and model, with a price **per million tokens** for input and output and, optionally, for cached input and cache write. When one of the optional prices is empty, those tokens are charged at the input price. The card also lists the models used in the last 30 days that have no price.
+Prices are **per million tokens**, in USD, for input, cached input, cache write and output. They are shown under **Integrations**, **AI Builder**, in the **Model prices** card.
 
-For the OpenAI and Anthropic models offered in the **AI** tab, the form can fill in the list price the provider publishes, with the date it was checked. It only fills the form: the superadmin reviews the values and saves them. The button appears only when the installation currency is `USD`, the currency both providers publish in; in another currency the form says so and the price has to be entered converted. Claude Haiku 5.5 has no suggested price, because it costs more for prompts over 100,000 tokens and a price row holds one price. These list prices are not updated by Orbit: check them against the provider's page before relying on them.
+- **OpenAI and Anthropic.** The models and their list prices come from a catalog that ships with Orbit and changes only with an Orbit release; Orbit never fetches prices. The card shows them read-only with the date they were checked against the providers' pricing pages, and the price API refuses to write them. A model can have prices by prompt size: Claude Haiku 5.5 costs five times more when the prompt (input, cached input and cache write of the call) is over 100,000 tokens, and each call is billed at the tier its prompt falls in. A release can also carry a price that starts on a later date; the card shows it with that date.
+- **OpenAI-compatible servers.** Their models have no list price, so a superadmin enters one row per model in the same card. When an optional price (cached input, cache write) is empty, those tokens are charged at the input price.
 
-The cost of a call is computed once, when the call is recorded, and stored with it. Changing a price later affects only new calls; it does not rewrite history.
+The card also lists the models used in the last 30 days that have no price: OpenAI-compatible models with no row, and OpenAI or Anthropic models that are not in the catalog.
 
-**"No price set"** means the model of a call had no price row when the call was made. Such a call has no cost: it is not counted as zero, it does not stop the call, and it does not count toward the cost budgets. A total that mixes priced and unpriced calls is shown as the known amount plus the number of calls with no price, never as a full amount.
+The cost of a call is computed once, when the call is recorded, and stored with it. A price change (a new release, or an edited OpenAI-compatible row) affects only new calls; it does not rewrite history.
 
-The figures are estimates from your own price table. They are not an invoice: compare them with the provider's billing before relying on them.
+**"No price set"** means the model of a call had no price when the call was made. Such a call has no cost: it is not counted as zero, it does not stop the call, and it does not count toward the cost budgets. A total that mixes priced and unpriced calls is shown as the known amount plus the number of calls with no price, never as a full amount.
+
+The figures are estimates from list prices and your own rows. They are not an invoice: discounts, taxes and the provider's own rounding are not included, so compare them with the provider's billing before relying on them.
 
 ### Currency
 
-All prices and costs are in one currency for the installation, set in the **Costs** card (default `USD`). Changing the currency converts nothing: prices and costs already stored keep their numbers. The usage report shows a note when the currency changed inside or after the selected period.
+All prices, costs and money budgets are in USD, the currency both providers publish in; it cannot be changed. An installation that used another currency is moved to USD once, when Orbit starts on this version: the cost budget numbers are kept as they were, and the **Costs** card asks the superadmin to review them until the card is saved. Costs already recorded are not converted, and the usage report shows a note when the currency changed inside or after the selected period.
 
 ### Cost budgets
 
-The **Costs** card has two optional budgets in money, next to the token budgets: one per session and one per user per calendar month (UTC). `0` means no money limit. They are checked before each model call against the cost already recorded, so the call that crosses the limit is the last one. Calls with no price do not count, so a cost budget does not limit a model that has no price row; the card warns when a cost budget is set and the model in use has no price. The token budgets always apply.
+The **Costs** card has two optional budgets in money, next to the token budgets: one per session and one per user per calendar month (UTC). `0` means no money limit. They are checked before each model call against the cost already recorded, so the call that crosses the limit is the last one. Calls with no price do not count, so a cost budget does not limit a model that has no price (an OpenAI-compatible model with no row); the card warns when a cost budget is set and the model in use has no price. The token budgets always apply.
 
 When a turn stops because of a budget, the chat says which one (session or month, tokens or cost).
 
@@ -284,11 +287,12 @@ Usage per user is information about a person's activity. Only superadmins can re
 
 ### API
 
-- `GET`/`PUT`/`DELETE /dashboard/api/builder/prices` (superadmin): the price table. A price row has `provider`, `model`, `input_per_mtok`, `output_per_mtok` and the optional `cached_input_per_mtok` and `cache_write_per_mtok`, as decimal strings.
+- `GET /dashboard/api/builder/catalog` (any signed-in user): the model catalog: `currency`, `reviewed_at` and, per provider, the models with `deprecated` and their `prices`, each with `effective_from` and `tiers` (`max_prompt_tokens`, `0` meaning no limit, and the four prices as decimal strings, `null` when billed at the input price).
+- `GET`/`PUT`/`DELETE /dashboard/api/builder/prices` (superadmin): the price table of OpenAI-compatible models. A price row has `provider`, `model`, `input_per_mtok`, `output_per_mtok` and the optional `cached_input_per_mtok` and `cache_write_per_mtok`, as decimal strings. A write or delete for `openai` or `anthropic` is refused with `prices of catalog providers cannot be changed`.
 - `GET /dashboard/api/builder/sessions/{id}/usage` (session owner): totals, budgets in use and one receipt per turn.
 - `GET /dashboard/api/builder/usage?from&to&group_by=day|user|model|session` and `GET /dashboard/api/builder/usage.csv?from&to`: the report and its export. `from` and `to` are UTC days (`YYYY-MM-DD`), both inclusive; the default is the last 30 days. A superadmin may add `user_id`; `group_by=user` is superadmin-only. The export is refused above 100000 rows.
 
-Money is carried as integer micros (1 unit of currency = 1,000,000 micros) in `cost_micros`; `null` means no price.
+Money is carried as integer micros (1 USD = 1,000,000 micros) in `cost_micros`; `null` means no price.
 
 ## Isolation model
 
@@ -428,13 +432,14 @@ Registry proxy (`zeep-registry-proxy`):
 | `not_configured` | Orbit has no builder wired: `BUILDER_URL` is empty. | Set `BUILDER_URL` and `BUILDER_SHARED_SECRET` on every Orbit replica and restart. In Compose, start with `--profile builder`. In Helm, set `builder.enabled=true`. With Kustomize, check that the Component is included in the overlay. |
 | `disabled` | The builder is wired, but **Enable AI Builder** is off in the settings. | A superadmin turns it on in **Integrations**, **AI Builder** tab. |
 | `provider_not_configured` | The model provider chosen in the builder settings is unusable. | In the **AI** tab, check the provider row: it must be enabled and have a model and, for `openai`, an API key; for `openai_compatible` it needs a base URL; for `anthropic`, an API key. |
+| `model_not_in_catalog` | The `openai` or `anthropic` provider row holds a model that is not in Orbit's model catalog, so its calls could not be priced. | In the **AI** tab, pick a model from the list and save. |
 | `budget_not_configured` | A token cap is `0` (unset), so every turn would end with `budget_exceeded`. | In the **AI Builder** tab, set both the per-session and the per-user monthly token caps to a value greater than zero. Until then the builder is unavailable and **Create with AI** is disabled. |
 | `builder_unreachable` | Orbit could not get a healthy answer from the builder. | Check that the builder container or pod is running, that `BUILDER_URL` resolves from Orbit, and that the network (Compose network, NetworkPolicy ingress from the Orbit pods on port 8081) lets Orbit through. A different `BUILDER_SHARED_SECRET` on the two sides makes every request fail with `401`, which also shows up as unreachable. The builder health endpoint requires a signed token, so a plain `curl` to it answers `401`; use the builder's logs instead. |
 
 Other symptoms:
 
 - **A turn ends right away with `budget_exceeded`.** A budget was reached or was set to `0` while the turn was running. The chat names the budget that stopped the turn. Check the session and monthly token budgets (both must be greater than zero) and, if set, the cost budgets.
-- **The cost reads "no price set".** The model has no row in the **Model prices** card. Add one; calls already recorded keep no cost.
+- **The cost reads "no price set".** For an OpenAI-compatible model, it has no row in the **Model prices** card: add one. For OpenAI or Anthropic, the model is not in the catalog: pick a catalog model in the **AI** tab. Calls already recorded keep no cost.
 - **A turn stays `queued`.** The builder is at capacity (`BUILDER_MAX_ACTIVE_SESSIONS`), or Orbit replicas are running their maximum number of turns (`BUILDER_WORKER_CONCURRENCY`). It starts when a slot frees up.
 - **A turn ends with a generic error.** Users see only a generic message by design; provider and builder error text is logged on the Orbit server, not returned. Look in Orbit's server logs.
 - **`npm install` fails with `E404` for a private package.** See the scoped-registry limitation under [Isolation model](#isolation-model), and check `REGISTRY_PROXY_UPSTREAMS` and the matching `REGISTRY_PROXY_TOKEN_<NAME>`.
