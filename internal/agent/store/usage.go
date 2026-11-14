@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/zeeplabs/zeep-orbit/internal/agent/catalog"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
 
@@ -184,11 +185,16 @@ func (s *Store) RecordUsage(ctx context.Context, r UsageRecord) error {
 	return nil
 }
 
-// callCost prices one call inside the RecordUsage transaction. It returns nil
-// when the model has no price row, and also when the cost does not fit the
-// column (an absurd price must not fail a call whose tokens are already
-// spent; the row then reads as "no price set").
+// callCost prices one call inside the RecordUsage transaction. The providers
+// of the model catalog (openai, anthropic) are priced by the catalog only; the
+// others by their ai_model_prices row. It returns nil when the model has no
+// price, and also when the cost does not fit the column (an absurd price must
+// not fail a call whose tokens are already spent; the row then reads as "no
+// price set").
 func callCost(ctx context.Context, tx pgx.Tx, r UsageRecord) (*int64, error) {
+	if catalog.Covers(r.Provider) {
+		return catalogCost(r, time.Now().UTC()), nil
+	}
 	var p Price
 	err := tx.QueryRow(ctx,
 		`SELECT (input_per_mtok * 1000000)::bigint, (cached_input_per_mtok * 1000000)::bigint,
@@ -207,6 +213,59 @@ func callCost(ctx context.Context, tx pgx.Tx, r UsageRecord) (*int64, error) {
 		return nil, nil
 	}
 	return &cost, nil
+}
+
+// catalogCost is the cost of a call of a catalog provider at time at: the
+// price version in force, at the tier of the call's prompt size (every input
+// class counts, as the providers bill it). nil when the model is not in the
+// catalog or the cost cannot be computed.
+func catalogCost(r UsageRecord, at time.Time) *int64 {
+	m, ok := catalog.Lookup(r.Provider, r.Model)
+	if !ok {
+		return nil
+	}
+	v, ok := m.PriceAt(at)
+	if !ok {
+		return nil
+	}
+	p, err := tierPrice(v.TierFor(r.InputTokens + r.CachedInputTokens + r.CacheWriteTokens))
+	if err != nil {
+		return nil
+	}
+	cost, err := CostMicros(p, r.InputTokens, r.CachedInputTokens, r.CacheWriteTokens, r.OutputTokens)
+	if err != nil {
+		return nil
+	}
+	return &cost
+}
+
+// tierPrice converts a catalog tier into micros. The catalog test rejects
+// malformed prices, so an error here means a broken release.
+func tierPrice(t catalog.Tier) (Price, error) {
+	var (
+		p   Price
+		err error
+	)
+	if p.Input, err = ParsePrice(t.Input); err != nil {
+		return Price{}, err
+	}
+	if p.Output, err = ParsePrice(t.Output); err != nil {
+		return Price{}, err
+	}
+	for _, opt := range []struct {
+		value string
+		dst   **int64
+	}{{t.CachedInput, &p.CachedInput}, {t.CacheWrite, &p.CacheWrite}} {
+		if opt.value == "" {
+			continue
+		}
+		v, err := ParsePrice(opt.value)
+		if err != nil {
+			return Price{}, err
+		}
+		*opt.dst = &v
+	}
+	return p, nil
 }
 
 // BudgetChecker enforces the session and per-user monthly caps from

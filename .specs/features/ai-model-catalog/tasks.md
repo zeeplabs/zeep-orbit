@@ -46,7 +46,7 @@ M03 DDL + USD (confirm DDL) ──► M05 prices API ────┘
 - **What**: `store.callCost` per design §3; existing store tests that seed `openai` price rows move to `openai_compatible`; new cases.
 - **Done when**: an `openai`/`gpt-4.1` call with no price row gets the catalog cost; an `openai` model outside the catalog gets NULL; an `ai_model_prices` row for `openai` is ignored; Haiku 5.5 at 100,000 and 100,001 prompt tokens uses each tier; `openai_compatible` is unchanged.
 - **Requirements**: AMC-06, AMC-07. **Tests**: unit + integration. **Gate**: Full.
-- **Status**: Pending.
+- **Status**: Done 2026-11-13. Full gate: 29 packages pass.
 
 ### M03 — USD only  `[higher-risk: confirm DDL first]`
 - **What**: DDL and `UPDATE` of design §4; settings validation (`cost_currency must be USD`); `cost_caps_review_pending` in `BuilderSettings` and cleared by a body with a cost cap.

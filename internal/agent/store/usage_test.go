@@ -228,6 +228,44 @@ func TestRecordUsage_ValidationAndAtomicity(t *testing.T) {
 	}
 }
 
+// --- ai-model-catalog M02: catalog providers are priced by the catalog ---
+
+// A call of a catalog model gets the catalog price with no price row, and an
+// ai_model_prices row for a catalog provider is ignored.
+func TestRecordUsage_CatalogProviderUsesCatalogPrice(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	e.setCaps(t, 10_000_000, 10_000_000)
+	sess := e.session(t, e.userA, e.appA)
+	// A stale operator price for a catalog model must not be used.
+	e.setPrice(t, "openai", "gpt-4.1", "100", nil, nil, "100")
+
+	rec := store.UsageRecord{
+		UserID: e.userA, Feature: store.FeatureBuilder, SessionID: sess.ID,
+		Provider: "openai", Model: "gpt-4.1", InputTokens: 1000, CachedInputTokens: 10_000, OutputTokens: 500, Reported: true,
+	}
+	if err := e.st.RecordUsage(ctx, rec); err != nil {
+		t.Fatal(err)
+	}
+	notInCatalog := rec
+	notInCatalog.Model = "o3-mini"
+	if err := e.st.RecordUsage(ctx, notInCatalog); err != nil {
+		t.Fatal(err)
+	}
+
+	got := e.ledger(t, sess.ID)
+	if len(got) != 2 {
+		t.Fatalf("ledger rows = %d, want 2", len(got))
+	}
+	// 1000*2 + 10000*0.5 + 500*8 = 11000 micros (catalog), not the 100/100 row.
+	if got[0].cost == nil || *got[0].cost != 11_000 {
+		t.Errorf("catalog cost = %v, want 11000", got[0].cost)
+	}
+	if got[1].cost != nil {
+		t.Errorf("a model outside the catalog must read as no price, got %d", *got[1].cost)
+	}
+}
+
 // --- ai-builder-costs C04: cost on every recorded call (ABC-02..04) ---
 
 func (e *env) setPrice(t *testing.T, provider, model, input string, cached, write *string, output string) {
@@ -287,11 +325,11 @@ func TestRecordUsage_PricedCallStoresCostSnapshot(t *testing.T) {
 	e.setCaps(t, 10_000_000, 10_000_000)
 	sess := e.session(t, e.userA, e.appA)
 	cached, write := "0.30", "3.75"
-	e.setPrice(t, "anthropic", "priced-model", "3", &cached, &write, "15")
+	e.setPrice(t, "openai_compatible", "priced-model", "3", &cached, &write, "15")
 
 	rec := store.UsageRecord{
 		UserID: e.userA, Feature: store.FeatureBuilder, SessionID: sess.ID,
-		Provider: "anthropic", Model: "priced-model", Purpose: store.PurposeCompaction,
+		Provider: "openai_compatible", Model: "priced-model", Purpose: store.PurposeCompaction,
 		InputTokens: 1000, CachedInputTokens: 10_000, CacheWriteTokens: 2000, OutputTokens: 500, Reported: true,
 	}
 	if err := e.st.RecordUsage(ctx, rec); err != nil {
@@ -300,7 +338,7 @@ func TestRecordUsage_PricedCallStoresCostSnapshot(t *testing.T) {
 	// 1000*3 + 10000*0.30 + 2000*3.75 + 500*15 = 21000 micros.
 	const first = int64(21_000)
 
-	e.setPrice(t, "anthropic", "priced-model", "6", nil, nil, "30")
+	e.setPrice(t, "openai_compatible", "priced-model", "6", nil, nil, "30")
 	rec.Purpose = ""
 	if err := e.st.RecordUsage(ctx, rec); err != nil {
 		t.Fatal(err)
@@ -446,13 +484,13 @@ func (e *env) setCostCaps(t *testing.T, sessionMicros, monthlyMicros int64) {
 	})
 }
 
-// spend records one call of model "cost-model" (1 unit per million tokens in
-// and out), so micros spent == tokens.
+// spend records one call of an openai_compatible model; with "cost-model" (1
+// unit per million tokens in and out) micros spent == tokens.
 func (e *env) spend(t *testing.T, sessionID, model string, tokens int) {
 	t.Helper()
 	if err := e.st.RecordUsage(context.Background(), store.UsageRecord{
 		UserID: e.userA, Feature: store.FeatureBuilder, SessionID: sessionID,
-		Provider: "openai", Model: model, InputTokens: tokens, Reported: true,
+		Provider: "openai_compatible", Model: model, InputTokens: tokens, Reported: true,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -472,7 +510,7 @@ func TestBudget_CostCaps(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	e.setCaps(t, 100_000_000, 100_000_000)
-	e.setPrice(t, "openai", "cost-model", "1", nil, nil, "1")
+	e.setPrice(t, "openai_compatible", "cost-model", "1", nil, nil, "1")
 	bc := store.NewBudgetChecker(e.pool)
 	sess := e.session(t, e.userA, e.appA)
 
@@ -531,7 +569,7 @@ func TestBudgetReason(t *testing.T) {
 func TestBudget_WarningsAtEightyPercent(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
-	e.setPrice(t, "openai", "cost-model", "1", nil, nil, "1")
+	e.setPrice(t, "openai_compatible", "cost-model", "1", nil, nil, "1")
 	bc := store.NewBudgetChecker(e.pool)
 
 	e.setCaps(t, 1000, 1_000_000)
