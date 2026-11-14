@@ -25,7 +25,8 @@ import type {
   BuilderSettings,
   BuilderSettingsUpdate,
 } from '@/lib/api'
-import { formatDateTime } from '@/lib/format'
+import { CATALOG_PRICE_CURRENCY, CATALOG_REVIEWED_AT, catalogModels, referencePrice } from '@/lib/aiModelCatalog'
+import { formatDate, formatDateTime } from '@/lib/format'
 import { decimalFromMicros, formatMoney, isDecimalAmount, microsFromDecimal } from '@/lib/money'
 import { Notice, SectionCard } from './builderSettingsParts'
 
@@ -383,6 +384,21 @@ function PriceTableCard() {
     })
   }
 
+  // The providers' published prices (lib/aiModelCatalog) only fill the form; the superadmin
+  // reviews and saves them, and they are offered only when the installation bills in USD.
+  const catalog = form ? catalogModels(form.provider) : []
+  const reference = form ? referencePrice(form.provider, form.model.trim()) : null
+  const fillReference = () => {
+    if (!form || !reference) return
+    setForm({
+      ...form,
+      input: reference.input,
+      cachedInput: reference.cachedInput ?? '',
+      cacheWrite: reference.cacheWrite ?? '',
+      output: reference.output,
+    })
+  }
+
   const priceField = (field: Exclude<PriceField, 'model'>, optional: boolean) => {
     if (!form) return null
     const id = `builder-price-${field}`
@@ -496,10 +512,16 @@ function PriceTableCard() {
                 autoComplete="off"
                 spellCheck={false}
                 disabled={form.editing}
+                list={catalog.length > 0 ? 'builder-price-model-catalog' : undefined}
                 onChange={(e) => setForm({ ...form, model: e.target.value })}
                 aria-invalid={submitted && errors.model ? true : undefined}
                 aria-describedby="builder-price-model-hint"
               />
+              <datalist id="builder-price-model-catalog">
+                {catalog.map((m) => (
+                  <option key={m.id} value={m.id} />
+                ))}
+              </datalist>
               <p
                 id="builder-price-model-hint"
                 role={submitted && errors.model ? 'alert' : undefined}
@@ -516,6 +538,29 @@ function PriceTableCard() {
             {priceField('cachedInput', true)}
             {priceField('cacheWrite', true)}
           </div>
+          {reference !== null &&
+            (currency === CATALOG_PRICE_CURRENCY ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <Button variant="outline" size="sm" className="gap-2" onClick={fillReference}>
+                  <Icon name="sell" size={14} />
+                  {t('settings.aiBuilder.prices.fillReference')}
+                </Button>
+                <p className="text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
+                  {t('settings.aiBuilder.prices.referenceHint', {
+                    provider: providerLabel(form.provider),
+                    date: formatDate(CATALOG_REVIEWED_AT),
+                  })}
+                </p>
+              </div>
+            ) : (
+              <p className="text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
+                {t('settings.aiBuilder.prices.referenceOtherCurrency', {
+                  provider: providerLabel(form.provider),
+                  referenceCurrency: CATALOG_PRICE_CURRENCY,
+                  currency,
+                })}
+              </p>
+            ))}
           <div className="flex flex-wrap items-center gap-3">
             <Button onClick={handleSave} disabled={upsert.isPending} className="gap-2">
               <Icon name={upsert.isPending ? 'progress_activity' : 'check'} size={14} className={upsert.isPending ? 'animate-spin' : undefined} />

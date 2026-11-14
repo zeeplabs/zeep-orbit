@@ -35,6 +35,7 @@ import { cn } from '@/lib/utils'
 import { authFetch } from '@/lib/api'
 import type { AIProviderKind, AIProviderStatus, AIProviderUpsertInput, GitHubTemplate } from '@/lib/api'
 import { validateAIProviderBaseUrl } from '@/lib/aiProviderBaseUrl'
+import { catalogModels, isCatalogModel } from '@/lib/aiModelCatalog'
 import AIBuilderSettings from '@/pages/settings/AIBuilderSettings'
 
 interface GitHubStatus {
@@ -1239,18 +1240,15 @@ function DeployTab() {
 // explicitly — never omitted — or a model-only update would silently
 // disable the provider (AGENTS.md §4's partial-update rule, applied in the
 // direction of "never send a false default by omission").
-// OPENAI_MODEL_PRESETS is the curated set of current, generally-recommended
-// OpenAI models offered in the select — kept short and reviewed
-// periodically rather than mirroring OpenAI's full catalog. "custom" always
-// stays last and reveals a free-text input, so a model added by OpenAI
-// after this list was last reviewed (or already saved by a previous PUT)
-// is never blocked.
-const OPENAI_MODEL_PRESETS = ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'o3-mini'] as const
-
+// OpenAI and Anthropic offer the curated presets of lib/aiModelCatalog in a select.
+// "custom" always stays last and reveals a free-text input, so a model added by the
+// provider after the list was last reviewed (or already saved by a previous PUT) is
+// never blocked.
+//
 // openai_compatible (ai-frontend-builder AFB-01) is any server speaking the OpenAI chat API
 // at a custom base URL (Ollama, vLLM, a gateway...). Its model is free text (no preset
 // catalog) and base_url is required; the stored URL is shown back (it is not a secret).
-// anthropic (ai-builder-costs ABC-15) is the Anthropic API: free-text model, no base URL.
+// anthropic (ai-builder-costs ABC-15) is the Anthropic API: no base URL.
 function parseAIProviderKind(value: string | null): AIProviderKind {
   return value === 'openai_compatible' || value === 'anthropic' ? value : 'openai'
 }
@@ -1295,7 +1293,7 @@ function AIProviderTab() {
         if (cancelled) return
         const savedModel = data.model || ''
         setModel(savedModel)
-        if (provider === 'openai' && savedModel && !(OPENAI_MODEL_PRESETS as readonly string[]).includes(savedModel)) {
+        if (catalogModels(provider).length > 0 && savedModel && !isCatalogModel(provider, savedModel)) {
           setCustomModel(savedModel)
         }
         setBaseUrl(data.base_url || '')
@@ -1314,8 +1312,10 @@ function AIProviderTab() {
 
   const isCompatible = provider === 'openai_compatible'
   const isAnthropic = provider === 'anthropic'
-  // Only OpenAI has a preset catalog; the other kinds take the model as free text.
-  const freeTextModel = isCompatible || isAnthropic
+  // openai_compatible has no preset catalog and takes the model as free text.
+  const presets = catalogModels(provider)
+  const freeTextModel = presets.length === 0
+  const isPreset = isCatalogModel(provider, model)
 
   const handleSave = async () => {
     setMessage(null)
@@ -1460,31 +1460,27 @@ function AIProviderTab() {
                   spellCheck={false}
                   value={model}
                   onChange={(e) => setModel(e.target.value)}
-                  placeholder={t(
-                    isAnthropic
-                      ? 'settings.aiBuilder.providerForm.anthropicModelPlaceholder'
-                      : 'settings.aiBuilder.providerForm.modelPlaceholder',
-                  )}
+                  placeholder={t('settings.aiBuilder.providerForm.modelPlaceholder')}
                 />
               ) : (
               <Select
-                value={(OPENAI_MODEL_PRESETS as readonly string[]).includes(model) ? model : 'custom'}
+                value={isPreset ? model : 'custom'}
                 onValueChange={(value) => setModel(value === 'custom' ? customModel : value)}
               >
                 <SelectTrigger id="ai-model">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {OPENAI_MODEL_PRESETS.map((preset) => (
-                    <SelectItem key={preset} value={preset}>
-                      {preset}
+                  {presets.map((preset) => (
+                    <SelectItem key={preset.id} value={preset.id}>
+                      {preset.id}
                     </SelectItem>
                   ))}
                   <SelectItem value="custom">{t('aiProvider.customModel')}</SelectItem>
                 </SelectContent>
               </Select>
               )}
-              {!freeTextModel && !(OPENAI_MODEL_PRESETS as readonly string[]).includes(model) && (
+              {!freeTextModel && !isPreset && (
                 <Input
                   aria-label={t('aiProvider.customModel')}
                   value={customModel}
@@ -1492,7 +1488,7 @@ function AIProviderTab() {
                     setCustomModel(e.target.value)
                     setModel(e.target.value)
                   }}
-                  placeholder="gpt-4-turbo"
+                  placeholder={isAnthropic ? 'claude-opus-4-8' : 'gpt-5'}
                 />
               )}
             </div>

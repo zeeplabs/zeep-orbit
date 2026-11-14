@@ -138,6 +138,8 @@ After deployment, a superadmin completes setup in the dashboard, under **Integra
    - `openai_compatible`: any server that speaks the OpenAI Chat Completions API (for example Ollama, vLLM, Azure OpenAI or a gateway). It needs a **base URL** and a model. The API key is optional for this kind.
    - `anthropic`: the Anthropic Messages API, with an API key and a model. It has no base URL setting (a gateway is reached through `openai_compatible`).
 
+   For `openai` and `anthropic` the model is picked from a list of current models; **Custom** takes any other model ID.
+
    The key is encrypted at rest and never returned by the API (only `has_key`). Updating the model without sending the key keeps the stored key.
 
    The base URL must be an absolute `http` or `https` URL without credentials, query string or fragment. Private and loopback hosts are allowed (an Ollama container on an internal network is a supported setup); link-local and cloud-metadata addresses are rejected. The check is made when you save and again when the connection is made, on the IP address actually dialed, so a hostname that resolves to a blocked address is also refused. If `HTTP_PROXY` or `HTTPS_PROXY` is set in Orbit's environment, the connection goes to that proxy and the check sees the proxy's address, not the target's.
@@ -253,6 +255,8 @@ Orbit records every model call the builder makes: the provider and model, what t
 ### Model prices
 
 Orbit ships no prices and fetches none. A superadmin enters them under **Integrations**, **AI Builder**, in the **Model prices** card: one row per provider and model, with a price **per million tokens** for input and output and, optionally, for cached input and cache write. When one of the optional prices is empty, those tokens are charged at the input price. The card also lists the models used in the last 30 days that have no price.
+
+For the OpenAI and Anthropic models offered in the **AI** tab, the form can fill in the list price the provider publishes, with the date it was checked. It only fills the form: the superadmin reviews the values and saves them. The button appears only when the installation currency is `USD`, the currency both providers publish in; in another currency the form says so and the price has to be entered converted. Claude Haiku 5.5 has no suggested price, because it costs more for prompts over 100,000 tokens and a price row holds one price. These list prices are not updated by Orbit: check them against the provider's page before relying on them.
 
 The cost of a call is computed once, when the call is recorded, and stored with it. Changing a price later affects only new calls; it does not rewrite history.
 
