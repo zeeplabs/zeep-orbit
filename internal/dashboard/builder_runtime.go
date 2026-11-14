@@ -305,6 +305,12 @@ func (rt *BuilderRuntime) resolveProvider(ctx context.Context, name string) prov
 		rt.log.Warn("builder: model provider is not available", "provider", name, "err", err)
 		return unavailableProvider{}
 	}
+	// A turn queued before the row moved to a model outside the catalog: the
+	// catalog cannot price it, so it does not run (ai-model-catalog AMC-05).
+	if !catalogModelUsable(prt.Provider, prt.Model) {
+		rt.log.Warn("builder: model is not in the catalog", "provider", name, "model", prt.Model)
+		return unavailableProvider{}
+	}
 	var p provider.Provider
 	if prt.Provider == aiProviderAnthropic {
 		// The official endpoint only (no operator-supplied URL), so the

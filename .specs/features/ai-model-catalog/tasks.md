@@ -58,7 +58,7 @@ M03 DDL + USD (confirm DDL) ──► M05 prices API ────┘
 - **What**: `GET /dashboard/api/builder/catalog`; model validation on `PUT /ai-providers/{openai,anthropic}`; availability reason `model_not_in_catalog`; `resolveProvider` refusal. Existing provider tests move to catalog IDs.
 - **Done when**: the catalog JSON matches design §5; a non-catalog model is 400; a deprecated saved model can be re-saved; status reports `model_not_in_catalog` for a row set by SQL; a queued turn with such a model ends `provider_unavailable`.
 - **Requirements**: AMC-02, AMC-04, AMC-05. **Tests**: integration. **Gate**: Full.
-- **Status**: Pending.
+- **Status**: Done 2026-11-13. Full gate: 29 packages pass. The deprecated-model path (re-saving a deprecated saved model) has no test yet: the first catalog has no deprecated model, and the catalog data is not injectable; `catalogModelChoosable` covers it in code.
 
 ### M05 — Prices API for openai_compatible only
 - **What**: `GET` filters to `openai_compatible` rows; `unpriced_models` per design §5; `PUT`/`DELETE` reject catalog providers.

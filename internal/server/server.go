@@ -431,6 +431,7 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Get("/api/builder/status", builderH.Status)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/builder/settings", dashH.GetBuilderSettingsConfig)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/builder/settings", dashH.UpsertBuilderSettingsConfig)
+		r.With(dashboard.RequireAuth(pool)).Get("/api/builder/catalog", dashH.GetBuilderCatalog)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/builder/prices", dashH.ListBuilderPricesConfig)
 		r.With(dashboard.RequireAuth(pool)).Put("/api/builder/prices", dashH.UpsertBuilderPriceConfig)
 		r.With(dashboard.RequireAuth(pool)).Delete("/api/builder/prices", dashH.DeleteBuilderPriceConfig)

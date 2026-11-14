@@ -19,6 +19,8 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/zeeplabs/zeep-orbit/internal/agent/catalog"
 )
 
 // Provider names with a functional persistence path.
@@ -122,6 +124,20 @@ func (h *Handler) UpsertAIProviderConfig(w http.ResponseWriter, r *http.Request)
 	if strings.TrimSpace(body.Model) == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "model is required"})
 		return
+	}
+	// openai and anthropic run catalog models only (ai-model-catalog AMC-04):
+	// the catalog prices their calls, so a model outside it could not be priced.
+	if catalog.Covers(provider) {
+		body.Model = strings.TrimSpace(body.Model)
+		cur, err := GetAIProvider(r.Context(), h.pool, provider)
+		if err != nil {
+			h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+			return
+		}
+		if !catalogModelChoosable(provider, body.Model, cur.Model) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": errModelNotInCatalog})
+			return
+		}
 	}
 
 	if msg, ok := h.prepareAIProviderBaseURL(w, r, provider, &body); !ok {

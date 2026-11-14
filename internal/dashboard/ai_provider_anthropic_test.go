@@ -22,7 +22,7 @@ func TestAnthropicProvider_SaveAndGetNeverReturnsKey(t *testing.T) {
 	pool, h := aiProviderHandlerTestPool(t)
 	super := mustCreateSuperadmin(t, pool)
 
-	w := putOpenAICompatible(t, h, super, anProvider, `{"model":"claude-test-model","api_key":"sk-ant-secret-123","base_url":"","enabled":true}`)
+	w := putOpenAICompatible(t, h, super, anProvider, `{"model":"claude-sonnet-5-5","api_key":"sk-ant-secret-123","base_url":"","enabled":true}`)
 	if w.Code != http.StatusOK {
 		t.Fatalf("PUT: expected 200, got %d: %s", w.Code, w.Body.String())
 	}
@@ -33,7 +33,7 @@ func TestAnthropicProvider_SaveAndGetNeverReturnsKey(t *testing.T) {
 	if gw.Code != http.StatusOK {
 		t.Fatalf("GET: expected 200, got %d", gw.Code)
 	}
-	if !got.HasKey || got.Model != "claude-test-model" || !got.Enabled || got.Provider != anProvider || got.BaseURL != "" {
+	if !got.HasKey || got.Model != "claude-sonnet-5-5" || !got.Enabled || got.Provider != anProvider || got.BaseURL != "" {
 		t.Errorf("unexpected GET body: %+v", got)
 	}
 	if strings.Contains(gw.Body.String(), "sk-ant-secret-123") || strings.Contains(gw.Body.String(), "api_key") {
@@ -44,7 +44,7 @@ func TestAnthropicProvider_SaveAndGetNeverReturnsKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveAIProviderRuntime: %v", err)
 	}
-	if rt.Provider != anProvider || rt.Model != "claude-test-model" || rt.APIKey != "sk-ant-secret-123" || rt.BaseURL != "" {
+	if rt.Provider != anProvider || rt.Model != "claude-sonnet-5-5" || rt.APIKey != "sk-ant-secret-123" || rt.BaseURL != "" {
 		t.Errorf("runtime: provider=%q model=%q baseURL=%q keyKept=%v", rt.Provider, rt.Model, rt.BaseURL, rt.APIKey == "sk-ant-secret-123")
 	}
 }
@@ -55,7 +55,7 @@ func TestAnthropicProvider_BaseURLRejected(t *testing.T) {
 	pool, h := aiProviderHandlerTestPool(t)
 	super := mustCreateSuperadmin(t, pool)
 
-	w := putOpenAICompatible(t, h, super, anProvider, `{"model":"m","api_key":"sk-ant-x","base_url":"https://proxy.example/v1","enabled":true}`)
+	w := putOpenAICompatible(t, h, super, anProvider, `{"model":"claude-sonnet-5-5","api_key":"sk-ant-x","base_url":"https://proxy.example/v1","enabled":true}`)
 	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "base_url is only supported by the openai_compatible provider") {
 		t.Fatalf("PUT with base_url: got %d %s", w.Code, w.Body.String())
 	}
@@ -69,7 +69,7 @@ func TestAnthropicProvider_KeyRequiredAtRuntime(t *testing.T) {
 	pool, h := aiProviderHandlerTestPool(t)
 	super := mustCreateSuperadmin(t, pool)
 
-	if w := putOpenAICompatible(t, h, super, anProvider, `{"model":"m","enabled":true}`); w.Code != http.StatusOK {
+	if w := putOpenAICompatible(t, h, super, anProvider, `{"model":"claude-sonnet-5-5","enabled":true}`); w.Code != http.StatusOK {
 		t.Fatalf("PUT: %d %s", w.Code, w.Body.String())
 	}
 	if _, err := ResolveAIProviderRuntime(context.Background(), pool, anProvider); !errors.Is(err, ErrAIProviderUnavailable) {
@@ -102,18 +102,18 @@ func TestBuilderSettings_AnthropicProviderSelectedAndBuilt(t *testing.T) {
 	if d := rt.prepareDeps(ctx, base); d.Provider.Name() == anProvider {
 		t.Fatal("the provider row does not exist yet: the turn must not get an Anthropic adapter")
 	}
-	if w := putOpenAICompatible(t, h, super, anProvider, `{"model":"claude-test-model","api_key":"sk-ant-local","enabled":true}`); w.Code != http.StatusOK {
+	if w := putOpenAICompatible(t, h, super, anProvider, `{"model":"claude-sonnet-5-5","api_key":"sk-ant-local","enabled":true}`); w.Code != http.StatusOK {
 		t.Fatalf("PUT provider: %d %s", w.Code, w.Body.String())
 	}
 	d := rt.prepareDeps(ctx, base)
-	if d.Provider.Name() != anProvider || d.Provider.Model() != "claude-test-model" {
-		t.Fatalf("provider = %s/%s, want anthropic/claude-test-model", d.Provider.Name(), d.Provider.Model())
+	if d.Provider.Name() != anProvider || d.Provider.Model() != "claude-sonnet-5-5" {
+		t.Fatalf("provider = %s/%s, want anthropic/claude-sonnet-5-5", d.Provider.Name(), d.Provider.Model())
 	}
 }
 
 // A price row is accepted for the kind (the price key is provider + model).
 func TestBuilderPrices_AnthropicKindAccepted(t *testing.T) {
-	if _, _, err := normalizeBuilderPriceKey(anProvider, "claude-test-model"); err != nil {
+	if _, _, err := normalizeBuilderPriceKey(anProvider, "claude-sonnet-5-5"); err != nil {
 		t.Errorf("normalizeBuilderPriceKey(anthropic): %v", err)
 	}
 	if _, _, err := normalizeBuilderPriceKey("claude", "m"); err == nil {

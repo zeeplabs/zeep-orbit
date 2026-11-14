@@ -43,6 +43,7 @@ const (
 	BuilderReasonNotConfigured         = "not_configured"          // BUILDER_URL unset: no builder wired
 	BuilderReasonDisabled              = "disabled"                // builder_settings.enabled is false
 	BuilderReasonProviderNotConfigured = "provider_not_configured" // the settings' LLM provider is unusable
+	BuilderReasonModelNotInCatalog     = "model_not_in_catalog"    // openai/anthropic row holds a model the catalog cannot price
 	BuilderReasonBudgetNotConfigured   = "budget_not_configured"   // a token cap is 0 (unset): every turn would end budget_exceeded
 	BuilderReasonBuilderUnreachable    = "builder_unreachable"     // builder Health failed
 )
@@ -84,7 +85,8 @@ type BuilderStatus struct {
 
 // availability evaluates the builder gate in this order, cheapest first:
 // not wired (not_configured) -> settings.enabled (disabled) -> provider row
-// (provider_not_configured) -> token caps (budget_not_configured) -> builder
+// (provider_not_configured) -> catalog model of openai/anthropic
+// (model_not_in_catalog) -> token caps (budget_not_configured) -> builder
 // Health (builder_unreachable). A cap of 0 means unset and blocks every turn
 // (store.Budget.Check), so it is reported here instead of failing each chat. The error
 // is only a database failure. Health is the builder's report, valid when
@@ -100,8 +102,10 @@ func (h *BuilderHandler) availability(ctx context.Context) (BuilderStatus, sandb
 		return st, sandbox.Health{}, err
 	}
 	st.PlanningMode = settings.PlanningMode
-	if _, perr := ResolveAIProviderRuntime(ctx, h.pool, settings.Provider); perr == nil {
+	modelUsable := true
+	if prt, perr := ResolveAIProviderRuntime(ctx, h.pool, settings.Provider); perr == nil {
 		st.ProviderConfigured = true
+		modelUsable = catalogModelUsable(prt.Provider, prt.Model)
 	} else if !errors.Is(perr, ErrAIProviderUnavailable) {
 		return st, sandbox.Health{}, perr
 	}
@@ -115,6 +119,9 @@ func (h *BuilderHandler) availability(ctx context.Context) (BuilderStatus, sandb
 		return st, sandbox.Health{}, nil
 	case !st.ProviderConfigured:
 		st.Reason = BuilderReasonProviderNotConfigured
+		return st, sandbox.Health{}, nil
+	case !modelUsable:
+		st.Reason = BuilderReasonModelNotInCatalog
 		return st, sandbox.Health{}, nil
 	case settings.SessionTokenCap <= 0 || settings.UserMonthlyTokenCap <= 0:
 		st.Reason = BuilderReasonBudgetNotConfigured
