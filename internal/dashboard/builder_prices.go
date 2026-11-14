@@ -3,7 +3,9 @@ package dashboard
 // builder_prices.go — operator-maintained model prices (ai-builder-costs C03,
 // ABC-06 to ABC-10). Prices are per million tokens, in the installation
 // currency (builder_settings.cost_currency), and travel as decimal strings so
-// no floating point touches money. Orbit ships no prices and fetches none.
+// no floating point touches money. Since ai-model-catalog (AMC-09) the
+// providers of the model catalog (openai, anthropic) are priced by the
+// catalog and have no rows here: this table is for openai_compatible.
 
 import (
 	"context"
@@ -17,6 +19,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/zeeplabs/zeep-orbit/internal/agent/catalog"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/store"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
@@ -69,12 +72,20 @@ type builderPricesResponse struct {
 	UnpricedModels []BuilderUnpricedModel `json:"unpriced_models"`
 }
 
+// errCatalogPriceReadOnly is the error of a price write for a provider of the
+// model catalog, whose prices ship with Orbit.
+const errCatalogPriceReadOnly = "prices of catalog providers cannot be changed"
+
 // normalizeBuilderPriceKey trims and validates the provider kind and model of
-// a price row.
+// a price row. The providers of the model catalog are refused: their prices
+// cannot be written or deleted.
 func normalizeBuilderPriceKey(provider, model string) (string, string, error) {
 	provider, model = strings.TrimSpace(provider), strings.TrimSpace(model)
 	if !builderProviders[provider] {
 		return "", "", errors.New("provider is not a known provider kind")
+	}
+	if catalog.Covers(provider) {
+		return "", "", errors.New(errCatalogPriceReadOnly)
 	}
 	if model == "" {
 		return "", "", errors.New("model is required")
@@ -145,9 +156,12 @@ func scanBuilderPrice(row pgx.Row) (*BuilderModelPrice, error) {
 	return &p, nil
 }
 
-// ListBuilderPrices returns every price row, ordered by provider and model.
+// ListBuilderPrices returns the price rows that are in use, ordered by
+// provider and model. Rows of catalog providers (left from before the
+// catalog) are not used for pricing, so they are not listed.
 func ListBuilderPrices(ctx context.Context, pool *db.Pool) ([]BuilderModelPrice, error) {
-	rows, err := pool.Query(ctx, `SELECT `+builderPriceCols+` FROM zeep_system.ai_model_prices ORDER BY provider, model`)
+	rows, err := pool.Query(ctx, `SELECT `+builderPriceCols+` FROM zeep_system.ai_model_prices
+		 WHERE provider <> ALL($1) ORDER BY provider, model`, catalogProviders())
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: list builder prices: %w", err)
 	}
@@ -208,16 +222,25 @@ func DeleteBuilderPrice(ctx context.Context, pool *db.Pool, provider, model stri
 }
 
 // ListBuilderUnpricedModels returns the models used since `since` that have
-// no price row, most used first.
+// no price, most used first: models of the other providers with no price
+// row, and models of the catalog providers that are not in the catalog (a
+// price row of a catalog provider does not count).
 func ListBuilderUnpricedModels(ctx context.Context, pool *db.Pool, since time.Time) ([]BuilderUnpricedModel, error) {
+	var catalogKeys []string
+	for _, m := range catalog.All() {
+		catalogKeys = append(catalogKeys, m.Provider+"/"+m.ID)
+	}
 	rows, err := pool.Query(ctx,
 		`SELECT l.provider, l.model, count(*)
 		   FROM zeep_system.ai_usage_ledger l
 		  WHERE l.created_at >= $1
-		    AND NOT EXISTS (SELECT 1 FROM zeep_system.ai_model_prices p WHERE p.provider = l.provider AND p.model = l.model)
+		    AND CASE WHEN l.provider = ANY($2)
+		             THEN NOT (l.provider || '/' || l.model = ANY($3))
+		             ELSE NOT EXISTS (SELECT 1 FROM zeep_system.ai_model_prices p WHERE p.provider = l.provider AND p.model = l.model)
+		        END
 		  GROUP BY l.provider, l.model
 		  ORDER BY count(*) DESC, l.provider, l.model
-		  LIMIT 50`, since)
+		  LIMIT 50`, since, catalogProviders(), catalogKeys)
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: list unpriced models: %w", err)
 	}
@@ -231,6 +254,11 @@ func ListBuilderUnpricedModels(ctx context.Context, pool *db.Pool, since time.Ti
 		out = append(out, m)
 	}
 	return out, rows.Err()
+}
+
+// catalogProviders are the provider kinds priced by the model catalog.
+func catalogProviders() []string {
+	return []string{catalog.ProviderOpenAI, catalog.ProviderAnthropic}
 }
 
 // ---------------------------------------------------------------------------

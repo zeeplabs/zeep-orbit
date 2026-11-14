@@ -34,7 +34,7 @@ func builderPriceRowCount(t *testing.T, pool *db.Pool) int {
 	return n
 }
 
-const builderPriceBody = `{"provider":"openai","model":"gpt-test","input_per_mtok":"3","cached_input_per_mtok":"0.3","cache_write_per_mtok":null,"output_per_mtok":"15.000000"}`
+const builderPriceBody = `{"provider":"openai_compatible","model":"gpt-test","input_per_mtok":"3","cached_input_per_mtok":"0.3","cache_write_per_mtok":null,"output_per_mtok":"15.000000"}`
 
 func TestBuilderPrices_NonSuperadminForbiddenNoMutation(t *testing.T) {
 	pool, h := builderPricesTestPool(t)
@@ -51,7 +51,7 @@ func TestBuilderPrices_NonSuperadminForbiddenNoMutation(t *testing.T) {
 	}{
 		{"GET prices", h.ListBuilderPricesConfig, http.MethodGet, "/x", ""},
 		{"PUT price", h.UpsertBuilderPriceConfig, http.MethodPut, "/x", strings.Replace(builderPriceBody, `"3"`, `"99"`, 1)},
-		{"DELETE price", h.DeleteBuilderPriceConfig, http.MethodDelete, "/x?provider=openai&model=gpt-test", ""},
+		{"DELETE price", h.DeleteBuilderPriceConfig, http.MethodDelete, "/x?provider=openai_compatible&model=gpt-test", ""},
 	}
 	for _, rt := range routes {
 		if w := callBuilder(t, rt.fn, admin, rt.meth, rt.target, rt.body); w.Code != http.StatusForbidden {
@@ -61,7 +61,7 @@ func TestBuilderPrices_NonSuperadminForbiddenNoMutation(t *testing.T) {
 			t.Errorf("%s unauthenticated: expected 401, got %d", rt.name, w.Code)
 		}
 	}
-	p, err := GetBuilderPrice(context.Background(), pool, "openai", "gpt-test")
+	p, err := GetBuilderPrice(context.Background(), pool, "openai_compatible", "gpt-test")
 	if err != nil || p == nil || p.Input != "3.00" {
 		t.Fatalf("the price must be untouched by forbidden calls, got %+v, %v", p, err)
 	}
@@ -85,7 +85,7 @@ func TestBuilderPrices_UpsertListDelete(t *testing.T) {
 
 	// Sending null for an optional price clears it; the row is replaced, not merged.
 	w = callBuilder(t, h.UpsertBuilderPriceConfig, super, http.MethodPut, "/x",
-		`{"provider":"openai","model":"gpt-test","input_per_mtok":"2.5","cached_input_per_mtok":null,"cache_write_per_mtok":"3.125","output_per_mtok":"10"}`)
+		`{"provider":"openai_compatible","model":"gpt-test","input_per_mtok":"2.5","cached_input_per_mtok":null,"cache_write_per_mtok":"3.125","output_per_mtok":"10"}`)
 	if w.Code != http.StatusOK {
 		t.Fatalf("second PUT: %d %s", w.Code, w.Body.String())
 	}
@@ -102,10 +102,10 @@ func TestBuilderPrices_UpsertListDelete(t *testing.T) {
 		t.Fatalf("list = %+v", list)
 	}
 
-	if w := callBuilder(t, h.DeleteBuilderPriceConfig, super, http.MethodDelete, "/x?provider=openai&model=gpt-test", ""); w.Code != http.StatusNoContent {
+	if w := callBuilder(t, h.DeleteBuilderPriceConfig, super, http.MethodDelete, "/x?provider=openai_compatible&model=gpt-test", ""); w.Code != http.StatusNoContent {
 		t.Fatalf("DELETE: %d %s", w.Code, w.Body.String())
 	}
-	if w := callBuilder(t, h.DeleteBuilderPriceConfig, super, http.MethodDelete, "/x?provider=openai&model=gpt-test", ""); w.Code != http.StatusNotFound {
+	if w := callBuilder(t, h.DeleteBuilderPriceConfig, super, http.MethodDelete, "/x?provider=openai_compatible&model=gpt-test", ""); w.Code != http.StatusNotFound {
 		t.Errorf("second DELETE: %d, want 404", w.Code)
 	}
 	if n := builderPriceRowCount(t, pool); n != 0 {
@@ -140,13 +140,13 @@ func TestBuilderPrices_InvalidValuesRejected(t *testing.T) {
 
 	bad := map[string]string{
 		"unknown provider": `{"provider":"nope","model":"m","input_per_mtok":"1","output_per_mtok":"1"}`,
-		"empty model":      `{"provider":"openai","model":"  ","input_per_mtok":"1","output_per_mtok":"1"}`,
-		"negative":         `{"provider":"openai","model":"m","input_per_mtok":"-1","output_per_mtok":"1"}`,
-		"seven decimals":   `{"provider":"openai","model":"m","input_per_mtok":"1.0000001","output_per_mtok":"1"}`,
-		"exponent":         `{"provider":"openai","model":"m","input_per_mtok":"1e3","output_per_mtok":"1"}`,
-		"missing output":   `{"provider":"openai","model":"m","input_per_mtok":"1"}`,
-		"bad optional":     `{"provider":"openai","model":"m","input_per_mtok":"1","cached_input_per_mtok":"x","output_per_mtok":"1"}`,
-		"control char":     `{"provider":"openai","model":"m\u0007","input_per_mtok":"1","output_per_mtok":"1"}`,
+		"empty model":      `{"provider":"openai_compatible","model":"  ","input_per_mtok":"1","output_per_mtok":"1"}`,
+		"negative":         `{"provider":"openai_compatible","model":"m","input_per_mtok":"-1","output_per_mtok":"1"}`,
+		"seven decimals":   `{"provider":"openai_compatible","model":"m","input_per_mtok":"1.0000001","output_per_mtok":"1"}`,
+		"exponent":         `{"provider":"openai_compatible","model":"m","input_per_mtok":"1e3","output_per_mtok":"1"}`,
+		"missing output":   `{"provider":"openai_compatible","model":"m","input_per_mtok":"1"}`,
+		"bad optional":     `{"provider":"openai_compatible","model":"m","input_per_mtok":"1","cached_input_per_mtok":"x","output_per_mtok":"1"}`,
+		"control char":     `{"provider":"openai_compatible","model":"m\u0007","input_per_mtok":"1","output_per_mtok":"1"}`,
 	}
 	for name, body := range bad {
 		w := callBuilder(t, h.UpsertBuilderPriceConfig, super, http.MethodPut, "/x", body)
@@ -165,7 +165,7 @@ func TestBuilderPrices_AuditCarriesOldAndNewValues(t *testing.T) {
 
 	callBuilder(t, h.UpsertBuilderPriceConfig, super, http.MethodPut, "/x", builderPriceBody)
 	callBuilder(t, h.UpsertBuilderPriceConfig, super, http.MethodPut, "/x", strings.Replace(builderPriceBody, `"3"`, `"4.5"`, 1))
-	callBuilder(t, h.DeleteBuilderPriceConfig, super, http.MethodDelete, "/x?provider=openai&model=gpt-test", "")
+	callBuilder(t, h.DeleteBuilderPriceConfig, super, http.MethodDelete, "/x?provider=openai_compatible&model=gpt-test", "")
 
 	updates, _, err := ListAuditLog(context.Background(), pool, AuditLogFilter{Action: "builder.price.update"})
 	if err != nil || len(updates) != 2 {
@@ -201,15 +201,49 @@ func TestBuilderPrices_UnpricedModelsFromLedger(t *testing.T) {
 			t.Fatalf("insert ledger row: %v", err)
 		}
 	}
-	insert("openai", "gpt-test", "1 hour")              // priced below
-	insert("openai", "gpt-unpriced", "1 hour")          // listed
-	insert("openai", "gpt-unpriced", "2 days")          // listed, same model
-	insert("openai_compatible", "old-model", "90 days") // outside the window
+	insert("openai_compatible", "gpt-test", "1 hour")     // priced below
+	insert("openai_compatible", "gpt-unpriced", "1 hour") // listed
+	insert("openai_compatible", "gpt-unpriced", "2 days") // listed, same model
+	insert("openai_compatible", "old-model", "90 days")   // outside the window
+	insert("openai", "gpt-4.1", "1 hour")                 // priced by the catalog
+	insert("openai", "o3-mini", "1 hour")                 // not in the catalog: listed
 	callBuilder(t, h.UpsertBuilderPriceConfig, super, http.MethodPut, "/x", builderPriceBody)
+	// A price row of a catalog provider (left from before the catalog) does
+	// not price the model, so o3-mini stays listed.
+	if _, err := pool.Exec(ctx, `INSERT INTO zeep_system.ai_model_prices (provider, model, input_per_mtok, output_per_mtok)
+		 VALUES ('openai', 'o3-mini', 1, 1)`); err != nil {
+		t.Fatalf("seed stale price: %v", err)
+	}
 
 	list := decodeJSON[builderPricesResponse](t, callBuilder(t, h.ListBuilderPricesConfig, super, http.MethodGet, "/x", ""))
-	if len(list.UnpricedModels) != 1 || list.UnpricedModels[0].Model != "gpt-unpriced" || list.UnpricedModels[0].Calls != 2 {
-		t.Fatalf("unpriced models = %+v, want gpt-unpriced with 2 calls", list.UnpricedModels)
+	got := list.UnpricedModels
+	if len(got) != 2 || got[0].Model != "gpt-unpriced" || got[0].Calls != 2 || got[1].Provider != "openai" || got[1].Model != "o3-mini" {
+		t.Fatalf("unpriced models = %+v, want gpt-unpriced (2 calls) and openai/o3-mini", got)
+	}
+	// The stale catalog-provider row is not listed as a price.
+	for _, p := range list.Prices {
+		if p.Provider == "openai" {
+			t.Errorf("a catalog provider row must not be listed: %+v", p)
+		}
+	}
+}
+
+// The prices of the catalog providers ship with Orbit: they cannot be
+// written or deleted through the API.
+func TestBuilderPrices_CatalogProvidersAreReadOnly(t *testing.T) {
+	pool, h := builderPricesTestPool(t)
+	super := mustCreateSuperadmin(t, pool)
+
+	for _, provider := range []string{"openai", "anthropic"} {
+		body := strings.Replace(builderPriceBody, `"provider":"openai_compatible"`, `"provider":"`+provider+`"`, 1)
+		w := callBuilder(t, h.UpsertBuilderPriceConfig, super, http.MethodPut, "/x", body)
+		if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), errCatalogPriceReadOnly) {
+			t.Errorf("PUT %s: got %d %s, want 400 %q", provider, w.Code, w.Body.String(), errCatalogPriceReadOnly)
+		}
+		w = callBuilder(t, h.DeleteBuilderPriceConfig, super, http.MethodDelete, "/x?provider="+provider+"&model=gpt-test", "")
+		if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), errCatalogPriceReadOnly) {
+			t.Errorf("DELETE %s: got %d %s, want 400", provider, w.Code, w.Body.String())
+		}
 	}
 }
 

@@ -111,10 +111,11 @@ func TestBuilderSettings_AnthropicProviderSelectedAndBuilt(t *testing.T) {
 	}
 }
 
-// A price row is accepted for the kind (the price key is provider + model).
-func TestBuilderPrices_AnthropicKindAccepted(t *testing.T) {
-	if _, _, err := normalizeBuilderPriceKey(anProvider, "claude-sonnet-5-5"); err != nil {
-		t.Errorf("normalizeBuilderPriceKey(anthropic): %v", err)
+// The kind is priced by the model catalog (ai-model-catalog AMC-09), so a
+// price row for it is refused; an unknown kind is refused too.
+func TestBuilderPrices_AnthropicKindIsCatalogPriced(t *testing.T) {
+	if _, _, err := normalizeBuilderPriceKey(anProvider, "claude-sonnet-5-5"); err == nil || err.Error() != errCatalogPriceReadOnly {
+		t.Errorf("normalizeBuilderPriceKey(anthropic) = %v, want %q", err, errCatalogPriceReadOnly)
 	}
 	if _, _, err := normalizeBuilderPriceKey("claude", "m"); err == nil {
 		t.Error("an unknown provider kind must be rejected")

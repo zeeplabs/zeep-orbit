@@ -64,7 +64,7 @@ M03 DDL + USD (confirm DDL) ──► M05 prices API ────┘
 - **What**: `GET` filters to `openai_compatible` rows; `unpriced_models` per design §5; `PUT`/`DELETE` reject catalog providers.
 - **Done when**: the handler tests cover each case; existing price tests use `openai_compatible`.
 - **Requirements**: AMC-09. **Tests**: integration. **Gate**: Full.
-- **Status**: Pending.
+- **Status**: Done 2026-11-13. Full gate: 29 packages pass.
 
 ### M06 — Frontend
 - **What**: design §6; delete `src/lib/aiModelCatalog.ts`.
