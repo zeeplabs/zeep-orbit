@@ -2119,7 +2119,7 @@ export interface BuilderSessionUsage {
   caps?: BuilderCapUsage[]
 }
 
-export type BuilderUsageGroupBy = 'day' | 'user' | 'model' | 'session'
+export type BuilderUsageGroupBy = 'day' | 'user' | 'model' | 'purpose' | 'session'
 
 /** One group of the usage report. */
 export interface BuilderUsageReportRow extends BuilderUsageTotals {
@@ -2462,6 +2462,8 @@ export interface BuilderSettings {
   session_cost_cap_micros: number
   user_monthly_cost_cap_micros: number
   planning_mode: BuilderPlanningMode
+  /** Model of `provider` that answers plan-mode turns; '' = the provider's own model. */
+  planning_model: string
   updated_by: string | null
   updated_at: string | null
   /** false until the first save (defaults shown). */
@@ -2486,6 +2488,8 @@ export interface BuilderSettingsUpdate {
   session_cost_cap_micros?: number
   user_monthly_cost_cap_micros?: number
   planning_mode?: BuilderPlanningMode
+  /** '' clears it (same as the provider's model): send the key explicitly, absent = keep. */
+  planning_model?: string
 }
 
 /** Largest money cap the server accepts, in micros (builderMaxCostCapMicros). */

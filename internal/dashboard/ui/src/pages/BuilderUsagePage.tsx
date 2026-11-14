@@ -70,7 +70,7 @@ function presetRange(preset: Preset, today: string): { from: string; to: string 
   return { from: addDays(today, -(Number(preset) - 1)), to: today }
 }
 
-const GROUPS: BuilderUsageGroupBy[] = ['day', 'model', 'session', 'user']
+const GROUPS: BuilderUsageGroupBy[] = ['day', 'model', 'purpose', 'session', 'user']
 
 function Tile({ label, value, detail }: { label: string; value: ReactNode; detail?: ReactNode }) {
   return (
@@ -193,6 +193,12 @@ export default function BuilderUsagePage() {
           <span className="text-[13px]">
             <span className="font-mono text-[12.5px]">{row.model ?? row.key}</span>
             {row.provider && <span className="ml-2 text-[12px] text-[var(--text-tertiary)]">{row.provider}</span>}
+          </span>
+        )
+      case 'purpose':
+        return (
+          <span className="text-[13px]">
+            {t(`builder.usage.purpose.${row.key}`, { defaultValue: row.key })}
           </span>
         )
       case 'session': {

@@ -80,8 +80,13 @@ interface SettingsForm {
   enabled: boolean
   provider: AIProviderKind
   planningMode: BuilderPlanningMode
+  /** '' = the provider's own model (the server's "same as the build model"). */
+  planningModel: string
   limits: Record<LimitKey, string>
 }
+
+/** Radix Select cannot hold an empty value, so "same as the build model" has a stand-in. */
+const SAME_MODEL = '__same__'
 
 const PLANNING_MODES: BuilderPlanningMode[] = ['required', 'suggested', 'off']
 
@@ -100,6 +105,7 @@ function toForm(settings: BuilderSettings): SettingsForm {
     enabled: settings.enabled,
     provider: parseProvider(settings.provider),
     planningMode: parsePlanningMode(settings.planning_mode),
+    planningModel: settings.planning_model ?? '',
     limits,
   }
 }
@@ -120,6 +126,8 @@ function buildUpdate(form: SettingsForm): { update: BuilderSettingsUpdate; error
     enabled: form.enabled,
     provider: form.provider,
     planning_mode: form.planningMode,
+    // Always sent: an empty value clears it, and omission would keep the old one.
+    planning_model: form.planningModel.trim(),
   }
   const errors: Partial<Record<LimitKey, LimitErrorKind>> = {}
   for (const field of LIMIT_FIELDS) {
@@ -136,6 +144,7 @@ function sameForm(a: SettingsForm, b: SettingsForm): boolean {
     a.enabled === b.enabled &&
     a.provider === b.provider &&
     a.planningMode === b.planningMode &&
+    a.planningModel.trim() === b.planningModel.trim() &&
     LIMIT_FIELDS.every(({ key }) => a.limits[key].trim() === b.limits[key].trim())
   )
 }
@@ -215,6 +224,7 @@ function GeneralSection() {
   const { t } = useTranslation()
   const settingsQuery = useBuilderSettings()
   const update = useUpdateBuilderSettings()
+  const catalogQuery = useBuilderCatalog()
   const [form, setForm] = useState<SettingsForm | null>(null)
   const [touched, setTouched] = useState<Partial<Record<LimitKey, boolean>>>({})
   const [submitted, setSubmitted] = useState(false)
@@ -253,6 +263,12 @@ function GeneralSection() {
   const monthlyCap = parseLimit(LIMIT_FIELDS[2], form.limits.user_monthly_token_cap)
   const capsMissing =
     'error' in sessionCap || 'error' in monthlyCap || sessionCap.value <= 0 || monthlyCap.value <= 0
+
+  // Catalog providers offer their models; a deprecated model already saved stays selectable.
+  // The model belongs to the provider, so changing the provider clears it (the server does too).
+  const planningOptions = catalogModelsOf(catalogQuery.data, form.provider)
+    .filter((m) => !m.deprecated || m.id === form.planningModel)
+    .map((m) => m.id)
 
   const setLimit = (key: LimitKey, value: string) =>
     setForm({ ...form, limits: { ...form.limits, [key]: value } })
@@ -310,7 +326,10 @@ function GeneralSection() {
         </div>
         <ProviderTabs
           value={form.provider}
-          onChange={(key) => setForm({ ...form, provider: parseProvider(key) })}
+          onChange={(key) => {
+            const provider = parseProvider(key)
+            setForm({ ...form, provider, planningModel: provider === form.provider ? form.planningModel : '' })
+          }}
           items={[
             { key: 'openai', name: 'OpenAI', icon: 'bolt' },
             { key: 'openai_compatible', name: t('settings.aiBuilder.provider.openaiCompatible'), icon: 'hub' },
@@ -345,6 +364,42 @@ function GeneralSection() {
         <p id="builder-planning-mode-hint" className="text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
           {t(`settings.aiBuilder.planning.modeDesc.${form.planningMode}`)}
         </p>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="builder-planning-model" className="text-[12px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
+          {t('settings.aiBuilder.planningModel.title')}
+        </Label>
+        <p className="text-[12.5px]" style={{ color: 'var(--text-secondary)' }}>
+          {t('settings.aiBuilder.planningModel.desc')}
+        </p>
+        {isCatalogProvider(form.provider) ? (
+          <Select
+            value={form.planningModel === '' ? SAME_MODEL : form.planningModel}
+            onValueChange={(value) => setForm({ ...form, planningModel: value === SAME_MODEL ? '' : value })}
+          >
+            <SelectTrigger id="builder-planning-model" className="w-full sm:w-[320px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={SAME_MODEL}>{t('settings.aiBuilder.planningModel.same')}</SelectItem>
+              {planningOptions.map((id) => (
+                <SelectItem key={id} value={id}>
+                  {id}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <Input
+            id="builder-planning-model"
+            value={form.planningModel}
+            maxLength={200}
+            placeholder={t('settings.aiBuilder.planningModel.custom')}
+            className="w-full sm:w-[320px]"
+            onChange={(e) => setForm({ ...form, planningModel: e.target.value })}
+          />
+        )}
       </div>
 
       <fieldset className="flex flex-col gap-4 border-0 p-0">
