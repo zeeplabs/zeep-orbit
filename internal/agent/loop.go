@@ -397,6 +397,9 @@ func (r *run) chat(ctx, tctx context.Context) (provider.ChatResponse, *outcome, 
 			Messages:        prompt,
 			Tools:           r.toolSpecs(),
 			MaxOutputTokens: r.lim.MaxOutputTokens,
+			// The system prompt is built once per turn and the history only
+			// grows, so the next step starts with this prefix.
+			CacheHint: true,
 		})
 		if err == nil {
 			break

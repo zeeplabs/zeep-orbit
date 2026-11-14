@@ -152,6 +152,27 @@ func TestAnthropicRequestShape(t *testing.T) {
 	}
 }
 
+// A loop step asks for the request-level breakpoint so the next step reads its
+// prefix; a one-off call must not, or it pays the write premium for nothing.
+func TestAnthropicCacheHint(t *testing.T) {
+	msgs := []Message{{Role: RoleUser, Content: "hi"}}
+
+	p, body, _ := captureAnthropic(t)
+	if _, err := p.Chat(context.Background(), ChatRequest{System: "s", Messages: msgs, CacheHint: true}); err != nil {
+		t.Fatalf("Chat: %v", err)
+	}
+	if got := mustJSON(t, (*body)["cache_control"]); got != `{"type":"ephemeral"}` {
+		t.Errorf("cache_control with the hint = %s, want the default 5 minute ephemeral entry", got)
+	}
+
+	if _, err := p.Chat(context.Background(), ChatRequest{System: "s", Messages: msgs}); err != nil {
+		t.Fatalf("Chat: %v", err)
+	}
+	if _, ok := (*body)["cache_control"]; ok {
+		t.Errorf("cache_control sent without the hint: %s", mustJSON(t, (*body)["cache_control"]))
+	}
+}
+
 func TestAnthropicMaxTokens(t *testing.T) {
 	for in, want := range map[int]float64{0: 16000, 1200: 4096, 4096: 4096, 32000: 32000} {
 		p, body, _ := captureAnthropic(t)

@@ -55,6 +55,13 @@ type ChatRequest struct {
 	Tools    []ToolSpec
 	// MaxOutputTokens caps the reply; 0 leaves the provider default.
 	MaxOutputTokens int
+	// CacheHint says the next call of the same loop starts with this
+	// request's prefix (tools, system and history), so it is worth keeping.
+	// Providers that cache only on request (Anthropic) ask for it; providers
+	// that cache on their own (OpenAI) ignore it. A one-off call such as a
+	// compaction summary leaves it false: the write premium would never be
+	// read back.
+	CacheHint bool
 }
 
 // ChatResponse is the model's reply to one ChatRequest.

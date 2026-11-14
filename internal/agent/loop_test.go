@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -659,5 +660,33 @@ func TestRunTurn_RecordsTokenClassesAndPurpose(t *testing.T) {
 	}
 	if got.Purpose != store.PurposeChat || !got.Reported {
 		t.Errorf("purpose/reported = %q/%v, want chat/true", got.Purpose, got.Reported)
+	}
+}
+
+// Provider caching is a prefix match: a step only reads what the previous step
+// wrote if it starts with the same tools, system prompt and history. The loop
+// must never rewrite them between steps of a turn.
+func TestRunTurn_StepsShareAByteIdenticalPrefix(t *testing.T) {
+	h := newHarness(t,
+		scriptStep{resp: toolResp(writeCall("c1", "src/App.tsx"))},
+		scriptStep{resp: toolResp(buildCall("c2", "build"))},
+		scriptStep{resp: textResp("Your tasks page is ready.")},
+	)
+	h.mustRun()
+
+	if h.prov.calls() != 3 {
+		t.Fatalf("provider calls = %d, want 3", h.prov.calls())
+	}
+	for i := 1; i < len(h.prov.reqs); i++ {
+		prev, cur := h.prov.reqs[i-1], h.prov.reqs[i]
+		if cur.System != prev.System {
+			t.Errorf("step %d: the system prompt changed between steps", i+1)
+		}
+		if !reflect.DeepEqual(cur.Tools, prev.Tools) {
+			t.Errorf("step %d: the tool list changed between steps", i+1)
+		}
+		if len(cur.Messages) <= len(prev.Messages) || !reflect.DeepEqual(cur.Messages[:len(prev.Messages)], prev.Messages) {
+			t.Errorf("step %d: the history is not the previous step's history plus new messages", i+1)
+		}
 	}
 }

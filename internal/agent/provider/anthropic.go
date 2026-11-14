@@ -224,6 +224,17 @@ type anRequest struct {
 	System    string      `json:"system,omitempty"`
 	Messages  []anMessage `json:"messages"`
 	Tools     []anTool    `json:"tools,omitempty"`
+	// CacheControl is the request-level (automatic) breakpoint: the API puts
+	// it on the last cacheable block and moves it forward as the history
+	// grows, so each step of a loop reads the previous step's prefix.
+	CacheControl *anCacheControl `json:"cache_control,omitempty"`
+}
+
+// anCacheControl is the default 5 minute entry. A loop step starts well
+// under 5 minutes after the previous one, so every read refreshes it and the
+// 1 hour entry (2x write) would only cost more.
+type anCacheControl struct {
+	Type string `json:"type"`
 }
 
 type anMessage struct {
@@ -280,6 +291,9 @@ func (a *Anthropic) buildRequest(req ChatRequest) anRequest {
 		MaxTokens: max(maxTokens, anthropicMinMaxTokens),
 		System:    req.System,
 		Messages:  make([]anMessage, 0, len(req.Messages)),
+	}
+	if req.CacheHint {
+		out.CacheControl = &anCacheControl{Type: "ephemeral"}
 	}
 	for _, m := range req.Messages {
 		if m.Role == RoleSystem {

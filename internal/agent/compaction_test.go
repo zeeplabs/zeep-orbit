@@ -178,3 +178,25 @@ func TestCompaction_SummarizationFailureFallsBackToFullHistory(t *testing.T) {
 		t.Error("without a summary the full history must still be sent")
 	}
 }
+
+// The loop's steps ask for provider caching; the one-off summarization call
+// does not (a write nobody reads is a pure premium).
+func TestCompaction_OnlyLoopStepsAskForProviderCaching(t *testing.T) {
+	h := newHarness(t,
+		scriptStep{resp: textResp("SUMMARY: user wants a tasks page.")}, // the summarization call
+		scriptStep{resp: textResp("done")},
+	)
+	seedOldTurns(h, 4)
+	h.deps.Limits = Limits{ContextWindowTokens: 8000, KeepRecentTurns: 2}
+	h.mustRun()
+
+	if h.prov.calls() != 2 {
+		t.Fatalf("provider calls = %d, want 2", h.prov.calls())
+	}
+	if h.prov.reqs[0].CacheHint {
+		t.Error("the summarization call must not ask for caching")
+	}
+	if !h.prov.reqs[1].CacheHint {
+		t.Error("the loop step must ask for caching")
+	}
+}

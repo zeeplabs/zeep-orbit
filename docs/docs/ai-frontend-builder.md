@@ -416,7 +416,7 @@ Registry proxy (`zeep-registry-proxy`):
 - **One turn at a time per session.** Sending a message while a turn is running is rejected.
 - **One builder replica.** Multiple builder instances and per-session containers are not supported.
 - **Provider support.** `openai`, `openai_compatible` and `anthropic` are supported. A native Gemini adapter is not implemented. Gemini's OpenAI-compatible endpoint is documented by Google as beta; whether it handles tool calls correctly with this builder has not been verified here.
-- **Anthropic provider, first version.** The model's thinking blocks are not sent back between steps, and prompt caching is not requested, so cached input and cache write stay at zero for this provider.
+- **Anthropic provider.** The model's thinking blocks are not sent back between steps. Prompt caching is requested for the model calls of a turn (a request-level breakpoint with the default 5-minute entry), so each step reads the previous step's prompt at the cached-input price; it is not requested for the history compaction summary, a one-off call. The cache belongs to the workspace of the API key, and a step that starts more than 5 minutes after the previous one pays a new cache write. A model whose minimum cacheable prompt is larger than the prompt does not cache (cached input and cache write stay at zero in the usage report).
 - **Cost covers the builder only.** The "Build with AI" backend chat is not recorded in the usage report.
 - **Publishing needs GitHub and Render.** Other publish targets are not supported.
 - **Reverting does not revert the brief.** Restoring an earlier turn keeps every brief version and the milestone progress. `ORBIT_BRIEF.md` is restored with the code, and the next build turn writes the current brief again.
