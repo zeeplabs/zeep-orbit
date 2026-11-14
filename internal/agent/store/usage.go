@@ -447,11 +447,11 @@ type EstimateQuery struct {
 	PricedSince *time.Time
 }
 
-// BuildEstimate is the spread of what one build turn spent on this
-// installation. The ranges are the 25th and 75th percentiles of the per-turn
-// totals. TokensLow/High are 0 and the cost range nil when the sample is under
-// EstimateMinSample; the cost range is also nil when the priced sample is.
-type BuildEstimate struct {
+// EstimateRange is the spread of one group of build turns: the 25th and 75th
+// percentiles of the per-turn totals. TokensLow/High are 0 and the cost range
+// nil when SampleTurns is under EstimateMinSample; the cost range is also nil
+// when PricedTurns is.
+type EstimateRange struct {
 	SampleTurns    int
 	PricedTurns    int
 	TokensLow      int64
@@ -459,6 +459,25 @@ type BuildEstimate struct {
 	CostMicrosLow  *int64
 	CostMicrosHigh *int64
 }
+
+// BuildEstimate is the spread of what one build turn spent on this
+// installation. The embedded range covers every build turn. First and Later
+// split it by the turn's milestone (1, and above 1); each is set only when its
+// own sample reaches EstimateMinSample. A turn with no milestone (a build with
+// no brief) is in the embedded range only.
+type BuildEstimate struct {
+	EstimateRange
+	First *EstimateRange
+	Later *EstimateRange
+}
+
+// estimateRange selects which per-turn totals an aggregate covers. The values
+// are constants of this package, never user input.
+const (
+	estimateAllTurns   = "TRUE"
+	estimateFirstTurns = "milestone = 1"
+	estimateLaterTurns = "milestone > 1"
+)
 
 // EstimateBuildTurn computes the build estimate from the ledger. The sample is
 // the completed build-mode turns of the builder created in the window, of every
@@ -472,13 +491,35 @@ func (s *Store) EstimateBuildTurn(ctx context.Context, q EstimateQuery) (*BuildE
 	if q.Provider == "" || q.Model == "" {
 		return nil, fmt.Errorf("%w: provider and model are required", ErrInvalidArgument)
 	}
+	all, err := s.estimateRange(ctx, q, estimateAllTurns)
+	if err != nil {
+		return nil, err
+	}
+	out := &BuildEstimate{EstimateRange: *all}
+	for _, g := range []struct {
+		filter string
+		dst    **EstimateRange
+	}{{estimateFirstTurns, &out.First}, {estimateLaterTurns, &out.Later}} {
+		r, err := s.estimateRange(ctx, q, g.filter)
+		if err != nil {
+			return nil, err
+		}
+		if r.SampleTurns >= EstimateMinSample {
+			*g.dst = r
+		}
+	}
+	return out, nil
+}
+
+func (s *Store) estimateRange(ctx context.Context, q EstimateQuery, filter string) (*EstimateRange, error) {
 	var (
-		out                                BuildEstimate
+		out                                EstimateRange
 		tokLow, tokHigh, costLow, costHigh *float64
 	)
 	err := s.pool.QueryRow(ctx,
 		`WITH per_turn AS (
-		   SELECT sum(l.input_tokens::bigint + l.cached_input_tokens + l.cache_write_tokens + l.output_tokens) AS tokens,
+		   SELECT t.milestone,
+		          sum(l.input_tokens::bigint + l.cached_input_tokens + l.cache_write_tokens + l.output_tokens) AS tokens,
 		          sum(l.cost_micros) AS cost,
 		          bool_and(l.cost_micros IS NOT NULL)
 		            AND ($5::timestamptz IS NULL OR min(l.created_at) >= $5::timestamptz) AS priced
@@ -495,7 +536,7 @@ func (s *Store) EstimateBuildTurn(ctx context.Context, q EstimateQuery) (*BuildE
 		        percentile_cont(0.75) WITHIN GROUP (ORDER BY tokens),
 		        percentile_cont(0.25) WITHIN GROUP (ORDER BY cost) FILTER (WHERE priced),
 		        percentile_cont(0.75) WITHIN GROUP (ORDER BY cost) FILTER (WHERE priced)
-		 FROM per_turn`,
+		 FROM per_turn WHERE `+filter,
 		q.Since, FeatureBuilder, q.Provider, q.Model, q.PricedSince, ModeBuild, TurnCompleted, PurposePlanning,
 	).Scan(&out.SampleTurns, &out.PricedTurns, &tokLow, &tokHigh, &costLow, &costHigh)
 	if err != nil {

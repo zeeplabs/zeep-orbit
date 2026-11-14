@@ -228,3 +228,76 @@ func TestEstimate_RequiresProviderAndModel(t *testing.T) {
 		t.Fatalf("err = %v, want ErrInvalidArgument", err)
 	}
 }
+
+// setMilestone marks the seeded turns as the build of that milestone.
+func (s *estSeed) setMilestone(t *testing.T, ids []string, milestone int) {
+	t.Helper()
+	if _, err := s.e.pool.Exec(context.Background(),
+		`UPDATE zeep_system.builder_turns SET milestone = $2 WHERE id = ANY($1)`, ids, milestone); err != nil {
+		t.Fatalf("set milestone: %v", err)
+	}
+}
+
+// laterTurns inserts n turns of milestone 2 that each spend 1000 tokens and
+// 1000 micros more than the buildTurns of the same index, so the two groups
+// have different ranges: tokens 1325..1775 and costs 4250..8750.
+func (s *estSeed) laterTurns(t *testing.T, n int, at time.Time) []string {
+	t.Helper()
+	ids := s.buildTurns(t, n, at)
+	for _, id := range ids {
+		s.call(t, id, at.Add(2*time.Second), estCall{tokens: 1000, cost: micros(1000)})
+	}
+	s.setMilestone(t, ids, 2)
+	return ids
+}
+
+func TestEstimate_SplitsTheFirstMilestoneFromTheLaterOnes(t *testing.T) {
+	e := newEnv(t)
+	now := time.Now()
+	s := e.estimateSeed(t)
+	s.setMilestone(t, s.buildTurns(t, 10, now.Add(-time.Hour)), 1)
+	s.laterTurns(t, 10, now.Add(-time.Hour))
+	// A build with no brief counts in the single range only.
+	s.buildTurns(t, 2, now.Add(-time.Hour))
+
+	est := estimate(t, e, now, nil)
+	if est.SampleTurns != 22 {
+		t.Fatalf("single sample = %d, want 22", est.SampleTurns)
+	}
+	if est.First == nil || est.First.SampleTurns != 10 || est.First.TokensLow != 325 || est.First.TokensHigh != 775 ||
+		est.First.CostMicrosLow == nil || *est.First.CostMicrosLow != 3250 || *est.First.CostMicrosHigh != 7750 {
+		t.Fatalf("first = %+v", est.First)
+	}
+	if est.Later == nil || est.Later.SampleTurns != 10 || est.Later.TokensLow != 1325 || est.Later.TokensHigh != 1775 ||
+		est.Later.CostMicrosLow == nil || *est.Later.CostMicrosLow != 4250 || *est.Later.CostMicrosHigh != 8750 {
+		t.Fatalf("later = %+v", est.Later)
+	}
+}
+
+func TestEstimate_AGroupUnderTheMinimumIsLeftOut(t *testing.T) {
+	e := newEnv(t)
+	now := time.Now()
+	s := e.estimateSeed(t)
+	s.setMilestone(t, s.buildTurns(t, 10, now.Add(-time.Hour)), 1)
+	s.laterTurns(t, store.EstimateMinSample-1, now.Add(-time.Hour))
+
+	est := estimate(t, e, now, nil)
+	if est.First == nil || est.Later != nil {
+		t.Fatalf("first = %+v, later = %+v, want only the first group", est.First, est.Later)
+	}
+	if est.SampleTurns != 19 {
+		t.Fatalf("single sample = %d, want 19", est.SampleTurns)
+	}
+}
+
+func TestEstimate_TurnsWithoutAMilestoneHaveNoGroups(t *testing.T) {
+	e := newEnv(t)
+	now := time.Now()
+	e.estimateSeed(t).buildTurns(t, 10, now.Add(-time.Hour))
+
+	est := estimate(t, e, now, nil)
+	checkSeededRange(t, est, 10)
+	if est.First != nil || est.Later != nil {
+		t.Fatalf("first = %+v, later = %+v, want none", est.First, est.Later)
+	}
+}

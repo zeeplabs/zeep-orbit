@@ -482,7 +482,16 @@ type BuilderPlanEstimate struct {
 	Milestones int                   `json:"milestones"`
 	Milestone  *BuilderEstimateRange `json:"milestone"`
 	Plan       *BuilderEstimateRange `json:"plan"`
+	// Basis says how Plan was computed: "split" (the first milestone and the
+	// later ones each from their own turns) or "single" (one range times the
+	// milestones). Empty when Available is false.
+	Basis string `json:"basis,omitempty"`
 }
+
+const (
+	builderEstimateBasisSplit  = "split"
+	builderEstimateBasisSingle = "single"
+)
 
 // PlanEstimate handles GET .../turns/{turn}/plan/estimate: the estimated range
 // of the first milestone and of the whole plan of the pending build plan,
@@ -514,8 +523,11 @@ func (h *BuilderHandler) PlanEstimate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := BuilderPlanEstimate{Currency: settings.CostCurrency}
+	done := 0
 	for _, m := range plan.Milestones {
-		if !m.Done {
+		if m.Done {
+			done++
+		} else {
 			out.Milestones++
 		}
 	}
@@ -542,16 +554,57 @@ func (h *BuilderHandler) PlanEstimate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out.Available = true
-	out.Milestone = &BuilderEstimateRange{
-		TokensLow: est.TokensLow, TokensHigh: est.TokensHigh,
-		CostMicrosLow: est.CostMicrosLow, CostMicrosHigh: est.CostMicrosHigh,
-	}
 	n := int64(out.Milestones)
-	out.Plan = &BuilderEstimateRange{
-		TokensLow: est.TokensLow * n, TokensHigh: est.TokensHigh * n,
-		CostMicrosLow: timesMicros(est.CostMicrosLow, n), CostMicrosHigh: timesMicros(est.CostMicrosHigh, n),
+	// Both groups need their own sample; else the old single range applies.
+	// The next milestone is the first of the app only when none is done.
+	if est.First != nil && est.Later != nil && n > 0 {
+		next := builderEstimateRange(est.Later)
+		plan := builderScaleRange(est.Later, n)
+		if done == 0 {
+			next = builderEstimateRange(est.First)
+			plan = builderAddRanges(est.First, builderScaleRange(est.Later, n-1))
+		}
+		out.Milestone, out.Plan, out.Basis = &next, &plan, builderEstimateBasisSplit
+		writeJSON(w, http.StatusOK, out)
+		return
 	}
+	single := builderEstimateRange(&est.EstimateRange)
+	out.Milestone = &single
+	scaled := builderScaleRange(&est.EstimateRange, n)
+	out.Plan, out.Basis = &scaled, builderEstimateBasisSingle
 	writeJSON(w, http.StatusOK, out)
+}
+
+func builderEstimateRange(r *store.EstimateRange) BuilderEstimateRange {
+	return BuilderEstimateRange{
+		TokensLow: r.TokensLow, TokensHigh: r.TokensHigh,
+		CostMicrosLow: r.CostMicrosLow, CostMicrosHigh: r.CostMicrosHigh,
+	}
+}
+
+// builderScaleRange is r times n milestones.
+func builderScaleRange(r *store.EstimateRange, n int64) BuilderEstimateRange {
+	return BuilderEstimateRange{
+		TokensLow: r.TokensLow * n, TokensHigh: r.TokensHigh * n,
+		CostMicrosLow: timesMicros(r.CostMicrosLow, n), CostMicrosHigh: timesMicros(r.CostMicrosHigh, n),
+	}
+}
+
+// builderAddRanges is r plus the already scaled range b. The cost is nil when
+// either side has none.
+func builderAddRanges(r *store.EstimateRange, b BuilderEstimateRange) BuilderEstimateRange {
+	return BuilderEstimateRange{
+		TokensLow: r.TokensLow + b.TokensLow, TokensHigh: r.TokensHigh + b.TokensHigh,
+		CostMicrosLow: sumMicrosOrNil(r.CostMicrosLow, b.CostMicrosLow), CostMicrosHigh: sumMicrosOrNil(r.CostMicrosHigh, b.CostMicrosHigh),
+	}
+}
+
+func sumMicrosOrNil(a, b *int64) *int64 {
+	if a == nil || b == nil {
+		return nil
+	}
+	out := *a + *b
+	return &out
 }
 
 // timesMicros is v*n, or nil when v is nil.
