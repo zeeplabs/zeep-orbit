@@ -52,7 +52,7 @@ M03 DDL + USD (confirm DDL) ──► M05 prices API ────┘
 - **What**: DDL and `UPDATE` of design §4; settings validation (`cost_currency must be USD`); `cost_caps_review_pending` in `BuilderSettings` and cleared by a body with a cost cap.
 - **Done when**: DDL diff shown and confirmed; provisioning twice is a no-op the second time; a `BRL` row becomes `USD` with the flag and caps unchanged; `PUT` with `BRL` is 400, with `USD` is 200; saving a cap clears the flag.
 - **Requirements**: AMC-10 (backend). **Tests**: integration. **Gate**: Full.
-- **Status**: Pending.
+- **Status**: Done 2026-11-13. DDL confirmed by the maintainer. Provisioning twice tested (`TestProvision_MovesOtherCurrencyToUSDAndFlagsCaps`). Full gate: 29 packages pass.
 
 ### M04 — Catalog API and model validation
 - **What**: `GET /dashboard/api/builder/catalog`; model validation on `PUT /ai-providers/{openai,anthropic}`; availability reason `model_not_in_catalog`; `resolveProvider` refusal. Existing provider tests move to catalog IDs.

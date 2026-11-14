@@ -25,6 +25,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/zeeplabs/zeep-orbit/internal/agent/catalog"
 )
 
 // Bounds for the numeric settings. They protect the platform from a typo (a
@@ -166,10 +168,12 @@ func validateBuilderSettingsInput(in *BuilderSettingsInput) error {
 		}
 		in.PublishRLSGate = &g
 	}
+	// Costs are in the catalog's currency (ai-model-catalog AMC-10). The field
+	// is still accepted with that value so older clients keep working.
 	if v := in.CostCurrency; v != nil {
 		c := strings.ToUpper(strings.TrimSpace(*v))
-		if !validCurrencyCode(c) {
-			return errors.New("cost_currency must be a 3-letter ISO 4217 code, for example USD or BRL")
+		if c != catalog.Currency {
+			return errors.New("cost_currency must be USD")
 		}
 		in.CostCurrency = &c
 	}
@@ -187,21 +191,6 @@ func validateBuilderSettingsInput(in *BuilderSettingsInput) error {
 		in.PlanningMode = &m
 	}
 	return nil
-}
-
-// validCurrencyCode reports whether c has the shape of an ISO 4217 code. The
-// code is only a label for the operator's own prices, so the list of real
-// currencies is not checked.
-func validCurrencyCode(c string) bool {
-	if len(c) != 3 {
-		return false
-	}
-	for _, r := range c {
-		if r < 'A' || r > 'Z' {
-			return false
-		}
-	}
-	return true
 }
 
 // builderPromptResponse is the API view of the active persona + rules. With no

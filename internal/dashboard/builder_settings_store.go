@@ -81,15 +81,19 @@ type BuilderSettings struct {
 	BackendApprovalMode string `json:"backend_approval_mode"`
 	// PublishRLSGate: "warn" lists open tables on publish, "block" refuses.
 	PublishRLSGate string `json:"publish_rls_gate"`
-	// CostCurrency is the ISO 4217 code that prices and stored costs are in.
-	// Changing it does not convert stored costs; CostCurrencyChangedAt says
-	// when it last changed (nil: never).
+	// CostCurrency is the currency of prices and stored costs: always "USD"
+	// since ai-model-catalog (the catalog's currency). CostCurrencyChangedAt
+	// says when it last changed (nil: never); stored costs were not converted.
 	CostCurrency          string     `json:"cost_currency"`
 	CostCurrencyChangedAt *time.Time `json:"cost_currency_changed_at"`
 	// Money caps in micros (1 unit of currency = 1,000,000). 0 means no money
 	// cap; the token caps above stay mandatory (ai-builder-costs ABC-19).
 	SessionCostCapMicros     int64 `json:"session_cost_cap_micros"`
 	UserMonthlyCostCapMicros int64 `json:"user_monthly_cost_cap_micros"`
+	// CostCapsReviewPending is set when the installation was moved to USD from
+	// another currency: the cap numbers were kept and should be reviewed. A
+	// save that carries a money cap clears it.
+	CostCapsReviewPending bool `json:"cost_caps_review_pending"`
 	// PlanningMode: "required", "suggested" or "off" (see the constants).
 	PlanningMode string `json:"planning_mode"`
 	// UpdatedBy and UpdatedAt are nil/zero while the row has never been saved.
@@ -137,7 +141,7 @@ const builderSettingsCols = `enabled, provider, context_window_tokens, session_t
 	max_steps_per_turn, max_fix_iterations, max_turn_seconds, backend_approval_mode, publish_rls_gate,
 	updated_by::text, updated_at,
 	cost_currency, cost_currency_changed_at, session_cost_cap_micros, user_monthly_cost_cap_micros,
-	planning_mode`
+	planning_mode, cost_caps_review_pending`
 
 func scanBuilderSettings(row pgx.Row) (*BuilderSettings, error) {
 	var (
@@ -149,7 +153,7 @@ func scanBuilderSettings(row pgx.Row) (*BuilderSettings, error) {
 		&s.MaxStepsPerTurn, &s.MaxFixIterations, &s.MaxTurnSeconds, &s.BackendApprovalMode, &s.PublishRLSGate,
 		&updatedBy, &updatedAt,
 		&s.CostCurrency, &s.CostCurrencyChangedAt, &s.SessionCostCapMicros, &s.UserMonthlyCostCapMicros,
-		&s.PlanningMode); err != nil {
+		&s.PlanningMode, &s.CostCapsReviewPending); err != nil {
 		return nil, err
 	}
 	s.UpdatedBy = updatedBy
@@ -209,7 +213,10 @@ func UpsertBuilderSettings(ctx context.Context, pool *db.Pool, updatedBy string,
 		   cost_currency                = COALESCE($19::text,   builder_settings.cost_currency),
 		   session_cost_cap_micros      = COALESCE($20::bigint, builder_settings.session_cost_cap_micros),
 		   user_monthly_cost_cap_micros = COALESCE($21::bigint, builder_settings.user_monthly_cost_cap_micros),
-		   planning_mode                = COALESCE($23::text,   builder_settings.planning_mode)
+		   planning_mode                = COALESCE($23::text,   builder_settings.planning_mode),
+		   cost_caps_review_pending     = CASE
+		     WHEN $20::bigint IS NOT NULL OR $21::bigint IS NOT NULL THEN false
+		     ELSE builder_settings.cost_caps_review_pending END
 		 RETURNING `+builderSettingsCols,
 		in.Enabled, in.Provider, in.ContextWindowTokens, in.SessionTokenCap, in.UserMonthlyTokenCap,
 		in.MaxStepsPerTurn, in.MaxFixIterations, in.MaxTurnSeconds,

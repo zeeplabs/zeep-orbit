@@ -970,6 +970,16 @@ func provisionZeepSystemOnce(ctx context.Context, pool *db.Pool) error {
 		   ADD COLUMN IF NOT EXISTS cost_currency_changed_at     TIMESTAMPTZ,
 		   ADD COLUMN IF NOT EXISTS session_cost_cap_micros      BIGINT NOT NULL DEFAULT 0 CHECK (session_cost_cap_micros >= 0),
 		   ADD COLUMN IF NOT EXISTS user_monthly_cost_cap_micros BIGINT NOT NULL DEFAULT 0 CHECK (user_monthly_cost_cap_micros >= 0)`,
+		// Catalog prices are in USD (ai-model-catalog AMC-10), so costs and
+		// money caps are too. An installation that billed in another currency
+		// is moved to USD once: the cap numbers are kept and flagged for the
+		// superadmin to review (saving the Costs card clears the flag); stored
+		// costs are not converted. The UPDATE matches no row after the first run.
+		`ALTER TABLE zeep_system.builder_settings
+		   ADD COLUMN IF NOT EXISTS cost_caps_review_pending BOOLEAN NOT NULL DEFAULT false`,
+		`UPDATE zeep_system.builder_settings
+		    SET cost_currency = 'USD', cost_currency_changed_at = now(), cost_caps_review_pending = true
+		  WHERE cost_currency <> 'USD'`,
 		// Planning mode (ai-builder-planning P01). All additive and defaulted:
 		// existing sessions stay in the building phase and existing turns in
 		// build mode. planning_mode defaults to 'required', so new sessions of

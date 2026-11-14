@@ -263,30 +263,73 @@ func TestBuilderSettings_CurrencyAndMoneyCaps(t *testing.T) {
 		t.Fatalf("after cap save = %+v", s)
 	}
 
-	// Saving the same currency is not a change; a different one is, and is normalized.
+	// Costs are in USD (ai-model-catalog AMC-10): "usd" is normalized and is
+	// not a change; any other currency is refused and changes nothing.
 	s = decodeJSON[BuilderSettings](t, callBuilder(t, h.UpsertBuilderSettingsConfig, super, http.MethodPut, "/x", `{"cost_currency":"usd"}`))
 	if s.CostCurrency != "USD" || s.CostCurrencyChangedAt != nil {
 		t.Fatalf("same currency must not set the change date: %+v", s)
 	}
-	s = decodeJSON[BuilderSettings](t, callBuilder(t, h.UpsertBuilderSettingsConfig, super, http.MethodPut, "/x", `{"cost_currency":" brl ","user_monthly_cost_cap_micros":90000000}`))
-	if s.CostCurrency != "BRL" || s.CostCurrencyChangedAt == nil || s.UserMonthlyCostCapMicros != 90_000_000 || s.SessionCostCapMicros != 5_000_000 {
-		t.Fatalf("after currency change = %+v", s)
+	w := callBuilder(t, h.UpsertBuilderSettingsConfig, super, http.MethodPut, "/x", `{"cost_currency":" brl ","user_monthly_cost_cap_micros":90000000}`)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "cost_currency must be USD") {
+		t.Fatalf("BRL: got %d %s, want 400 cost_currency must be USD", w.Code, w.Body.String())
+	}
+	s = decodeJSON[BuilderSettings](t, callBuilder(t, h.UpsertBuilderSettingsConfig, super, http.MethodPut, "/x", `{"user_monthly_cost_cap_micros":90000000}`))
+	if s.CostCurrency != "USD" || s.UserMonthlyCostCapMicros != 90_000_000 || s.SessionCostCapMicros != 5_000_000 {
+		t.Fatalf("after monthly cap save = %+v", s)
 	}
 
 	// An absent key keeps the value; 0 clears a cap.
 	s = decodeJSON[BuilderSettings](t, callBuilder(t, h.UpsertBuilderSettingsConfig, super, http.MethodPut, "/x", `{"session_cost_cap_micros":0}`))
-	if s.SessionCostCapMicros != 0 || s.UserMonthlyCostCapMicros != 90_000_000 || s.CostCurrency != "BRL" {
+	if s.SessionCostCapMicros != 0 || s.UserMonthlyCostCapMicros != 90_000_000 || s.CostCurrency != "USD" {
 		t.Fatalf("after clearing one cap = %+v", s)
 	}
 
 	for name, body := range map[string]string{
 		"two letters":  `{"cost_currency":"US"}`,
 		"digits":       `{"cost_currency":"U5D"}`,
+		"other code":   `{"cost_currency":"EUR"}`,
 		"negative cap": `{"session_cost_cap_micros":-1}`,
 		"huge cap":     `{"user_monthly_cost_cap_micros":9000000000000000000}`,
 	} {
 		if w := callBuilder(t, h.UpsertBuilderSettingsConfig, super, http.MethodPut, "/x", body); w.Code != http.StatusBadRequest {
 			t.Errorf("%s: expected 400, got %d: %s", name, w.Code, w.Body.String())
 		}
+	}
+}
+
+// An installation that billed in another currency is moved to USD by the
+// provisioner, once: the cap numbers are kept and flagged for review, and a
+// save that carries a money cap clears the flag (ai-model-catalog AMC-10).
+func TestProvision_MovesOtherCurrencyToUSDAndFlagsCaps(t *testing.T) {
+	pool, h := builderPricesTestPool(t)
+	super := mustCreateSuperadmin(t, pool)
+	ctx := context.Background()
+
+	callBuilder(t, h.UpsertBuilderSettingsConfig, super, http.MethodPut, "/x", `{"session_cost_cap_micros":50000000,"user_monthly_cost_cap_micros":500000000}`)
+	if _, err := pool.Exec(ctx, `UPDATE zeep_system.builder_settings SET cost_currency = 'BRL', cost_currency_changed_at = NULL WHERE id = 1`); err != nil {
+		t.Fatalf("seed BRL: %v", err)
+	}
+	for i := 0; i < 2; i++ { // the second run must be a no-op
+		if err := ProvisionZeepSystem(ctx, pool); err != nil {
+			t.Fatalf("provision %d: %v", i+1, err)
+		}
+	}
+	s, err := GetBuilderSettings(ctx, pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.CostCurrency != "USD" || s.CostCurrencyChangedAt == nil || !s.CostCapsReviewPending ||
+		s.SessionCostCapMicros != 50_000_000 || s.UserMonthlyCostCapMicros != 500_000_000 {
+		t.Fatalf("after provision = %+v, want USD, a change date, the flag and the caps unchanged", s)
+	}
+
+	// A save without a money cap keeps the flag; one with a cap clears it.
+	kept := decodeJSON[BuilderSettings](t, callBuilder(t, h.UpsertBuilderSettingsConfig, super, http.MethodPut, "/x", `{"planning_mode":"suggested"}`))
+	if !kept.CostCapsReviewPending {
+		t.Fatalf("a save without a money cap must keep the flag: %+v", kept)
+	}
+	cleared := decodeJSON[BuilderSettings](t, callBuilder(t, h.UpsertBuilderSettingsConfig, super, http.MethodPut, "/x", `{"session_cost_cap_micros":10000000,"user_monthly_cost_cap_micros":100000000}`))
+	if cleared.CostCapsReviewPending || cleared.SessionCostCapMicros != 10_000_000 {
+		t.Fatalf("saving the caps must clear the flag: %+v", cleared)
 	}
 }
