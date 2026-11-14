@@ -11,7 +11,7 @@ Commits only when the user asks (AGENTS.md §2); one commit per task when author
 **Spec**: `.specs/features/ai-builder-costs/spec.md`
 **Design**: `.specs/features/ai-builder-costs/design.md`
 **Parent**: `.specs/features/ai-frontend-builder/`
-**Status**: Approved by the maintainer on 2026-11-13, DDL of C01 included. In execution on `feat/ai-frontend-builder`. Done: C01–C12, and C13 partly (2026-11-14: real turns on OpenAI `gpt-5.5` and Anthropic `claude-sonnet-5-5`, cost matches the catalog; the opt-in contract test and the comparison with the provider's usage page were not run). Prompt caching for the Anthropic adapter added 2026-11-14 (`f44ac21`).
+**Status**: Approved by the maintainer on 2026-11-13, DDL of C01 included. In execution on `feat/ai-frontend-builder`. Done: C01–C12, and C13 partly (2026-11-14: real turns on OpenAI `gpt-5.5` and Anthropic `claude-sonnet-5-5`, cost matches the catalog; the opt-in contract test and the comparison with the provider's usage page were not run: they need the owner's API keys, which are not in the agent's environment). Prompt caching for the Anthropic adapter added 2026-11-14 (`f44ac21`).
 
 ---
 

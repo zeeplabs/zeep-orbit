@@ -121,3 +121,31 @@ func TestBuilderPrices_AnthropicKindIsCatalogPriced(t *testing.T) {
 		t.Error("an unknown provider kind must be rejected")
 	}
 }
+
+// A stored key that cannot be decrypted (saved under another secret) is
+// unavailable like a missing one, but carries its own sentinel so the builder
+// status can log the real cause.
+func TestAnthropicProvider_UndecryptableKeyIsDistinguishable(t *testing.T) {
+	pool, h := aiProviderHandlerTestPool(t)
+	super := mustCreateSuperadmin(t, pool)
+
+	if w := putOpenAICompatible(t, h, super, anProvider, `{"model":"claude-sonnet-5-5","api_key":"sk-ant-x","enabled":true}`); w.Code != http.StatusOK {
+		t.Fatalf("PUT: %d %s", w.Code, w.Body.String())
+	}
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE zeep_system.ai_providers SET api_key_encrypted = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' WHERE provider = $1`, anProvider); err != nil {
+		t.Fatalf("corrupt key: %v", err)
+	}
+	_, err := ResolveAIProviderRuntime(context.Background(), pool, anProvider)
+	if !errors.Is(err, ErrAIProviderUnavailable) || !errors.Is(err, ErrAIProviderKeyUndecryptable) {
+		t.Fatalf("want both ErrAIProviderUnavailable and ErrAIProviderKeyUndecryptable, got %v", err)
+	}
+	// A key-less row is not this case.
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE zeep_system.ai_providers SET api_key_encrypted = '' WHERE provider = $1`, anProvider); err != nil {
+		t.Fatalf("clear key: %v", err)
+	}
+	if _, err := ResolveAIProviderRuntime(context.Background(), pool, anProvider); errors.Is(err, ErrAIProviderKeyUndecryptable) {
+		t.Errorf("a missing key must not be reported as undecryptable: %v", err)
+	}
+}

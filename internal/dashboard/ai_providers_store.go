@@ -194,6 +194,13 @@ type AIProviderRuntime struct {
 // as "provider unconfigured".
 var ErrAIProviderUnavailable = errors.New("dashboard: ai provider is not available")
 
+// ErrAIProviderKeyUndecryptable is wrapped together with
+// ErrAIProviderUnavailable when the stored key exists but cannot be decrypted,
+// typically because it was saved under a different AI_PROVIDER_ENCRYPTION_KEY
+// or DASHBOARD_BOOTSTRAP_SECRET. Callers that only report "unconfigured" use
+// it to tell this fixable case apart from a row that was never set up.
+var ErrAIProviderKeyUndecryptable = errors.New("dashboard: ai provider key cannot be decrypted")
+
 // ResolveAIProviderRuntime loads provider's row for server-side use. Unlike
 // resolveDecryptedAIProviderKey (the legacy openai-only accessor used by the
 // build/edit chat), it returns the base URL and accepts a key-less
@@ -238,7 +245,7 @@ func ResolveAIProviderRuntime(ctx context.Context, pool *db.Pool, provider strin
 	if apiKeyEncrypted != "" {
 		rt.APIKey, err = crypto.DecryptAIProviderKey(apiKeyEncrypted)
 		if err != nil {
-			return nil, fmt.Errorf("%w: decrypt key: %v", ErrAIProviderUnavailable, err)
+			return nil, fmt.Errorf("%w: %w: %v", ErrAIProviderUnavailable, ErrAIProviderKeyUndecryptable, err)
 		}
 	}
 	return rt, nil

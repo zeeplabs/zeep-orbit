@@ -108,6 +108,11 @@ func (h *BuilderHandler) availability(ctx context.Context) (BuilderStatus, sandb
 		modelUsable = catalogModelUsable(prt.Provider, prt.Model)
 	} else if !errors.Is(perr, ErrAIProviderUnavailable) {
 		return st, sandbox.Health{}, perr
+	} else if errors.Is(perr, ErrAIProviderKeyUndecryptable) {
+		// Reported to the client as provider_not_configured, which hides that
+		// the key exists but was saved under another encryption secret.
+		h.logger.Warn("builder provider key cannot be decrypted; save the key again",
+			zap.String("provider", settings.Provider), zap.Error(perr))
 	}
 
 	switch {
