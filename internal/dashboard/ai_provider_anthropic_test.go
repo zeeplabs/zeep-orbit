@@ -111,6 +111,57 @@ func TestBuilderSettings_AnthropicProviderSelectedAndBuilt(t *testing.T) {
 	}
 }
 
+// ai-builder-economy AEC-02/AEC-05: prepareDeps gives plan-mode turns their own
+// model of the same provider, and falls back to the build model, with a
+// warning, when that model cannot be used.
+func TestBuilderRuntime_PlanningProviderFollowsThePlanningModel(t *testing.T) {
+	rt := newTestBuilderRuntime(t)
+	pool := rt.pool
+	h := NewHandler(pool, nil, nil)
+	super := mustCreateSuperadmin(t, pool)
+	ctx := context.Background()
+
+	if w := putOpenAICompatible(t, h, super, anProvider, `{"model":"claude-sonnet-5-5","api_key":"sk-ant-local","enabled":true}`); w.Code != http.StatusOK {
+		t.Fatalf("PUT provider: %d %s", w.Code, w.Body.String())
+	}
+	set := func(model string) {
+		t.Helper()
+		prov := anProvider
+		if _, err := UpsertBuilderSettings(ctx, pool, super.ID, BuilderSettingsInput{Provider: &prov, PlanningModel: &model}); err != nil {
+			t.Fatalf("settings: %v", err)
+		}
+	}
+	base := agent.Deps{Provider: unavailableProvider{}}
+
+	set("")
+	if d := rt.prepareDeps(ctx, base); d.PlanningProvider != nil || d.Provider.Model() != "claude-sonnet-5-5" {
+		t.Fatalf("empty planning model: planning provider = %v, build = %s", d.PlanningProvider, d.Provider.Model())
+	}
+
+	set("claude-haiku-5-5")
+	d := rt.prepareDeps(ctx, base)
+	if d.PlanningProvider == nil || d.PlanningProvider.Name() != anProvider || d.PlanningProvider.Model() != "claude-haiku-5-5" {
+		t.Fatalf("planning provider = %v, want anthropic/claude-haiku-5-5", d.PlanningProvider)
+	}
+	if d.Provider.Model() != "claude-sonnet-5-5" {
+		t.Errorf("build model = %s, want it untouched", d.Provider.Model())
+	}
+
+	// The same model as the build one needs no second client.
+	set("claude-sonnet-5-5")
+	if d := rt.prepareDeps(ctx, base); d.PlanningProvider != nil {
+		t.Errorf("planning model equal to the build model: planning provider = %v, want nil", d.PlanningProvider)
+	}
+
+	// A model that left the catalog (saved before, or through the store): the
+	// turn still has its build provider.
+	set("claude-gone")
+	d = rt.prepareDeps(ctx, base)
+	if d.PlanningProvider != nil || d.Provider.Model() != "claude-sonnet-5-5" {
+		t.Errorf("uncatalogued planning model: planning provider = %v, build = %s", d.PlanningProvider, d.Provider.Model())
+	}
+}
+
 // The kind is priced by the model catalog (ai-model-catalog AMC-09), so a
 // price row for it is refused; an unknown kind is refused too.
 func TestBuilderPrices_AnthropicKindIsCatalogPriced(t *testing.T) {

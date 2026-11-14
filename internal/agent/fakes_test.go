@@ -271,10 +271,17 @@ type fakeProvider struct {
 	mu     sync.Mutex
 	script []scriptStep
 	reqs   []provider.ChatRequest
+	// modelID overrides the default model name "fake-1".
+	modelID string
 }
 
-func (p *fakeProvider) Name() string  { return "fake" }
-func (p *fakeProvider) Model() string { return "fake-1" }
+func (p *fakeProvider) Name() string { return "fake" }
+func (p *fakeProvider) Model() string {
+	if p.modelID != "" {
+		return p.modelID
+	}
+	return "fake-1"
+}
 
 func (p *fakeProvider) Chat(_ context.Context, req provider.ChatRequest) (provider.ChatResponse, error) {
 	p.mu.Lock()

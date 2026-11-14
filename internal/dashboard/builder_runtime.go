@@ -293,6 +293,10 @@ func (rt *BuilderRuntime) prepareDeps(ctx context.Context, base agent.Deps) agen
 	}
 	base.PlanningEnabled = s.PlanningMode != BuilderPlanningOff
 	base.Provider = rt.resolveProvider(ctx, s.Provider)
+	// The planning model only matters when it differs from the build model.
+	if s.PlanningModel != "" && s.PlanningModel != base.Provider.Model() {
+		base.PlanningProvider = rt.resolvePlanningProvider(ctx, s.Provider, s.PlanningModel)
+	}
 	return base
 }
 
@@ -300,16 +304,44 @@ func (rt *BuilderRuntime) prepareDeps(ctx context.Context, base agent.Deps) agen
 // settings. Any failure yields an unavailableProvider (the turn then ends with
 // provider_unavailable); the cause is logged without the key.
 func (rt *BuilderRuntime) resolveProvider(ctx context.Context, name string) provider.Provider {
+	p, ok := rt.buildProvider(ctx, name, "")
+	if !ok {
+		return unavailableProvider{}
+	}
+	return p
+}
+
+// resolvePlanningProvider builds the client that answers plan-mode turns: the
+// provider named in the settings, running model instead of the provider row's
+// model (same key). Any failure yields nil and a warning, so the turn runs on
+// the build model instead of failing because of a cost tier
+// (ai-builder-economy AEC-05).
+func (rt *BuilderRuntime) resolvePlanningProvider(ctx context.Context, name, model string) provider.Provider {
+	p, ok := rt.buildProvider(ctx, name, model)
+	if !ok {
+		rt.log.Warn("builder: planning model is not available, the turn uses the build model", "provider", name, "model", model)
+		return nil
+	}
+	return p
+}
+
+// buildProvider is the client of provider name, with the provider row's model
+// or, when model is not empty, that model. It reports false after logging why
+// it could not build one.
+func (rt *BuilderRuntime) buildProvider(ctx context.Context, name, model string) (provider.Provider, bool) {
 	prt, err := ResolveAIProviderRuntime(ctx, rt.pool, name)
 	if err != nil {
 		rt.log.Warn("builder: model provider is not available", "provider", name, "err", err)
-		return unavailableProvider{}
+		return nil, false
+	}
+	if model != "" {
+		prt.Model = model
 	}
 	// A turn queued before the row moved to a model outside the catalog: the
 	// catalog cannot price it, so it does not run (ai-model-catalog AMC-05).
 	if !catalogModelUsable(prt.Provider, prt.Model) {
 		rt.log.Warn("builder: model is not in the catalog", "provider", name, "model", prt.Model)
-		return unavailableProvider{}
+		return nil, false
 	}
 	var p provider.Provider
 	if prt.Provider == aiProviderAnthropic {
@@ -328,9 +360,9 @@ func (rt *BuilderRuntime) resolveProvider(ctx context.Context, name string) prov
 	}
 	if err != nil {
 		rt.log.Warn("builder: model provider could not be built", "provider", name, "err", err)
-		return unavailableProvider{}
+		return nil, false
 	}
-	return p
+	return p, true
 }
 
 // unavailableProvider is the Provider of a turn whose real provider could not

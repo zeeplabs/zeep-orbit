@@ -554,3 +554,38 @@ func TestBuildSystemPromptWithBrief_OrderAndPrecedence(t *testing.T) {
 		t.Error("the core prompt must carry the planning rules and name the brief in the precedence list")
 	}
 }
+
+// ai-builder-economy AEC-02: a plan-mode turn's calls go to the planning
+// provider and are recorded under its model; a build-mode turn's calls go to
+// the build provider even when a planning provider is set.
+func TestPlanningProvider_AnswersOnlyPlanModeTurns(t *testing.T) {
+	for _, tc := range []struct {
+		mode, wantModel, wantPurpose string
+		planningCalls, buildCalls    int
+	}{
+		{store.ModePlan, "fake-plan", store.PurposePlanning, 1, 0},
+		{store.ModeBuild, "fake-1", store.PurposeChat, 0, 1},
+	} {
+		h := newPlanHarness(t, tc.mode, scriptStep{resp: textResp("done")})
+		planner := &fakeProvider{modelID: "fake-plan", script: []scriptStep{{resp: textResp("done")}}}
+		h.deps.PlanningProvider = planner
+		h.mustRun()
+
+		if planner.calls() != tc.planningCalls || h.prov.calls() != tc.buildCalls {
+			t.Errorf("%s turn: planning provider %d calls, build provider %d, want %d and %d",
+				tc.mode, planner.calls(), h.prov.calls(), tc.planningCalls, tc.buildCalls)
+		}
+		if len(h.st.usage) != 1 || h.st.usage[0].Model != tc.wantModel || h.st.usage[0].Purpose != tc.wantPurpose {
+			t.Errorf("%s turn: usage = %+v, want model %s and purpose %s", tc.mode, h.st.usage, tc.wantModel, tc.wantPurpose)
+		}
+	}
+}
+
+// AEC-01: with no planning provider a plan-mode turn runs on the build one.
+func TestPlanningProvider_NilKeepsTheBuildProvider(t *testing.T) {
+	h := newPlanHarness(t, store.ModePlan, scriptStep{resp: textResp("done")})
+	h.mustRun()
+	if h.prov.calls() != 1 || len(h.st.usage) != 1 || h.st.usage[0].Model != "fake-1" || h.st.usage[0].Purpose != store.PurposePlanning {
+		t.Fatalf("build provider calls = %d, usage = %+v", h.prov.calls(), h.st.usage)
+	}
+}

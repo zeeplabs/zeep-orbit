@@ -81,7 +81,10 @@ type PromptSource func(ctx context.Context, s *store.Session) (PromptInput, erro
 type Deps struct {
 	Store    Store
 	Provider provider.Provider
-	Tools    *tools.Registry
+	// PlanningProvider answers the calls of a plan-mode turn. Nil means
+	// Provider answers them. Compaction always uses Provider.
+	PlanningProvider provider.Provider
+	Tools            *tools.Registry
 	// Builder should be wrapped with sandbox.NewRestoring so a lost builder
 	// volume is restored from snapshots (see [SnapshotProvider]).
 	Builder sandbox.Sandbox
@@ -381,18 +384,29 @@ func (r *run) ctxEnd(ctx, tctx context.Context) (*outcome, error) {
 	return nil, nil
 }
 
+// modelProvider is the provider that answers this turn's chat calls: the
+// planning provider in a plan-mode turn when one is set, else the turn's
+// Provider. The usage record of a call names the provider it used.
+func (r *run) modelProvider() provider.Provider {
+	if r.planMode && r.deps.PlanningProvider != nil {
+		return r.deps.PlanningProvider
+	}
+	return r.deps.Provider
+}
+
 // chat performs one model call (compacting the history first when needed),
 // records its usage and returns the response. A context-too-long answer is
 // retried once with a forced compaction.
 func (r *run) chat(ctx, tctx context.Context) (provider.ChatResponse, *outcome, error) {
 	var resp provider.ChatResponse
 	force := false
+	p := r.modelProvider()
 	for {
 		prompt, err := r.promptMessages(ctx, tctx, force)
 		if err != nil {
 			return resp, nil, err
 		}
-		resp, err = r.deps.Provider.Chat(tctx, provider.ChatRequest{
+		resp, err = p.Chat(tctx, provider.ChatRequest{
 			System:          r.system,
 			Messages:        prompt,
 			Tools:           r.toolSpecs(),
@@ -416,14 +430,14 @@ func (r *run) chat(ctx, tctx context.Context) (provider.ChatResponse, *outcome, 
 		}
 		// Raw provider text only goes to the server log.
 		r.log.Error("agent provider call failed", "turn", r.turn.ID, "session", r.sess.ID,
-			"provider", r.deps.Provider.Name(), "model", r.deps.Provider.Model(), "err", err, "cause", errors.Unwrap(err))
+			"provider", p.Name(), "model", p.Model(), "err", err, "cause", errors.Unwrap(err))
 		return resp, &outcome{status: store.TurnFailed, code: CodeProviderUnavailable, commit: true}, nil
 	}
 
 	// Usage first: the tokens are spent whether or not the rest persists.
 	if err := r.deps.Store.RecordUsage(ctx, store.UsageRecord{
 		UserID: r.sess.OwnerUserID, Feature: store.FeatureBuilder, SessionID: r.sess.ID, TurnID: r.turn.ID,
-		Provider: r.deps.Provider.Name(), Model: r.deps.Provider.Model(),
+		Provider: p.Name(), Model: p.Model(),
 		Purpose:     r.usagePurpose(),
 		InputTokens: resp.Usage.InputTokens, CachedInputTokens: resp.Usage.CachedInputTokens,
 		CacheWriteTokens: resp.Usage.CacheWriteTokens, OutputTokens: resp.Usage.OutputTokens,
