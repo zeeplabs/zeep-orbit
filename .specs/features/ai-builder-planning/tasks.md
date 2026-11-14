@@ -11,7 +11,7 @@ Commits only when the user asks (AGENTS.md §2); one commit per task when author
 **Spec**: `.specs/features/ai-builder-planning/spec.md`
 **Design**: `.specs/features/ai-builder-planning/design.md`
 **Parent**: `.specs/features/ai-frontend-builder/`
-**Status**: Approved by the maintainer on 2026-11-13 with the defaults of design §12. In execution on `feat/ai-frontend-builder`. Done: P01–P11. The DDL of P01 is still shown and confirmed before it is applied.
+**Status**: Approved by the maintainer on 2026-11-13 with the defaults of design §12. In execution on `feat/ai-frontend-builder`. Done: P01–P12. The DDL of P01 is still shown and confirmed before it is applied.
 
 ---
 
@@ -128,6 +128,19 @@ P11 docs + CHANGELOG (last)        P12 local end-to-end run        P13 real-mode
 - **What**: scripted mock model on the local stack: zero-question path, three rounds then the bound, skip, revise, back to questions, approve and build, continue to the last milestone, plan first, `off`, `suggested`, restart of the server with a pending round, budget ending during the briefing. Screenshots of the cards in both languages.
 - **Done when**: each path recorded as passed or failed with what was seen; failures fixed or listed as open in this file.
 - **Depends**: P10.
+- **Status**: Done 2026-11-13. Local stack (Orbit built from this branch, builder on :8081, Postgres on :5434), scripted OpenAI-compatible mock model on 127.0.0.1:8099 (scratchpad only, no real model and no key), Playwright headless. Every path passed:
+  - Zero questions: a first message that answers everything gives a `plan` turn with `propose_build_plan` as its only call, then the plan card.
+  - Three rounds then the bound: three question cards answered, the fourth `ask_user` call is refused without a card, and the agent proposes the plan (4 calls, 3 cards, 3 answered).
+  - Plan mode refuses a write: a `write_file` call in a briefing turn produces no `file_changed` and no build event; the agent then asks.
+  - Skip ("Start building now"), revise ("Ask for changes", the revised plan with the open-to-everyone warning and "Already built"), back to questions (a new round, then a new plan), approve and build in the same turn: passed again on the code of P10, with the estimate route answered by the test (priced, tokens only) and by the server (real figures from 18 local build turns).
+  - Continue to the last milestone: milestone 2 of 2 built by "Continue", progress 2/2, no Continue button afterward (P10 run).
+  - Plan first: a `plan` turn on a building session, no write before approval, approval stores brief version 2 and builds in the same turn (P10 run).
+  - `off`: no switch, new sessions build, and a build turn is not offered `ask_user` (the mock asks only when the tool is offered; the turn wrote and built). `suggested`: new sessions build; a build turn asked one round with a card, its second `ask_user` was refused without a card, and the turn wrote, built and completed.
+  - Restart with a pending round: Orbit stopped and started with a session paused on a question card; the card was rebuilt on reload, the answer resumed the turn, the plan was approved and milestone 1 was built.
+  - Budget ending during the briefing: with the session cap lowered below the first call, the answer resumed the turn, the next model call was refused, the turn ended `budget_exceeded`, the answered round stayed in the chat and the chat named the session token limit.
+  - Screenshots of the question card, the plan card, "Continue" and the brief drawer in English and pt-BR.
+
+  Two failures of the test script itself, fixed in the script and run again: the wait for the end of a resumed turn returned on the `awaiting_confirmation` status of before the click, which restored the budget cap before the resume. No product failure. Still seen and not caused by this feature: the preview iframe asks for its page once before the first build output exists (404) and loads after the build.
 
 ### P13 — Real-model run (owner)
 - **What**: with the owner's key, together with costs C13: whether a real model asks useful questions and stays inside the bounds, whether it respects one milestone per turn, the size of real plans against the limits, and the provider behavior of the §4.3 **[verify]**. Feeds the eval set of the parent spec (T42) for success criterion 1.
