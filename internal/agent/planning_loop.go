@@ -115,7 +115,8 @@ func (r *run) directive(brief *BriefInput) string {
 	if r.planMode {
 		b.WriteString("Mode: planning. In this turn you cannot change files, run builds or propose backend changes; those tools are not available. " +
 			"Find out what to build: call orbit_get_app_schema first and do not ask about data that already exists, " +
-			"ask with ask_user only what the user's messages do not answer, then call propose_build_plan.")
+			"ask with ask_user only what the user's messages do not answer, then call propose_build_plan. " +
+			"Do not reply in plain text: a question goes through ask_user, and the turn ends with propose_build_plan.")
 		if brief != nil {
 			b.WriteString(" An app brief already exists (APP BRIEF section): your plan replaces it, so send the whole plan and mark the milestones that are already built as done.")
 		}

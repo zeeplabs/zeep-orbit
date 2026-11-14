@@ -502,7 +502,8 @@ func TestPrompt_BriefIsStableAndTheDirectiveFollowsTheTurn(t *testing.T) {
 	if strings.Contains(planTurn, headerBrief) {
 		t.Error("no brief, no brief section")
 	}
-	if _, s := sessionSection(planTurn); !strings.Contains(s, "Mode: planning") || !strings.Contains(s, "you cannot change files") {
+	if _, s := sessionSection(planTurn); !strings.Contains(s, "Mode: planning") || !strings.Contains(s, "you cannot change files") ||
+		!strings.Contains(s, "Do not reply in plain text") {
 		t.Errorf("directive of a planning turn:\n%s", s)
 	}
 	revise := run(store.ModePlan, 0, briefInput(t, 2, file), true)

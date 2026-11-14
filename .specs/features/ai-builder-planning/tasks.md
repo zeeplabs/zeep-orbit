@@ -11,7 +11,7 @@ Commits only when the user asks (AGENTS.md §2); one commit per task when author
 **Spec**: `.specs/features/ai-builder-planning/spec.md`
 **Design**: `.specs/features/ai-builder-planning/design.md`
 **Parent**: `.specs/features/ai-frontend-builder/`
-**Status**: Approved by the maintainer on 2026-11-13 with the defaults of design §12. In execution on `feat/ai-frontend-builder`. Done: P01–P12. The DDL of P01 is still shown and confirmed before it is applied.
+**Status**: Approved by the maintainer on 2026-11-13 with the defaults of design §12. In execution on `feat/ai-frontend-builder`. Done: P01–P13. The DDL of P01 is still shown and confirmed before it is applied.
 
 ---
 
@@ -145,3 +145,11 @@ P11 docs + CHANGELOG (last)        P12 local end-to-end run        P13 real-mode
 ### P13 — Real-model run (owner)
 - **What**: with the owner's key, together with costs C13: whether a real model asks useful questions and stays inside the bounds, whether it respects one milestone per turn, the size of real plans against the limits, and the provider behavior of the §4.3 **[verify]**. Feeds the eval set of the parent spec (T42) for success criterion 1.
 - **Depends**: P12, a key typed by the owner.
+- **Status**: Done 2026-11-13, partly: OpenAI only, one sample per path. The owner typed an OpenAI key (model `gpt-4.1`) in the local settings and approved the run with caps of US$ 2 per session and US$ 10 per month; the model had no price row, so the money caps could not apply and the run was bounded by token caps lowered for it (1M per session, 3M per user per month), then restored with the mock provider. About 201K tokens in total; no cost figure, since there was no price.
+  - Questions (vague pt-BR request, clinic appointments, made-up data): the agent read the schema first, asked one round of 4 questions in pt-BR, in product terms (features, who uses it, sign-in, look), 3 to 5 options each, inside every bound; after the answers it proposed the plan without a second round.
+  - Plan size: 2,045 bytes for 5 screens, 3 tables, 4 milestones, 3 assumptions (limit 8 KiB); a revision 2,443 bytes; a complete first message 762 bytes. Access per table was sensible (`role` for staff, `signed_in` for patients and appointments).
+  - One milestone per turn: after approval the same turn built milestone 1 only (login), passed install, typecheck, lint (after one fix) and build, stopped and named milestone 2 as next. 19 calls, 173.7K tokens, 144K of them cached input.
+  - Zero questions: a complete first message gave `propose_build_plan` directly, about 5K tokens. It did not read the schema first (new, empty backend), against the directive.
+  - Design §4.3 **[verify]**, OpenAI: a plan-first turn on a session whose history has `write_file`, `edit_file` and `run_build` calls, with those tools not offered, was accepted by the Chat Completions endpoint with no error. Anthropic was not run (no key): still open.
+  - Failure found and fixed: the first plan-first turn answered in plain text (a question in prose, "Ótima sugestão!") with no `ask_user` and no `propose_build_plan`, so the turn ended `completed` with no card. The plan-mode directive and the "Planning" block of `prompts/core.md` now say not to reply in plain text and to end the turn with `propose_build_plan`; the prompt test checks the directive. The same request then ended in a revised plan with milestone 1 marked done and the WhatsApp point written as an assumption and an exclusion. One sample before and one after: the fix is likely, not proven. A stronger guarantee (`tool_choice` required in plan mode) is left for `ai-builder-economy` or the eval.
+  - Open: Anthropic; more samples per path for the eval set of the parent spec (T42); a price row for the real model so the cost side of C13 can be measured.

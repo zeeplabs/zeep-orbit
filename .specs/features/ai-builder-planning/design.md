@@ -132,6 +132,8 @@ Enforced twice, both in the loop and both tested:
 
 **Partly resolved in P04:** the shared contract table has the case `history_with_unoffered_tool` (a history with a call to a tool that is not in the request's tool list). Both adapters send the history unchanged and the case passes against both fakes; the fakes do not check tool names against the list, so the answer of the real OpenAI and Anthropic endpoints is still open and goes to P13. If a provider refuses, the fallback is to keep offering the specs of tools present in the history while the loop still refuses to run them.
 
+**Resolved for OpenAI in P13:** the Chat Completions endpoint (`gpt-4.1`) accepted a plan-first turn whose history has `write_file`, `edit_file` and `run_build` calls while those tools were not offered. Anthropic is still unverified (no key in the run).
+
 ### 4.4 Bounds (ABP-04, ABP-05, ABP-16)
 
 Counted by `analyzeTurn` from the turn's persisted messages (answered `ask_user` calls), so a resume cannot reset them:
