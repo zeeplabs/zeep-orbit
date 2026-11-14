@@ -96,6 +96,9 @@ type BuilderSettings struct {
 	CostCapsReviewPending bool `json:"cost_caps_review_pending"`
 	// PlanningMode: "required", "suggested" or "off" (see the constants).
 	PlanningMode string `json:"planning_mode"`
+	// PlanningModel is the model of Provider that answers plan-mode turns; ""
+	// means the provider row's model (ai-builder-economy).
+	PlanningModel string `json:"planning_model"`
 	// UpdatedBy and UpdatedAt are nil/zero while the row has never been saved.
 	UpdatedBy *string    `json:"updated_by"`
 	UpdatedAt *time.Time `json:"updated_at"`
@@ -121,6 +124,9 @@ type BuilderSettingsInput struct {
 	SessionCostCapMicros     *int64  `json:"session_cost_cap_micros"`
 	UserMonthlyCostCapMicros *int64  `json:"user_monthly_cost_cap_micros"`
 	PlanningMode             *string `json:"planning_mode"`
+	// PlanningModel: "" clears it, so a client that clears the field must send
+	// the key.
+	PlanningModel *string `json:"planning_model"`
 }
 
 func defaultBuilderSettings() *BuilderSettings {
@@ -141,7 +147,7 @@ const builderSettingsCols = `enabled, provider, context_window_tokens, session_t
 	max_steps_per_turn, max_fix_iterations, max_turn_seconds, backend_approval_mode, publish_rls_gate,
 	updated_by::text, updated_at,
 	cost_currency, cost_currency_changed_at, session_cost_cap_micros, user_monthly_cost_cap_micros,
-	planning_mode, cost_caps_review_pending`
+	planning_mode, cost_caps_review_pending, planning_model`
 
 func scanBuilderSettings(row pgx.Row) (*BuilderSettings, error) {
 	var (
@@ -153,7 +159,7 @@ func scanBuilderSettings(row pgx.Row) (*BuilderSettings, error) {
 		&s.MaxStepsPerTurn, &s.MaxFixIterations, &s.MaxTurnSeconds, &s.BackendApprovalMode, &s.PublishRLSGate,
 		&updatedBy, &updatedAt,
 		&s.CostCurrency, &s.CostCurrencyChangedAt, &s.SessionCostCapMicros, &s.UserMonthlyCostCapMicros,
-		&s.PlanningMode, &s.CostCapsReviewPending); err != nil {
+		&s.PlanningMode, &s.CostCapsReviewPending, &s.PlanningModel); err != nil {
 		return nil, err
 	}
 	s.UpdatedBy = updatedBy
@@ -185,7 +191,7 @@ func UpsertBuilderSettings(ctx context.Context, pool *db.Pool, updatedBy string,
 		   (id, enabled, provider, context_window_tokens, session_token_cap, user_monthly_token_cap,
 		    max_steps_per_turn, max_fix_iterations, max_turn_seconds,
 		    backend_approval_mode, publish_rls_gate, updated_by, updated_at,
-		    cost_currency, session_cost_cap_micros, user_monthly_cost_cap_micros, planning_mode)
+		    cost_currency, session_cost_cap_micros, user_monthly_cost_cap_micros, planning_mode, planning_model)
 		 VALUES (1,
 		   COALESCE($1::boolean, false), COALESCE($2::text, $9), COALESCE($3::int, $10),
 		   COALESCE($4::bigint, 0), COALESCE($5::bigint, 0),
@@ -193,7 +199,7 @@ func UpsertBuilderSettings(ctx context.Context, pool *db.Pool, updatedBy string,
 		   COALESCE($15::text, $17), COALESCE($16::text, $18),
 		   $14::uuid, now(),
 		   COALESCE($19::text, $22), COALESCE($20::bigint, 0), COALESCE($21::bigint, 0),
-		   COALESCE($23::text, $24))
+		   COALESCE($23::text, $24), COALESCE($25::text, ''))
 		 ON CONFLICT (id) DO UPDATE SET
 		   enabled                = COALESCE($1::boolean, builder_settings.enabled),
 		   provider               = COALESCE($2::text,    builder_settings.provider),
@@ -214,6 +220,7 @@ func UpsertBuilderSettings(ctx context.Context, pool *db.Pool, updatedBy string,
 		   session_cost_cap_micros      = COALESCE($20::bigint, builder_settings.session_cost_cap_micros),
 		   user_monthly_cost_cap_micros = COALESCE($21::bigint, builder_settings.user_monthly_cost_cap_micros),
 		   planning_mode                = COALESCE($23::text,   builder_settings.planning_mode),
+		   planning_model               = COALESCE($25::text,   builder_settings.planning_model),
 		   cost_caps_review_pending     = CASE
 		     WHEN $20::bigint IS NOT NULL OR $21::bigint IS NOT NULL THEN false
 		     ELSE builder_settings.cost_caps_review_pending END
@@ -225,7 +232,7 @@ func UpsertBuilderSettings(ctx context.Context, pool *db.Pool, updatedBy string,
 		updatedBy,
 		in.BackendApprovalMode, in.PublishRLSGate, builderDefaultApprovalMode, builderDefaultPublishRLSGate,
 		in.CostCurrency, in.SessionCostCapMicros, in.UserMonthlyCostCapMicros, builderDefaultCostCurrency,
-		in.PlanningMode, builderDefaultPlanningMode,
+		in.PlanningMode, builderDefaultPlanningMode, in.PlanningModel,
 	))
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: upsert builder settings: %w", err)

@@ -17,6 +17,7 @@ package dashboard
 // record sizes and version ids only.
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,9 +25,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/zeeplabs/zeep-orbit/internal/agent/catalog"
+	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
 
 // Bounds for the numeric settings. They protect the platform from a typo (a
@@ -110,6 +113,14 @@ func (h *Handler) UpsertBuilderSettingsConfig(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	if msg, err := resolveBuilderPlanningModel(r.Context(), h.pool, &body); err != nil {
+		h.writeError(w, r, http.StatusInternalServerError, "internal error", err)
+		return
+	} else if msg != "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg})
+		return
+	}
+
 	s, err := UpsertBuilderSettings(r.Context(), h.pool, user.ID, body)
 	if err != nil {
 		h.writeError(w, r, http.StatusInternalServerError, "failed to update builder settings", err)
@@ -126,7 +137,7 @@ func validateBuilderSettingsInput(in *BuilderSettingsInput) error {
 		in.UserMonthlyTokenCap == nil && in.MaxStepsPerTurn == nil && in.MaxFixIterations == nil && in.MaxTurnSeconds == nil &&
 		in.BackendApprovalMode == nil && in.PublishRLSGate == nil &&
 		in.CostCurrency == nil && in.SessionCostCapMicros == nil && in.UserMonthlyCostCapMicros == nil &&
-		in.PlanningMode == nil {
+		in.PlanningMode == nil && in.PlanningModel == nil {
 		return errors.New("no settings to update")
 	}
 	if in.Provider != nil {
@@ -191,6 +202,59 @@ func validateBuilderSettingsInput(in *BuilderSettingsInput) error {
 		in.PlanningMode = &m
 	}
 	return nil
+}
+
+// builderPlanningModelMaxLen bounds the planning model of an openai_compatible
+// provider, whose models the catalog does not cover.
+const builderPlanningModelMaxLen = 200
+
+const errPlanningModelNotInCatalog = "planning_model must be a model of the selected provider's catalog"
+
+// resolveBuilderPlanningModel checks in.PlanningModel against the provider the
+// settings will have after this save, and clears a saved planning model when
+// the provider changes (ai-builder-economy AEC-03, AEC-04). It returns a
+// client error message, or "" when the input may be saved. The model is the
+// provider row's model when empty, so "" is always valid.
+func resolveBuilderPlanningModel(ctx context.Context, pool *db.Pool, in *BuilderSettingsInput) (string, error) {
+	if in.PlanningModel == nil && in.Provider == nil {
+		return "", nil
+	}
+	cur, err := GetBuilderSettings(ctx, pool)
+	if err != nil {
+		return "", err
+	}
+	provider := cur.Provider
+	if in.Provider != nil {
+		provider = *in.Provider
+	}
+	if in.PlanningModel == nil {
+		// The operator did not touch the field but the provider moved: the
+		// saved model belonged to the old provider, so it is cleared, not kept.
+		if provider != cur.Provider && cur.PlanningModel != "" {
+			empty := ""
+			in.PlanningModel = &empty
+		}
+		return "", nil
+	}
+	model := strings.TrimSpace(*in.PlanningModel)
+	in.PlanningModel = &model
+	if model == "" {
+		return "", nil
+	}
+	saved := cur.PlanningModel
+	if provider != cur.Provider {
+		saved = "" // a deprecated model stays valid only for the provider that already holds it
+	}
+	if catalog.Covers(provider) {
+		if !catalogModelChoosable(provider, model, saved) {
+			return errPlanningModelNotInCatalog, nil
+		}
+		return "", nil
+	}
+	if len(model) > builderPlanningModelMaxLen || strings.ContainsFunc(model, unicode.IsControl) {
+		return "planning_model must be at most 200 characters without control characters", nil
+	}
+	return "", nil
 }
 
 // builderPromptResponse is the API view of the active persona + rules. With no

@@ -294,6 +294,102 @@ func TestBuilderSettings_PlanningModeMergeAndDefault(t *testing.T) {
 	}
 }
 
+// planning_model (ai-builder-economy E01): empty by default, validated against
+// the catalog of the provider the settings will have, merged on absent key,
+// cleared with "", and cleared when the provider changes.
+func TestBuilderSettings_PlanningModel(t *testing.T) {
+	pool, h := builderSettingsTestPool(t)
+	super := mustCreateSuperadmin(t, pool)
+	do := func(body string) (int, string, BuilderSettings) {
+		t.Helper()
+		w := callBuilder(t, h.UpsertBuilderSettingsConfig, super, http.MethodPut, "/x", body)
+		var s BuilderSettings
+		if w.Code == http.StatusOK {
+			s = decodeJSON[BuilderSettings](t, w)
+		}
+		return w.Code, w.Body.String(), s
+	}
+	ok := func(body string) BuilderSettings {
+		t.Helper()
+		code, out, s := do(body)
+		if code != http.StatusOK {
+			t.Fatalf("PUT %s: %d %s", body, code, out)
+		}
+		return s
+	}
+
+	// Default: empty, with no row and after the first save.
+	if got := decodeJSON[BuilderSettings](t, callBuilder(t, h.GetBuilderSettingsConfig, super, http.MethodGet, "/x", "")); got.PlanningModel != "" {
+		t.Fatalf("unsaved planning_model = %q, want empty", got.PlanningModel)
+	}
+	if got := ok(`{"enabled":true,"provider":"anthropic"}`); got.PlanningModel != "" {
+		t.Fatalf("first save planning_model = %q, want empty", got.PlanningModel)
+	}
+
+	// A catalog model of the provider is saved, trimmed, and an unrelated
+	// update keeps it.
+	if got := ok(`{"planning_model":" claude-haiku-5-5 "}`); got.PlanningModel != "claude-haiku-5-5" {
+		t.Fatalf("planning_model = %q", got.PlanningModel)
+	}
+	if got := ok(`{"max_steps_per_turn":12}`); got.PlanningModel != "claude-haiku-5-5" {
+		t.Fatalf("an unrelated update must keep planning_model: %+v", got)
+	}
+
+	// A model of another provider, or outside the catalog, is refused and
+	// leaves the saved value alone.
+	for _, bad := range []string{"gpt-5.5", "claude-nope"} {
+		code, out, _ := do(`{"planning_model":"` + bad + `"}`)
+		if code != http.StatusBadRequest || !strings.Contains(out, errPlanningModelNotInCatalog) {
+			t.Errorf("planning_model %q: %d %s", bad, code, out)
+		}
+	}
+	if got := decodeJSON[BuilderSettings](t, callBuilder(t, h.GetBuilderSettingsConfig, super, http.MethodGet, "/x", "")); got.PlanningModel != "claude-haiku-5-5" {
+		t.Fatalf("a refused value changed planning_model to %q", got.PlanningModel)
+	}
+
+	// The model is checked against the provider of the same request.
+	if code, out, _ := do(`{"provider":"openai","planning_model":"claude-haiku-5-5"}`); code != http.StatusBadRequest {
+		t.Errorf("anthropic model with the provider moved to openai: %d %s", code, out)
+	}
+	if got := ok(`{"provider":"openai","planning_model":"gpt-5.5"}`); got.Provider != "openai" || got.PlanningModel != "gpt-5.5" {
+		t.Fatalf("provider and planning model together: %+v", got)
+	}
+
+	// Moving the provider without naming the field clears it; an explicit ""
+	// clears it too; changing nothing about the provider keeps it.
+	if got := ok(`{"provider":"openai"}`); got.PlanningModel != "gpt-5.5" {
+		t.Fatalf("same provider must keep planning_model: %+v", got)
+	}
+	if got := ok(`{"provider":"anthropic"}`); got.PlanningModel != "" {
+		t.Fatalf("a provider change must clear planning_model: %+v", got)
+	}
+	ok(`{"planning_model":"claude-haiku-5-5"}`)
+	if got := ok(`{"planning_model":""}`); got.PlanningModel != "" {
+		t.Fatalf("explicit empty must clear planning_model: %+v", got)
+	}
+
+	// openai_compatible has no catalog: any short text, no control characters.
+	if got := ok(`{"provider":"openai_compatible","planning_model":"my-small-model"}`); got.PlanningModel != "my-small-model" {
+		t.Fatalf("openai_compatible planning_model: %+v", got)
+	}
+	for _, bad := range []string{strings.Repeat("m", builderPlanningModelMaxLen+1), "bad\\nmodel"} {
+		if code, out, _ := do(`{"planning_model":"` + bad + `"}`); code != http.StatusBadRequest {
+			t.Errorf("openai_compatible planning_model %q: %d %s", bad, code, out)
+		}
+	}
+
+	// The field alone is a valid update, and the DDL is idempotent.
+	if code, out, _ := do(`{}`); code != http.StatusBadRequest || !strings.Contains(out, "no settings to update") {
+		t.Errorf("empty body: %d %s", code, out)
+	}
+	if err := ProvisionZeepSystem(context.Background(), pool); err != nil {
+		t.Fatalf("second provision: %v", err)
+	}
+	if got := decodeJSON[BuilderSettings](t, callBuilder(t, h.GetBuilderSettingsConfig, super, http.MethodGet, "/x", "")); got.PlanningModel != "my-small-model" {
+		t.Fatalf("planning_model after re-provision = %q", got.PlanningModel)
+	}
+}
+
 // Invalid values are 400 and never create or alter the row.
 func TestBuilderSettings_InvalidValuesRejected(t *testing.T) {
 	pool, h := builderSettingsTestPool(t)

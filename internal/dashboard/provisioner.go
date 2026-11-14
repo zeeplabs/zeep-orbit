@@ -987,6 +987,11 @@ func provisionZeepSystemOnce(ctx context.Context, pool *db.Pool) error {
 		`ALTER TABLE zeep_system.builder_settings
 		   ADD COLUMN IF NOT EXISTS planning_mode TEXT NOT NULL DEFAULT 'required'
 		   CHECK (planning_mode IN ('required', 'suggested', 'off'))`,
+		// Planning model (ai-builder-economy E01): the model of the selected
+		// provider that answers plan-mode turns. '' means the provider row's
+		// model, so existing installations change nothing.
+		`ALTER TABLE zeep_system.builder_settings
+		   ADD COLUMN IF NOT EXISTS planning_model TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE zeep_system.builder_sessions
 		   ADD COLUMN IF NOT EXISTS phase TEXT NOT NULL DEFAULT 'building'
 		   CHECK (phase IN ('briefing', 'building'))`,
