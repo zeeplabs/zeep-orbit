@@ -603,6 +603,11 @@ var builderUsageGroups = map[string]struct{ cols, join, group, order string }{
 		group: `l.provider, l.model`,
 		order: `SUM(l.cost_micros) DESC NULLS LAST, count(*) DESC, l.provider, l.model`,
 	},
+	"purpose": {
+		cols:  `l.purpose, NULL::text, false, NULL::text, NULL::text`,
+		group: `l.purpose`,
+		order: `SUM(l.cost_micros) DESC NULLS LAST, count(*) DESC, l.purpose`,
+	},
 	// A session's title can come from what its owner typed, so it is only
 	// returned to that owner.
 	"session": {
@@ -616,8 +621,8 @@ var builderUsageGroups = map[string]struct{ cols, join, group, order string }{
 }
 
 // UsageReport handles GET /dashboard/api/builder/usage?from&to&group_by&user_id:
-// usage of a date range (UTC days, both inclusive) grouped by day, user, model
-// or session. A superadmin reads everyone's usage; anyone else reads their own
+// usage of a date range (UTC days, both inclusive) grouped by day, user, model,
+// purpose or session. A superadmin reads everyone's usage; anyone else reads their own
 // and may not group by user.
 func (h *BuilderHandler) UsageReport(w http.ResponseWriter, r *http.Request) {
 	user, ok := h.requireUsageReader(w, r)
@@ -630,7 +635,7 @@ func (h *BuilderHandler) UsageReport(w http.ResponseWriter, r *http.Request) {
 	}
 	g, known := builderUsageGroups[groupBy]
 	if !known {
-		h.writeError(w, http.StatusBadRequest, "group_by must be 'day', 'user', 'model' or 'session'")
+		h.writeError(w, http.StatusBadRequest, "group_by must be 'day', 'user', 'model', 'purpose' or 'session'")
 		return
 	}
 	if groupBy == "user" && !builderUsageSeesAll(user) {

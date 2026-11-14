@@ -31,6 +31,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **AI Frontend Builder: "Create with AI" on an empty installation.** The builder entry sat in the frontend apps section, which only renders when at least one app exists, so a new installation had no way to start a builder session even though the builder can create its own backend. The empty state now shows the entry too.
 - **AI Frontend Builder: your sessions are listed on the Apps page.** A new section, **Being built with AI**, lists your builder sessions with their title and last update, and opens the session. Before this, a session that was not published appeared nowhere, so leaving the builder page meant coming back through the URL. The timeline also stops showing the raw name of the backend proposal tool, and a turn that continues after you confirm or reject a proposal now says "Work resumed" instead of "Resumed after an interruption".
 - **Builder turns expose `user_message`.** The turn objects returned by `GET /dashboard/api/builder/sessions/{id}` carry the text the user sent for that turn, so the chat can be rebuilt after a reload.
+- **AI Frontend Builder: usage report by purpose.** `GET /dashboard/api/builder/usage?group_by=purpose` returns one row per purpose (`chat`, `planning`, `compaction`) with the same columns as the other groupings, so the share of spend that goes to planning is one request instead of a database query.
 
 ### Changed
 

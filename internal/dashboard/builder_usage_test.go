@@ -561,3 +561,44 @@ func TestBuilderUsage_SessionViewsCarryTheCost(t *testing.T) {
 		t.Errorf("list usage of the fresh session = %+v", u)
 	}
 }
+
+func TestBuilderUsage_ReportGroupedByPurpose(t *testing.T) {
+	e, s1, _ := buReportEnv(t)
+	planning := store.UsageRecord{UserID: e.owner.ID, SessionID: s1, Purpose: store.PurposePlanning, InputTokens: 500, OutputTokens: 100, Reported: true}
+	e.buCallAt(t, planning, time.Date(2026, 3, 10, 13, 0, 0, 0, time.UTC)) // 1500 + 1500 = 3000
+
+	_, rep := e.buReport(t, e.super, buRange+"&group_by=purpose")
+	if rep.GroupBy != "purpose" || len(rep.Rows) != 3 {
+		t.Fatalf("purpose report = %+v", rep)
+	}
+	chat := buReportRow(t, rep, store.PurposeChat)
+	if chat.Calls != 3 || buCost(t, chat.CostMicros) != 10500 || chat.UnpricedCalls != 1 {
+		t.Errorf("chat row = %+v", chat)
+	}
+	if c := buReportRow(t, rep, store.PurposeCompaction); c.Calls != 1 || buCost(t, c.CostMicros) != 4500 {
+		t.Errorf("compaction row = %+v", c)
+	}
+	if p := buReportRow(t, rep, store.PurposePlanning); p.Calls != 1 || buCost(t, p.CostMicros) != 3000 {
+		t.Errorf("planning row = %+v", p)
+	}
+	var calls, cost int64
+	for _, r := range rep.Rows {
+		calls += r.Calls
+		cost += buCost(t, r.CostMicros)
+	}
+	if calls != rep.Totals.Calls || cost != buCost(t, rep.Totals.CostMicros) {
+		t.Errorf("rows add up to %d calls / %d micros, totals = %+v", calls, cost, rep.Totals)
+	}
+
+	// A regular user sees only their own rows.
+	_, own := e.buReport(t, e.owner, buRange+"&group_by=purpose")
+	if chat := buReportRow(t, own, store.PurposeChat); chat.Calls != 2 {
+		t.Errorf("owner chat row = %+v", chat)
+	}
+
+	// The 400 message names every grouping.
+	w := e.do(t, e.h.UsageReport, e.super, http.MethodGet, "/x?"+buRange+"&group_by=nope", "")
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "'purpose'") {
+		t.Errorf("unknown group_by: code=%d body=%s", w.Code, w.Body.String())
+	}
+}
