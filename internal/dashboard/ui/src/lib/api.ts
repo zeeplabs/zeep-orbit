@@ -1911,6 +1911,7 @@ export type BuilderUnavailableReason =
   | 'not_configured' // BUILDER_URL unset: no builder deployed
   | 'disabled' // superadmin switched it off (settings.enabled)
   | 'provider_not_configured' // the settings' LLM provider is unusable
+  | 'model_not_in_catalog' // the openai/anthropic row holds a model the catalog cannot price
   | 'budget_not_configured' // a token cap is 0 (unset): every turn would end budget_exceeded
   | 'builder_unreachable' // builder health probe failed
 
@@ -2452,9 +2453,11 @@ export interface BuilderSettings {
   max_steps_per_turn: number
   max_fix_iterations: number
   max_turn_seconds: number
-  /** ISO 4217 code that prices and stored costs are in. Changing it converts nothing. */
+  /** Currency of prices and stored costs: always 'USD' (the model catalog's currency). */
   cost_currency: string
   cost_currency_changed_at: string | null
+  /** Set when the installation was moved to USD from another currency; saving a money cap clears it. */
+  cost_caps_review_pending: boolean
   /** Money caps in micros (1 unit = 1,000,000). 0 = no money cap. */
   session_cost_cap_micros: number
   user_monthly_cost_cap_micros: number
@@ -2480,7 +2483,6 @@ export interface BuilderSettingsUpdate {
   max_steps_per_turn?: number
   max_fix_iterations?: number
   max_turn_seconds?: number
-  cost_currency?: string
   session_cost_cap_micros?: number
   user_monthly_cost_cap_micros?: number
   planning_mode?: BuilderPlanningMode
@@ -2498,6 +2500,53 @@ export const BUILDER_SETTINGS_LIMITS = {
   max_fix_iterations: { min: 1, max: 20 },
   max_turn_seconds: { min: 10, max: 3600 },
 } as const
+
+// -- Model catalog --
+
+/** The provider kinds whose models and prices come from the catalog shipped with Orbit. */
+export type BuilderCatalogProviderKind = 'openai' | 'anthropic'
+
+/**
+ * One price tier of a catalog model (builder_catalog.go). Prices are decimal strings per million
+ * tokens, in the catalog currency. max_prompt_tokens is the largest prompt (input + cached input +
+ * cache write of a call) billed at the tier; 0 means no limit. A null optional price is billed at
+ * the input price.
+ */
+export interface BuilderCatalogTier {
+  max_prompt_tokens: number
+  input_per_mtok: string
+  cached_input_per_mtok: string | null
+  cache_write_per_mtok: string | null
+  output_per_mtok: string
+}
+
+export interface BuilderCatalogPrice {
+  effective_from: string
+  tiers: BuilderCatalogTier[]
+}
+
+export interface BuilderCatalogModel {
+  id: string
+  /** Not offered for a new choice; a provider row that already uses it keeps working. */
+  deprecated: boolean
+  /** Ascending effective_from: the last one not after now is in force, later ones are upcoming. */
+  prices: BuilderCatalogPrice[]
+}
+
+export interface BuilderCatalog {
+  currency: string
+  reviewed_at: string
+  providers: { provider: BuilderCatalogProviderKind; models: BuilderCatalogModel[] }[]
+}
+
+export function isCatalogProvider(provider: string): provider is BuilderCatalogProviderKind {
+  return provider === 'openai' || provider === 'anthropic'
+}
+
+/** The catalog models of a provider ([] for a provider outside the catalog or while loading). */
+export function catalogModelsOf(catalog: BuilderCatalog | undefined, provider: string): BuilderCatalogModel[] {
+  return catalog?.providers.find((p) => p.provider === provider)?.models ?? []
+}
 
 // -- Model prices (superadmin) --
 
@@ -2795,6 +2844,7 @@ export const builderKeys = {
   templates: () => ['builder', 'templates'] as const,
   settings: () => ['builder', 'settings'] as const,
   prices: () => ['builder', 'prices'] as const,
+  catalog: () => ['builder', 'catalog'] as const,
   prompt: () => ['builder', 'prompt'] as const,
   skills: () => ['builder', 'skills'] as const,
   skill: (name: string, version?: number) => ['builder', 'skill', name, version ?? null] as const,
@@ -3013,6 +3063,15 @@ export function useBuilderSettings(
     queryKey: builderKeys.settings(),
     queryFn: () => apiFetch<BuilderSettings>(`${BUILDER_BASE}/settings`),
     enabled: options.enabled ?? true,
+  })
+}
+
+/** The model catalog. It only changes with an Orbit release, so it is fetched once per page load. */
+export function useBuilderCatalog(): UseQueryResult<BuilderCatalog> {
+  return useQuery({
+    queryKey: builderKeys.catalog(),
+    queryFn: () => apiFetch<BuilderCatalog>(`${BUILDER_BASE}/catalog`),
+    staleTime: Infinity,
   })
 }
 

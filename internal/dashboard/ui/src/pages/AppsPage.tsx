@@ -479,6 +479,8 @@ export default function AppsPage() {
     ? t("builder.newSession.reason.disabled")
     : builderReason === "provider_not_configured"
     ? t("builder.newSession.reason.provider_not_configured")
+    : builderReason === "model_not_in_catalog"
+    ? t("builder.newSession.reason.model_not_in_catalog")
     : builderReason === "budget_not_configured"
     ? t("builder.newSession.reason.budget_not_configured")
     : builderReason === "builder_unreachable"

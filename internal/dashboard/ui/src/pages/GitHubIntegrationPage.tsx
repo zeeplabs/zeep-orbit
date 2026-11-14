@@ -32,10 +32,9 @@ import {
 import { PageHeader, EmptyState, LoadingState, StatusPill, DataTable, ProviderTabs, AboutPanel, ConfirmDialog } from '@/components/patterns'
 import type { Column } from '@/components/patterns'
 import { cn } from '@/lib/utils'
-import { authFetch } from '@/lib/api'
+import { authFetch, catalogModelsOf, isCatalogProvider, useBuilderCatalog } from '@/lib/api'
 import type { AIProviderKind, AIProviderStatus, AIProviderUpsertInput, GitHubTemplate } from '@/lib/api'
 import { validateAIProviderBaseUrl } from '@/lib/aiProviderBaseUrl'
-import { catalogModels, isCatalogModel } from '@/lib/aiModelCatalog'
 import AIBuilderSettings from '@/pages/settings/AIBuilderSettings'
 
 interface GitHubStatus {
@@ -1240,10 +1239,10 @@ function DeployTab() {
 // explicitly — never omitted — or a model-only update would silently
 // disable the provider (AGENTS.md §4's partial-update rule, applied in the
 // direction of "never send a false default by omission").
-// OpenAI and Anthropic offer the curated presets of lib/aiModelCatalog in a select.
-// "custom" always stays last and reveals a free-text input, so a model added by the
-// provider after the list was last reviewed (or already saved by a previous PUT) is
-// never blocked.
+// OpenAI and Anthropic offer only the models of the catalog shipped with Orbit
+// (ai-model-catalog AMC-03): the catalog prices their calls, and the server refuses any
+// other model. A deprecated model is listed only while the row still uses it; a saved model
+// outside the catalog is shown in a notice and has to be replaced.
 //
 // openai_compatible (ai-frontend-builder AFB-01) is any server speaking the OpenAI chat API
 // at a custom base URL (Ollama, vLLM, a gateway...). Its model is free text (no preset
@@ -1259,7 +1258,8 @@ function AIProviderTab() {
   const [searchParams] = useSearchParams()
   const [provider, setProvider] = useState<AIProviderKind>(() => parseAIProviderKind(searchParams.get('provider')))
   const [model, setModel] = useState('')
-  const [customModel, setCustomModel] = useState('')
+  const [savedModel, setSavedModel] = useState('')
+  const catalogQuery = useBuilderCatalog()
   const [baseUrl, setBaseUrl] = useState('')
   const [baseUrlError, setBaseUrlError] = useState<string | null>(null)
   const [apiKey, setApiKey] = useState('')
@@ -1277,7 +1277,7 @@ function AIProviderTab() {
     let cancelled = false
     setLoading(true)
     setModel('')
-    setCustomModel('')
+    setSavedModel('')
     setBaseUrl('')
     setBaseUrlError(null)
     setApiKey('')
@@ -1291,11 +1291,8 @@ function AIProviderTab() {
         if (!res.ok || cancelled) return
         const data = (await res.json()) as AIProviderStatus
         if (cancelled) return
-        const savedModel = data.model || ''
-        setModel(savedModel)
-        if (catalogModels(provider).length > 0 && savedModel && !isCatalogModel(provider, savedModel)) {
-          setCustomModel(savedModel)
-        }
+        setModel(data.model || '')
+        setSavedModel(data.model || '')
         setBaseUrl(data.base_url || '')
         setEnabled(!!data.enabled)
         setHasKey(!!data.has_key)
@@ -1312,14 +1309,22 @@ function AIProviderTab() {
 
   const isCompatible = provider === 'openai_compatible'
   const isAnthropic = provider === 'anthropic'
-  // openai_compatible has no preset catalog and takes the model as free text.
-  const presets = catalogModels(provider)
-  const freeTextModel = presets.length === 0
-  const isPreset = isCatalogModel(provider, model)
+  // openai_compatible has no catalog and takes the model as free text.
+  const freeTextModel = !isCatalogProvider(provider)
+  const catalogModels = catalogModelsOf(catalogQuery.data, provider)
+  const modelOptions = catalogModels.filter((m) => !m.deprecated || m.id === savedModel)
+  const modelInOptions = modelOptions.some((m) => m.id === model)
+  const savedOutsideCatalog =
+    !freeTextModel && savedModel !== '' && catalogQuery.data !== undefined && !catalogModels.some((m) => m.id === savedModel)
 
   const handleSave = async () => {
     setMessage(null)
     setBaseUrlError(null)
+    if (!freeTextModel && !modelInOptions) {
+      setMessage(t('aiProvider.chooseModelError'))
+      setMessageType('error')
+      return
+    }
     if (isCompatible) {
       const reason = validateAIProviderBaseUrl(baseUrl)
       if (reason) {
@@ -1353,6 +1358,7 @@ function AIProviderTab() {
       setMessageType('success')
       setApiKey('')
       setHasKey(!!(data as AIProviderStatus).has_key)
+      setSavedModel((data as AIProviderStatus).model || model)
       if (isCompatible) setBaseUrl((data as AIProviderStatus).base_url || baseUrl.trim())
       // The AI Builder tab reads the same row through this key.
       queryClient.invalidateQueries({ queryKey: ['ai-provider-status', provider] })
@@ -1364,7 +1370,7 @@ function AIProviderTab() {
     }
   }
 
-  if (loading) return <LoadingState rows={3} />
+  if (loading || (!freeTextModel && catalogQuery.isLoading)) return <LoadingState rows={3} />
 
   return (
     <div className="flex flex-wrap items-start gap-6">
@@ -1462,34 +1468,33 @@ function AIProviderTab() {
                   onChange={(e) => setModel(e.target.value)}
                   placeholder={t('settings.aiBuilder.providerForm.modelPlaceholder')}
                 />
+              ) : catalogQuery.isError ? (
+                <p role="alert" className="text-[12px]" style={{ color: 'var(--danger)' }}>
+                  {t('aiProvider.catalogLoadError')}
+                </p>
               ) : (
-              <Select
-                value={isPreset ? model : 'custom'}
-                onValueChange={(value) => setModel(value === 'custom' ? customModel : value)}
-              >
-                <SelectTrigger id="ai-model">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {presets.map((preset) => (
-                    <SelectItem key={preset.id} value={preset.id}>
-                      {preset.id}
-                    </SelectItem>
-                  ))}
-                  <SelectItem value="custom">{t('aiProvider.customModel')}</SelectItem>
-                </SelectContent>
-              </Select>
+                <Select value={modelInOptions ? model : undefined} onValueChange={setModel}>
+                  <SelectTrigger id="ai-model">
+                    <SelectValue placeholder={t('aiProvider.chooseModel')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {modelOptions.map((m) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.deprecated ? t('aiProvider.deprecatedModel', { model: m.id }) : m.id}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               )}
-              {!freeTextModel && !isPreset && (
-                <Input
-                  aria-label={t('aiProvider.customModel')}
-                  value={customModel}
-                  onChange={(e) => {
-                    setCustomModel(e.target.value)
-                    setModel(e.target.value)
-                  }}
-                  placeholder={isAnthropic ? 'claude-opus-4-8' : 'gpt-5'}
-                />
+              {savedOutsideCatalog && (
+                <p role="alert" className="text-[12px]" style={{ color: 'var(--warning-text)' }}>
+                  {t('aiProvider.savedModelNotInCatalog', { model: savedModel })}
+                </p>
+              )}
+              {!freeTextModel && !savedOutsideCatalog && (
+                <p className="text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
+                  {t('aiProvider.catalogHint')}
+                </p>
               )}
             </div>
             <div className="flex flex-col gap-1.5">

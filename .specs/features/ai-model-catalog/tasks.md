@@ -70,7 +70,7 @@ M03 DDL + USD (confirm DDL) ──► M05 prices API ────┘
 - **What**: design §6; delete `src/lib/aiModelCatalog.ts`.
 - **Done when**: frontend gate passes; checked in the browser (AI tab for both providers, a non-catalog saved model, the prices card, the Costs card with the review notice) in en and pt-BR.
 - **Requirements**: AMC-03, AMC-08, AMC-10 (UI). **Tests**: none (no framework); browser check. **Gate**: Frontend.
-- **Status**: Pending.
+- **Status**: Done 2026-11-13. Frontend gate passes. Checked on the local stack in en and pt-BR: AI tab lists for both providers (no free text), a saved `o3-mini` shows the notice and blocks the save, the catalog table with the Haiku 5.5 tiers, the OpenAI-compatible section, and the Costs card with the review notice (set by SQL, then restored). Fixed during the check: catalog dates rendered one day early west of UTC (now formatted in UTC).
 
 ### M07 — Docs
 - **What**: `docs/docs/ai-frontend-builder.md` (provider models, Model prices, currency, `model_not_in_catalog`, API); CHANGELOG (rewrite the `0ae2140` entry into this feature, with the behavior changes: USD only, no custom model for OpenAI/Anthropic, builder unavailable on a non-catalog model); `RELEASE.md` catalog step; README rows if a feature row mentions model prices (and the three translations).

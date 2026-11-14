@@ -12,6 +12,9 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { EmptyState, ErrorState, LoadingState, ProviderTabs, StatusPill } from '@/components/patterns'
 import {
+  catalogModelsOf,
+  isCatalogProvider,
+  useBuilderCatalog,
   BUILDER_SETTINGS_LIMITS,
   authFetch,
   useAIProviderStatus,
@@ -413,11 +416,19 @@ function ProviderSummary({ provider }: { provider: AIProviderKind }) {
   const { t } = useTranslation()
   const [, setSearchParams] = useSearchParams()
   const status = useAIProviderStatus(provider)
+  const catalogQuery = useBuilderCatalog()
 
   const goConfigure = () => setSearchParams({ tab: 'ai', provider }, { replace: true })
   const data = status.data
   const isCompatible = provider === 'openai_compatible'
   const ready = Boolean(data?.has_key && data?.enabled && data?.model && (!isCompatible || data?.base_url))
+  // A catalog provider left on a model outside the catalog keeps the builder unavailable
+  // (model_not_in_catalog) until a catalog model is chosen.
+  const modelOutsideCatalog =
+    isCatalogProvider(provider) &&
+    !!data?.model &&
+    catalogQuery.data !== undefined &&
+    !catalogModelsOf(catalogQuery.data, provider).some((m) => m.id === data.model)
 
   return (
     <div
@@ -468,6 +479,9 @@ function ProviderSummary({ provider }: { provider: AIProviderKind }) {
             </div>
           </dl>
           {!ready && <Notice tone="warning">{t('settings.aiBuilder.provider.notReady')}</Notice>}
+          {ready && modelOutsideCatalog && (
+            <Notice tone="warning">{t('settings.aiBuilder.provider.modelNotInCatalog', { model: data?.model })}</Notice>
+          )}
           <div className="flex flex-wrap items-center gap-3">
             <Button variant="outline" size="sm" onClick={goConfigure} className="gap-2">
               <Icon name="settings" size={14} />

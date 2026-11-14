@@ -6,12 +6,14 @@ import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ConfirmDialog, EmptyState, ErrorState, LoadingState } from '@/components/patterns'
 import {
   BUILDER_MAX_COST_CAP_MICROS,
+  catalogModelsOf,
+  isCatalogProvider,
   useAIProviderStatus,
+  useBuilderCatalog,
   useBuilderPrices,
   useBuilderSettings,
   useDeleteBuilderPrice,
@@ -21,25 +23,20 @@ import {
 import type {
   BuilderModelPrice,
   BuilderPriceInput,
-  BuilderProviderKind,
   BuilderSettings,
   BuilderSettingsUpdate,
 } from '@/lib/api'
-import { CATALOG_PRICE_CURRENCY, CATALOG_REVIEWED_AT, catalogModels, referencePrice } from '@/lib/aiModelCatalog'
-import { formatDate, formatDateTime } from '@/lib/format'
+import { formatCalendarDate, formatDateTime } from '@/lib/format'
 import { decimalFromMicros, formatMoney, isDecimalAmount, microsFromDecimal } from '@/lib/money'
+import { CatalogPricesTable } from './CatalogPricesTable'
 import { Notice, SectionCard } from './builderSettingsParts'
 
-// Settings -> "AI Builder" -> costs (ai-builder-costs C09, ABC-06 to ABC-10, ABC-19): the
-// installation currency, the two money caps and the price table. Orbit ships no prices and
-// fetches none, so nothing here has a default: a model without a row shows "no price set".
+// Settings -> "AI Builder" -> costs (ai-builder-costs C09, ai-model-catalog AMC-08/10): the two
+// money caps, in USD, and the prices. OpenAI and Anthropic prices come from the model catalog
+// shipped with Orbit and are read-only; OpenAI-compatible servers are priced here by the
+// superadmin, and such a model without a row shows "no price set".
 
-const PROVIDER_KINDS: BuilderProviderKind[] = ['openai', 'openai_compatible', 'anthropic']
 const MODEL_MAX_LENGTH = 200
-
-function parseProviderKind(value: string): BuilderProviderKind {
-  return value === 'openai_compatible' || value === 'anthropic' ? value : 'openai'
-}
 
 export function BuilderCostsSection() {
   return (
@@ -51,25 +48,19 @@ export function BuilderCostsSection() {
 }
 
 // ---------------------------------------------------------------------------
-// Currency and money caps
+// Money caps
 // ---------------------------------------------------------------------------
 
 type CapKey = 'session_cost_cap_micros' | 'user_monthly_cost_cap_micros'
 const CAP_KEYS: CapKey[] = ['session_cost_cap_micros', 'user_monthly_cost_cap_micros']
 
-interface CostForm {
-  currency: string
-  caps: Record<CapKey, string>
-}
+type CostForm = Record<CapKey, string>
 
 function toCostForm(settings: BuilderSettings): CostForm {
   const cap = (micros: number) => (micros > 0 ? decimalFromMicros(micros) : '')
   return {
-    currency: settings.cost_currency,
-    caps: {
-      session_cost_cap_micros: cap(settings.session_cost_cap_micros),
-      user_monthly_cost_cap_micros: cap(settings.user_monthly_cost_cap_micros),
-    },
+    session_cost_cap_micros: cap(settings.session_cost_cap_micros),
+    user_monthly_cost_cap_micros: cap(settings.user_monthly_cost_cap_micros),
   }
 }
 
@@ -84,6 +75,7 @@ function CostSettingsCard() {
   const { t } = useTranslation()
   const settingsQuery = useBuilderSettings()
   const pricesQuery = useBuilderPrices()
+  const catalogQuery = useBuilderCatalog()
   const update = useUpdateBuilderSettings()
   const [form, setForm] = useState<CostForm | null>(null)
   const [submitted, setSubmitted] = useState(false)
@@ -118,35 +110,33 @@ function CostSettingsCard() {
   }
 
   const settings = settingsQuery.data
+  const currency = settings.cost_currency
   const serverForm = toCostForm(settings)
-  const currency = form.currency.trim().toUpperCase()
-  const currencyValid = /^[A-Z]{3}$/.test(currency)
   const caps = {
-    session_cost_cap_micros: parseCap(form.caps.session_cost_cap_micros),
-    user_monthly_cost_cap_micros: parseCap(form.caps.user_monthly_cost_cap_micros),
+    session_cost_cap_micros: parseCap(form.session_cost_cap_micros),
+    user_monthly_cost_cap_micros: parseCap(form.user_monthly_cost_cap_micros),
   }
   const capsValid = CAP_KEYS.every((key) => caps[key] !== null)
-  const dirty =
-    currency !== serverForm.currency ||
-    CAP_KEYS.some((key) => caps[key] !== settings[key])
-  const currencyChanged = currencyValid && currency !== settings.cost_currency
+  // A pending review can be confirmed by saving the caps unchanged.
+  const dirty = settings.cost_caps_review_pending || CAP_KEYS.some((key) => caps[key] !== settings[key])
 
-  // A money cap only counts calls that have a cost, so warn when the model in use has none.
+  // A money cap only counts calls that have a cost, so warn when the model in use has none: a
+  // catalog provider's model outside the catalog, or an OpenAI-compatible model with no row.
   const activeModel = providerStatus.data?.model ?? ''
   const anyCap = CAP_KEYS.some((key) => (caps[key] ?? 0) > 0)
   const activeModelUnpriced =
     anyCap &&
     activeModel !== '' &&
-    pricesQuery.data !== undefined &&
-    !pricesQuery.data.prices.some((p) => p.provider === settings.provider && p.model === activeModel)
+    (isCatalogProvider(settings.provider)
+      ? catalogQuery.data !== undefined && !catalogModelsOf(catalogQuery.data, settings.provider).some((m) => m.id === activeModel)
+      : pricesQuery.data !== undefined && !pricesQuery.data.prices.some((p) => p.provider === settings.provider && p.model === activeModel))
 
   const handleSave = () => {
     setSubmitted(true)
-    if (!currencyValid || !capsValid) return
-    // All three keys are always sent: an omitted key keeps the stored value, so a cleared cap
-    // must travel as an explicit 0.
+    if (!capsValid) return
+    // Both caps are always sent: an omitted key keeps the stored value, so a cleared cap must
+    // travel as an explicit 0. Sending them also confirms a pending review.
     const payload: BuilderSettingsUpdate = {
-      cost_currency: currency,
       session_cost_cap_micros: caps.session_cost_cap_micros ?? 0,
       user_monthly_cost_cap_micros: caps.user_monthly_cost_cap_micros ?? 0,
     }
@@ -162,7 +152,7 @@ function CostSettingsCard() {
   return (
     <SectionCard
       title={title}
-      description={t('settings.aiBuilder.costs.desc')}
+      description={t('settings.aiBuilder.costs.desc', { currency })}
       action={
         <Link
           to="/builder/usage"
@@ -172,36 +162,13 @@ function CostSettingsCard() {
         </Link>
       }
     >
-      <div className="flex flex-col gap-1.5 sm:max-w-[220px]">
-        <Label htmlFor="builder-cost-currency" className="text-[12px] font-semibold">
-          {t('settings.aiBuilder.costs.currency')}
-        </Label>
-        <Input
-          id="builder-cost-currency"
-          value={form.currency}
-          maxLength={3}
-          autoComplete="off"
-          spellCheck={false}
-          onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })}
-          aria-invalid={submitted && !currencyValid ? true : undefined}
-          aria-describedby="builder-cost-currency-hint"
-        />
-        <p
-          id="builder-cost-currency-hint"
-          role={submitted && !currencyValid ? 'alert' : undefined}
-          className="text-[12px]"
-          style={{ color: submitted && !currencyValid ? 'var(--danger)' : 'var(--text-tertiary)' }}
-        >
-          {submitted && !currencyValid
-            ? t('settings.aiBuilder.costs.currencyError')
-            : t('settings.aiBuilder.costs.currencyHint')}
-        </p>
-      </div>
-      {currencyChanged && <Notice tone="warning">{t('settings.aiBuilder.costs.currencyWarning')}</Notice>}
-      {settings.cost_currency_changed_at && (
-        <p className="-mt-2 text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
-          {t('settings.aiBuilder.costs.currencyChangedAt', { date: formatDateTime(settings.cost_currency_changed_at) })}
-        </p>
+      {settings.cost_caps_review_pending && (
+        <Notice tone="warning">
+          {t('settings.aiBuilder.costs.reviewCaps', {
+            currency,
+            date: settings.cost_currency_changed_at ? formatDateTime(settings.cost_currency_changed_at) : '',
+          })}
+        </Notice>
       )}
 
       <fieldset className="flex flex-col gap-4 border-0 p-0">
@@ -221,15 +188,15 @@ function CostSettingsCard() {
             return (
               <div key={key} className="flex flex-col gap-1.5">
                 <Label htmlFor={id} className="text-[12px] font-semibold">
-                  {t(`settings.aiBuilder.costs.${key}`, { currency: currencyValid ? currency : settings.cost_currency })}
+                  {t(`settings.aiBuilder.costs.${key}`, { currency })}
                 </Label>
                 <Input
                   id={id}
                   type="text"
                   inputMode="decimal"
                   autoComplete="off"
-                  value={form.caps[key]}
-                  onChange={(e) => setForm({ ...form, caps: { ...form.caps, [key]: e.target.value } })}
+                  value={form[key]}
+                  onChange={(e) => setForm({ ...form, [key]: e.target.value })}
                   aria-invalid={invalid ? true : undefined}
                   aria-describedby={`${id}-hint`}
                 />
@@ -252,7 +219,7 @@ function CostSettingsCard() {
           <Icon name={update.isPending ? 'progress_activity' : 'check'} size={14} className={update.isPending ? 'animate-spin' : undefined} />
           {update.isPending ? t('settings.aiBuilder.saving') : t('settings.aiBuilder.save')}
         </Button>
-        {dirty && !update.isPending && (
+        {dirty && !update.isPending && !settings.cost_caps_review_pending && (
           <Button
             variant="ghost"
             onClick={() => {
@@ -272,10 +239,12 @@ function CostSettingsCard() {
 // Price table
 // ---------------------------------------------------------------------------
 
+/** The only provider kind priced here: the catalog providers are read-only. */
+const PRICED_PROVIDER = 'openai_compatible'
+
 interface PriceForm {
-  /** Set when editing an existing row: the key fields are then read-only. */
+  /** Set when editing an existing row: the model is then read-only. */
   editing: boolean
-  provider: BuilderProviderKind
   model: string
   input: string
   cachedInput: string
@@ -285,7 +254,6 @@ interface PriceForm {
 
 const EMPTY_PRICE_FORM: PriceForm = {
   editing: false,
-  provider: 'openai',
   model: '',
   input: '',
   cachedInput: '',
@@ -310,7 +278,7 @@ function toPriceInput(form: PriceForm): BuilderPriceInput {
   const optional = (text: string) => (text.trim() === '' ? null : text.trim())
   // All four price keys are always sent; null clears an optional price.
   return {
-    provider: form.provider,
+    provider: PRICED_PROVIDER,
     model: form.model.trim(),
     input_per_mtok: form.input.trim(),
     cached_input_per_mtok: optional(form.cachedInput),
@@ -322,8 +290,7 @@ function toPriceInput(form: PriceForm): BuilderPriceInput {
 function PriceTableCard() {
   const { t } = useTranslation()
   const pricesQuery = useBuilderPrices()
-  // A new row starts on the provider the builder uses, which is the one that needs a price.
-  const activeProvider = useBuilderSettings().data?.provider ?? 'openai'
+  const catalogQuery = useBuilderCatalog()
   const upsert = useUpsertBuilderPrice()
   const del = useDeleteBuilderPrice()
   const [form, setForm] = useState<PriceForm | null>(null)
@@ -355,15 +322,14 @@ function PriceTableCard() {
   const providerLabel = (kind: string) =>
     kind === 'openai' ? 'OpenAI' : kind === 'anthropic' ? 'Anthropic' : kind === 'openai_compatible' ? t('settings.aiBuilder.provider.openaiCompatible') : kind
 
-  const openNew = (provider?: string, model?: string) => {
+  const openNew = (model?: string) => {
     setSubmitted(false)
-    setForm({ ...EMPTY_PRICE_FORM, provider: parseProviderKind(provider ?? activeProvider), model: model ?? '' })
+    setForm({ ...EMPTY_PRICE_FORM, model: model ?? '' })
   }
   const openEdit = (price: BuilderModelPrice) => {
     setSubmitted(false)
     setForm({
       editing: true,
-      provider: parseProviderKind(price.provider),
       model: price.model,
       input: price.input_per_mtok,
       cachedInput: price.cached_input_per_mtok ?? '',
@@ -381,21 +347,6 @@ function PriceTableCard() {
         setForm(null)
         setSubmitted(false)
       },
-    })
-  }
-
-  // The providers' published prices (lib/aiModelCatalog) only fill the form; the superadmin
-  // reviews and saves them, and they are offered only when the installation bills in USD.
-  const catalog = form ? catalogModels(form.provider) : []
-  const reference = form ? referencePrice(form.provider, form.model.trim()) : null
-  const fillReference = () => {
-    if (!form || !reference) return
-    setForm({
-      ...form,
-      input: reference.input,
-      cachedInput: reference.cachedInput ?? '',
-      cacheWrite: reference.cacheWrite ?? '',
-      output: reference.output,
     })
   }
 
@@ -439,14 +390,6 @@ function PriceTableCard() {
     <SectionCard
       title={title}
       description={t('settings.aiBuilder.prices.desc', { currency })}
-      action={
-        form === null ? (
-          <Button variant="outline" size="sm" className="shrink-0 gap-2" onClick={() => openNew()}>
-            <Icon name="add" size={14} />
-            {t('settings.aiBuilder.prices.add')}
-          </Button>
-        ) : undefined
-      }
     >
       {unpriced.length > 0 && (
         <Notice tone="warning">
@@ -458,18 +401,56 @@ function PriceTableCard() {
                   {providerLabel(m.provider)} · {m.model}
                 </span>
                 <span>{t('settings.aiBuilder.prices.unpricedCalls', { count: m.calls })}</span>
-                <button
-                  type="button"
-                  className="font-semibold underline underline-offset-2"
-                  onClick={() => openNew(m.provider, m.model)}
-                >
-                  {t('settings.aiBuilder.prices.setPrice')}
-                </button>
+                {isCatalogProvider(m.provider) ? (
+                  <Link
+                    to={`/integracoes/github?tab=ai&provider=${m.provider}`}
+                    className="font-semibold underline underline-offset-2"
+                  >
+                    {t('settings.aiBuilder.prices.notInCatalog')}
+                  </Link>
+                ) : (
+                  <button
+                    type="button"
+                    className="font-semibold underline underline-offset-2"
+                    onClick={() => openNew(m.model)}
+                  >
+                    {t('settings.aiBuilder.prices.setPrice')}
+                  </button>
+                )}
               </li>
             ))}
           </ul>
         </Notice>
       )}
+
+      <div>
+        <h4 className="text-[13px] font-semibold" style={{ color: 'var(--text-primary)' }}>
+          {t('settings.aiBuilder.prices.catalogTitle')}
+        </h4>
+        {catalogQuery.data && (
+          <p className="text-[12.5px]" style={{ color: 'var(--text-secondary)' }}>
+            {t('settings.aiBuilder.prices.catalogDesc', { date: formatCalendarDate(catalogQuery.data.reviewed_at) })}
+          </p>
+        )}
+      </div>
+      <CatalogPricesTable />
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h4 className="text-[13px] font-semibold" style={{ color: 'var(--text-primary)' }}>
+            {t('settings.aiBuilder.prices.compatibleTitle')}
+          </h4>
+          <p className="text-[12.5px]" style={{ color: 'var(--text-secondary)' }}>
+            {t('settings.aiBuilder.prices.compatibleDesc')}
+          </p>
+        </div>
+        {form === null && (
+          <Button variant="outline" size="sm" className="shrink-0 gap-2" onClick={() => openNew()}>
+            <Icon name="add" size={14} />
+            {t('settings.aiBuilder.prices.add')}
+          </Button>
+        )}
+      </div>
 
       {form !== null && (
         <div
@@ -480,28 +461,7 @@ function PriceTableCard() {
             {form.editing ? t('settings.aiBuilder.prices.editTitle') : t('settings.aiBuilder.prices.addTitle')}
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="builder-price-provider" className="text-[12px] font-semibold">
-                {t('settings.aiBuilder.prices.provider')}
-              </Label>
-              <Select
-                value={form.provider}
-                onValueChange={(value) => setForm({ ...form, provider: parseProviderKind(value) })}
-                disabled={form.editing}
-              >
-                <SelectTrigger id="builder-price-provider">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PROVIDER_KINDS.map((kind) => (
-                    <SelectItem key={kind} value={kind}>
-                      {providerLabel(kind)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-1.5 sm:col-span-2">
               <Label htmlFor="builder-price-model" className="text-[12px] font-semibold">
                 {t('settings.aiBuilder.prices.model')}
               </Label>
@@ -512,16 +472,10 @@ function PriceTableCard() {
                 autoComplete="off"
                 spellCheck={false}
                 disabled={form.editing}
-                list={catalog.length > 0 ? 'builder-price-model-catalog' : undefined}
                 onChange={(e) => setForm({ ...form, model: e.target.value })}
                 aria-invalid={submitted && errors.model ? true : undefined}
                 aria-describedby="builder-price-model-hint"
               />
-              <datalist id="builder-price-model-catalog">
-                {catalog.map((m) => (
-                  <option key={m.id} value={m.id} />
-                ))}
-              </datalist>
               <p
                 id="builder-price-model-hint"
                 role={submitted && errors.model ? 'alert' : undefined}
@@ -538,29 +492,6 @@ function PriceTableCard() {
             {priceField('cachedInput', true)}
             {priceField('cacheWrite', true)}
           </div>
-          {reference !== null &&
-            (currency === CATALOG_PRICE_CURRENCY ? (
-              <div className="flex flex-wrap items-center gap-3">
-                <Button variant="outline" size="sm" className="gap-2" onClick={fillReference}>
-                  <Icon name="sell" size={14} />
-                  {t('settings.aiBuilder.prices.fillReference')}
-                </Button>
-                <p className="text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
-                  {t('settings.aiBuilder.prices.referenceHint', {
-                    provider: providerLabel(form.provider),
-                    date: formatDate(CATALOG_REVIEWED_AT),
-                  })}
-                </p>
-              </div>
-            ) : (
-              <p className="text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
-                {t('settings.aiBuilder.prices.referenceOtherCurrency', {
-                  provider: providerLabel(form.provider),
-                  referenceCurrency: CATALOG_PRICE_CURRENCY,
-                  currency,
-                })}
-              </p>
-            ))}
           <div className="flex flex-wrap items-center gap-3">
             <Button onClick={handleSave} disabled={upsert.isPending} className="gap-2">
               <Icon name={upsert.isPending ? 'progress_activity' : 'check'} size={14} className={upsert.isPending ? 'animate-spin' : undefined} />
