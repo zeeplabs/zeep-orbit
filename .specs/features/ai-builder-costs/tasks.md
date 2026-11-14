@@ -11,7 +11,7 @@ Commits only when the user asks (AGENTS.md §2); one commit per task when author
 **Spec**: `.specs/features/ai-builder-costs/spec.md`
 **Design**: `.specs/features/ai-builder-costs/design.md`
 **Parent**: `.specs/features/ai-frontend-builder/`
-**Status**: Approved by the maintainer on 2026-11-13, DDL of C01 included. In execution on `feat/ai-frontend-builder`. Done: C01–C12. Pending: C13 (real-endpoint run, needs the owner's keys).
+**Status**: Approved by the maintainer on 2026-11-13, DDL of C01 included. In execution on `feat/ai-frontend-builder`. Done: C01–C12, and C13 partly (2026-11-14: real turns on OpenAI `gpt-5.5` and Anthropic `claude-sonnet-5-5`, cost matches the catalog; the opt-in contract test and the comparison with the provider's usage page were not run). Prompt caching for the Anthropic adapter added 2026-11-14 (`f44ac21`).
 
 ---
 
@@ -136,6 +136,7 @@ C12 docs + CHANGELOG (last)        C13 real-endpoint run (owner, needs keys)
 ### C13 — Real-endpoint run (owner)
 - **What**: run the opt-in contract test against OpenAI and Anthropic with the owner's keys; compare one call's recorded tokens and cost with the provider's usage page; record the result in the design notes. Closes parent task T02 as well.
 - **Requirements**: Success Criteria. **Depends**: C07. **Tests**: manual.
+- **Status**: Partly done 2026-11-14. Real turns through the dashboard API on both providers: recorded tokens in four classes and `cost_micros` equal the catalog formula (OpenAI `gpt-5.5`: input 5, cached 0.5, output 30 per Mtok; Anthropic `claude-sonnet-5-5`: input 2, write 2.5, read 0.1, output 10), 0 unpriced calls. The OpenAI run showed cached input (232,832 tokens in 15 chat calls). The first Anthropic runs showed cached and write at 0 because the adapter sent no `cache_control`; with `ChatRequest.CacheHint` (loop calls only, not compaction) a one-milestone run had 141,326 tokens read from the cache and 29,076 written over 11 calls, US$ 0.134 recorded against about US$ 0.388 for the same tokens uncached (computed, one sample). Not done: `go test -tags providercontract` against the real endpoints and the comparison with each provider's usage page, which still needs the owner at the console.
 
 ---
 
