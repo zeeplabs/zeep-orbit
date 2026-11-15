@@ -235,6 +235,20 @@ func (h *BuilderHandler) Publish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The session was loaded before the lock: a publish that finished while this
+	// request waited has linked the app or moved the published commit. Decide
+	// from a fresh read, and refuse when the state this request checked moved.
+	fresh, err := h.store.GetSession(ctx, user.ID, sess.ID)
+	if err != nil {
+		h.serverError(w, r, err)
+		return
+	}
+	if publishStateMoved(sess, fresh) {
+		h.writePublishConflict(w, PublishReasonInProgress, "the project changed while this publish was waiting: reload and try again")
+		return
+	}
+	sess = fresh
+
 	// ---- the tree: read before any side effect, so a builder failure is clean ----
 	files, err := h.readPublishTree(ctx, sess.ID)
 	if err != nil {
@@ -263,14 +277,27 @@ func (h *BuilderHandler) Publish(w http.ResponseWriter, r *http.Request) {
 		h.publishFailure(w, r, sess, "github_failed", err)
 		return
 	}
-	sha, err := client.CommitTree(ctx, owner, repoInfo.Name, builderPublishBranch, files, message, "")
-	if err != nil {
-		// Nothing references the new repository yet: archive it instead of
-		// leaving an empty one behind (best effort).
+	// abandonFirstPublish undoes what a first publish created before it could be
+	// linked to the session (best effort): nothing references the repository or
+	// the frontend app yet, and a retry creates new ones, so leaving them would
+	// orphan one more pair per attempt.
+	abandonFirstPublish := func(createdAppID string) {
 		if aerr := client.ArchiveRepo(ctx, owner, repoInfo.Name); aerr != nil {
-			h.logger.Warn("builder publish: archive repository after a failed first commit",
+			h.logger.Warn("builder publish: archive repository of an unfinished first publish",
 				zap.String("repo", repoInfo.Name), zap.Error(aerr))
 		}
+		if createdAppID == "" {
+			return
+		}
+		if _, aerr := h.pool.Exec(ctx,
+			`UPDATE zeep_system.frontend_apps SET archived_at = now() WHERE id = $1 AND archived_at IS NULL`, createdAppID); aerr != nil {
+			h.logger.Warn("builder publish: archive frontend app of an unfinished first publish",
+				zap.String("frontend_app_id", createdAppID), zap.Error(aerr))
+		}
+	}
+	sha, err := client.CommitTree(ctx, owner, repoInfo.Name, builderPublishBranch, files, message, "")
+	if err != nil {
+		abandonFirstPublish("")
 		h.publishPushFailure(w, r, sess, err)
 		return
 	}
@@ -279,6 +306,7 @@ func (h *BuilderHandler) Publish(w http.ResponseWriter, r *http.Request) {
 		// The default template: a frontend app needs a template row, so the
 		// hidden one is created (or refreshed) now that the code is pushed.
 		if tpl, err = ensureBuilderDefaultTemplate(ctx, h.pool); err != nil {
+			abandonFirstPublish("")
 			h.publishFailure(w, r, sess, "internal", err)
 			return
 		}
@@ -294,6 +322,7 @@ func (h *BuilderHandler) Publish(w http.ResponseWriter, r *http.Request) {
 		BackendAppID:  sess.BackendAppID,
 	})
 	if err != nil {
+		abandonFirstPublish("")
 		h.publishFailure(w, r, sess, "internal", err)
 		return
 	}
@@ -304,6 +333,7 @@ func (h *BuilderHandler) Publish(w http.ResponseWriter, r *http.Request) {
 		h.logger.Warn("builder publish: add owner as frontend app admin", zap.String("frontend_app_id", created.ID), zap.Error(merr))
 	}
 	if err := h.store.RecordPublish(ctx, user.ID, sess.ID, &created.ID, sha); err != nil {
+		abandonFirstPublish(created.ID)
 		h.publishFailure(w, r, sess, "internal", err)
 		return
 	}
@@ -323,6 +353,21 @@ func (h *BuilderHandler) Publish(w http.ResponseWriter, r *http.Request) {
 	h.audit(r.Context(), user, "builder.session.publish", sess.ID, sess.Title,
 		map[string]any{"frontend_app_id": created.ID, "republish": false}, r.RemoteAddr)
 	writeJSON(w, http.StatusCreated, BuilderPublishResult{FrontendApp: final, PublishedSHA: sha, Republish: false})
+}
+
+// publishStateMoved reports whether the state a publish was decided on (what
+// the handler checked before it took the lock) differs from the fresh read.
+func publishStateMoved(before, after *store.Session) bool {
+	linked := func(s *store.Session) string {
+		if s.FrontendAppID == nil {
+			return ""
+		}
+		return *s.FrontendAppID
+	}
+	return linked(before) != linked(after) ||
+		before.PublishedSHA != after.PublishedSHA ||
+		before.HeadSHA != after.HeadSHA ||
+		before.Status != after.Status
 }
 
 // republish pushes one more commit on top of the last published one.

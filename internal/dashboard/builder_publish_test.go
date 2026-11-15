@@ -63,6 +63,9 @@ type bpubGitHub struct {
 	archived    []string
 	repoGate    chan struct{} // when set, creating a repository waits for it
 	repoGateHit chan struct{}
+	// onRefCreate runs when the branch ref is created (the last step of a first
+	// push), before the answer.
+	onRefCreate func()
 }
 
 type bpubTreeEntry struct{ path, blob string }
@@ -131,6 +134,15 @@ func (g *bpubGitHub) roundTrip(r *http.Request) (*http.Response, error) {
 	gate, hit := g.repoGate, g.repoGateHit
 	isRepoCreate := r.Method == http.MethodPost && strings.HasPrefix(p, "/orgs/acme-org/repos")
 	g.mu.Unlock()
+
+	if r.Method == http.MethodPost && strings.HasSuffix(p, "/git/refs") {
+		g.mu.Lock()
+		hook := g.onRefCreate
+		g.mu.Unlock()
+		if hook != nil {
+			hook()
+		}
+	}
 
 	if isRepoCreate && gate != nil {
 		select {
@@ -1438,5 +1450,65 @@ func TestPublishAndZip_AgainstRealBuilderArchive(t *testing.T) {
 	}
 	if !names["src/Extra.tsx"] || !names["package.json"] || names["pax_global_header"] {
 		t.Errorf("zip entries = %v", names)
+	}
+}
+
+// A failure after the push (here: the session row is gone when the publish is
+// recorded) must not leave the repository and the frontend app behind: a retry
+// creates new ones.
+func TestPublish_FailureAfterThePushArchivesTheRepositoryAndTheApp(t *testing.T) {
+	e := newBPubEnv(t)
+	s := e.session(t)
+	e.gh.mu.Lock()
+	e.gh.onRefCreate = func() {
+		if _, err := e.pool.Exec(context.Background(), `DELETE FROM zeep_system.builder_sessions WHERE id = $1`, s.ID); err != nil {
+			t.Errorf("delete session: %v", err)
+		}
+	}
+	e.gh.mu.Unlock()
+
+	w := e.publish(t, e.owner, s.ID, "")
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("want 500, got %d: %s", w.Code, w.Body.String())
+	}
+	e.gh.mu.Lock()
+	archived := append([]string(nil), e.gh.archived...)
+	e.gh.mu.Unlock()
+	if len(archived) != 1 {
+		t.Errorf("archived repos = %v, want the one that was pushed", archived)
+	}
+	var live int
+	if err := e.pool.QueryRow(context.Background(),
+		`SELECT count(*) FROM zeep_system.frontend_apps WHERE archived_at IS NULL`).Scan(&live); err != nil {
+		t.Fatal(err)
+	}
+	if live != 0 {
+		t.Errorf("%d live frontend apps left by a publish that was never recorded", live)
+	}
+}
+
+func TestPublishStateMoved(t *testing.T) {
+	app := "app-1"
+	other := "app-2"
+	base := func() *store.Session {
+		return &store.Session{HeadSHA: "h1", PublishedSHA: "", Status: store.SessionIdle}
+	}
+	cases := map[string]func(*store.Session){
+		"same":                  func(*store.Session) {},
+		"linked meanwhile":      func(s *store.Session) { s.FrontendAppID = &app },
+		"published meanwhile":   func(s *store.Session) { s.PublishedSHA = "p1" },
+		"head moved":            func(s *store.Session) { s.HeadSHA = "h2" },
+		"a turn started":        func(s *store.Session) { s.Status = store.SessionRunning },
+		"relinked to other app": func(s *store.Session) { s.FrontendAppID = &other },
+	}
+	for name, mutate := range cases {
+		before, after := base(), base()
+		if name == "relinked to other app" {
+			before.FrontendAppID = &app
+		}
+		mutate(after)
+		if got, want := publishStateMoved(before, after), name != "same"; got != want {
+			t.Errorf("%s: moved = %v, want %v", name, got, want)
+		}
 	}
 }
