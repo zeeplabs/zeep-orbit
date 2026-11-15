@@ -413,7 +413,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **Auth provider "allowed domains" field couldn't be cleared** — emptying it in Settings and saving reported success but the old value came back on reload; the frontend omitted the field entirely instead of sending an empty list.
 - **Google login button and brand theme flashed incorrectly on first paint of the login screen** — two redundant, uncached fetches of the same config endpoint resolved after the first render. Unified into a single shared query, gated behind the app's loading screen.
 - User registration (bootstrap, dashboard user creation, app signup) now validates email format and normalizes email (lowercase) and name (Title Case) before persisting.
-
+- **AI Frontend Builder: the provider client checks the target host before it uses an environment proxy.** With `HTTP_PROXY`/`HTTPS_PROXY` set, the dial-time guard only saw the proxy's address, so a base URL that resolves to a link-local or metadata address was not refused. The target host (literal and resolved addresses) is now checked before a proxy is chosen.
+- **AI Frontend Builder: environment files are never published.** The pushed tree and the ZIP leave out `.env`, `.env.local`, `.env.production` and the like at any depth (`.env.example`, `.env.sample`, `.env.template` and `.env.defaults` stay), since the agent or the user may have put a secret in one. `dist` and `.orbit` are excluded at the project root only, so a source folder named `dist` deeper in the tree is no longer dropped silently.
+- **AI Frontend Builder: publish.** A publish decides from the session read after it takes the per-session lock, so a double click or a second tab cannot create a second repository and frontend app; a first publish that fails after the push (before it is linked to the session) archives the new repository and frontend app instead of leaving them behind; and a repository that is gone (deleted, renamed, installation revoked) now answers `502` instead of `remote_moved`.
+- **Registry proxy NetworkPolicy (Kustomize and Helm).** The egress rule also excludes `100.64.0.0/10` (shared address space, which includes the Alibaba metadata address) and `0.0.0.0/8`. The `k8s/builder` manifests carry a digest-pin hint for the builder and registry proxy images.
 ---
 
 ## [0.4.0] — 2026-07-26
