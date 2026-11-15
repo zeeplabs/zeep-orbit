@@ -20,9 +20,11 @@ package dashboard
 // Private and loopback addresses stay allowed (an Ollama container on the
 // internal network is a supported setup); isBlockedAIProviderIP decides.
 //
-// Limitation: with HTTP(S)_PROXY set in the environment the connection goes to
-// the proxy, so this guard sees the proxy's address, not the target's. Proxy
-// egress policy is then the operator's.
+// With HTTP(S)_PROXY set in the environment the connection goes to the proxy,
+// so DialContext sees the proxy's address, not the target's. The Proxy hook
+// therefore vets the target host itself before a proxy is chosen. What the
+// proxy then resolves is the operator's egress policy (a rebinding answer given
+// only to the proxy is not visible here).
 
 import (
 	"context"
@@ -30,6 +32,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"net/url"
 	"syscall"
 	"time"
 )
@@ -63,6 +66,40 @@ func aiProviderDialControl(_, address string, _ syscall.RawConn) error {
 	return nil
 }
 
+// vetAIProviderHost resolves host (a name or an IP literal) and returns the
+// addresses it may be dialed on. It refuses a blocked literal spelling and any
+// answer that contains a blocked address.
+func vetAIProviderHost(ctx context.Context, lookup aiProviderLookup, host string) ([]netip.Addr, error) {
+	// Literal spellings first (decimal/hex/octal forms and metadata names
+	// included): no lookup is needed to know they are refused.
+	if isBlockedAIProviderHost(host) {
+		return nil, errAIProviderAddrBlocked
+	}
+	var ips []netip.Addr
+	if ip, perr := netip.ParseAddr(host); perr == nil {
+		ips = []netip.Addr{ip}
+	} else {
+		var err error
+		if ips, err = lookup(ctx, host); err != nil {
+			return nil, err
+		}
+	}
+	if len(ips) == 0 {
+		return nil, errAIProviderAddrBlocked
+	}
+	for _, ip := range ips {
+		if isBlockedAIProviderIP(ip) {
+			return nil, errAIProviderAddrBlocked
+		}
+	}
+	return ips, nil
+}
+
+// aiProviderProxy picks the proxy for a request (the environment's, by default).
+// A variable so a test can set one: http.ProxyFromEnvironment reads the
+// environment once per process.
+var aiProviderProxy = http.ProxyFromEnvironment
+
 // newAIProviderHTTPClient returns the *http.Client to pass as
 // provider.OpenAIConfig.HTTPClient. lookup nil means the system resolver.
 // Redirects are not followed: a chat-completions endpoint has no reason to
@@ -77,32 +114,28 @@ func newAIProviderHTTPClient(lookup aiProviderLookup) *http.Client {
 		Control:   aiProviderDialControl,
 	}
 	tr := http.DefaultTransport.(*http.Transport).Clone()
+	// With HTTP(S)_PROXY set the connection goes to the proxy, so DialContext
+	// only sees the proxy's address. Vet the target here, before a proxy is
+	// chosen, so a metadata or link-local target is refused either way.
+	proxyFromEnv := aiProviderProxy
+	tr.Proxy = func(req *http.Request) (*url.URL, error) {
+		proxyURL, err := proxyFromEnv(req)
+		if err != nil || proxyURL == nil {
+			return proxyURL, err
+		}
+		if _, err := vetAIProviderHost(req.Context(), lookup, req.URL.Hostname()); err != nil {
+			return nil, err
+		}
+		return proxyURL, nil
+	}
 	tr.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
 		host, port, err := net.SplitHostPort(addr)
 		if err != nil {
 			return nil, errAIProviderAddrBlocked
 		}
-		// Literal spellings first (decimal/hex/octal forms and metadata names
-		// included): no lookup is needed to know they are refused.
-		if isBlockedAIProviderHost(host) {
-			return nil, errAIProviderAddrBlocked
-		}
-		var ips []netip.Addr
-		if ip, perr := netip.ParseAddr(host); perr == nil {
-			ips = []netip.Addr{ip}
-		} else {
-			ips, err = lookup(ctx, host)
-			if err != nil {
-				return nil, err
-			}
-		}
-		if len(ips) == 0 {
-			return nil, errAIProviderAddrBlocked
-		}
-		for _, ip := range ips {
-			if isBlockedAIProviderIP(ip) {
-				return nil, errAIProviderAddrBlocked
-			}
+		ips, err := vetAIProviderHost(ctx, lookup, host)
+		if err != nil {
+			return nil, err
 		}
 		var lastErr error
 		for _, ip := range ips {

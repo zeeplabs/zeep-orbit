@@ -142,7 +142,7 @@ After deployment, a superadmin completes setup in the dashboard, under **Integra
 
    The key is encrypted at rest and never returned by the API (only `has_key`). Updating the model without sending the key keeps the stored key.
 
-   The base URL must be an absolute `http` or `https` URL without credentials, query string or fragment. Private and loopback hosts are allowed (an Ollama container on an internal network is a supported setup); link-local and cloud-metadata addresses are rejected. The check is made when you save and again when the connection is made, on the IP address actually dialed, so a hostname that resolves to a blocked address is also refused. If `HTTP_PROXY` or `HTTPS_PROXY` is set in Orbit's environment, the connection goes to that proxy and the check sees the proxy's address, not the target's.
+   The base URL must be an absolute `http` or `https` URL without credentials, query string or fragment. Private and loopback hosts are allowed (an Ollama container on an internal network is a supported setup); link-local and cloud-metadata addresses are rejected. The check is made when you save and again when the connection is made, on the IP address actually dialed, so a hostname that resolves to a blocked address is also refused. If `HTTP_PROXY` or `HTTPS_PROXY` is set in Orbit's environment, the connection goes to that proxy, so the dial-time check sees the proxy's address. Orbit therefore also checks the target host (literal and resolved addresses) before it chooses the proxy; what the proxy itself resolves is covered by the proxy's own egress policy.
 
 2. **Builder settings** (the **AI Builder** tab).
 

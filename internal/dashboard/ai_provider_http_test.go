@@ -181,3 +181,40 @@ func TestAIProviderHTTPClient_ThroughOpenAIAdapter(t *testing.T) {
 		t.Errorf("error text leaks the destination or key: %q", msg)
 	}
 }
+
+// With HTTPS_PROXY set the dial only sees the proxy, so the target must be
+// vetted before a proxy is chosen: a hostname that resolves to the metadata
+// address is refused without a connection to the proxy.
+func TestAIProviderHTTPClient_VetsTheTargetWhenAProxyIsSet(t *testing.T) {
+	proxy, hits, _ := hitServer(t)
+	proxyURL, err := url.Parse(proxy.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prev := aiProviderProxy
+	aiProviderProxy = http.ProxyURL(proxyURL)
+	t.Cleanup(func() { aiProviderProxy = prev })
+
+	c := newAIProviderHTTPClient(fixedLookup(map[string][]string{"metadata.example.test": {"169.254.169.254"}}))
+	resp, err := c.Get("http://metadata.example.test/latest")
+	if resp != nil {
+		resp.Body.Close()
+	}
+	if !errors.Is(err, errAIProviderAddrBlocked) {
+		t.Fatalf("err = %v, want errAIProviderAddrBlocked", err)
+	}
+	if hits.Load() != 0 {
+		t.Errorf("the proxy received %d requests for a blocked target", hits.Load())
+	}
+
+	// A permitted target still goes through the proxy.
+	c = newAIProviderHTTPClient(fixedLookup(map[string][]string{"provider.example.test": {"203.0.113.10"}}))
+	resp, err = c.Get("http://provider.example.test/v1")
+	if err != nil {
+		t.Fatalf("allowed target through the proxy: %v", err)
+	}
+	resp.Body.Close()
+	if hits.Load() != 1 {
+		t.Errorf("proxy hits = %d, want 1", hits.Load())
+	}
+}
