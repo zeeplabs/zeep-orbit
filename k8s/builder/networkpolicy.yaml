@@ -72,6 +72,8 @@ spec:
               - 172.16.0.0/12
               - 192.168.0.0/16
               - 169.254.0.0/16
+              - 100.64.0.0/10   # shared address space (CGNAT; includes the Alibaba metadata address)
+              - 0.0.0.0/8
               - 127.0.0.0/8
       ports:
         - port: 443

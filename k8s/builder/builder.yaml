@@ -44,7 +44,9 @@ spec:
           type: RuntimeDefault
       containers:
         - name: builder
-          # Para produção, pin por digest imutável.
+          # Para produção, pin por digest imutável (ou por tag de release, via
+          # `images:` no overlay), no mesmo release do zeep-orbit:
+          # image: ghcr.io/zeeplabs/zeep-orbit-builder@sha256:<digest>
           image: ghcr.io/zeeplabs/zeep-orbit-builder:latest
           imagePullPolicy: Always
           securityContext:
