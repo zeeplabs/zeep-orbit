@@ -160,6 +160,7 @@ After deployment, a superadmin completes setup in the dashboard, under **Integra
    | Max fix iterations (failed builds per turn) | `3` | 1 to 20 |
    | Max seconds per turn | `600` | 10 to 3600 |
    | Planning | `required` | `required`, `suggested` or `off` (see [Planning](#planning)) |
+   | Planning model | empty (the provider's own model) | a model of the selected provider (see [Planning model](#planning-model)) |
 
    Token budgets count every token of a call: input, cached input, cache write and output. **Both token budgets must be greater than zero.** With either one at `0`, the builder reports itself unavailable (`budget_not_configured`) and **Create with AI** is disabled; sending a message to an existing session is refused the same way. If a cap is set back to `0` while a turn is already running, that turn's next model call is refused and the turn ends with a `budget_exceeded` event. The budget is checked before each model call, against what was already recorded, so the call that crosses the limit is the last one. The monthly budget counts the calendar month in UTC. A settings change applies to the next turn without restarting Orbit.
 
@@ -199,6 +200,18 @@ A superadmin sets **Planning** in **Integrations**, **AI Builder** (`planning_mo
 
 Switching from `required` to `off` while a session is still in its questions moves that session to building on its next message. The answers stay in the conversation, which the agent reads, but no brief is created from them. A turn already paused on a question or a plan finishes as it started.
 
+### Planning model
+
+Planning is a share of the spend that does not write code: the agent asks questions and writes a plan. A superadmin can run those turns on a cheaper model with **Planning model** in **Integrations**, **AI Builder** (`planning_model` in `PUT /dashboard/api/builder/settings`).
+
+- **The default changes nothing.** Left empty, every call of every turn uses the provider's own model, as before.
+- **Same provider only.** The planning model is a model of the provider selected in **Model provider**: one key, one set of failure modes. For `openai` and `anthropic` it must be a catalog model (the API refuses any other with `planning_model must be a model of the selected provider's catalog`); a deprecated model the setting already holds stays valid. For `openai_compatible` it is any short text. Changing the provider clears the saved planning model unless the same request sets a new one.
+- **What runs on it.** Calls of a plan-mode turn: the questions, the plan, and a revision of a rejected plan. When the user approves a plan and the same turn goes on to build, the build calls use the provider's own model. History compaction always uses the provider's own model. Each call is recorded and priced under the model that answered it.
+- **It never stops the builder.** If the planning model cannot be used (for example it left the catalog, or the provider cannot be built), the planning turn runs on the build model and a warning is logged. Only the build model decides whether the builder is available.
+- **Budgets.** Token and cost budgets count the calls of both models together.
+- **Check the share.** In the usage report, group by **Purpose** (`group_by=purpose`) to see what planning costs against building, and by **Model** to see which model answered.
+- **Decide with evidence.** Whether a cheaper model plans well enough is a quality question. A test that is off by default and spends real tokens (`go test -tags planningeval`, see the header of `internal/agent/planning_eval_test.go`) sends the same 12 briefs through the real plan-mode turn on each model and prints one result line per brief, with the plan text anonymized for a blind read.
+
 ### Questions
 
 While planning, a turn runs in **plan mode**: the agent is offered only the read tools (`list_dir`, `read_file`, `get_build_logs`, `orbit_get_app_schema`, `orbit_list_auth_providers`, and `load_skill` when skills are enabled) and the two planning tools. It cannot change files, run a build or propose a backend change. This is enforced by the agent loop, which refuses any other tool call without running it, not only by the prompt. With an existing backend app, the agent is told to read its schema before asking.
@@ -230,7 +243,7 @@ A plan's arguments must fit in 8 KiB and its compact form in 6000 characters; ov
 The plan card shows a range of tokens and, when the data allows it, of cost, for one milestone and for the milestones of the plan not yet built. It is computed by the server from the completed build turns of the installation in the last 90 days, for the provider and model configured now: the 25th to 75th percentile per turn. Under 10 such turns the card says there is no estimate yet; under 10 turns with a price for every call, it shows tokens only. Cost uses only turns after the last currency change.
 
 - The figures come from every user of the installation, aggregated. A user can therefore infer the typical cost of a build on the installation.
-- The first build of an app usually costs more than a later milestone, and the estimate uses one distribution for both.
+- The first build of an app usually costs more than a later milestone. When there are at least 10 completed turns of milestone 1 and at least 10 of later milestones, the plan range is the first-milestone range plus the later range for each remaining milestone (`basis: "split"`). With fewer in either group, one range is used for every milestone (`basis: "single"`). Turns that planned are not part of either sample.
 - It is an estimate from past builds, not a quote and not a budget.
 
 ### Data and audit
@@ -244,7 +257,7 @@ All routes are owner-only, under `/dashboard/api/builder/sessions/{id}`. The thr
 - `POST .../turns/{turn}/answers` with `{tool_call_id, answers: [{id, choices, text, decide}], skip}`.
 - `POST .../turns/{turn}/plan/approve` with `{tool_call_id}`.
 - `POST .../turns/{turn}/plan/revise` with `{tool_call_id, feedback, more_questions}`; `feedback` is required unless `more_questions`.
-- `GET .../turns/{turn}/plan/estimate`: `{available, sample_turns, currency, milestones, milestone, plan}`, each range with `tokens_low`, `tokens_high`, `cost_micros_low` and `cost_micros_high` (`null` without a price).
+- `GET .../turns/{turn}/plan/estimate`: `{available, sample_turns, currency, milestones, milestone, plan, basis}` (`basis` is `split` or `single`, absent when not available), each range with `tokens_low`, `tokens_high`, `cost_micros_low` and `cost_micros_high` (`null` without a price).
 - `GET .../brief` (`version: 0` when there is none) and `GET .../brief/versions/{v}`.
 - `POST .../messages` accepts `plan_first` (refused when planning is `off`) and `milestone` (only the next pending milestone of the brief, otherwise `400`). The session detail carries `phase`, `brief_version`, `milestones_total`, `milestones_done` and `next_milestone`; each turn carries `mode`, `brief_version` and `milestone`.
 
@@ -281,7 +294,7 @@ When a turn stops because of a budget, the chat says which one (session or month
 
 - **In the chat.** Each finished step shows its tokens and cost in one line. Opening it shows the receipt: model calls, tokens by class, cost, working time, files changed, builds and the model.
 - **In the session.** A strip under the page header shows the session total and, for each budget that is set, how much of it is used.
-- **In the usage report** (`/dashboard/builder/usage`, linked from the apps page, from a session and from the **Costs** card). It shows a period of up to 366 days, grouped by day, model or session, with the totals, the share of tokens spent on history compaction and a CSV download with one line per model call. Days are counted in UTC. A superadmin sees every user's usage, can group by user and can select a user to see only theirs. Everyone else sees only their own usage.
+- **In the usage report** (`/dashboard/builder/usage`, linked from the apps page, from a session and from the **Costs** card). It shows a period of up to 366 days, grouped by day, model, purpose (chat, planning or compaction) or session, with the totals, the share of tokens spent on history compaction and a CSV download with one line per model call. Days are counted in UTC. A superadmin sees every user's usage, can group by user and can select a user to see only theirs. Everyone else sees only their own usage.
 
 Usage per user is information about a person's activity. Only superadmins can read other users' usage, and a session's title is shown in the report only to the session's owner.
 
@@ -290,7 +303,7 @@ Usage per user is information about a person's activity. Only superadmins can re
 - `GET /dashboard/api/builder/catalog` (any signed-in user): the model catalog: `currency`, `reviewed_at` and, per provider, the models with `deprecated` and their `prices`, each with `effective_from` and `tiers` (`max_prompt_tokens`, `0` meaning no limit, and the four prices as decimal strings, `null` when billed at the input price).
 - `GET`/`PUT`/`DELETE /dashboard/api/builder/prices` (superadmin): the price table of OpenAI-compatible models. A price row has `provider`, `model`, `input_per_mtok`, `output_per_mtok` and the optional `cached_input_per_mtok` and `cache_write_per_mtok`, as decimal strings. A write or delete for `openai` or `anthropic` is refused with `prices of catalog providers cannot be changed`.
 - `GET /dashboard/api/builder/sessions/{id}/usage` (session owner): totals, budgets in use and one receipt per turn.
-- `GET /dashboard/api/builder/usage?from&to&group_by=day|user|model|session` and `GET /dashboard/api/builder/usage.csv?from&to`: the report and its export. `from` and `to` are UTC days (`YYYY-MM-DD`), both inclusive; the default is the last 30 days. A superadmin may add `user_id`; `group_by=user` is superadmin-only. The export is refused above 100000 rows.
+- `GET /dashboard/api/builder/usage?from&to&group_by=day|user|model|purpose|session` and `GET /dashboard/api/builder/usage.csv?from&to`: the report and its export. `from` and `to` are UTC days (`YYYY-MM-DD`), both inclusive; the default is the last 30 days. A superadmin may add `user_id`; `group_by=user` is superadmin-only. The export is refused above 100000 rows.
 
 Money is carried as integer micros (1 USD = 1,000,000 micros) in `cost_micros`; `null` means no price.
 
@@ -417,6 +430,8 @@ Registry proxy (`zeep-registry-proxy`):
 - **One builder replica.** Multiple builder instances and per-session containers are not supported.
 - **Provider support.** `openai`, `openai_compatible` and `anthropic` are supported. A native Gemini adapter is not implemented. Gemini's OpenAI-compatible endpoint is documented by Google as beta; whether it handles tool calls correctly with this builder has not been verified here.
 - **Anthropic provider.** The model's thinking blocks are not sent back between steps. Prompt caching is requested for the model calls of a turn (a request-level breakpoint with the default 5-minute entry), so each step reads the previous step's prompt at the cached-input price; it is not requested for the history compaction summary, a one-off call. The cache belongs to the workspace of the API key, and a step that starts more than 5 minutes after the previous one pays a new cache write. A model whose minimum cacheable prompt is larger than the prompt does not cache (cached input and cache write stay at zero in the usage report).
+- **The planning model is the same provider as the build model.** A planning model from another provider is not supported: it would need two keys and two budgets. It is one setting per installation, not per user or session.
+- **Prompt cache at the plan-to-build switch.** The tools offered differ between plan mode and build mode, so a planning call's cache was never reusable by the build calls. With a planning model set, the first build call of a turn that planned also starts on another model. Whether this changes the cost of that turn has not been measured yet.
 - **Cost covers the builder only.** The "Build with AI" backend chat is not recorded in the usage report.
 - **Publishing needs GitHub and Render.** Other publish targets are not supported.
 - **Reverting does not revert the brief.** Restoring an earlier turn keeps every brief version and the milestone progress. `ORBIT_BRIEF.md` is restored with the code, and the next build turn writes the current brief again.

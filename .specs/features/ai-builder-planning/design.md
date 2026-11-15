@@ -175,7 +175,7 @@ The chat rebuilds an answered round from the `proposal` event (questions) plus `
 
 - `store.Session.Phase`, `store.Turn.Mode`, `BriefVersion`, `Milestone`; `Deps.PlanningEnabled` (from `planning_mode != off`, set in `prepareDeps`).
 - `runCalls` pauses on `KindPlanning` as on `KindProposal`.
-- Model calls of a plan-mode turn are recorded with `purpose = planning` (`store.PurposePlanning`, validated in Go; no DDL, as foreseen in costs design §2). Reports that sum all purposes are unchanged; a per-purpose breakdown belongs to `ai-builder-economy`.
+- Model calls of a plan-mode turn are recorded with `purpose = planning` (`store.PurposePlanning`, validated in Go; no DDL, as foreseen in costs design §2). Reports that sum all purposes are unchanged; the per-purpose breakdown (`group_by=purpose`) was added by `ai-builder-economy`.
 - `PromptInput` gains `Brief *BriefInput` (`Version`, `Plan`, `Done`, `WorkspaceFile`): data, not rendered text. **Changed in P04:** the prompt source only knows the session, while the mode and the milestone belong to the turn, so the loop renders the brief (`planning.RenderBrief`), builds the directive (`SessionContext.Directive`) and decides whether the file is stale.
 - In a build turn, when `planning.RenderBriefFile(plan, version)` differs from `WorkspaceFile` (the content of `ORBIT_BRIEF.md` at HEAD), the loop writes the file through `Builder.Op` (`FileOp{Kind: write_file, Path, Content}`) before the first model call and marks the turn as having written, so it is committed with the next checkpoint. **Resolved in P04:** the builder remembers op ids for the whole session, so the id is `<turn id>:brief-v<version>`: a resumed turn replays the write, and a later turn that must write the same version again (after a revert) is not swallowed as a replay. A builder failure on this write is logged and the turn goes on.
 
@@ -236,7 +236,7 @@ cost_low,   cost_high   = the same over per-turn cost, using only turns in which
 - Response: `{ available, sample_turns, currency, milestone: { tokens_low, tokens_high, cost_micros_low, cost_micros_high }, plan: { ... } }`. The frontend formats; it computes nothing.
 - The card labels it an estimate and says it comes from past builds on this installation.
 - It uses turns of every user, as percentiles with a minimum sample. A member can therefore infer the typical cost of a build on the installation (decision 4 in §12).
-- Known limit: the first build of an app usually costs more than a later milestone, and this v1 uses one distribution. To be measured in the eval and refined in `ai-builder-economy`.
+- Known limit: the first build of an app usually costs more than a later milestone, and this v1 uses one distribution. Refined by `ai-builder-economy`: with at least 10 turns of milestone 1 and 10 of later milestones the estimate is split (`basis: split`); otherwise this single distribution still applies.
 
 **Changed in P07:**
 

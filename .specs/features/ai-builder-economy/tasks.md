@@ -10,7 +10,7 @@ One commit per finished task with a green gate (authorized by the maintainer for
 
 **Spec**: `.specs/features/ai-builder-economy/spec.md`
 **Design**: `.specs/features/ai-builder-economy/design.md`
-**Status**: Draft (2026-11-14), not approved. Open for the maintainer: A1 (same provider only) and A4 (acceptance thresholds). Nothing implemented.
+**Status**: Approved (A1 and A4 on 2026-11-14). E01 to E06 and E08 done, E07 waiting for the blind read, E09 pending.
 
 ---
 
@@ -43,7 +43,7 @@ E03 and E04 do not depend on E01 and can run first.
 - **Requirements**: AEC-08.
 - **Done when**: rows per purpose add up to the totals; a non-superadmin sees only their rows; the 400 message names `purpose`.
 - **Tests**: unit/integration in the dashboard package (existing usage test helpers). **Gate**: Full.
-- **Status**: Pending.
+- **Status**: Done (`40a7b57`).
 
 ### E04 — Estimate split first vs later  `[P]`
 - **What**: `EstimateBuildTurn` computes the `milestone = 1` and `milestone > 1` groups in the same query; `PlanEstimate` uses them when both have 10 turns and returns `basis`.
@@ -51,7 +51,7 @@ E03 and E04 do not depend on E01 and can run first.
 - **Requirements**: AEC-10.
 - **Done when**: both groups filled → split range and `basis=split`; one short → old numbers and `basis=single`; `milestone IS NULL` turns only in the single group; cost nil under the priced minimum. Existing estimate tests still pass unchanged.
 - **Tests**: store (seeded turns) and handler. **Gate**: Full.
-- **Status**: Pending.
+- **Status**: Done (`c42e582`). Deviation: three queries over the same CTE (all, first, later) instead of one FILTER query; first and later are computed only when the sample has at least 10 turns.
 
 ### E01 — `planning_model` setting and DDL  `[higher-risk: DDL]`
 - **What**: the column (design §2), the field on the settings struct, the update input, the validation and the clearing on provider change, the audit field.
@@ -59,7 +59,7 @@ E03 and E04 do not depend on E01 and can run first.
 - **Requirements**: AEC-01, AEC-03, AEC-04.
 - **Done when**: the setting table in design §7 passes; an existing installation with no column migrates with the default `''`; the idempotent DDL runs twice without error. **[verify]** the audit payload and the catalog's context-window data (design §3).
 - **Tests**: integration (settings handler). **Gate**: Full.
-- **Status**: Pending, needs the maintainer's approval of the DDL.
+- **Status**: Done (`5a34e95`), DDL approved by the maintainer. Deviation: any provider change clears the saved planning model unless the request sets a new one.
 
 ### E02 — Runtime: planning calls on the planning model
 - **What**: `Deps.PlanningProvider`; `modelProvider()` in `run`; `buildProvider` extracted from `resolveProvider`; `resolvePlanningProvider` with the fallback and the warning; `prepareDeps` wiring.
@@ -68,7 +68,7 @@ E03 and E04 do not depend on E01 and can run first.
 - **Requirements**: AEC-02, AEC-05, and AEC-01 for the nil case.
 - **Done when**: the runtime table in design §7 passes, including the ledger model of each row and the switch back to the build model after approval; `Deps` validation does not require `PlanningProvider`.
 - **Tests**: unit with two fake providers recording their requests; integration for the fallback. **Gate**: Full.
-- **Status**: Pending.
+- **Status**: Done (`39550f7`).
 
 ### E05 — Frontend: planning model select and purpose grouping
 - **What**: a "Planning model" select in the AI Builder settings tab (options: "Same as the build model" and the catalog models of the selected provider; sends `planning_model` explicitly, `""` to clear); the purpose grouping and labels on the usage page; types in `lib/api.ts`.
@@ -77,7 +77,7 @@ E03 and E04 do not depend on E01 and can run first.
 - **Requirements**: AEC-09 and the UI of AEC-03/AEC-04.
 - **Done when**: both locales have every string; changing the provider refreshes the options and shows a cleared planning model; the mutation has `onError` toast; the grouping option appears.
 - **Tests**: `tsc -b`, build, i18n JSON; a Playwright case only if the existing settings tab has one to extend. **Gate**: Frontend.
-- **Status**: Pending.
+- **Status**: Done (`c7f94b4`). The UI was not opened in a browser; checked by `tsc -b` and the test suite.
 
 ### E06 — Planning eval harness (opt-in)
 - **What**: the `planningeval` test file, the 12 briefs, the answer script, the output lines, the shuffled and anonymized plan files, the cost cap (design §6).
@@ -86,21 +86,21 @@ E03 and E04 do not depend on E01 and can run first.
 - **Requirements**: AEC-06, AEC-07.
 - **Done when**: `go vet -tags planningeval ./internal/agent/` passes; with `PLANEVAL_PROVIDERS` empty the test skips; a dry run against a fake provider prints 12 lines and a totals line and writes 12 anonymized files.
 - **Tests**: the dry run is a normal test (no tag) over the printing and anonymizing helpers. **Gate**: Quick.
-- **Status**: Pending.
+- **Status**: Done (`bb07413`). Deviations: the cost cap is checked between briefs, not between calls; a malformed plan never pauses the turn (the loop returns the error to the model), so the harness counts a retry and, on give-up, a `text` outcome.
 
 ### E07 — Run the eval and decide  (spends real tokens)
 - **What**: run the harness for the build model and the candidate planning model on the same 12 briefs; the maintainer reads the anonymized plans; record the result and a go / no-go in `design.md` Risks and here.
 - **Depends on**: E06, and the maintainer setting the acceptance thresholds (A4).
 - **Expected cost**: about 12 plan turns per model; at the sample's US$ 0.016 per planning call and 3 to 5 calls per turn, roughly US$ 0.6 to 0.9 for Sonnet and under US$ 0.05 for Haiku. **Ask before running.**
 - **Done when**: the result lines are pasted in `design.md`; the decision is written; if no-go, E09 is skipped and the setting stays empty.
-- **Status**: Pending.
+- **Status**: Run on 2026-11-15 (Sonnet 5.5 and Haiku 5.5, 12 briefs each, US$ 0.39 in total); waiting for the maintainer's blind read of the plans (A4).
 
 ### E08 — Docs and CHANGELOG
 - **What**: `docs/docs/ai-frontend-builder.md` (the planning model setting, the report grouping, the estimate), `CHANGELOG.md` under `[Unreleased]`, the parent specs' "Out of Scope"/risk lines that point to this feature (`ai-builder-costs` spec row 8, `ai-builder-planning` spec decision 6 and design §9 limit), README only if a user-facing table lists settings. English only in docs.
 - **Depends on**: E05, E07.
 - **Done when**: the docs state that the default changes nothing, the A1 limit (same provider) and how to check the share of planning in the report; the parent lines are marked as done by this feature.
 - **Gate**: none beyond `gofmt`/JSON checks; Quick if code was touched.
-- **Status**: Pending.
+- **Status**: Done (2026-11-15). The E07 verdict is added to `design.md` Risks once the blind read is done.
 
 ### E09 — Local check with a planning model set  (spends real tokens)
 - **What**: in the local stack, set the planning model, run a vague request to a plan, approve it, and let the build run; read the ledger by purpose and by model; confirm design A6 (cache at the mode switch) and the Haiku caching [verify]; reset the setting if the owner wants.
