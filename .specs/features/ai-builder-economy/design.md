@@ -3,7 +3,7 @@
 **Spec**: `.specs/features/ai-builder-economy/spec.md`
 **Status**: Draft (2026-11-14). **One DDL change** (§2, higher-risk), which needs the maintainer's approval before it is written.
 
-Items marked **[verify]** were not confirmed in the code or against a real call and must be checked in the task that names them.
+Items marked **[verify]** were not confirmed in the code or against a real call and must be checked in the task that names them. The Haiku caching and A6 items were checked in E09 (see `tasks.md`).
 
 ---
 

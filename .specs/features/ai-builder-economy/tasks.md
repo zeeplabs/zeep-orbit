@@ -10,7 +10,7 @@ One commit per finished task with a green gate (authorized by the maintainer for
 
 **Spec**: `.specs/features/ai-builder-economy/spec.md`
 **Design**: `.specs/features/ai-builder-economy/design.md`
-**Status**: Approved (A1 and A4 on 2026-11-14). E01 to E06 and E08 done, E07 waiting for the blind read, E09 pending.
+**Status**: Approved (A1 and A4 on 2026-11-14). E01 to E09 done; E07 is a go.
 
 ---
 
@@ -93,7 +93,7 @@ E03 and E04 do not depend on E01 and can run first.
 - **Depends on**: E06, and the maintainer setting the acceptance thresholds (A4).
 - **Expected cost**: about 12 plan turns per model; at the sample's US$ 0.016 per planning call and 3 to 5 calls per turn, roughly US$ 0.6 to 0.9 for Sonnet and under US$ 0.05 for Haiku. **Ask before running.**
 - **Done when**: the result lines are pasted in `design.md`; the decision is written; if no-go, E09 is skipped and the setting stays empty.
-- **Status**: Run on 2026-11-15 (Sonnet 5.5 and Haiku 5.5, 12 briefs each, US$ 0.39 in total); waiting for the maintainer's blind read of the plans (A4).
+- **Status**: Run on 2026-11-15 (Sonnet 5.5 and Haiku 5.5, 12 briefs each, 12/12 valid plans on both, US$ 0.370 against US$ 0.021). **Go** by the maintainer after the blind read (A4).
 
 ### E08 — Docs and CHANGELOG
 - **What**: `docs/docs/ai-frontend-builder.md` (the planning model setting, the report grouping, the estimate), `CHANGELOG.md` under `[Unreleased]`, the parent specs' "Out of Scope"/risk lines that point to this feature (`ai-builder-costs` spec row 8, `ai-builder-planning` spec decision 6 and design §9 limit), README only if a user-facing table lists settings. English only in docs.
@@ -107,7 +107,25 @@ E03 and E04 do not depend on E01 and can run first.
 - **Depends on**: E02, E05, E07 (go).
 - **Expected cost**: about US$ 0.15 to 0.4 for one turn on Sonnet build plus Haiku planning. **Ask before running.**
 - **Done when**: planning rows show the cheap model and at least 80% lower cost per call (spec success criterion); the first build call's `cache_write_tokens` is recorded with and without the setting; the numbers go in the "Real turns" notes of this file.
-- **Status**: Pending.
+- **Status**: Done (2026-11-15). Numbers in "Real turns" below. The setting was reset to empty afterwards.
+
+
+### Real turns (E09, 2026-11-15, local stack, Anthropic)
+
+One vague-but-answered request ("to-do app", one milestone), Sonnet 5.5 builds, same prompt, one run each. A sample of one per arm, an order of magnitude and not a forecast.
+
+| | Planning off (same model) | `planning_model = claude-haiku-5-5` |
+| --- | --- | --- |
+| Planning calls | 2 on Sonnet, US$ 0.0329 | 2 on Haiku, US$ 0.0017 (-94.7%) |
+| Build calls (`chat`) | 10, US$ 0.1192 | 8, US$ 0.1129 |
+| Whole turn | 12 calls, US$ 0.1522 | 10 calls, US$ 0.1146 |
+| First build call: `cache_read` / `cache_write` | 0 / 13,252 | 0 / 13,142 |
+
+- **Spec criterion met:** per planning call, US$ 0.0165 on Sonnet against US$ 0.0009 on Haiku, far past the 80% bar. The saving from planning alone is US$ 0.031 of US$ 0.152 (about 20%); the whole-turn difference (about 25%) also carries two fewer build calls, which is noise, not an effect of the setting.
+- **A6 confirmed:** the first build call reads nothing from the cache with or without the setting (the tools list changes at the mode switch), and its cache write is the same within 1%. The planning model does not add a loss at the switch.
+- **Haiku caches short prefixes:** its second planning call read 8,259 tokens written by the first (cache_write 8,259 then cache_read 8,259). Not tested below 8k tokens.
+- **Ledger:** every row priced (0 unpriced); planning rows carry `claude-haiku-5-5`, build rows `claude-sonnet-5-5`, as AEC-02 requires.
+- **Not exercised:** the fallback to the build model with a real provider (covered by `TestPlanningProvider_*` and `TestBuilderRuntime_PlanningProviderFollowsThePlanningModel`), and a plan of several milestones.
 
 ---
 
