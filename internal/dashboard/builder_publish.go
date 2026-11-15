@@ -625,17 +625,38 @@ type publishTreeError struct{ msg string }
 
 func (e *publishTreeError) Error() string { return "builder publish: " + e.msg }
 
-// treeExcluded reports whether an archive path never leaves the builder: version
-// control data, installed dependencies, build output and the builder's own
-// bookkeeping, at any depth.
+// treeExcluded reports whether an archive path never leaves the builder:
+// version control data and installed dependencies at any depth, the build
+// output (dist) and the builder's own bookkeeping (.orbit) at the project root,
+// and environment files, which may hold a secret the agent or the user wrote
+// (.env, .env.local, .env.production...; the .env.example family stays).
+// A source folder that happens to be named dist deeper in the tree is kept.
 func treeExcluded(name string) bool {
-	for _, seg := range strings.Split(name, "/") {
+	segs := strings.Split(name, "/")
+	for i, seg := range segs {
 		switch seg {
-		case ".git", "node_modules", "dist", ".orbit":
+		case ".git", "node_modules":
 			return true
+		case "dist", ".orbit":
+			if i == 0 {
+				return true
+			}
 		}
 	}
-	return false
+	return isEnvFile(segs[len(segs)-1])
+}
+
+// isEnvFile reports whether a file name is a dotenv file that can hold values,
+// as opposed to a committed template of one.
+func isEnvFile(base string) bool {
+	if base != ".env" && !strings.HasPrefix(base, ".env.") {
+		return false
+	}
+	switch strings.ToLower(strings.TrimPrefix(base, ".env.")) {
+	case "example", "sample", "template", "defaults":
+		return false
+	}
+	return true
 }
 
 // cleanTreePath normalizes a tar entry name; ok=false for an unsafe one

@@ -41,6 +41,11 @@ const (
 // "the repository changed outside the builder" (design §12: HTTP 409).
 var ErrRemoteMoved = errors.New("github: the remote branch changed since the last known commit")
 
+// ErrRepoNotFound is returned by CommitTree when it expected the branch of a
+// published repository and the repository itself answers 404: it was deleted or
+// renamed, or the installation lost access. It is not "moved".
+var ErrRepoNotFound = errors.New("github: repository not found or not accessible")
+
 // ErrRepoExists is returned by CreateEmptyRepo when a repository with that name
 // already exists in the organization.
 var ErrRepoExists = errors.New("github: repository already exists")
@@ -169,6 +174,15 @@ func (c *Client) CommitTree(ctx context.Context, owner, repo, branch string, fil
 	case exists && (expectedParent == "" || !strings.EqualFold(head, expectedParent)):
 		return "", ErrRemoteMoved
 	case !exists && expectedParent != "":
+		// The ref lookup answers 404 for a missing branch and for a missing
+		// repository alike: tell them apart before blaming an outside push.
+		found, rerr := c.repoExists(ctx, owner, repo)
+		if rerr != nil {
+			return "", rerr
+		}
+		if !found {
+			return "", fmt.Errorf("%w: %s/%s", ErrRepoNotFound, owner, repo)
+		}
 		return "", ErrRemoteMoved
 	}
 
@@ -263,6 +277,24 @@ func (c *Client) branchHead(ctx context.Context, owner, repo, branch string) (sh
 		return "", false, nil
 	default:
 		return "", false, apiStatusError(resp, body)
+	}
+}
+
+// repoExists reports whether the repository answers GET /repos/{owner}/{repo}.
+func (c *Client) repoExists(ctx context.Context, owner, repo string) (bool, error) {
+	u := fmt.Sprintf("%s/repos/%s/%s", githubAPIBaseURL, url.PathEscape(owner), url.PathEscape(repo))
+	resp, body, err := c.doAuthenticated(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return true, nil
+	case http.StatusNotFound:
+		return false, nil
+	default:
+		return false, apiStatusError(resp, body)
 	}
 }
 

@@ -18,6 +18,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path"
 	"sort"
 	"strings"
 	"sync"
@@ -182,6 +183,9 @@ func (g *bpubGitHub) roundTrip(r *http.Request) (*http.Response, error) {
 	}
 
 	switch {
+	case r.Method == http.MethodGet && tail == "":
+		return bpubJSON(http.StatusOK, fmt.Sprintf(`{"name":%q}`, name))
+
 	case r.Method == http.MethodPatch && tail == "":
 		g.archived = append(g.archived, name)
 		return bpubJSON(http.StatusOK, `{}`)
@@ -418,6 +422,8 @@ func (e *bpubEnv) session(t *testing.T) BuilderSessionView {
 		".git/config":                "[core]\n",
 		".orbit/ops.jsonl":           "{}\n",
 		"packages/ui/node_modules/x": "x\n",
+		".env.local":                 "API_SECRET=do-not-publish\n",
+		"src/dist/logo.svg":          "<svg/>\n",
 		"public/favicon.svg":         "<svg/>\n",
 		"scripts/run.sh":             "#!/bin/sh\n",
 	})
@@ -578,6 +584,7 @@ func TestPublish_FirstPublishCreatesRepoCommitFrontendAppAndService(t *testing.T
 		"src/orbit.config.ts": "export const ORBIT_API_URL = 'https://orbit.test.example'\n",
 		"public/favicon.svg":  "<svg/>\n",
 		"scripts/run.sh":      "#!/bin/sh\n",
+		"src/dist/logo.svg":   "<svg/>\n", // a source folder named dist below the root is kept
 	}
 	if len(tree) != len(wantTree) {
 		t.Errorf("tree has %d files %v, want %d", len(tree), bpubKeys(tree), len(wantTree))
@@ -588,7 +595,7 @@ func TestPublish_FirstPublishCreatesRepoCommitFrontendAppAndService(t *testing.T
 		}
 	}
 	for p := range tree {
-		if strings.Contains(p, "node_modules") || strings.HasPrefix(p, "dist/") || strings.HasPrefix(p, ".git/") || strings.HasPrefix(p, ".orbit/") {
+		if strings.Contains(p, "node_modules") || strings.HasPrefix(p, "dist/") || strings.HasPrefix(p, ".git/") || strings.HasPrefix(p, ".orbit/") || strings.HasPrefix(path.Base(p), ".env") {
 			t.Errorf("excluded path %q was published", p)
 		}
 	}
@@ -1217,6 +1224,7 @@ func TestDownloadZip_ContainsTheTreeButNotNodeModules(t *testing.T) {
 		"src/orbit.config.ts": "export const ORBIT_API_URL = 'https://orbit.test.example'\n",
 		"public/favicon.svg":  "<svg/>\n",
 		"scripts/run.sh":      "#!/bin/sh\n",
+		"src/dist/logo.svg":   "<svg/>\n", // a source folder named dist below the root is kept
 	}
 	if len(got) != len(want) {
 		t.Errorf("zip has %v, want %v", bpubKeys(got), bpubKeys(want))
@@ -1227,7 +1235,7 @@ func TestDownloadZip_ContainsTheTreeButNotNodeModules(t *testing.T) {
 		}
 	}
 	for p := range got {
-		if strings.Contains(p, "node_modules") || strings.HasPrefix(p, "dist/") || strings.HasPrefix(p, ".git/") || strings.HasPrefix(p, ".orbit/") {
+		if strings.Contains(p, "node_modules") || strings.HasPrefix(p, "dist/") || strings.HasPrefix(p, ".git/") || strings.HasPrefix(p, ".orbit/") || strings.HasPrefix(path.Base(p), ".env") {
 			t.Errorf("excluded path %q in the zip", p)
 		}
 	}
@@ -1287,12 +1295,12 @@ func TestDownloadZip_NeedsNeitherGitHubNorADeployProvider(t *testing.T) {
 // ---- tree helpers ----
 
 func TestTreeExcludedAndCleanTreePath(t *testing.T) {
-	for _, p := range []string{"node_modules/a/b.js", "a/node_modules/b", ".git/config", "dist/index.html", "packages/x/dist/y.js", ".orbit/ops.jsonl"} {
+	for _, p := range []string{"node_modules/a/b.js", "a/node_modules/b", ".git/config", "dist/index.html", ".orbit/ops.jsonl", ".env", ".env.local", "a/.env.production", ".env.Development.local"} {
 		if !treeExcluded(p) {
 			t.Errorf("treeExcluded(%q) = false", p)
 		}
 	}
-	for _, p := range []string{"src/node_modules_notes.md", "src/dist.ts", "distribution/a", ".github/workflows/ci.yml", ".gitignore", "a/.orbit.json"} {
+	for _, p := range []string{"src/node_modules_notes.md", "src/dist.ts", "distribution/a", ".github/workflows/ci.yml", ".gitignore", "a/.orbit.json", "src/dist/logo.svg", "packages/x/dist/y.js", "src/.orbit/x", ".env.example", ".env.sample", "a/.env.template", ".envrc.md", "src/environment.ts"} {
 		if treeExcluded(p) {
 			t.Errorf("treeExcluded(%q) = true", p)
 		}

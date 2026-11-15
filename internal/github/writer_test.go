@@ -253,7 +253,13 @@ func TestCommitTree_MismatchedHeadReturnsErrRemoteMovedWithoutWrites(t *testing.
 // An expected parent with a branch that no longer exists, and a first commit
 // into a branch that already exists, are both "the remote moved".
 func TestCommitTree_BranchGoneOrAppearedReturnsErrRemoteMoved(t *testing.T) {
-	gone := &fakeGitHub{route: happyRoute("", 0, 0)}
+	inner := happyRoute("", 0, 0)
+	gone := &fakeGitHub{route: func(r recordedReq) (int, string) {
+		if r.Method == http.MethodGet && strings.HasSuffix(r.Path, "/repos/acme/my-app") {
+			return http.StatusOK, `{"name":"my-app"}`
+		}
+		return inner(r)
+	}}
 	if _, err := gone.client(t).CommitTree(context.Background(), "acme", "my-app", "main", sampleFiles(), "m", headSHA); !errors.Is(err, ErrRemoteMoved) {
 		t.Errorf("deleted branch: error = %v, want ErrRemoteMoved", err)
 	}
@@ -267,6 +273,19 @@ func TestCommitTree_BranchGoneOrAppearedReturnsErrRemoteMoved(t *testing.T) {
 	}
 	if appeared.writes() != 0 {
 		t.Error("first commit into an existing branch: no writes expected")
+	}
+}
+
+// A 404 on the ref also happens when the repository is gone (deleted, renamed,
+// installation revoked): that is not "moved by an outside push".
+func TestCommitTree_MissingRepositoryIsNotRemoteMoved(t *testing.T) {
+	f := &fakeGitHub{route: happyRoute("", 0, 0)} // every GET other than the ref answers 404
+	_, err := f.client(t).CommitTree(context.Background(), "acme", "my-app", "main", sampleFiles(), "m", headSHA)
+	if !errors.Is(err, ErrRepoNotFound) || errors.Is(err, ErrRemoteMoved) {
+		t.Fatalf("error = %v, want ErrRepoNotFound", err)
+	}
+	if f.writes() != 0 {
+		t.Error("no writes expected")
 	}
 }
 
