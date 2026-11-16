@@ -25,7 +25,8 @@ import AccessDenied from './pages/AccessDenied'
 import OAuthConsent from './components/OAuthConsent'
 import { RequireRole } from './components/patterns/RequireRole'
 import { Toaster } from 'sonner'
-import { useBootstrapStatus } from './lib/api'
+import { useBootstrapStatus, useBuilderStatus } from './lib/api'
+import { readMode, resolveLanding } from './lib/mode'
 
 const ComponentsSandbox = import.meta.env.DEV
   ? lazy(() => import('./pages/dev/ComponentsSandbox'))
@@ -46,6 +47,21 @@ function ResumeReturnTo({ fallback }: { fallback: string }) {
     window.location.assign(returnTo ? `/dashboard${returnTo}` : fallback)
   }, [location.search, fallback])
   return <LoadingScreen />
+}
+
+// HomeEntry decides where `/` lands (HCH-10): the chat home for the simple
+// mode when the builder is available, `/apps` otherwise. The chat home page
+// arrives with H04; until then the "home" case still goes to /apps so nothing
+// changes for users.
+function HomeEntry() {
+  const builder = useBuilderStatus()
+  const landing = resolveLanding(readMode(), {
+    isPending: builder.isPending,
+    isError: builder.isError,
+    available: builder.data?.available,
+  })
+  if (landing === 'loading') return <LoadingScreen />
+  return <Navigate to="/apps" replace />
 }
 
 function LoadingScreen() {
@@ -134,7 +150,7 @@ function App() {
         <Route
           element={<DashboardShell user={user} />}
         >
-          <Route index element={<Navigate to="/apps" replace />} />
+          <Route index element={<HomeEntry />} />
           <Route path="/apps" element={<AppsPage />} />
           <Route path="/apps/new" element={<AppOnboardingPage />} />
           <Route path="/apps/:id" element={<AppDetailsPage />} />

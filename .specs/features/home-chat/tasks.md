@@ -10,7 +10,7 @@ One commit per finished task with a green gate (authorized by the maintainer for
 
 **Spec**: `.specs/features/home-chat/spec.md`
 **Design**: `.specs/features/home-chat/design.md`
-**Status**: Spec approved 2026-11-16. H01 done. Next: H02.
+**Status**: Spec approved 2026-11-16. H01, H02 done. Next: H03.
 
 ---
 
