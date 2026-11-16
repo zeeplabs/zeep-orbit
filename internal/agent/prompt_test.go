@@ -82,7 +82,7 @@ func TestBuildSystemPrompt_CoreStatesThatSignUpIsOpen(t *testing.T) {
 	core := CorePrompt()
 	for _, want := range []string{
 		"sign-up on an Orbit app is open", "anyone who signs up", "only staff or only the team",
-		"an administrator creates the accounts", `Do not label that access as "staff only"`,
+		"an administrator creates the accounts", "bound to a role", `Do not label that access as "staff only"`,
 	} {
 		if !strings.Contains(core, want) {
 			t.Errorf("core.md must state %q", want)
