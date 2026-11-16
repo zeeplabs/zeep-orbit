@@ -2027,6 +2027,10 @@ export interface BuilderSession {
   tokens_out: number
   /** Absent while the session has no recorded model call. */
   usage?: BuilderSessionUsage
+  /** Brief progress, set by the list route (zeros when the session has no brief). */
+  brief_version?: number
+  milestones_total?: number
+  milestones_done?: number
   created_at: string
   updated_at: string
 }

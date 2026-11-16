@@ -8,6 +8,7 @@ import GoogleSetupPage from './pages/GoogleSetupPage'
 import DashboardShell from './pages/DashboardShell'
 import SimpleShell, { type ShellUser } from './components/layout/SimpleShell'
 import HomeChatPage from './pages/HomeChatPage'
+import ProjectsPage from './pages/ProjectsPage'
 import OnboardingPage from './pages/OnboardingPage'
 import AppsPage from './pages/AppsPage'
 import AppOnboardingPage from './pages/AppOnboardingPage'
@@ -70,6 +71,17 @@ function HomeEntry({ user }: { user: ShellUser | null }) {
       <HomeChatPage />
     </SimpleShell>
   )
+}
+
+// SimpleLayout wraps the simple screens that are reached by their own URL
+// (`/projetos`). They need the builder: when it is not available the user goes
+// to `/apps` (HCH-20), where a superadmin sees why.
+function SimpleLayout({ user }: { user: ShellUser | null }) {
+  const builder = useBuilderStatus()
+  if (!user) return <Navigate to="/login" replace />
+  if (builder.isPending) return <LoadingScreen />
+  if (builder.isError || !builder.data?.available) return <Navigate to="/apps" replace />
+  return <SimpleShell user={user} />
 }
 
 function LoadingScreen() {
@@ -156,6 +168,9 @@ function App() {
           !user ? <Navigate to={`/login?return_to=${returnTo}`} replace /> : <OAuthConsent />
         } />
         <Route path="/" element={<HomeEntry user={user} />} />
+        <Route element={<SimpleLayout user={user} />}>
+          <Route path="/projetos" element={<ProjectsPage />} />
+        </Route>
         <Route
           element={<DashboardShell user={user} />}
         >

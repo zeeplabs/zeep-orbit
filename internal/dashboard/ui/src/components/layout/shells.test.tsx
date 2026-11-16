@@ -9,9 +9,11 @@ vi.mock('@/components/patterns/UnsavedChangesBlocker', () => ({ UnsavedChangesBl
 
 vi.mock('@/lib/useCurrentRole', () => ({ useCurrentRole: () => 'admin' }))
 
+const builder = vi.hoisted(() => ({ available: true }))
 vi.mock('@/lib/api', async (orig) => ({
   ...(await orig<typeof import('@/lib/api')>()),
   useBuilderSessions: () => ({ data: [] }),
+  useBuilderStatus: () => ({ data: { available: builder.available } }),
 }))
 
 import SimpleShell from './SimpleShell'
@@ -75,8 +77,16 @@ describe('SimpleShell', () => {
 })
 
 describe('advanced Sidebar', () => {
-  test('shows the mode switch turned on', () => {
+  test('shows the mode switch turned on when the builder is available', () => {
+    builder.available = true
     wrap(<Sidebar companyName="Acme" footer={<div>footer</div>} />, '/apps')
     expect(screen.getByRole('switch', { name: 'Advanced mode' })).toHaveAttribute('aria-checked', 'true')
+  })
+
+  test('hides the switch when the builder is not available (HCH-20)', () => {
+    builder.available = false
+    wrap(<Sidebar companyName="Acme" footer={<div>footer</div>} />, '/apps')
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument()
+    expect(screen.getByText('footer')).toBeInTheDocument()
   })
 })

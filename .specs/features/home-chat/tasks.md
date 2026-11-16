@@ -10,7 +10,7 @@ One commit per finished task with a green gate (authorized by the maintainer for
 
 **Spec**: `.specs/features/home-chat/spec.md`
 **Design**: `.specs/features/home-chat/design.md`
-**Status**: Spec approved 2026-11-16. H01, H02, H03, H04 done. Next: H05, H06.
+**Status**: Spec approved 2026-11-16. H01 to H05 done. Next: H06.
 
 ---
 
@@ -60,6 +60,8 @@ H01 [verify] ─► H02 mode + landing ─► H03 shells ─┬─► H04 home +
 - **Gate**: Frontend.
 
 > **Login landing (2026-11-16, maintainer's OK)**: a successful login and `/login` for a signed-in user now go to `/dashboard/` instead of `/dashboard/apps`; `HomeEntry` sends advanced-mode users and users without the builder on to `/apps`. The e2e global setup and `login()` helper set `orbit.mode=advanced` so the suite keeps driving the advanced interface on a stack where the builder is available.
+
+> **H05 note (2026-11-16)**: `GET /builder/sessions` rows now carry `brief_version`, `milestones_total` and `milestones_done` (zeros without a brief), from `Store.MilestoneSummaries` (two queries for the whole list). They live in a separate `BuilderSessionListItem` type: embedding both the view and `builderBriefProgress` in one struct would make Go drop the duplicate JSON keys (the detail route is covered by a test). `/projetos` is a layout route (`SimpleLayout`) that redirects to `/apps` when the builder is unavailable (HCH-20). The advanced sidebar shows the mode switch only when the builder is available. HCH-19 still says `role=\"tablist\"` for Chat / Meus projetos; the shell uses route links instead (see the H03 note), to be reconciled in the spec at H09.
 
 > **H03/H04 note (2026-11-16)**: `SimpleShell` renders `/` (via `HomeEntry`, with `children`); H05 mounts it as a layout route for `/projetos`, H06 for `/builder/:sessionId`. The header uses route links with `aria-current` instead of ARIA tabs (each item navigates to a page; the tabs pattern needs a tabpanel in the same view). Mobile layout of the simple shell (nav, footer) is H09 (HCH-19); today the sidebar is hidden below `md`. Logout, language and change-password flows are duplicated from `DashboardShell` to keep its diff to the switch only; extracting a shared hook is a follow-up.
 
