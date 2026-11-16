@@ -86,7 +86,7 @@ func accessText(d DataEntry) string {
 	case AccessPublic:
 		who = "open to everyone, signed in or not"
 	case AccessSignedIn:
-		who = "any signed-in user"
+		who = "any signed-in user (anyone can create an account, so this is not limited to a team)"
 	case AccessOwner:
 		who = "each user only their own rows"
 	default:
