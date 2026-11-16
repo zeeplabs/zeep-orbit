@@ -42,6 +42,7 @@ jobs:
           cd internal/dashboard/ui
           npm ci
           npx tsc -b
+          npm test
           npm run build
 
       - name: Go vet

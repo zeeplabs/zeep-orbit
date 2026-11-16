@@ -1,10 +1,9 @@
-import { test, expect } from '@playwright/test'
-import { MODE_STORAGE_KEY, readMode, writeMode, resetModeMemory, resolveLanding } from '../src/lib/mode'
+import { describe, test, expect, beforeEach } from 'vitest'
+import { MODE_STORAGE_KEY, readMode, writeMode, resetModeMemory, resolveLanding } from './mode'
 
 /**
- * Pure logic of the interface mode (home-chat HCH-08, HCH-10). No page: the
- * storage is a fake, so these run without touching the dashboard. The real
- * redirect in the browser is covered by the H09 UAT.
+ * Pure logic of the interface mode (home-chat HCH-08, HCH-10). The storage is a
+ * fake. The real redirect in the browser is covered by the H09 UAT.
  */
 
 function fakeStorage(initial: Record<string, string> = {}) {
@@ -27,9 +26,9 @@ const throwing = {
   },
 }
 
-test.beforeEach(() => resetModeMemory())
+beforeEach(() => resetModeMemory())
 
-test.describe('readMode / writeMode', () => {
+describe('readMode / writeMode', () => {
   test('absent value is simple', () => {
     expect(readMode(fakeStorage())).toBe('simple')
   })
@@ -63,7 +62,7 @@ test.describe('readMode / writeMode', () => {
   })
 })
 
-test.describe('resolveLanding matrix', () => {
+describe('resolveLanding matrix', () => {
   const avail = { isPending: false, isError: false, available: true }
   const unavail = { isPending: false, isError: false, available: false }
   const loading = { isPending: true, isError: false, available: undefined }

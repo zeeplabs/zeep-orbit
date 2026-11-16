@@ -18,7 +18,7 @@ One commit per finished task with a green gate (authorized by the maintainer for
 
 | Gate | When | Command |
 | --- | --- | --- |
-| Frontend | Every UI task | `cd internal/dashboard/ui && node_modules/.bin/tsc -b && npm run build` plus JSON validation of `en.json` and `pt-BR.json` (not `npx tsc`) |
+| Frontend | Every UI task | `cd internal/dashboard/ui && node_modules/.bin/tsc -b && npm test && npm run build` plus JSON validation of `en.json` and `pt-BR.json` (not `npx tsc`) |
 | Full | Only if H05 touches Go | `go build ./... && go vet ./... && gofmt -l cmd internal && go test -p 1 -parallel 4 -timeout 30m ./...` (`DASHBOARD_BOOTSTRAP_SECRET` and `TEST_DATABASE_URL` set) |
 
 ## Dependency Graph
