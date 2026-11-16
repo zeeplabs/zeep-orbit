@@ -527,3 +527,86 @@ func TestRecordUsage_PlanningPurpose(t *testing.T) {
 		t.Fatalf("purpose = %q %v", purpose, err)
 	}
 }
+
+func TestMilestoneSummaries(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+
+	// Empty input is not an error.
+	if got, err := e.st.MilestoneSummaries(ctx, nil); err != nil || len(got) != 0 {
+		t.Fatalf("no ids: %+v %v", got, err)
+	}
+
+	noBrief := e.briefingSession(t)
+
+	built := e.briefingSession(t)
+	e.pausedOn(t, built, store.TurnOptions{}, store.PlanningToolProposeBuildPlan, planArgs)
+	turns, _ := e.st.ListTurns(ctx, e.userA, built.ID)
+	if _, _, err := e.st.ApproveBuildPlan(ctx, e.userA, built.ID, turns[0].ID, approve(1)); err != nil {
+		t.Fatal(err)
+	}
+	// The approval turn builds milestone 1 and has not finished: 0 of 3.
+	got, err := e.st.MilestoneSummaries(ctx, []string{noBrief.ID, built.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := got[noBrief.ID]; ok {
+		t.Errorf("a session without a brief must be absent: %+v", got[noBrief.ID])
+	}
+	if s := got[built.ID]; s != (store.MilestoneSummary{BriefVersion: 1, Total: 3, Done: 0}) {
+		t.Fatalf("before the build: %+v", s)
+	}
+
+	// Once that turn completes, milestone 1 is done, and the batch agrees with MilestoneProgress.
+	e.complete(t, store.TurnCompleted)
+	got, err = e.st.MilestoneSummaries(ctx, []string{built.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := got[built.ID]; s != (store.MilestoneSummary{BriefVersion: 1, Total: 3, Done: 1}) {
+		t.Fatalf("after milestone 1: %+v", s)
+	}
+	_, states, err := e.st.MilestoneProgress(ctx, built.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := 0
+	for _, m := range states {
+		if m.Done {
+			done++
+		}
+	}
+	if done != got[built.ID].Done || len(states) != got[built.ID].Total {
+		t.Errorf("batch %+v disagrees with MilestoneProgress %+v", got[built.ID], states)
+	}
+}
+
+func TestMilestoneSummaries_UsesTheNewestBriefAndSkipsAnUnreadableOne(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+
+	sess := e.briefingSession(t)
+	other := e.briefingSession(t)
+	insert := func(id string, version int, plan string) {
+		t.Helper()
+		if _, err := e.pool.Exec(ctx,
+			`INSERT INTO zeep_system.builder_briefs (session_id, version, plan, created_by)
+			 VALUES ($1, $2, $3::jsonb, $4)`, id, version, plan, e.userA); err != nil {
+			t.Fatal(err)
+		}
+	}
+	insert(sess.ID, 1, `{"milestones":[{"title":"a","done":true}]}`)
+	insert(sess.ID, 2, `{"milestones":[{"title":"a","done":true},{"title":"b","done":false}]}`)
+	insert(other.ID, 1, `"not an object"`)
+
+	got, err := e.st.MilestoneSummaries(ctx, []string{sess.ID, other.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := got[sess.ID]; s != (store.MilestoneSummary{BriefVersion: 2, Total: 2, Done: 1}) {
+		t.Errorf("newest brief: %+v", s)
+	}
+	if _, ok := got[other.ID]; ok {
+		t.Errorf("an unreadable brief must not appear (and must not fail the list): %+v", got[other.ID])
+	}
+}

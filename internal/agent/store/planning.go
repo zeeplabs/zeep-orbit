@@ -175,15 +175,6 @@ func milestoneProgress(ctx context.Context, q querier, sessionID string) (*Brief
 	if err != nil || brief == nil {
 		return nil, nil, err
 	}
-	var plan struct {
-		Milestones []struct {
-			Title string `json:"title"`
-			Done  bool   `json:"done"`
-		} `json:"milestones"`
-	}
-	if err := json.Unmarshal(brief.Plan, &plan); err != nil {
-		return nil, nil, fmt.Errorf("builder store: milestone progress: brief v%d is not valid JSON: %w", brief.Version, err)
-	}
 	rows, err := q.Query(ctx,
 		`SELECT DISTINCT milestone FROM zeep_system.builder_turns
 		 WHERE session_id = $1 AND brief_version = $2 AND milestone IS NOT NULL AND status = 'completed'`,
@@ -203,11 +194,122 @@ func milestoneProgress(ctx context.Context, q querier, sessionID string) (*Brief
 	if err := rows.Err(); err != nil {
 		return nil, nil, fmt.Errorf("builder store: milestone progress: %w", err)
 	}
-	states := make([]MilestoneState, 0, len(plan.Milestones))
-	for i, m := range plan.Milestones {
-		states = append(states, MilestoneState{Index: i + 1, Title: m.Title, Done: m.Done || built[i+1]})
+	states, err := milestoneStates(brief.Version, brief.Plan, built)
+	if err != nil {
+		return nil, nil, err
 	}
 	return brief, states, nil
+}
+
+// milestoneStates reads the milestones of a brief plan and marks each done when the plan says
+// so or when a completed turn built it (built is keyed by the 1-based milestone index).
+func milestoneStates(version int, plan json.RawMessage, built map[int]bool) ([]MilestoneState, error) {
+	var parsed struct {
+		Milestones []struct {
+			Title string `json:"title"`
+			Done  bool   `json:"done"`
+		} `json:"milestones"`
+	}
+	if err := json.Unmarshal(plan, &parsed); err != nil {
+		return nil, fmt.Errorf("builder store: milestone progress: brief v%d is not valid JSON: %w", version, err)
+	}
+	states := make([]MilestoneState, 0, len(parsed.Milestones))
+	for i, m := range parsed.Milestones {
+		states = append(states, MilestoneState{Index: i + 1, Title: m.Title, Done: m.Done || built[i+1]})
+	}
+	return states, nil
+}
+
+// MilestoneSummary is the brief progress of one session as counts.
+type MilestoneSummary struct {
+	BriefVersion int
+	Total        int
+	Done         int
+}
+
+// MilestoneSummaries returns the brief progress of many sessions in two queries (the session
+// list shows it for every row). Sessions without a brief are absent from the map. A session
+// whose brief cannot be parsed is also absent: one bad row must not break a list. The rules
+// are those of MilestoneProgress. Internal (not owner-scoped): pass ids the caller owns.
+func (s *Store) MilestoneSummaries(ctx context.Context, sessionIDs []string) (map[string]MilestoneSummary, error) {
+	out := map[string]MilestoneSummary{}
+	if len(sessionIDs) == 0 {
+		return out, nil
+	}
+	rows, err := s.pool.Query(ctx,
+		`SELECT DISTINCT ON (session_id) session_id, version, plan
+		 FROM zeep_system.builder_briefs WHERE session_id = ANY($1::text[]::uuid[])
+		 ORDER BY session_id, version DESC`, sessionIDs)
+	if err != nil {
+		return nil, fmt.Errorf("builder store: milestone summaries: %w", err)
+	}
+	type current struct {
+		version int
+		plan    json.RawMessage
+	}
+	briefs := map[string]current{}
+	for rows.Next() {
+		var id string
+		var c current
+		if err := rows.Scan(&id, &c.version, &c.plan); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("builder store: milestone summaries: scan brief: %w", err)
+		}
+		briefs[id] = c
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("builder store: milestone summaries: %w", err)
+	}
+	if len(briefs) == 0 {
+		return out, nil
+	}
+
+	withBrief := make([]string, 0, len(briefs))
+	for id := range briefs {
+		withBrief = append(withBrief, id)
+	}
+	trows, err := s.pool.Query(ctx,
+		`SELECT DISTINCT session_id, brief_version, milestone FROM zeep_system.builder_turns
+		 WHERE session_id = ANY($1::text[]::uuid[]) AND brief_version IS NOT NULL AND milestone IS NOT NULL AND status = 'completed'`,
+		withBrief)
+	if err != nil {
+		return nil, fmt.Errorf("builder store: milestone summaries: %w", err)
+	}
+	defer trows.Close()
+	built := map[string]map[int]bool{}
+	for trows.Next() {
+		var id string
+		var version, milestone int
+		if err := trows.Scan(&id, &version, &milestone); err != nil {
+			return nil, fmt.Errorf("builder store: milestone summaries: scan turn: %w", err)
+		}
+		if version != briefs[id].version {
+			continue // built for an older brief version
+		}
+		if built[id] == nil {
+			built[id] = map[int]bool{}
+		}
+		built[id][milestone] = true
+	}
+	if err := trows.Err(); err != nil {
+		return nil, fmt.Errorf("builder store: milestone summaries: %w", err)
+	}
+
+	for id, c := range briefs {
+		states, err := milestoneStates(c.version, c.plan, built[id])
+		if err != nil {
+			continue
+		}
+		sum := MilestoneSummary{BriefVersion: c.version, Total: len(states)}
+		for _, m := range states {
+			if m.Done {
+				sum.Done++
+			}
+		}
+		out[id] = sum
+	}
+	return out, nil
 }
 
 // nextPending returns the 1-based index of the first milestone that is not

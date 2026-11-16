@@ -622,15 +622,45 @@ func (h *BuilderHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 		h.serverError(w, r, err)
 		return
 	}
-	out := make([]BuilderSessionView, 0, len(sessions))
+	progress, err := h.store.MilestoneSummaries(r.Context(), ids)
+	if err != nil {
+		h.serverError(w, r, err)
+		return
+	}
+	out := make([]BuilderSessionListItem, 0, len(sessions))
 	for i := range sessions {
 		v := newBuilderSessionView(&sessions[i])
 		u := usage[v.ID]
 		u.Currency = settings.CostCurrency
 		v.Usage = &u
-		out = append(out, v)
+		p := progress[v.ID]
+		out = append(out, BuilderSessionListItem{
+			BuilderSessionView: v,
+			builderSessionProgress: builderSessionProgress{
+				BriefVersion:    p.BriefVersion,
+				MilestonesTotal: p.Total,
+				MilestonesDone:  p.Done,
+			},
+		})
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// builderSessionProgress is the brief progress shown on a session list row: the same three
+// fields the detail route carries (builderBriefProgress), as zeros when there is no brief.
+type builderSessionProgress struct {
+	BriefVersion    int `json:"brief_version"`
+	MilestonesTotal int `json:"milestones_total"`
+	MilestonesDone  int `json:"milestones_done"`
+}
+
+// BuilderSessionListItem is one row of GET /api/builder/sessions. It is the session view plus
+// the brief progress, so a list can say "milestone 2 of 4" without one request per session.
+// It is a separate type from the detail body on purpose: embedding both the view and
+// builderBriefProgress in one struct would make Go drop the duplicate JSON keys.
+type BuilderSessionListItem struct {
+	BuilderSessionView
+	builderSessionProgress
 }
 
 // BuilderSessionDetail is the body of GET /api/builder/sessions/{id}.
