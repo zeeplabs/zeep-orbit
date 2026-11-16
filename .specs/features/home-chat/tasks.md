@@ -10,7 +10,7 @@ One commit per finished task with a green gate (authorized by the maintainer for
 
 **Spec**: `.specs/features/home-chat/spec.md`
 **Design**: `.specs/features/home-chat/design.md`
-**Status**: Spec approved 2026-11-16. H01, H02 done. Next: H03.
+**Status**: Spec approved 2026-11-16. H01, H02, H03 done. Next: H04, H05, H06.
 
 ---
 
@@ -58,6 +58,8 @@ H01 [verify] ─► H02 mode + landing ─► H03 shells ─┬─► H04 home +
 - **Depends on**: H02.
 - **Done when**: keyboard and screen-reader behavior of the tablist and switch checked; advanced shell diff is only the new switch; both themes.
 - **Gate**: Frontend.
+
+> **H03 note (2026-11-16)**: `SimpleShell` exists and is tested but is **not routed yet**; H04 mounts it for `/`, H05 for `/projetos`, H06 for `/builder/:sessionId`. The header uses route links with `aria-current` instead of ARIA tabs (each item navigates to a page; the tabs pattern needs a tabpanel in the same view). Mobile layout of the simple shell (nav, footer) is H09 (HCH-19); today the sidebar is hidden below `md`. Logout, language and change-password flows are duplicated from `DashboardShell` to keep its diff to the switch only; extracting a shared hook is a follow-up.
 
 ### H04 — Home page and creation flow  `[P with H05, H06]`
 - **What**: `HomeChatPage`, composer, suggestions, backend selector with the existing-backend picker, "Continue de onde parou", creation mutation with the failure path (HCH-02 to HCH-07), title function.

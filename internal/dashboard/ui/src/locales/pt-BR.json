@@ -1744,5 +1744,12 @@
   "unsaved.title": "Sair sem salvar?",
   "unsaved.message": "Você tem alterações que não foram salvas. Se sair desta página, elas serão perdidas.",
   "unsaved.leave": "Sair da página",
-  "unsaved.stay": "Continuar editando"
+  "unsaved.stay": "Continuar editando",
+  "nav.simple.advancedMode": "Modo avançado",
+  "nav.simple.chat": "Chat",
+  "nav.simple.projects": "Meus projetos",
+  "nav.simple.newProject": "Novo projeto",
+  "nav.simple.recents": "Recentes",
+  "nav.simple.untitled": "Projeto sem título",
+  "nav.simple.mainNav": "Navegação principal"
 }

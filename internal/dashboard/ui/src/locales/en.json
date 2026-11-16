@@ -1744,5 +1744,12 @@
   "unsaved.title": "Leave without saving?",
   "unsaved.message": "You have changes that haven't been saved. If you leave this page, they will be lost.",
   "unsaved.leave": "Leave page",
-  "unsaved.stay": "Stay"
+  "unsaved.stay": "Stay",
+  "nav.simple.advancedMode": "Advanced mode",
+  "nav.simple.chat": "Chat",
+  "nav.simple.projects": "My projects",
+  "nav.simple.newProject": "New project",
+  "nav.simple.recents": "Recent",
+  "nav.simple.untitled": "Untitled project",
+  "nav.simple.mainNav": "Main navigation"
 }

@@ -7,6 +7,7 @@ import { hasPlatformPermission } from '@/lib/permissions'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import { Separator } from '@/components/ui/separator'
 import { NAV_SECTIONS, NavItemDef } from './nav'
+import { ModeSwitch } from './ModeSwitch'
 import orbitWordmark from '@/assets/images/logo/orbit-transparent.png'
 
 function label(key: string, t: (k: string) => string): string {
@@ -144,6 +145,9 @@ export function Sidebar({ companyName, banner, footer }: SidebarProps) {
       </nav>
 
       {banner}
+
+      {/* The label hides on the 72px tablet rail like the other sidebar labels; the switch keeps its aria-label. */}
+      <ModeSwitch advanced className="mb-3 px-2 md:justify-center lg:justify-start" labelClassName="hidden lg:inline" />
 
       {footer}
     </aside>
