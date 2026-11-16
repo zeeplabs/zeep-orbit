@@ -75,6 +75,21 @@ func TestBuildSystemPrompt_EmbeddedCoreRules(t *testing.T) {
 	}
 }
 
+// The agent must never tell the user that sign-up is closed or that accounts
+// are created by an administrator: neither is true on an Orbit app, and a
+// table with access public is open to anyone who signs up.
+func TestBuildSystemPrompt_CoreStatesThatSignUpIsOpen(t *testing.T) {
+	core := CorePrompt()
+	for _, want := range []string{
+		"sign-up on an Orbit app is open", "anyone who signs up", "only staff or only the team",
+		"an administrator creates the accounts", "bound to a role", `Do not label that access as "staff only"`,
+	} {
+		if !strings.Contains(core, want) {
+			t.Errorf("core.md must state %q", want)
+		}
+	}
+}
+
 func TestBuildSystemPrompt_OversizedTemplateGuideTruncated(t *testing.T) {
 	guide := strings.Repeat("g", MaxTemplateGuideChars+500)
 	out := BuildSystemPrompt("core", "", guide, "", fullSession())

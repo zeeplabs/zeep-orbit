@@ -13,7 +13,7 @@ Screens:
 - Patient: One patient's record
 
 Data (intent; tables are created through backend proposals):
-- patients [any signed-in user]: People the clinic attends
+- patients [any signed-in user (anyone can create an account, so this is not limited to a team)]: People the clinic attends
 - notes [by role; doctors write, reception reads]: Notes per visit
 
 Look: style: clean; colors: teal; interface language: pt-BR

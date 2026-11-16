@@ -56,7 +56,7 @@ func buildProposeBackendPlanSchema() json.RawMessage {
 	props := addTable["properties"].(map[string]any)
 	props["access"] = map[string]any{
 		"type": "string", "enum": []string{builderAccessPublic, builderAccessOwner, builderAccessPolicy},
-		"description": "Who can see the rows: public (anyone with access to the app reads every row), owner (each user sees only their own rows) or policy (row policies decide).",
+		"description": "Who can see the rows: public (no row protection: every account reads and changes every row, and anyone can create an account because sign-up is open), owner (each user sees only their own rows) or policy (row policies decide).",
 	}
 	props["access_reason"] = map[string]any{"type": "string", "maxLength": builderAccessReasonMax, "description": "One line saying why the table has that access."}
 	addTable["required"] = []string{"name", "columns", "access", "access_reason"}
@@ -164,7 +164,7 @@ func parseTableAccess(operation json.RawMessage) (access, reason string, err err
 	switch access {
 	case builderAccessPublic, builderAccessOwner, builderAccessPolicy:
 	case "":
-		return "", "", errors.New("\"access\" is required: public (anyone with access to the app reads every row), owner (each user sees only their own rows) or policy (a row policy decides)")
+		return "", "", errors.New("\"access\" is required: public (no row protection: every account reads and changes every row, and anyone can create an account because sign-up is open), owner (each user sees only their own rows) or policy (a row policy decides)")
 	default:
 		return "", "", errors.New("\"access\" must be public, owner or policy")
 	}
