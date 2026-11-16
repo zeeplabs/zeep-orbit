@@ -2614,7 +2614,7 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, status int,
 		}
 		h.logger.Warn("dashboard request hit a DDL lock timeout",
 			zap.String("method", r.Method),
-			zap.String("path", r.URL.Path),
+			zap.String("path", RedactPreviewTokenPath(r.URL.Path)),
 			zap.Error(err),
 		)
 		writeJSON(w, http.StatusConflict, map[string]string{"error": provisioner.ErrDDLLockTimeout.Error()})
@@ -2622,7 +2622,7 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, status int,
 	}
 	h.logger.Error("dashboard request failed",
 		zap.String("method", r.Method),
-		zap.String("path", r.URL.Path),
+		zap.String("path", RedactPreviewTokenPath(r.URL.Path)),
 		zap.Int("status", status),
 		zap.Error(err),
 	)

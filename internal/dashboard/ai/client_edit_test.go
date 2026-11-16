@@ -431,3 +431,26 @@ func TestEditToolDefs_IncludesAllEightProposalsPlusReadTools(t *testing.T) {
 		t.Errorf("expected exactly %d tool defs, got %d: %+v", len(want), len(defs), got)
 	}
 }
+
+// add_policy (ai-builder-backend B04) belongs to the AI Frontend Builder only:
+// ParseEditOperation accepts it, but the edit chat neither advertises the tool
+// nor treats a call to it as a proposal.
+func TestAddPolicy_BuilderOnly(t *testing.T) {
+	op, err := ParseEditOperation("propose_add_policy", `{"table":"notes","template":"open_read","roles":["member"]}`)
+	if err != nil || op.Kind != "add_policy" || op.AddPolicy == nil || op.AddPolicy.Template != "open_read" {
+		t.Fatalf("ParseEditOperation add_policy = %+v, %v", op, err)
+	}
+	for _, bad := range []string{``, `{"table":"notes"}`, `{"template":"open_read"}`, `not json`} {
+		if _, err := ParseEditOperation("propose_add_policy", bad); err == nil {
+			t.Errorf("add_policy args %q must be rejected", bad)
+		}
+	}
+	for _, d := range editToolDefs() {
+		if d.Function.Name == "propose_add_policy" {
+			t.Error("the edit chat must not advertise propose_add_policy")
+		}
+	}
+	if editProposalToolNames["propose_add_policy"] {
+		t.Error("the edit chat must not treat propose_add_policy as an edit proposal")
+	}
+}

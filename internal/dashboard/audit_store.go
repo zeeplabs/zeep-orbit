@@ -54,7 +54,7 @@ var auditCategories = map[string][]string{
 	"create": {
 		"app.create", "user.create", "data.create", "app.table.create",
 		"app.token.create", "frontend_app.create", "github.template.create",
-		"app_member.added",
+		"app_member.added", "builder.skill.create",
 	},
 	"modify": {
 		"app.update", "data.update", "config.update", "config.system.update",
@@ -63,11 +63,12 @@ var auditCategories = map[string][]string{
 		"app.user.sessions.reset", "app.user.role_update", "github.config.update", "github.template.update",
 		"app.secret.regenerate", "frontend_app.sync.regenerate", "frontend_app.sync.retry",
 		"frontend_app.retry", "frontend_app.deploy.retry",
+		"builder.skill.version", "builder.skill.enable", "builder.skill.disable",
 	},
 	"delete": {
 		"app.delete", "user.delete", "data.delete", "app.table.delete",
 		"frontend_app.delete", "github.config.delete", "github.template.delete",
-		"app_member.removed", "app.token.revoke",
+		"app_member.removed", "app.token.revoke", "builder.skill.delete",
 	},
 	"auth": {
 		"user.login", "user.logout", "app.user.activate", "app.user.deactivate",

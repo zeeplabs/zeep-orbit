@@ -17,6 +17,9 @@ spec:
     metadata:
       labels:
         {{- include "zeep-orbit.selectorLabels" . | nindent 8 }}
+        {{- if .Values.builder.enabled }}
+        app.kubernetes.io/component: orbit
+        {{- end }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -66,6 +69,15 @@ spec:
             {{- with .Values.database.maxConns }}
             - name: DB_MAX_CONNS
               value: {{ . | quote }}
+            {{- end }}
+            {{- if .Values.builder.enabled }}
+            - name: BUILDER_URL
+              value: {{ printf "http://%s:8081" (include "zeep-orbit.builder.fullname" .) | quote }}
+            - name: BUILDER_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "zeep-orbit.builder.secretName" . }}
+                  key: BUILDER_SHARED_SECRET
             {{- end }}
 
           resources:

@@ -1,0 +1,52 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# Optional Kustomize Component: AI frontend builder. It adds the builder, the
+# npm registry proxy and the NetworkPolicies that isolate the builder (they only
+# take effect on a CNI that enforces NetworkPolicy: Calico, Cilium...), and points
+# the Orbit Deployment at them.
+#
+# A Component cannot be applied alone, and Kustomize rejects an overlay that
+# lives inside the base directory, so use it from an overlay OUTSIDE k8s/:
+#
+#   # my-overlay/kustomization.yaml
+#   apiVersion: kustomize.config.k8s.io/v1beta1
+#   kind: Kustomization
+#   resources:
+#     - ../k8s
+#   components:
+#     - ../k8s/builder
+#
+#   kubectl apply -k my-overlay
+#
+# Secret NÃO está no GitOps — criar manualmente antes do apply:
+#   kubectl create secret generic zeep-orbit-builder-secret \
+#     --from-literal=BUILDER_SHARED_SECRET="$(openssl rand -hex 32)"
+# Ver secret.example.yaml. Mirrors charts/zeep-orbit (builder.enabled=true).
+resources:
+  - builder.yaml
+  - registry-proxy.yaml
+  - networkpolicy.yaml
+
+patches:
+  # Point Orbit at the builder and label its pods for the NetworkPolicy.
+  - target:
+      kind: Deployment
+      name: zeep-orbit
+    patch: |-
+      - op: add
+        path: /spec/template/metadata/labels/component
+        value: orbit
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: BUILDER_URL
+          value: "http://zeep-orbit-builder:8081"
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: BUILDER_SHARED_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: zeep-orbit-builder-secret
+              key: BUILDER_SHARED_SECRET

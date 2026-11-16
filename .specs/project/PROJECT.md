@@ -2,7 +2,7 @@
 
 ## Vision
 
-Self-hosted platform that provides a shared backend for multiple internal or SaaS applications — eliminating the need to create, deploy, and maintain individual backends for each app.
+Self-hosted platform for building apps with AI the right way: AI builds the frontend, wired to a real backend generated from the database schema — or the same backend alone, for frontends that already exist. One shared platform for multiple internal or SaaS applications, eliminating the need to create, deploy, and maintain individual backends for each app.
 
 ## Problem
 
@@ -20,9 +20,9 @@ Schema-in → REST-out. Define your tables in YAML, get REST APIs. No backend co
 
 ## Positioning
 
-> "One backend for all your apps. Deploy once, connect many."
+> "Vibe coding done right: AI-built apps on a real backend."
 
-Not a BaaS. Not a database. A **backend orchestrator** — schema-driven, self-hosted, multi-app.
+Not described as a BaaS anymore. A trustworthy, self-hosted platform for AI-built apps, in two modes: a full app (AI-built frontend + schema-generated backend) or the backend alone for an existing frontend. Previous positioning (until 2026-11-13): "One backend for all your apps. Deploy once, connect many."
 
 ## Target Users
 

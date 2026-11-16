@@ -1,0 +1,563 @@
+package dashboard
+
+// builder_runtime.go — the one place that turns the BUILDER_* environment into
+// a running AI Frontend Builder (ai-frontend-builder T30): the sandbox client,
+// the tool registry, the turn worker and the per-turn resolution of provider,
+// limits and prompt. cmd/zeep/main.go only calls NewBuilderRuntimeFromEnv,
+// Start and Stop; internal/server only receives HandlerConfig.
+//
+// Off switch: BUILDER_URL empty means NewBuilderRuntime returns (nil, nil).
+// Every method of a nil *BuilderRuntime is a no-op and HandlerConfig then
+// yields a config with an untyped-nil Sandbox, so the builder routes answer
+// 503 "builder not configured", there is no worker goroutine and no sandbox
+// client.
+//
+// What is resolved when:
+//   - at start-up: builder URL, shared secret (fatal when missing or too
+//     short), sandbox client, tools, worker;
+//   - at the start of EVERY turn (agent.WorkerConfig.PrepareDeps): the
+//     builder_settings row (provider choice and limits) and the provider row
+//     (model, key, base URL), so a superadmin change applies to the next turn
+//     without a restart. A provider that cannot be resolved does not abort the
+//     worker: the turn runs with a provider whose Chat fails, which the loop
+//     reports as provider_unavailable;
+//   - at the start of every chat turn (PromptSource): the company layer pinned
+//     on the session, the template guide and file tree read from the session's
+//     workspace.
+
+import (
+	"archive/tar"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"os"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+	"unicode/utf8"
+
+	"github.com/zeeplabs/zeep-orbit/internal/agent"
+	"github.com/zeeplabs/zeep-orbit/internal/agent/planning"
+	"github.com/zeeplabs/zeep-orbit/internal/agent/provider"
+	"github.com/zeeplabs/zeep-orbit/internal/agent/sandbox"
+	"github.com/zeeplabs/zeep-orbit/internal/agent/skills"
+	"github.com/zeeplabs/zeep-orbit/internal/agent/store"
+	"github.com/zeeplabs/zeep-orbit/internal/agent/tools"
+	"github.com/zeeplabs/zeep-orbit/internal/builder"
+	"github.com/zeeplabs/zeep-orbit/internal/db"
+)
+
+// Environment variables read by the builder wiring.
+const (
+	// EnvBuilderURL is the builder daemon's base URL. Empty disables the feature.
+	EnvBuilderURL = "BUILDER_URL"
+	// EnvBuilderSharedSecret is the HMAC key shared with the builder (request and
+	// preview tokens). Required when BUILDER_URL is set.
+	EnvBuilderSharedSecret = "BUILDER_SHARED_SECRET"
+)
+
+const (
+	// builderPromptScanTimeout bounds the archive read that supplies the
+	// template guide and the file tree.
+	builderPromptScanTimeout = 20 * time.Second
+
+	maxGuideBytes      = 64 << 10
+	maxBriefFileBytes  = 32 << 10
+	maxScanEntries     = 5000
+	maxTreeDepth       = 3
+	maxTreeLines       = 300
+	templateGuideFile  = "ORBIT_AGENT.md"
+	providerUnavailMsg = "builder model provider is not available"
+)
+
+// BuilderRuntimeConfig configures NewBuilderRuntime.
+type BuilderRuntimeConfig struct {
+	// URL is BUILDER_URL; empty disables the builder (NewBuilderRuntime returns nil).
+	URL string
+	// SharedSecret is BUILDER_SHARED_SECRET (required when URL is set).
+	SharedSecret string
+	// Concurrency is the turn worker's slots; <1 means agent.WorkerConcurrencyFromEnv().
+	Concurrency int
+	// Logger receives the worker's and the runtime's server-side logs
+	// (default slog.Default()).
+	Logger *slog.Logger
+	// HTTPClient is the client for the builder daemon (default: a plain client;
+	// builder calls are bounded by their contexts, not a client timeout).
+	HTTPClient *http.Client
+}
+
+// BuilderRuntime is the running builder: see the file comment. Build one with
+// NewBuilderRuntime or NewBuilderRuntimeFromEnv.
+type BuilderRuntime struct {
+	pool    *db.Pool
+	store   *store.Store
+	sandbox sandbox.Sandbox // the restoring wrapper, shared by handlers, tools and worker
+	signer  *builder.Signer
+	worker  *agent.Worker
+	log     *slog.Logger
+	// skills serves the enabled skills (built-ins plus custom) to every turn.
+	skills skills.Source
+
+	// providerHTTP is the SSRF-guarded client handed to the LLM adapter. Tests
+	// replace it; nothing outside this package can.
+	providerHTTP *http.Client
+
+	mu     sync.Mutex
+	cancel context.CancelFunc
+	done   chan struct{}
+}
+
+// NewBuilderRuntimeFromEnv reads BUILDER_URL, BUILDER_SHARED_SECRET and
+// BUILDER_WORKER_CONCURRENCY. It returns (nil, nil) when BUILDER_URL is empty.
+func NewBuilderRuntimeFromEnv(pool *db.Pool, logger *slog.Logger) (*BuilderRuntime, error) {
+	return NewBuilderRuntime(pool, BuilderRuntimeConfig{
+		URL:          os.Getenv(EnvBuilderURL),
+		SharedSecret: os.Getenv(EnvBuilderSharedSecret),
+		Concurrency:  agent.WorkerConcurrencyFromEnv(),
+		Logger:       logger,
+	})
+}
+
+// NewBuilderRuntime wires the builder. It returns (nil, nil) when cfg.URL is
+// empty. A set URL with a missing or too short secret is an error: the caller
+// should fail start-up with it (the message never contains the secret).
+func NewBuilderRuntime(pool *db.Pool, cfg BuilderRuntimeConfig) (*BuilderRuntime, error) {
+	if strings.TrimSpace(cfg.URL) == "" {
+		return nil, nil
+	}
+	if pool == nil {
+		return nil, errors.New("builder: database pool is required")
+	}
+	signer, err := builder.NewSigner([]byte(cfg.SharedSecret))
+	if err != nil {
+		return nil, fmt.Errorf("builder: %s must be set to a secret of at least %d bytes when %s is set: %w",
+			EnvBuilderSharedSecret, builder.MinSecretLen, EnvBuilderURL, err)
+	}
+	raw, err := sandbox.NewHTTP(cfg.URL, signer, cfg.HTTPClient)
+	if err != nil {
+		return nil, fmt.Errorf("builder: invalid %s: %w", EnvBuilderURL, err)
+	}
+	log := cfg.Logger
+	if log == nil {
+		log = slog.Default()
+	}
+
+	st := store.New(pool)
+	sb := sandbox.NewRestoring(raw, agent.SnapshotProvider(st))
+
+	skillSrc := NewBuilderSkillSource(pool)
+	reg, err := newBuilderToolRegistry(pool, sb, st, skillSrc, log)
+	if err != nil {
+		return nil, err
+	}
+
+	rt := &BuilderRuntime{
+		pool: pool, store: st, sandbox: sb, signer: signer, log: log,
+		skills:       skillSrc,
+		providerHTTP: newAIProviderHTTPClient(nil),
+	}
+
+	deps := agent.Deps{
+		Store:    st,
+		Provider: unavailableProvider{},
+		Tools:    reg,
+		Builder:  sb,
+		Budget:   store.NewBudgetChecker(pool),
+		Prompt:   rt.promptSource,
+		// The same function the workspace tools were registered with: the
+		// revert turn's rebuild must use the base the preview is served under.
+		PreviewBase: tools.PreviewBuildBase,
+		Logger:      log,
+	}
+	concurrency := cfg.Concurrency
+	if concurrency < 1 {
+		concurrency = agent.WorkerConcurrencyFromEnv()
+	}
+	w, err := agent.NewWorker(deps, st, agent.WorkerConfig{
+		Concurrency: concurrency,
+		PrepareDeps: rt.prepareDeps,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("builder: create worker: %w", err)
+	}
+	rt.worker = w
+	return rt, nil
+}
+
+// newBuilderToolRegistry builds the one tool registry the agent loop shares:
+// the workspace tools, the Orbit tools, load_skill and the planning tools.
+// load_skill and the planning tools are always registered; the loop decides
+// per turn whether the model is offered them (skills enabled, turn mode,
+// planning setting).
+func newBuilderToolRegistry(pool *db.Pool, sb sandbox.Sandbox, st *store.Store, skillSrc skills.Source, log *slog.Logger) (*tools.Registry, error) {
+	reg := tools.NewRegistry(tools.WithLogger(log))
+	if err := tools.RegisterWorkspaceTools(reg, sb, tools.WorkspaceConfig{PreviewBase: tools.PreviewBuildBase}); err != nil {
+		return nil, fmt.Errorf("builder: register workspace tools: %w", err)
+	}
+	if err := RegisterBuilderTools(reg, BuilderToolDeps{Pool: pool, Sessions: st}); err != nil {
+		return nil, fmt.Errorf("builder: register orbit tools: %w", err)
+	}
+	if err := skills.RegisterTool(reg, skillSrc); err != nil {
+		return nil, fmt.Errorf("builder: register skills tool: %w", err)
+	}
+	for _, tool := range planning.Tools() {
+		if err := reg.Register(tool); err != nil {
+			return nil, fmt.Errorf("builder: register planning tools: %w", err)
+		}
+	}
+	return reg, nil
+}
+
+// HandlerConfig is the part of BuilderHandlerConfig that comes from the
+// runtime. On a nil runtime it is the zero config: untyped-nil Sandbox, no
+// store, no signer, no Poke (every builder route but status is then a 503).
+// The caller fills Logger and Dashboard.
+func (rt *BuilderRuntime) HandlerConfig() BuilderHandlerConfig {
+	if rt == nil {
+		return BuilderHandlerConfig{}
+	}
+	return BuilderHandlerConfig{
+		Store:         rt.store,
+		Sandbox:       rt.sandbox,
+		PreviewSigner: rt.signer,
+		Poke:          rt.worker.Poke,
+	}
+}
+
+// Start runs the turn worker in its own goroutine until ctx is cancelled or
+// Stop is called. It is a no-op on a nil runtime and on a second call.
+func (rt *BuilderRuntime) Start(ctx context.Context) {
+	if rt == nil {
+		return
+	}
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	if rt.done != nil {
+		return
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	rt.cancel = cancel
+	rt.done = make(chan struct{})
+	done := rt.done
+	go func() {
+		defer close(done)
+		if err := rt.worker.Run(runCtx); err != nil {
+			rt.log.Error("builder worker stopped with an error", "err", err)
+		}
+	}()
+}
+
+// Stop stops claiming turns and waits for the in-flight ones, up to the
+// worker's ShutdownGrace (30s; turns still running after that are released to
+// another replica) or ctx, whichever ends first. Safe on a nil or never
+// started runtime.
+func (rt *BuilderRuntime) Stop(ctx context.Context) error {
+	if rt == nil {
+		return nil
+	}
+	rt.mu.Lock()
+	cancel, done := rt.cancel, rt.done
+	rt.mu.Unlock()
+	if done == nil {
+		return nil
+	}
+	cancel()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// ---- per-turn resolution ----
+
+// prepareDeps is agent.WorkerConfig.PrepareDeps: limits and provider from the
+// settings tables, read fresh for every turn.
+func (rt *BuilderRuntime) prepareDeps(ctx context.Context, base agent.Deps) agent.Deps {
+	s, err := GetBuilderSettings(ctx, rt.pool)
+	if err != nil {
+		rt.log.Error("builder: read settings for a turn failed", "err", err)
+		base.Provider = unavailableProvider{}
+		return base
+	}
+	base.Limits = agent.Limits{
+		MaxSteps:            s.MaxStepsPerTurn,
+		MaxFixIterations:    s.MaxFixIterations,
+		MaxTurnDuration:     time.Duration(s.MaxTurnSeconds) * time.Second,
+		ContextWindowTokens: s.ContextWindowTokens,
+	}
+	base.PlanningEnabled = s.PlanningMode != BuilderPlanningOff
+	base.Provider = rt.resolveProvider(ctx, s.Provider)
+	// The planning model only matters when it differs from the build model.
+	if s.PlanningModel != "" && s.PlanningModel != base.Provider.Model() {
+		base.PlanningProvider = rt.resolvePlanningProvider(ctx, s.Provider, s.PlanningModel)
+	}
+	return base
+}
+
+// resolveProvider builds the model client for the provider named in the
+// settings. Any failure yields an unavailableProvider (the turn then ends with
+// provider_unavailable); the cause is logged without the key.
+func (rt *BuilderRuntime) resolveProvider(ctx context.Context, name string) provider.Provider {
+	p, ok := rt.buildProvider(ctx, name, "")
+	if !ok {
+		return unavailableProvider{}
+	}
+	return p
+}
+
+// resolvePlanningProvider builds the client that answers plan-mode turns: the
+// provider named in the settings, running model instead of the provider row's
+// model (same key). Any failure yields nil and a warning, so the turn runs on
+// the build model instead of failing because of a cost tier
+// (ai-builder-economy AEC-05).
+func (rt *BuilderRuntime) resolvePlanningProvider(ctx context.Context, name, model string) provider.Provider {
+	p, ok := rt.buildProvider(ctx, name, model)
+	if !ok {
+		rt.log.Warn("builder: planning model is not available, the turn uses the build model", "provider", name, "model", model)
+		return nil
+	}
+	return p
+}
+
+// buildProvider is the client of provider name, with the provider row's model
+// or, when model is not empty, that model. It reports false after logging why
+// it could not build one.
+func (rt *BuilderRuntime) buildProvider(ctx context.Context, name, model string) (provider.Provider, bool) {
+	prt, err := ResolveAIProviderRuntime(ctx, rt.pool, name)
+	if err != nil {
+		rt.log.Warn("builder: model provider is not available", "provider", name, "err", err)
+		return nil, false
+	}
+	if model != "" {
+		prt.Model = model
+	}
+	// A turn queued before the row moved to a model outside the catalog: the
+	// catalog cannot price it, so it does not run (ai-model-catalog AMC-05).
+	if !catalogModelUsable(prt.Provider, prt.Model) {
+		rt.log.Warn("builder: model is not in the catalog", "provider", name, "model", prt.Model)
+		return nil, false
+	}
+	var p provider.Provider
+	if prt.Provider == aiProviderAnthropic {
+		// The official endpoint only (no operator-supplied URL), so the
+		// adapter's own client is used: it has the longer timeout this API
+		// needs and there is no address to guard.
+		p, err = provider.NewAnthropic(provider.AnthropicConfig{APIKey: prt.APIKey, Model: prt.Model})
+	} else {
+		p, err = provider.NewOpenAI(provider.OpenAIConfig{
+			Name:       prt.Provider,
+			BaseURL:    prt.BaseURL,
+			APIKey:     prt.APIKey,
+			Model:      prt.Model,
+			HTTPClient: rt.providerHTTP,
+		})
+	}
+	if err != nil {
+		rt.log.Warn("builder: model provider could not be built", "provider", name, "err", err)
+		return nil, false
+	}
+	return p, true
+}
+
+// unavailableProvider is the Provider of a turn whose real provider could not
+// be resolved. Its Chat error is an *provider.ErrProvider, which the loop maps
+// to the generic provider_unavailable code.
+type unavailableProvider struct{}
+
+func (unavailableProvider) Chat(context.Context, provider.ChatRequest) (provider.ChatResponse, error) {
+	return provider.ChatResponse{}, &provider.ErrProvider{Err: errors.New(providerUnavailMsg)}
+}
+func (unavailableProvider) Name() string  { return "unavailable" }
+func (unavailableProvider) Model() string { return "" }
+
+// ---- prompt source ----
+
+// promptSource is agent.PromptSource. The company layer is the prompt version
+// pinned when the session was created (later edits do not change a running
+// session); a database failure fails the turn rather than silently dropping
+// the company rules. The skills index is resolved on every turn, not pinned
+// to the session, so disabling or deleting a skill applies to the next turn;
+// a database failure fails the turn here too, so company skills are never
+// silently dropped; the brief is the user's approved plan, so failing to read
+// it fails the turn too. The workspace-derived parts (template guide, file
+// tree, the workspace copy of the brief) and the app name degrade to empty:
+// the agent has tools to look at them.
+func (rt *BuilderRuntime) promptSource(ctx context.Context, s *store.Session) (agent.PromptInput, error) {
+	in := agent.PromptInput{Session: agent.SessionContext{
+		BackendAppID: s.BackendAppID,
+		Locale:       s.Locale,
+	}}
+
+	if s.PromptVersionID != nil {
+		v, err := GetBuilderPromptVersion(ctx, rt.pool, *s.PromptVersionID)
+		if err != nil {
+			return agent.PromptInput{}, err
+		}
+		if v != nil {
+			in.Company = agent.CompanyLayer(v.Persona, v.Rules)
+		}
+	}
+
+	entries, err := rt.skills.Entries(ctx)
+	if err != nil {
+		return agent.PromptInput{}, err
+	}
+	index, dropped := skills.RenderIndex(entries, agent.MaxSkillsIndexChars)
+	if len(dropped) > 0 {
+		// Only reachable when the index is over budget (for example after an
+		// upgrade that added built-ins); the superadmin sees it in the UI too.
+		rt.log.Warn("builder: skills left out of the prompt index (over budget)", "session", s.ID, "dropped", dropped)
+	}
+	in.SkillsIndex = index
+
+	var name string
+	if err := rt.pool.QueryRow(ctx, `SELECT name FROM zeep_system.apps WHERE id = $1`, s.BackendAppID).Scan(&name); err != nil {
+		rt.log.Warn("builder: backend app name unavailable for the prompt", "session", s.ID)
+	} else {
+		in.Session.BackendAppName = name
+	}
+
+	sctx, cancel := context.WithTimeout(ctx, builderPromptScanTimeout)
+	defer cancel()
+	scan, err := rt.scanWorkspace(sctx, s.ID)
+	if err != nil {
+		if ctx.Err() != nil {
+			return agent.PromptInput{}, ctx.Err()
+		}
+		rt.log.Warn("builder: workspace scan for the prompt failed", "session", s.ID, "err", err)
+	}
+	in.TemplateGuide = scan.guide
+	in.Session.FileTree = scan.tree
+
+	brief, err := rt.briefInput(ctx, s.ID, scan.brief)
+	if err != nil {
+		return agent.PromptInput{}, err
+	}
+	in.Brief = brief
+	return in, nil
+}
+
+// briefInput reads the session's current brief and milestone progress.
+// workspaceFile is the workspace copy of the brief, which the loop compares
+// with the current version. It returns nil when the session has no brief. A
+// stored plan that no longer validates (the bounds were tightened by an
+// upgrade) is logged and skipped: the turn runs without a brief.
+func (rt *BuilderRuntime) briefInput(ctx context.Context, sessionID, workspaceFile string) (*agent.BriefInput, error) {
+	brief, states, err := rt.store.MilestoneProgress(ctx, sessionID)
+	if err != nil || brief == nil {
+		return nil, err
+	}
+	plan, err := planning.ParsePlan(brief.Plan)
+	if err != nil {
+		rt.log.Error("builder: stored brief is not a valid plan", "session", sessionID, "version", brief.Version, "err", err)
+		return nil, nil
+	}
+	done := map[int]bool{}
+	for _, m := range states {
+		if m.Done {
+			done[m.Index] = true
+		}
+	}
+	return &agent.BriefInput{Version: brief.Version, Plan: plan, Done: done, WorkspaceFile: workspaceFile}, nil
+}
+
+// scanWorkspace reads the session's committed tree (HEAD) from the builder and
+// extracts the template guide (ORBIT_AGENT.md at the root, the default
+// template ships one), the workspace copy of the brief (ORBIT_BRIEF.md at the
+// root) and a depth-limited file listing. On a read error it returns whatever
+// was gathered before it.
+func (rt *BuilderRuntime) scanWorkspace(ctx context.Context, sessionID string) (workspaceScan, error) {
+	rc, err := rt.sandbox.Archive(ctx, sessionID, "")
+	if err != nil {
+		return workspaceScan{}, err
+	}
+	defer rc.Close()
+	return scanWorkspaceFiles(rc)
+}
+
+// workspaceScan is what the prompt needs from the workspace archive.
+type workspaceScan struct {
+	guide string
+	tree  string
+	// brief is the content of planning.BriefFileName, "" when absent.
+	brief string
+}
+
+func scanWorkspaceArchive(r io.Reader) (guide, tree string, err error) {
+	scan, err := scanWorkspaceFiles(r)
+	return scan.guide, scan.tree, err
+}
+
+func scanWorkspaceFiles(r io.Reader) (scan workspaceScan, err error) {
+	var (
+		paths []string
+		seen  = map[string]bool{}
+		guide string
+	)
+	defer func() {
+		sort.Strings(paths)
+		if len(paths) > maxTreeLines {
+			paths = append(paths[:maxTreeLines], "... (more files not listed)")
+		}
+		scan.guide, scan.tree = guide, strings.Join(paths, "\n")
+	}()
+	add := func(p string) {
+		if !seen[p] {
+			seen[p] = true
+			paths = append(paths, p)
+		}
+	}
+	tr := tar.NewReader(r)
+	for n := 0; n < maxScanEntries; n++ {
+		hdr, nerr := tr.Next()
+		if errors.Is(nerr, io.EOF) {
+			break
+		}
+		if nerr != nil {
+			err = nerr
+			break
+		}
+		if hdr.Typeflag != tar.TypeReg {
+			continue
+		}
+		name, ok := cleanTreePath(hdr.Name)
+		if !ok || treeExcluded(name) {
+			continue
+		}
+		if name == templateGuideFile && guide == "" {
+			b, rerr := io.ReadAll(io.LimitReader(tr, maxGuideBytes))
+			if rerr != nil {
+				err = rerr
+				break
+			}
+			if utf8.Valid(b) {
+				guide = string(b)
+			} else {
+				guide = strings.ToValidUTF8(string(b), "")
+			}
+		}
+		if name == planning.BriefFileName && scan.brief == "" {
+			// One byte over the cap is read on purpose: an oversized file then
+			// differs from any valid brief and gets rewritten.
+			b, rerr := io.ReadAll(io.LimitReader(tr, maxBriefFileBytes+1))
+			if rerr != nil {
+				err = rerr
+				break
+			}
+			scan.brief = string(b)
+		}
+		segs := strings.Split(name, "/")
+		if len(segs) > maxTreeDepth {
+			add(strings.Join(segs[:maxTreeDepth], "/") + "/")
+		} else {
+			add(name)
+		}
+	}
+	return scan, err
+}

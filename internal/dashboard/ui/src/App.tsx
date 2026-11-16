@@ -19,6 +19,8 @@ import SdkPage from './pages/SdkPage'
 import MCPPage from './pages/MCPPage'
 import ChangelogPage from './pages/ChangelogPage'
 import DataBrowserPage from './pages/DataBrowserPage'
+import BuilderPage from './pages/BuilderPage'
+import BuilderUsagePage from './pages/BuilderUsagePage'
 import AccessDenied from './pages/AccessDenied'
 import OAuthConsent from './components/OAuthConsent'
 import { RequireRole } from './components/patterns/RequireRole'
@@ -136,6 +138,8 @@ function App() {
           <Route path="/apps" element={<AppsPage />} />
           <Route path="/apps/new" element={<AppOnboardingPage />} />
           <Route path="/apps/:id" element={<AppDetailsPage />} />
+          <Route path="/builder/usage" element={<BuilderUsagePage />} />
+          <Route path="/builder/:sessionId" element={<BuilderPage />} />
           <Route path="/apps/:id/edit" element={<RedirectToAppDetails />} />
           <Route path="/apps/:id/users" element={<RedirectToAppDetails tab="users" />} />
           <Route

@@ -1,0 +1,97 @@
+{{- if .Values.builder.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "zeep-orbit.registryProxy.fullname" . }}
+  labels:
+    {{- include "zeep-orbit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: registry-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "zeep-orbit.registryProxy.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zeep-orbit.registryProxy.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: registry-proxy
+          image: {{ include "zeep-orbit.registryProxy.image" . }}
+          imagePullPolicy: {{ .Values.builder.registryProxy.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          ports:
+            - name: http
+              containerPort: 4873
+              protocol: TCP
+          env:
+            - name: REGISTRY_PROXY_ADDR
+              value: ":4873"
+            - name: REGISTRY_PROXY_UPSTREAMS
+              value: {{ .Values.builder.registryProxy.upstreams | quote }}
+            {{- if .Values.builder.registryProxy.tokenDefault }}
+            - name: REGISTRY_PROXY_TOKEN_DEFAULT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "zeep-orbit.fullname" . }}
+                  key: REGISTRY_PROXY_TOKEN_DEFAULT
+            {{- end }}
+            {{- if .Values.builder.registryProxy.tokenCompany }}
+            - name: REGISTRY_PROXY_TOKEN_COMPANY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "zeep-orbit.fullname" . }}
+                  key: REGISTRY_PROXY_TOKEN_COMPANY
+            {{- end }}
+          resources:
+            {{- toYaml .Values.builder.registryProxy.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "zeep-orbit.registryProxy.fullname" . }}
+  labels:
+    {{- include "zeep-orbit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: registry-proxy
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "zeep-orbit.registryProxy.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: 4873
+      targetPort: http
+      protocol: TCP
+{{- end }}

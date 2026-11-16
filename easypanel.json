@@ -1,6 +1,6 @@
 {
   "name": "Zeep Orbit",
-  "description": "Open-source BaaS - schema definitions into instant REST APIs + PostgreSQL",
+  "description": "Open-source platform for building apps with AI on a real backend - schema definitions into instant REST APIs + PostgreSQL",
   "logo": "https://raw.githubusercontent.com/zeeplabs/zeep-orbit/main/docs/static/img/orbit-logo.png",
   "documentation": "https://github.com/zeeplabs/zeep-orbit",
   "services": [

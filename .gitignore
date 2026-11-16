@@ -10,3 +10,4 @@ docs/build/
 docs/.docusaurus/
 .worktrees/
 .DS_Store
+.env.local

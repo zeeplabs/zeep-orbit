@@ -41,13 +41,21 @@ type Client struct {
 	httpClient     httpDoer
 	appID          string
 	privateKeyPEM  []byte
+
+	// downloadClient is used for streaming downloads (DownloadTarball), which
+	// legitimately outlive the 10s API timeout. When nil, httpClient is used.
+	// It is set by NewClient only when the caller did not supply an HTTPClient,
+	// so a client wired to a mock transport stays the only transport in use.
+	downloadClient httpDoer
 }
 
 // NewClient builds a Client for the given GitHub App configuration.
 func NewClient(cfg AppConfig) *Client {
 	httpClient := cfg.HTTPClient
+	var downloadClient httpDoer
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: httpClientTimeout}
+		downloadClient = &http.Client{Timeout: tarballDownloadTimeout}
 	}
 
 	return &Client{
@@ -60,6 +68,7 @@ func NewClient(cfg AppConfig) *Client {
 		httpClient:     httpClient,
 		appID:          cfg.AppID,
 		privateKeyPEM:  cfg.PrivateKeyPEM,
+		downloadClient: downloadClient,
 	}
 }
 

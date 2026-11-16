@@ -1,6 +1,6 @@
 # zeep-orbit-client
 
-Rust client for [Zeep Orbit](https://github.com/zeeplabs/zeep-orbit) — an open-source, self-hosted BaaS platform.
+Rust client for [Zeep Orbit](https://github.com/zeeplabs/zeep-orbit) — an open-source, self-hosted platform for building apps with AI on a real backend.
 
 ```rust
 use orbit_client::OrbitClient, ClientConfig};

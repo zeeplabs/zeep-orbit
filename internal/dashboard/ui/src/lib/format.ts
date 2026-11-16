@@ -17,6 +17,14 @@ export function formatDate(iso: string): string {
   return format(iso, { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+/**
+ * Data de calendário sem hora (ex.: a data de revisão do catálogo de modelos, que o servidor
+ * manda como meia-noite UTC). Formata em UTC para não virar o dia anterior a oeste de Greenwich.
+ */
+export function formatCalendarDate(iso: string): string {
+  return format(iso, { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' })
+}
+
 /** Hora com segundos, ex.: "10:01:05". */
 export function formatTime(iso: string): string {
   return format(iso, { hour: '2-digit', minute: '2-digit', second: '2-digit' })

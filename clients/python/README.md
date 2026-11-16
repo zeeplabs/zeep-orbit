@@ -1,6 +1,6 @@
 # zeeplabs-orbit-client
 
-Python client for [Zeep Orbit](https://github.com/zeeplabs/zeep-orbit) — an open-source, self-hosted BaaS platform.
+Python client for [Zeep Orbit](https://github.com/zeeplabs/zeep-orbit) — an open-source, self-hosted platform for building apps with AI on a real backend.
 
 ```python
 from zeeplabs_orbit_client import OrbitClient, ClientConfig
