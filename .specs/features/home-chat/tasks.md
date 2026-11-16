@@ -59,6 +59,8 @@ H01 [verify] ─► H02 mode + landing ─► H03 shells ─┬─► H04 home +
 - **Done when**: keyboard and screen-reader behavior of the tablist and switch checked; advanced shell diff is only the new switch; both themes.
 - **Gate**: Frontend.
 
+> **Login landing (2026-11-16, maintainer's OK)**: a successful login and `/login` for a signed-in user now go to `/dashboard/` instead of `/dashboard/apps`; `HomeEntry` sends advanced-mode users and users without the builder on to `/apps`. The e2e global setup and `login()` helper set `orbit.mode=advanced` so the suite keeps driving the advanced interface on a stack where the builder is available.
+
 > **H03/H04 note (2026-11-16)**: `SimpleShell` renders `/` (via `HomeEntry`, with `children`); H05 mounts it as a layout route for `/projetos`, H06 for `/builder/:sessionId`. The header uses route links with `aria-current` instead of ARIA tabs (each item navigates to a page; the tabs pattern needs a tabpanel in the same view). Mobile layout of the simple shell (nav, footer) is H09 (HCH-19); today the sidebar is hidden below `md`. Logout, language and change-password flows are duplicated from `DashboardShell` to keep its diff to the switch only; extracting a shared hook is a follow-up.
 
 ### H04 — Home page and creation flow  `[P with H05, H06]`

@@ -145,7 +145,7 @@ function App() {
           />
         )}
         <Route path="/login" element={
-          user ? <ResumeReturnTo fallback="/dashboard/apps" /> : <LoginPage />
+          user ? <ResumeReturnTo fallback="/dashboard/" /> : <LoginPage />
         } />
         <Route path="/google-setup" element={
           !user ? <Navigate to="/login" replace /> :
