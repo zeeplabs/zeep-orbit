@@ -53,3 +53,36 @@ describe('SimpleSidebar', () => {
     expect(screen.getByText('footer')).toBeInTheDocument()
   })
 })
+
+describe('SimpleSidebar collapsed (builder route)', () => {
+  function setup() {
+    return render(
+      <MemoryRouter initialEntries={['/builder/b']}>
+        <SimpleSidebar collapsed footer={<div>footer</div>} />
+      </MemoryRouter>,
+    )
+  }
+
+  test('is 68 px wide and every entry is a link with an accessible name', () => {
+    sessions.data = [s('a', '2026-01-01T00:00:00Z', 'Clinic app'), s('b', '2026-02-01T00:00:00Z', '')]
+    const { container } = setup()
+    expect(container.querySelector('aside')).toHaveClass('w-[68px]')
+    expect(screen.getByRole('link', { name: 'New project' })).toHaveAttribute('href', '/')
+    const nav = screen.getByRole('navigation', { name: 'Recent' })
+    expect(within(nav).getByRole('link', { name: 'Clinic app' })).toHaveAttribute('href', '/builder/a')
+  })
+
+  test('highlights the current project and falls back for an empty title', () => {
+    sessions.data = [s('b', '2026-02-01T00:00:00Z', '')]
+    setup()
+    expect(screen.getByRole('link', { name: 'Untitled project' })).toHaveAttribute('aria-current', 'page')
+  })
+
+  test('renders no visible text label for the entries, only the footer', () => {
+    sessions.data = [s('a', '2026-01-01T00:00:00Z', 'Clinic app')]
+    setup()
+    expect(screen.queryByText('Clinic app')).not.toBeInTheDocument()
+    expect(screen.queryByText('Recent')).not.toBeInTheDocument()
+    expect(screen.getByText('footer')).toBeInTheDocument()
+  })
+})

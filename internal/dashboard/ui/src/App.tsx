@@ -84,6 +84,14 @@ function SimpleLayout({ user }: { user: ShellUser | null }) {
   return <SimpleShell user={user} />
 }
 
+// BuilderLayout hosts `/builder/:sessionId` in the simple shell with the
+// collapsed sidebar (HCH-13). Unlike SimpleLayout it does not require the
+// builder to be available: a session opened by link keeps rendering its own
+// "unavailable" notice instead of bouncing the user away.
+function BuilderLayout({ user }: { user: ShellUser | null }) {
+  return <SimpleShell user={user} collapsed />
+}
+
 function LoadingScreen() {
   const { t } = useTranslation()
   return (
@@ -171,6 +179,9 @@ function App() {
         <Route element={<SimpleLayout user={user} />}>
           <Route path="/projetos" element={<ProjectsPage />} />
         </Route>
+        <Route element={<BuilderLayout user={user} />}>
+          <Route path="/builder/:sessionId" element={<BuilderPage />} />
+        </Route>
         <Route
           element={<DashboardShell user={user} />}
         >
@@ -178,7 +189,6 @@ function App() {
           <Route path="/apps/new" element={<AppOnboardingPage />} />
           <Route path="/apps/:id" element={<AppDetailsPage />} />
           <Route path="/builder/usage" element={<BuilderUsagePage />} />
-          <Route path="/builder/:sessionId" element={<BuilderPage />} />
           <Route path="/apps/:id/edit" element={<RedirectToAppDetails />} />
           <Route path="/apps/:id/users" element={<RedirectToAppDetails tab="users" />} />
           <Route

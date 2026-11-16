@@ -59,7 +59,7 @@ export default function BuilderPage() {
   const publishEvent = useMemo(() => latestPublishEvent(events), [events])
 
   if (!sessionId) {
-    return <NotFound onBack={() => navigate('/apps')} />
+    return <NotFound onBack={() => navigate('/projetos')} />
   }
 
   if (sessionQuery.isLoading) {
@@ -77,7 +77,7 @@ export default function BuilderPage() {
   if (sessionQuery.isError || !session) {
     const kind = classifyBuilderError(sessionQuery.error).kind
     if (kind === 'not_found' || kind === 'forbidden') {
-      return <NotFound onBack={() => navigate('/apps')} />
+      return <NotFound onBack={() => navigate('/projetos')} />
     }
     if (kind === 'not_configured' || kind === 'unavailable') {
       return (
@@ -85,7 +85,7 @@ export default function BuilderPage() {
           icon="smart_toy"
           title={t('builder.page.unavailableTitle')}
           description={t(kind === 'not_configured' ? 'builder.page.unavailable.not_configured' : 'builder.page.unavailable.unknown')}
-          action={{ label: t('builder.page.back'), onClick: () => navigate('/apps') }}
+          action={{ label: t('builder.page.back'), onClick: () => navigate('/projetos') }}
         />
       )
     }
@@ -142,14 +142,14 @@ export default function BuilderPage() {
   }
 
   return (
-    <div className="flex flex-col lg:h-[calc(100vh-5rem)]">
+    <div className="flex flex-col p-6 max-md:p-4 lg:h-[calc(100vh-3.5rem)]">
       <PageHeader
         className="mb-4"
         title={session.title || t('builder.page.untitled')}
         subtitle={
           <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <Link
-              to="/apps"
+              to="/projetos"
               className="inline-flex items-center gap-1 underline-offset-2 hover:underline"
               style={{ color: 'var(--text-secondary)' }}
             >

@@ -62,6 +62,22 @@ describe('SimpleShell', () => {
     expect(screen.getByRole('link', { name: 'Skip to main content' })).toHaveAttribute('href', '#main-content')
   })
 
+  test('collapsed shell keeps the header and shows the user actions as icon buttons', () => {
+    wrap(
+      <Routes>
+        <Route element={<SimpleShell user={user} collapsed />}>
+          <Route path="/builder/:sessionId" element={<p>builder</p>} />
+        </Route>
+      </Routes>,
+      '/builder/x',
+    )
+    expect(document.querySelector('aside')).toHaveClass('w-[68px]')
+    expect(screen.getByRole('button', { name: 'Log Out' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Change Password' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'My projects' })).toBeInTheDocument()
+    expect(within(screen.getByRole('main')).getByText('builder')).toBeInTheDocument()
+  })
+
   test('redirects to /login without a user', () => {
     wrap(
       <Routes>

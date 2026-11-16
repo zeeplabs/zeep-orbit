@@ -10,7 +10,7 @@ One commit per finished task with a green gate (authorized by the maintainer for
 
 **Spec**: `.specs/features/home-chat/spec.md`
 **Design**: `.specs/features/home-chat/design.md`
-**Status**: Spec approved 2026-11-16. H01 to H05 done. Next: H06.
+**Status**: Spec approved 2026-11-16. H01 to H06 done (H06 visual check pending to H09). Next: H07/H08 checks, then H09.
 
 ---
 
@@ -62,6 +62,8 @@ H01 [verify] ─► H02 mode + landing ─► H03 shells ─┬─► H04 home +
 > **Login landing (2026-11-16, maintainer's OK)**: a successful login and `/login` for a signed-in user now go to `/dashboard/` instead of `/dashboard/apps`; `HomeEntry` sends advanced-mode users and users without the builder on to `/apps`. The e2e global setup and `login()` helper set `orbit.mode=advanced` so the suite keeps driving the advanced interface on a stack where the builder is available.
 
 > **H05 note (2026-11-16)**: `GET /builder/sessions` rows now carry `brief_version`, `milestones_total` and `milestones_done` (zeros without a brief), from `Store.MilestoneSummaries` (two queries for the whole list). They live in a separate `BuilderSessionListItem` type: embedding both the view and `builderBriefProgress` in one struct would make Go drop the duplicate JSON keys (the detail route is covered by a test). `/projetos` is a layout route (`SimpleLayout`) that redirects to `/apps` when the builder is unavailable (HCH-20). The advanced sidebar shows the mode switch only when the builder is available. HCH-19 still says `role=\"tablist\"` for Chat / Meus projetos; the shell uses route links instead (see the H03 note), to be reconciled in the spec at H09.
+
+> **H06 note (2026-11-16)**: H01 (d) answered: `BuilderPage` relied on the advanced shell's `p-10` (its `lg:h-[calc(100vh-5rem)]` is the viewport minus 2 x 40 px). It now owns its padding (`p-6`, `p-4` on phones) and sizes to `lg:h-[calc(100vh-3.5rem)]`, where 3.5rem is the simple shell's fixed `h-14` header. `/builder/:sessionId` is under `BuilderLayout` (`SimpleShell collapsed`), which does not require the builder to be available, so a session opened by link still shows its own unavailable notice; `/builder/usage` stays in the advanced shell. The builder's back link and not-found actions now go to `/projetos` (label "Back to my projects"). `SidebarFooter` got a `collapsed` icon column; no change to its expanded layout. **Not verified in a browser yet** (no Chromium locally): the 1440/1024/390 px and two-theme check is done in H09.
 
 > **H03/H04 note (2026-11-16)**: `SimpleShell` renders `/` (via `HomeEntry`, with `children`); H05 mounts it as a layout route for `/projetos`, H06 for `/builder/:sessionId`. The header uses route links with `aria-current` instead of ARIA tabs (each item navigates to a page; the tabs pattern needs a tabpanel in the same view). Mobile layout of the simple shell (nav, footer) is H09 (HCH-19); today the sidebar is hidden below `md`. Logout, language and change-password flows are duplicated from `DashboardShell` to keep its diff to the switch only; extracting a shared hook is a follow-up.
 

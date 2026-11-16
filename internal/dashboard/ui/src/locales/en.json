@@ -1389,7 +1389,7 @@
   "builder.newSession.submitting": "Creating session…",
   "builder.page.loading": "Loading session",
   "builder.page.untitled": "AI builder session",
-  "builder.page.back": "Back to apps",
+  "builder.page.back": "Back to my projects",
   "builder.page.backendApp": "Backend app",
   "builder.page.backendCreated": "Backend created by the AI builder",
   "builder.page.retry": "Try again",

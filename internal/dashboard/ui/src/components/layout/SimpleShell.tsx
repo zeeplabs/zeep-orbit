@@ -36,7 +36,16 @@ const TAB_CLASS =
  * for the mode switch (HCH-09); extracting a shared hook is a follow-up.
  * `children` replaces the <Outlet/> for a route that is not a layout route.
  */
-export default function SimpleShell({ user, children }: { user: ShellUser | null; children?: ReactNode }) {
+export default function SimpleShell({
+  user,
+  children,
+  collapsed = false,
+}: {
+  user: ShellUser | null
+  children?: ReactNode
+  /** Icon-only sidebar (68 px), used by the builder route (HCH-13). */
+  collapsed?: boolean
+}) {
   const qc = useQueryClient()
   const { t, i18n } = useTranslation()
   const mainRef = useRef<HTMLElement>(null)
@@ -90,6 +99,7 @@ export default function SimpleShell({ user, children }: { user: ShellUser | null
       onSaveLanguage={saveLanguage}
       onLogout={() => setShowLogoutDialog(true)}
       version={pkg.version}
+      collapsed={collapsed}
     />
   )
 
@@ -108,10 +118,10 @@ export default function SimpleShell({ user, children }: { user: ShellUser | null
 
       <UnsavedChangesBlocker />
 
-      <SimpleSidebar footer={footer} />
+      <SimpleSidebar footer={footer} collapsed={collapsed} />
 
       <div className="flex min-h-screen min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between gap-4 border-b border-[var(--border)] px-6 py-3 max-md:px-4">
+        <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-[var(--border)] px-6 max-md:px-4">
           {/* Route links, not ARIA tabs: each one navigates to a page, and the
               WAI-ARIA tabs pattern needs a tabpanel in the same view. */}
           <nav aria-label={t('nav.simple.mainNav')} className="flex items-center gap-1">
