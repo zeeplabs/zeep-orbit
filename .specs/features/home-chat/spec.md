@@ -39,7 +39,7 @@ This feature makes the AI chat the default landing screen, in the style of a gen
 | 3 | Project title from the first prompt | The first 60 characters of the prompt, trimmed at a word boundary. | The server default for a new backend is "Untitled app"; a list of identical titles is unusable. The prompt is already stored as the first message, so the title adds no new data, but it shows in more places. | Yes (2026-11-16) |
 | 4 | Frontends outside the builder in "Meus projetos" | Not shown in v1. | They have no session to open. | Yes (2026-11-16) |
 | 5 | Who sees the chat landing | Every authenticated user for whom `GET /builder/status` says `available`. Anyone else lands on `/apps`. | Same gate as "Criar com IA" in `AppsPage`. | Yes (2026-11-16) |
-| 6 | Session created, first message failed | Keep the user on the home screen with the text intact, delete the empty session best-effort, and show the error. | A session with no message is clutter, and the user must not lose a long prompt. | Yes (2026-11-16) |
+| 6 | Session created, first message failed | Keep the user on the home screen with the text intact and show the error. The session just created is **kept and reused** by the next attempt with the same backend choice (no second session or backend). A different backend choice starts a new session; the empty one stays in the list. | `DELETE /builder/sessions/{id}` archives the session but does not delete the backend it created (`builder_handlers.go:676`), so deleting would leave an empty app in `/apps`. Changed from "delete best-effort" with the maintainer's OK on 2026-11-16. | Yes (2026-11-16, changed) |
 | 7 | Backend choice on the composer | "Backend novo" by default; "Usar backend existente" opens a picker of the apps the user can see. | `CreateBuilderSessionInput.backend` supports both. | Yes (2026-11-16) |
 
 ---
@@ -54,7 +54,7 @@ This feature makes the AI chat the default landing screen, in the style of a gen
 
 1. HCH-01 The route `/` SHALL render the home chat when the builder is available and the saved mode is simple (or unset); the heading, subtitle, composer, suggestions and "Continue de onde parou" section follow `design.md`.
 2. HCH-02 WHEN the user submits a non-empty prompt THEN the screen SHALL create a builder session with the chosen backend (`{mode:"new"}` by default) and a title per assumption 3, post the prompt as the first message, and navigate to `/builder/:sessionId`.
-3. HCH-03 WHEN the session is created but the message is not accepted THEN the screen SHALL behave as assumption 6: error shown, text kept, empty session deleted best-effort (a failed delete is logged, not shown).
+3. HCH-03 WHEN the session is created but the message is not accepted THEN the screen SHALL behave as assumption 6: error shown, text kept, the created session kept and reused by the retry (nothing is deleted).
 4. HCH-04 The submit control SHALL be disabled while a request is in flight and when the prompt is empty or whitespace; the composer SHALL be a real labelled `<textarea>`; Enter sends and Shift+Enter inserts a newline.
 5. HCH-05 The suggestion chips SHALL fill the composer (not send); they are static, translated text and make no model call.
 6. HCH-06 The "Backend novo" control SHALL offer "Usar backend existente" with a picker of the apps the user can see; picking one sends `{mode:"existing", app_id}`.

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Navigate, NavLink, Outlet } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
@@ -18,7 +18,7 @@ import { SimpleSidebar } from './SimpleSidebar'
 import { ModeSwitch } from './ModeSwitch'
 import pkg from '../../../package.json'
 
-interface User {
+export interface ShellUser {
   id: string
   email: string
   name?: string
@@ -34,8 +34,9 @@ const TAB_CLASS =
  * (home-chat spec, assumption 2). The logout, language and change-password
  * flows mirror DashboardShell on purpose so that file stays untouched except
  * for the mode switch (HCH-09); extracting a shared hook is a follow-up.
+ * `children` replaces the <Outlet/> for a route that is not a layout route.
  */
-export default function SimpleShell({ user }: { user: User | null }) {
+export default function SimpleShell({ user, children }: { user: ShellUser | null; children?: ReactNode }) {
   const qc = useQueryClient()
   const { t, i18n } = useTranslation()
   const mainRef = useRef<HTMLElement>(null)
@@ -125,7 +126,7 @@ export default function SimpleShell({ user }: { user: User | null }) {
         </header>
 
         <main id="main-content" ref={mainRef} tabIndex={-1} className="min-w-0 flex-1 focus:outline-none">
-          <Outlet />
+          {children ?? <Outlet />}
         </main>
       </div>
 

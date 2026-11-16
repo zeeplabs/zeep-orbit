@@ -6,6 +6,8 @@ import { safeReturnTo } from '@/lib/returnTo'
 import LoginPage from './pages/LoginPage'
 import GoogleSetupPage from './pages/GoogleSetupPage'
 import DashboardShell from './pages/DashboardShell'
+import SimpleShell, { type ShellUser } from './components/layout/SimpleShell'
+import HomeChatPage from './pages/HomeChatPage'
 import OnboardingPage from './pages/OnboardingPage'
 import AppsPage from './pages/AppsPage'
 import AppOnboardingPage from './pages/AppOnboardingPage'
@@ -49,19 +51,25 @@ function ResumeReturnTo({ fallback }: { fallback: string }) {
   return <LoadingScreen />
 }
 
-// HomeEntry decides where `/` lands (HCH-10): the chat home for the simple
-// mode when the builder is available, `/apps` otherwise. The chat home page
-// arrives with H04; until then the "home" case still goes to /apps so nothing
-// changes for users.
-function HomeEntry() {
+// HomeEntry decides where `/` lands (HCH-10): the chat home, inside the simple
+// shell, for the simple mode when the builder is available; `/apps` otherwise.
+// The decision is made before any shell renders so nobody sees the simple chrome
+// flash before a redirect.
+function HomeEntry({ user }: { user: ShellUser | null }) {
   const builder = useBuilderStatus()
   const landing = resolveLanding(readMode(), {
     isPending: builder.isPending,
     isError: builder.isError,
     available: builder.data?.available,
   })
+  if (!user) return <Navigate to="/login" replace />
   if (landing === 'loading') return <LoadingScreen />
-  return <Navigate to="/apps" replace />
+  if (landing === 'apps') return <Navigate to="/apps" replace />
+  return (
+    <SimpleShell user={user}>
+      <HomeChatPage />
+    </SimpleShell>
+  )
 }
 
 function LoadingScreen() {
@@ -147,10 +155,10 @@ function App() {
         <Route path="/oauth/consent" element={
           !user ? <Navigate to={`/login?return_to=${returnTo}`} replace /> : <OAuthConsent />
         } />
+        <Route path="/" element={<HomeEntry user={user} />} />
         <Route
           element={<DashboardShell user={user} />}
         >
-          <Route index element={<HomeEntry />} />
           <Route path="/apps" element={<AppsPage />} />
           <Route path="/apps/new" element={<AppOnboardingPage />} />
           <Route path="/apps/:id" element={<AppDetailsPage />} />

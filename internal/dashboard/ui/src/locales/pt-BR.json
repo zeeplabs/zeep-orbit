@@ -1751,5 +1751,22 @@
   "nav.simple.newProject": "Novo projeto",
   "nav.simple.recents": "Recentes",
   "nav.simple.untitled": "Projeto sem título",
-  "nav.simple.mainNav": "Navegação principal"
+  "nav.simple.mainNav": "Navegação principal",
+  "home.heading": "O que vamos construir hoje?",
+  "home.subtitle": "Descreva o app que você quer e o Orbit monta o backend e as telas.",
+  "home.composerLabel": "Descreva seu app",
+  "home.composerPlaceholder": "Ex.: um app para agendar atendimentos do meu negócio",
+  "home.composerHint": "Enter envia, Shift+Enter quebra a linha",
+  "home.send": "Iniciar projeto",
+  "home.sending": "Criando seu projeto…",
+  "home.backendLabel": "Backend",
+  "home.backendExistingGroup": "Usar backend existente",
+  "home.suggestionsLabel": "Sugestões",
+  "home.suggestion1": "Um app de agendamento para um pequeno negócio",
+  "home.suggestion2": "Controle de estoque para uma loja pequena",
+  "home.suggestion3": "Cadastro de clientes com histórico de atendimentos",
+  "home.suggestion4": "Um quadro de tarefas para uma equipe",
+  "home.continueTitle": "Continue de onde parou",
+  "home.viewAll": "Ver todos os projetos",
+  "home.updatedAt": "Atualizado em {{date}}"
 }
