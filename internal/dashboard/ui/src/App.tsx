@@ -56,7 +56,7 @@ function ResumeReturnTo({ fallback }: { fallback: string }) {
 // shell, for the simple mode when the builder is available; `/apps` otherwise.
 // The decision is made before any shell renders so nobody sees the simple chrome
 // flash before a redirect.
-function HomeEntry({ user }: { user: ShellUser | null }) {
+export function HomeEntry({ user }: { user: ShellUser | null }) {
   const builder = useBuilderStatus()
   const landing = resolveLanding(readMode(), {
     isPending: builder.isPending,
@@ -76,7 +76,7 @@ function HomeEntry({ user }: { user: ShellUser | null }) {
 // SimpleLayout wraps the simple screens that are reached by their own URL
 // (`/projetos`). They need the builder: when it is not available the user goes
 // to `/apps` (HCH-20), where a superadmin sees why.
-function SimpleLayout({ user }: { user: ShellUser | null }) {
+export function SimpleLayout({ user }: { user: ShellUser | null }) {
   const builder = useBuilderStatus()
   if (!user) return <Navigate to="/login" replace />
   if (builder.isPending) return <LoadingScreen />
@@ -88,7 +88,7 @@ function SimpleLayout({ user }: { user: ShellUser | null }) {
 // collapsed sidebar (HCH-13). Unlike SimpleLayout it does not require the
 // builder to be available: a session opened by link keeps rendering its own
 // "unavailable" notice instead of bouncing the user away.
-function BuilderLayout({ user }: { user: ShellUser | null }) {
+export function BuilderLayout({ user }: { user: ShellUser | null }) {
   return <SimpleShell user={user} collapsed />
 }
 
