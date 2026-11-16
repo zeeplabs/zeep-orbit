@@ -4,13 +4,13 @@
 
 Implement these tasks with the `tlc-spec-driven` skill: **activate it by name and follow its Execute flow and Critical Rules.** If the skill cannot be activated, stop and tell the user.
 
-One commit per finished task with a green gate (authorized by the maintainer for the builder work); push only with the maintainer's OK; never add Claude/Anthropic attribution; never force push. **Do not start any task before the maintainer approves this spec** (open items: assumptions 1 to 7 of the spec).
+One commit per finished task with a green gate (authorized by the maintainer for the builder work); push only with the maintainer's OK; never add Claude/Anthropic attribution; never force push. Spec approved by the maintainer on 2026-11-16 (assumptions 1 to 7 confirmed).
 
 ---
 
 **Spec**: `.specs/features/home-chat/spec.md`
 **Design**: `.specs/features/home-chat/design.md`
-**Status**: Draft. No task started.
+**Status**: Spec approved 2026-11-16. H01 done. Next: H02.
 
 ---
 
@@ -39,6 +39,13 @@ H01 [verify] ─► H02 mode + landing ─► H03 shells ─┬─► H04 home +
 - **Where**: `internal/dashboard/builder_*.go`, `internal/dashboard/ui/src/pages/{DashboardShell,BuilderPage,AppsPage}.tsx`, `lib/api.ts`.
 - **Done when**: each item answered in the spec's assumption table and edge cases; the only possible Go change (milestone counts in the list) is decided.
 - **Gate**: none.
+- **Result (2026-11-16)**:
+  - (a) `GET /builder/sessions` is owner-scoped (`builder_handlers.go:599`). `BuilderSessionView` has `backend_app_id`, `frontend_app_id`, `published_sha`, `status`, `phase`, `title`, `usage`; no backend name and no milestone progress (`builderBriefProgress` exists only on the detail route, `builder_planning.go:350`). Backend name: join client-side with the apps list. Milestone progress for HCH-17: **Go change needed in H05**, add the current and total milestone to the list view, computed in one batched query (no per-session query), with a handler test. Full gate applies to H05.
+  - (b) A backend deletion cascades to its sessions, so no orphan session exists; frontend deletion sets `frontend_app_id` NULL. Edge case in the spec rewritten.
+  - (c) `DashboardShell` has no collapse or drawer mode (a padded `<Outlet/>`); `SimpleSidebar` is new, nothing to reuse.
+  - (d) `BuilderPage` sizes itself with `h-[70vh]` / `lg:h-auto lg:min-h-0`; whether it depends on the advanced shell padding is still to be checked in H06.
+  - (e) Locale: send `locale: i18n.language`, same as `NewBuilderSessionDialog.tsx:127`; the server validates and falls back to Accept-Language, then `en`.
+  - (f) No server-side per-user preference storage; `localStorage` stays (assumption 1).
 
 ### H02 — Mode preference and landing
 - **What**: `lib/mode.ts` and `useMode`; `HomeEntry` in `App.tsx` replacing the unconditional redirect (HCH-10); route table for the two shells.

@@ -1,6 +1,6 @@
 # Home Chat Specification
 
-> Status: **Draft for review (2026-11-16).** Nothing is implemented. Child of `.specs/features/ai-frontend-builder/` and `ai-builder-backend/`. Design reference: the canvas "Orbit Home Chat" (private artifact, <https://claude.ai/artifact/WB885VgnYJXzREoeSRT4h4>, version 5, four screens). The screen descriptions in `design.md` are the durable copy; the canvas may not outlive this conversation.
+> Status: **Approved by the maintainer (2026-11-16); H01 done, implementation starting.** Child of `.specs/features/ai-frontend-builder/` and `ai-builder-backend/`. Design reference: the canvas "Orbit Home Chat" (private artifact, <https://claude.ai/artifact/WB885VgnYJXzREoeSRT4h4>, version 5, four screens). The screen descriptions in `design.md` are the durable copy; the canvas may not outlive this conversation.
 
 ## Problem Statement
 
@@ -34,13 +34,13 @@ This feature makes the AI chat the default landing screen, in the style of a gen
 
 | # | Decision | Chosen default | Rationale | Confirmed? |
 | --- | --- | --- | --- | --- |
-| 1 | Where the preference lives | `localStorage`, per browser, key `orbit.mode`; absent means simple mode when the builder is available. | `lib/theme.ts` already does this; there is no per-user preferences table (**[verify]**). | No |
-| 2 | Which shell a route uses | By route, not by preference: `/`, `/projetos`, `/builder/:id` use the simple shell; every other route uses today's shell. The preference only chooses where `/` lands and what the toggle shows. | Avoids a half-simple, half-advanced screen and keeps every existing deep link working. | No |
-| 3 | Project title from the first prompt | The first 60 characters of the prompt, trimmed at a word boundary. | The server default for a new backend is "Untitled app"; a list of identical titles is unusable. The prompt is already stored as the first message, so the title adds no new data, but it shows in more places. | No |
-| 4 | Frontends outside the builder in "Meus projetos" | Not shown in v1. | They have no session to open. | No |
-| 5 | Who sees the chat landing | Every authenticated user for whom `GET /builder/status` says `available`. Anyone else lands on `/apps`. | Same gate as "Criar com IA" in `AppsPage`. | Fact for the gate; behavior is my proposal. |
-| 6 | Session created, first message failed | Keep the user on the home screen with the text intact, delete the empty session best-effort, and show the error. | A session with no message is clutter, and the user must not lose a long prompt. | No |
-| 7 | Backend choice on the composer | "Backend novo" by default; "Usar backend existente" opens a picker of the apps the user can see. | `CreateBuilderSessionInput.backend` supports both. | Fact for the API. |
+| 1 | Where the preference lives | `localStorage`, per browser, key `orbit.mode`; absent means simple mode when the builder is available. | `lib/theme.ts` already does this; there is no per-user preferences table (verified in H01: no server-side per-user preference storage exists; limit: per browser, not per account). | Yes (2026-11-16) |
+| 2 | Which shell a route uses | By route, not by preference: `/`, `/projetos`, `/builder/:id` use the simple shell; every other route uses today's shell. The preference only chooses where `/` lands and what the toggle shows. | Avoids a half-simple, half-advanced screen and keeps every existing deep link working. | Yes (2026-11-16) |
+| 3 | Project title from the first prompt | The first 60 characters of the prompt, trimmed at a word boundary. | The server default for a new backend is "Untitled app"; a list of identical titles is unusable. The prompt is already stored as the first message, so the title adds no new data, but it shows in more places. | Yes (2026-11-16) |
+| 4 | Frontends outside the builder in "Meus projetos" | Not shown in v1. | They have no session to open. | Yes (2026-11-16) |
+| 5 | Who sees the chat landing | Every authenticated user for whom `GET /builder/status` says `available`. Anyone else lands on `/apps`. | Same gate as "Criar com IA" in `AppsPage`. | Yes (2026-11-16) |
+| 6 | Session created, first message failed | Keep the user on the home screen with the text intact, delete the empty session best-effort, and show the error. | A session with no message is clutter, and the user must not lose a long prompt. | Yes (2026-11-16) |
+| 7 | Backend choice on the composer | "Backend novo" by default; "Usar backend existente" opens a picker of the apps the user can see. | `CreateBuilderSessionInput.backend` supports both. | Yes (2026-11-16) |
 
 ---
 
@@ -115,7 +115,7 @@ This feature makes the AI chat the default landing screen, in the style of a gen
 ## Edge Cases
 
 - The user has no sessions and no apps: the home shows the composer and hides "Continue de onde parou"; `/projetos` shows the empty state.
-- A session whose backend was deleted: the card shows "Backend removido" and only "Abrir conversa" (**[verify]** the list payload carries the app name or a deleted flag).
+- A session whose backend was deleted: cannot occur. `builder_sessions.backend_app_id` is `NOT NULL ... ON DELETE CASCADE` (`provisioner.go:798`), so deleting a backend deletes its sessions. The card "Backend removido" is dropped. A session that disappears between the list and the click returns 404 on `/builder/:id`, and the page must show a not-found state. A deleted frontend sets `frontend_app_id` to NULL (`ON DELETE SET NULL`) and the project reads as having no frontend.
 - A very long prompt: the title is cut at 60 characters; the full text goes as the message (the API's own limit applies and its error is shown).
 - Two tabs: the preference is read at navigation, not live-synced.
 - `localStorage` unavailable (private mode): the preference falls back to simple mode for the session without an error, as `theme.ts` does.
