@@ -8,6 +8,7 @@ import {
   UseMutationResult,
 } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { projectTitleFromPrompt } from './projectTitle'
 
 
 export interface ReferenceDef {
@@ -2026,6 +2027,10 @@ export interface BuilderSession {
   tokens_out: number
   /** Absent while the session has no recorded model call. */
   usage?: BuilderSessionUsage
+  /** Brief progress, set by the list route (zeros when the session has no brief). */
+  brief_version?: number
+  milestones_total?: number
+  milestones_done?: number
   created_at: string
   updated_at: string
 }
@@ -3342,6 +3347,64 @@ export function useDeleteBuilderSession(): UseMutationResult<void, Error, string
       qc.removeQueries({ queryKey: builderKeys.session(sessionId) })
       qc.removeQueries({ queryKey: builderKeys.events(sessionId) })
       qc.invalidateQueries({ queryKey: builderKeys.sessions() })
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+/** Input of the chat home: the first prompt and where the data will live. */
+export interface StartBuilderProjectInput {
+  prompt: string
+  backend: BuilderBackendChoice
+  locale: string
+}
+
+/**
+ * Chat home flow: creates a session (title from the prompt) and posts the prompt as its
+ * first message. If the message is refused (429, 4xx, a network error) the session just
+ * created is kept and reused by the next attempt with the same backend choice, so a retry
+ * never creates a second session or a second backend. Deleting it would archive the session
+ * but leave the backend it created behind (DELETE /builder/sessions/{id} does not remove
+ * apps). A different backend choice on the retry starts a new session; the empty one stays
+ * in the list and can be deleted there.
+ */
+export function useStartBuilderProject(): UseMutationResult<
+  BuilderSession,
+  Error,
+  StartBuilderProjectInput
+> {
+  const qc = useQueryClient()
+  const pending = useRef<{ session: BuilderSession; backendKey: string } | null>(null)
+  return useMutation({
+    mutationFn: async ({ prompt, backend, locale }: StartBuilderProjectInput) => {
+      const content = prompt.trim()
+      const backendKey = backend.mode === 'existing' ? `existing:${backend.app_id}` : 'new'
+
+      let session: BuilderSession
+      if (pending.current && pending.current.backendKey === backendKey) {
+        session = pending.current.session
+      } else {
+        const title = projectTitleFromPrompt(content)
+        session = await apiFetch<BuilderSession>(
+          `${BUILDER_BASE}/sessions`,
+          jsonRequest('POST', { backend, locale, ...(title ? { title } : {}) }),
+        )
+        pending.current = { session, backendKey }
+      }
+
+      await apiFetch<BuilderTurn>(
+        `${builderSessionPath(session.id)}/messages`,
+        jsonRequest('POST', { content }),
+      )
+      pending.current = null
+      return session
+    },
+    onSettled: () => {
+      // A session (and, for a new backend, an app) may exist even when the message failed.
+      qc.invalidateQueries({ queryKey: builderKeys.sessions() })
+      qc.invalidateQueries({ queryKey: ['apps'] })
     },
     onError: (error) => {
       toast.error(error.message)

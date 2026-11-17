@@ -6,6 +6,9 @@ import { safeReturnTo } from '@/lib/returnTo'
 import LoginPage from './pages/LoginPage'
 import GoogleSetupPage from './pages/GoogleSetupPage'
 import DashboardShell from './pages/DashboardShell'
+import SimpleShell, { type ShellUser } from './components/layout/SimpleShell'
+import HomeChatPage from './pages/HomeChatPage'
+import ProjectsPage from './pages/ProjectsPage'
 import OnboardingPage from './pages/OnboardingPage'
 import AppsPage from './pages/AppsPage'
 import AppOnboardingPage from './pages/AppOnboardingPage'
@@ -25,7 +28,8 @@ import AccessDenied from './pages/AccessDenied'
 import OAuthConsent from './components/OAuthConsent'
 import { RequireRole } from './components/patterns/RequireRole'
 import { Toaster } from 'sonner'
-import { useBootstrapStatus } from './lib/api'
+import { useBootstrapStatus, useBuilderStatus } from './lib/api'
+import { readMode, resolveLanding } from './lib/mode'
 
 const ComponentsSandbox = import.meta.env.DEV
   ? lazy(() => import('./pages/dev/ComponentsSandbox'))
@@ -46,6 +50,51 @@ function ResumeReturnTo({ fallback }: { fallback: string }) {
     window.location.assign(returnTo ? `/dashboard${returnTo}` : fallback)
   }, [location.search, fallback])
   return <LoadingScreen />
+}
+
+// HomeEntry decides where `/` lands (HCH-10): the chat home, inside the simple
+// shell, for the simple mode when the builder is available; `/apps` otherwise.
+// The decision is made before any shell renders so nobody sees the simple chrome
+// flash before a redirect.
+export function HomeEntry({ user }: { user: ShellUser | null }) {
+  const builder = useBuilderStatus()
+  const landing = resolveLanding(readMode(), {
+    isPending: builder.isPending,
+    isError: builder.isError,
+    available: builder.data?.available,
+  })
+  if (!user) return <Navigate to="/login" replace />
+  if (landing === 'loading') return <LoadingScreen />
+  if (landing === 'apps') return <Navigate to="/apps" replace />
+  return (
+    <SimpleShell user={user}>
+      <HomeChatPage />
+    </SimpleShell>
+  )
+}
+
+// SimpleLayout wraps the simple screens that are reached by their own URL
+// (`/projetos`, `/builder/:sessionId`). They need the builder: when it is not
+// available the user goes to `/apps` (HCH-20), where a superadmin sees why.
+export function SimpleLayout({
+  user,
+  collapsed = false,
+}: {
+  user: ShellUser | null
+  collapsed?: boolean
+}) {
+  const builder = useBuilderStatus()
+  if (!user) return <Navigate to="/login" replace />
+  if (builder.isPending) return <LoadingScreen />
+  if (builder.isError || !builder.data?.available) return <Navigate to="/apps" replace />
+  return <SimpleShell user={user} collapsed={collapsed} />
+}
+
+// BuilderLayout hosts `/builder/:sessionId` in the simple shell with the
+// collapsed sidebar (HCH-13). It gates on the builder like SimpleLayout, so a
+// session opened by link while the builder is unavailable goes to `/apps`.
+export function BuilderLayout({ user }: { user: ShellUser | null }) {
+  return <SimpleLayout user={user} collapsed />
 }
 
 function LoadingScreen() {
@@ -121,7 +170,7 @@ function App() {
           />
         )}
         <Route path="/login" element={
-          user ? <ResumeReturnTo fallback="/dashboard/apps" /> : <LoginPage />
+          user ? <ResumeReturnTo fallback="/dashboard/" /> : <LoginPage />
         } />
         <Route path="/google-setup" element={
           !user ? <Navigate to="/login" replace /> :
@@ -131,15 +180,20 @@ function App() {
         <Route path="/oauth/consent" element={
           !user ? <Navigate to={`/login?return_to=${returnTo}`} replace /> : <OAuthConsent />
         } />
+        <Route path="/" element={<HomeEntry user={user} />} />
+        <Route element={<SimpleLayout user={user} />}>
+          <Route path="/projetos" element={<ProjectsPage />} />
+        </Route>
+        <Route element={<BuilderLayout user={user} />}>
+          <Route path="/builder/:sessionId" element={<BuilderPage />} />
+        </Route>
         <Route
           element={<DashboardShell user={user} />}
         >
-          <Route index element={<Navigate to="/apps" replace />} />
           <Route path="/apps" element={<AppsPage />} />
           <Route path="/apps/new" element={<AppOnboardingPage />} />
           <Route path="/apps/:id" element={<AppDetailsPage />} />
           <Route path="/builder/usage" element={<BuilderUsagePage />} />
-          <Route path="/builder/:sessionId" element={<BuilderPage />} />
           <Route path="/apps/:id/edit" element={<RedirectToAppDetails />} />
           <Route path="/apps/:id/users" element={<RedirectToAppDetails tab="users" />} />
           <Route

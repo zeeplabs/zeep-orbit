@@ -3,10 +3,12 @@ import { NavLink } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/ui/icon'
 import { useCurrentRole } from '@/lib/useCurrentRole'
+import { useBuilderStatus } from '@/lib/api'
 import { hasPlatformPermission } from '@/lib/permissions'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import { Separator } from '@/components/ui/separator'
 import { NAV_SECTIONS, NavItemDef } from './nav'
+import { ModeSwitch } from './ModeSwitch'
 import orbitWordmark from '@/assets/images/logo/orbit-transparent.png'
 
 function label(key: string, t: (k: string) => string): string {
@@ -98,6 +100,8 @@ interface SidebarProps {
 export function Sidebar({ companyName, banner, footer }: SidebarProps) {
   const { t } = useTranslation()
   const role = useCurrentRole()
+  // The simple interface needs the AI builder: without it the switch would lead nowhere (HCH-20).
+  const builderAvailable = useBuilderStatus().data?.available === true
 
   // SPEC_DEVIATION: design.md didn't cover the logo/company-name block's
   // fate at 72px tablet width. A horizontal wordmark + company name can't
@@ -144,6 +148,11 @@ export function Sidebar({ companyName, banner, footer }: SidebarProps) {
       </nav>
 
       {banner}
+
+      {/* The label hides on the 72px tablet rail like the other sidebar labels; the switch keeps its aria-label. */}
+      {builderAvailable && (
+        <ModeSwitch advanced className="mb-3 px-2 md:justify-center lg:justify-start" labelClassName="hidden lg:inline" />
+      )}
 
       {footer}
     </aside>

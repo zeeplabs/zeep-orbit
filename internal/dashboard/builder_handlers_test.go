@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -1211,6 +1212,65 @@ func TestBuilderAPIBaseURL(t *testing.T) {
 	for _, bad := range []string{"ftp://x.example", "https://user:pw@x.example", "https://x.example?q=1", "not a url", "https://x.example#f"} {
 		if got, ok := mk(bad, "h", nil); ok {
 			t.Errorf("accepted %q as %q", bad, got)
+		}
+	}
+}
+
+func TestBuilderList_CarriesTheBriefProgressOfEachSession(t *testing.T) {
+	e := newBHEnv(t)
+	ctx := context.Background()
+	plain := e.createOK(t, e.owner, e.appA)
+	planned := e.createOK(t, e.owner, e.appA)
+	if _, err := e.pool.Exec(ctx,
+		`INSERT INTO zeep_system.builder_briefs (session_id, version, plan, created_by)
+		 VALUES ($1, 1, '{"milestones":[{"title":"a","done":true},{"title":"b"},{"title":"c"}]}'::jsonb, $2)`,
+		planned.ID, e.owner.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	w := e.do(t, e.h.ListSessions, e.owner, http.MethodGet, "/x", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("list: %d %s", w.Code, w.Body)
+	}
+	type row struct {
+		ID              string `json:"id"`
+		BriefVersion    int    `json:"brief_version"`
+		MilestonesTotal int    `json:"milestones_total"`
+		MilestonesDone  int    `json:"milestones_done"`
+	}
+	byID := map[string]row{}
+	for _, r := range decodeJSON[[]row](t, w) {
+		byID[r.ID] = r
+	}
+	if got := byID[plain.ID]; got.BriefVersion != 0 || got.MilestonesTotal != 0 || got.MilestonesDone != 0 {
+		t.Errorf("session without a brief: %+v, want zeros", got)
+	}
+	if got := byID[planned.ID]; got.BriefVersion != 1 || got.MilestonesTotal != 3 || got.MilestonesDone != 1 {
+		t.Errorf("session with a brief: %+v, want v1, 1 of 3", got)
+	}
+
+	// Still the session view, with the usage the list already carried.
+	var raw []map[string]json.RawMessage
+	if err := json.Unmarshal(w.Body.Bytes(), &raw); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"id", "title", "status", "backend_app_id", "frontend_app_id", "published_sha", "usage"} {
+		if _, ok := raw[0][key]; !ok {
+			t.Errorf("list row lost the %q field", key)
+		}
+	}
+}
+
+func TestBuilderDetail_KeepsTheBriefProgressKeysOnce(t *testing.T) {
+	e := newBHEnv(t)
+	sess := e.createOK(t, e.owner, e.appA)
+	w := e.do(t, e.h.GetSession, e.owner, http.MethodGet, "/x", "", "id", sess.ID)
+	if w.Code != http.StatusOK {
+		t.Fatalf("detail: %d %s", w.Code, w.Body)
+	}
+	for _, key := range []string{"milestones_total", "milestones_done", "brief_version", "next_milestone"} {
+		if n := strings.Count(w.Body.String(), `"`+key+`"`); n != 1 {
+			t.Errorf("detail has %q %d times, want 1", key, n)
 		}
 	}
 }

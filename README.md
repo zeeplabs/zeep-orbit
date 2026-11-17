@@ -97,6 +97,7 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/myapp/tasks
 | **Sync Credentials**     | Per-app deploy keys for local↔repo sync                  |
 | **Recent Deploys**       | Live list of the latest Render deploys across your frontend apps |
 | **AI Frontend Builder**  | Describe a frontend in a chat, approve the plan it proposes, preview it live against your backend app, then publish it (opt-in, needs the builder service) |
+| **Chat home & My projects** | Chat-style home to start a frontend from one message, a projects page with status and current milestone, and a switch to the advanced interface (needs the builder) |
 
 ### Platform
 

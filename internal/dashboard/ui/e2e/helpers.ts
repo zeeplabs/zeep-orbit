@@ -18,6 +18,8 @@ export async function bootstrapOrSkip(page: Page) {
 }
 
 export async function login(page: Page) {
+  // Specs drive the advanced interface; see global-setup.ts.
+  await page.addInitScript(() => localStorage.setItem('orbit.mode', 'advanced'))
   await page.goto('/dashboard')
   // Most specs run with the shared storageState set up by global-setup.ts,
   // which already lands here on /apps -- only submit the login form when a
