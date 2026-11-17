@@ -144,7 +144,7 @@ export default function BuilderPage() {
   return (
     <div className="flex flex-col p-6 max-md:p-4 lg:h-[calc(100vh-3.5rem)]">
       <PageHeader
-        className="mb-4"
+        className="mb-4 lg:flex-nowrap"
         title={session.title || t('builder.page.untitled')}
         subtitle={
           <span className="flex flex-wrap items-center gap-x-4 gap-y-1">

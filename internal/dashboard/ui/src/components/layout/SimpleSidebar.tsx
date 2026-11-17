@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/ui/icon'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useBuilderSessions, type BuilderSession } from '@/lib/api'
+import { badgeTint, projectInitial } from '@/lib/projectBadge'
 import orbitWordmark from '@/assets/images/logo/orbit-transparent.png'
 import orbitIcon from '@/assets/images/logo/orbit-icon-transparent.png'
 
@@ -70,7 +71,7 @@ export function SimpleSidebar({ footer, collapsed = false }: { footer: ReactNode
 }
 
 const ICON_LINK =
-  'flex h-10 w-10 items-center justify-center rounded-[8px] text-[var(--text-secondary)] no-underline transition-colors hover:bg-[var(--hover-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-[var(--primary-tint)] aria-[current=page]:text-[var(--text-primary)]'
+  'flex h-10 w-10 items-center justify-center rounded-[8px] text-[var(--text-secondary)] no-underline transition-colors hover:bg-[var(--hover-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-[var(--primary-tint)] aria-[current=page]:text-[var(--text-primary)] aria-[current=page]:ring-2 aria-[current=page]:ring-[var(--primary)]'
 
 function IconEntry({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -105,11 +106,21 @@ function CollapsedSidebar({ recents, footer }: { recents: BuilderSession[]; foot
           <ul className="m-0 flex min-h-0 flex-1 list-none flex-col gap-1 overflow-y-auto p-0">
             {recents.map((s) => {
               const title = s.title || t('nav.simple.untitled')
+              const initial = projectInitial(s.title)
               return (
                 <li key={s.id}>
                   <IconEntry label={title}>
                     <NavLink to={`/builder/${s.id}`} aria-label={title} className={ICON_LINK}>
-                      <Icon name="chat_bubble" size={18} />
+                      {initial ? (
+                        <span
+                          aria-hidden="true"
+                          className={`flex h-8 w-8 items-center justify-center rounded-[8px] text-sm font-semibold text-[var(--text-primary)] ${badgeTint(s.id)}`}
+                        >
+                          {initial}
+                        </span>
+                      ) : (
+                        <Icon name="chat_bubble" size={18} />
+                      )}
                     </NavLink>
                   </IconEntry>
                 </li>

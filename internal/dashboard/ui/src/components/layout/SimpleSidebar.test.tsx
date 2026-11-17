@@ -85,4 +85,17 @@ describe('SimpleSidebar collapsed (builder route)', () => {
     expect(screen.queryByText('Recent')).not.toBeInTheDocument()
     expect(screen.getByText('footer')).toBeInTheDocument()
   })
+
+  test('each project shows its own initial, an untitled one keeps the chat icon', () => {
+    sessions.data = [
+      s('a', '2026-01-01T00:00:00Z', 'clinic app'),
+      s('b', '2026-02-01T00:00:00Z', 'Nutrition tracker'),
+      s('c', '2026-03-01T00:00:00Z', ''),
+    ]
+    setup()
+    const nav = screen.getByRole('navigation', { name: 'Recent' })
+    expect(within(within(nav).getByRole('link', { name: 'clinic app' })).getByText('C')).toBeInTheDocument()
+    expect(within(within(nav).getByRole('link', { name: 'Nutrition tracker' })).getByText('N')).toBeInTheDocument()
+    expect(within(within(nav).getByRole('link', { name: 'Untitled project' })).getByText('chat_bubble')).toBeInTheDocument()
+  })
 })
