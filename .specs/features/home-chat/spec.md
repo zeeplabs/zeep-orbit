@@ -98,7 +98,7 @@ This feature makes the AI chat the default landing screen, in the style of a gen
 
 **Acceptance Criteria**
 
-1. HCH-19 The new screens SHALL work in the light and dark themes (tokens only, no literal colors), at phone width (the sidebar becomes the existing mobile navigation, the two-pane builder stacks), and with the keyboard (visible focus, `role="tablist"` for Chat / Meus projetos with arrow-key support).
+1. HCH-19 The new screens SHALL work in the light and dark themes (tokens only, no literal colors), at phone width (the sidebar becomes the existing mobile navigation, the two-pane builder stacks), and with the keyboard (visible focus, Chat / Meus projetos as route links with `aria-current="page"`, not ARIA tabs, because each one navigates to a page).
 2. HCH-20 WHEN the builder is not available THEN the simple screens SHALL NOT render; a user who types `/` or `/projetos` is redirected to `/apps`, and the switch is hidden. A superadmin SHALL see the reason ("not_configured", "disabled", "provider_not_configured", ...) as a banner on `/apps` with a link to the settings, as `AppsPage` already does for "Criar com IA".
 
 ### P3: Docs

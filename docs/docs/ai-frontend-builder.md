@@ -33,6 +33,19 @@ Three pieces, all built from this repository:
 - **Reverting** restores the working copy to the state after an earlier turn as a *new* commit (history is not rewritten), rebuilds the preview, and makes no model call, so it spends no tokens.
 - **Sessions are owner-only.** A superadmin cannot read other users' sessions. Using the builder requires at least viewer access on the backend app; confirming a backend change requires editor or admin.
 
+## Home chat and My projects
+
+When the builder is available, the dashboard opens on a chat-style home instead of the apps list. This is a second way in; the existing screens and deep links are unchanged.
+
+- **Home (`/dashboard/`).** One message box. Starting a project creates a builder session and sends the message as its first turn, then opens `/builder/:id`. The title is the first 60 characters of the message, cut at a word boundary. A selector chooses the backend: a new one (created by the builder) or one of the backend apps the user can already see. Four suggestions fill the box without sending. "Continue where you left off" lists the three most recently updated sessions.
+- **If the first message fails** (for example a rate limit), the session that was just created is kept and the next attempt sends the message to it, so no empty session is left behind and nothing is deleted. A backend that the builder created is not removed when a session is archived; delete it from **Apps** if it is no longer needed.
+- **My projects (`/dashboard/projetos`).** One card per builder session the user owns (title, status, backend app, last update, "Open chat" and "Backend") and one card per backend app the user can see that none of the user's sessions uses ("Open backend" and "Create frontend with AI", which starts a session on that backend). Status is *Published* when the session has a published frontend, *Building* with the current milestone (for example "milestone 2 of 4") when it has a brief, and a neutral label otherwise; a backend without a session is *Backend only*. Filters (All, Building, Published, Backend only) and the search box work on the loaded list. A backend used only by another user's session also appears as *Backend only*, because sessions are owner-only.
+- **The builder page** opens in the same shell, with the sidebar collapsed to icons (each with a name and a tooltip). `/builder/usage` and every other deep link (`/apps/:id`, `/data-browser`, `/logs` and so on) keep the advanced layout.
+- **Advanced mode.** A switch in the header (simple shell) and at the bottom of the advanced sidebar toggles between the two interfaces. The choice is stored in the browser (`localStorage`, key `orbit.mode`, `simple` or `advanced`); it is per browser, not per account, and falls back to memory when storage is blocked. With the builder available the default is simple. In advanced mode `/dashboard/` opens `/apps`.
+- **Behavior change:** after login, and on `/dashboard/` for a signed-in user, Orbit now goes to `/dashboard/` (it used to go to `/dashboard/apps`). Users whose saved mode is advanced, and every user on an installation where the builder is not available (`BUILDER_URL` unset, disabled, or any other reason in `GET /dashboard/api/builder/status`), still end up on `/apps`; the home and My projects are never shown without the builder. A superadmin sees the reason on **Apps**, in the disabled "Create with AI" entry.
+- **API.** Each row of `GET /dashboard/api/builder/sessions` carries `brief_version`, `milestones_total` and `milestones_done` (zeros when the session has no brief), computed for the whole list in two queries.
+- **On a phone** the sidebar is replaced by a bottom bar (Chat, My projects, More); More opens a sheet with New project, recent projects and the account actions.
+
 ## Enabling it
 
 Orbit reads three variables on its side (the builder daemon and the proxy have their own, listed under [Environment variables](#environment-variables)).
