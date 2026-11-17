@@ -52,7 +52,9 @@ describe('SimpleShell', () => {
 
   test('Chat is current only on the exact home route', () => {
     setup('/')
-    expect(screen.getByRole('link', { name: 'Chat' })).toHaveAttribute('aria-current', 'page')
+    expect(
+      within(screen.getByRole('navigation', { name: 'Main navigation' })).getByRole('link', { name: 'Chat' }),
+    ).toHaveAttribute('aria-current', 'page')
   })
 
   test('the switch is off here, the page renders in <main>, the skip link exists', () => {
@@ -74,7 +76,9 @@ describe('SimpleShell', () => {
     expect(document.querySelector('aside')).toHaveClass('w-[68px]')
     expect(screen.getByRole('button', { name: 'Log Out' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Change Password' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'My projects' })).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('navigation', { name: 'Main navigation' })).getByRole('link', { name: 'My projects' }),
+    ).toBeInTheDocument()
     expect(within(screen.getByRole('main')).getByText('builder')).toBeInTheDocument()
   })
 
@@ -89,6 +93,37 @@ describe('SimpleShell', () => {
       '/',
     )
     expect(screen.getByText('login page')).toBeInTheDocument()
+  })
+})
+
+describe('SimpleMobileNav', () => {
+  function setup(path = '/') {
+    return wrap(
+      <Routes>
+        <Route element={<SimpleShell user={user} />}>
+          <Route path="*" element={<p>page</p>} />
+        </Route>
+      </Routes>,
+      path,
+    )
+  }
+
+  test('bottom bar has Chat, My projects and More, current tab marked', () => {
+    setup('/projetos')
+    const bar = screen.getByRole('navigation', { name: 'Mobile navigation' })
+    expect(within(bar).getByRole('link', { name: 'Chat' })).not.toHaveAttribute('aria-current')
+    expect(within(bar).getByRole('link', { name: 'My projects' })).toHaveAttribute('aria-current', 'page')
+    expect(within(bar).getByRole('button', { name: 'More' })).toBeInTheDocument()
+  })
+
+  test('More opens a sheet with New project and the user actions', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event')
+    setup('/')
+    await userEvent.setup().click(screen.getByRole('button', { name: 'More' }))
+    const sheet = await screen.findByRole('dialog')
+    expect(within(sheet).getByRole('link', { name: 'New project' })).toHaveAttribute('href', '/')
+    expect(within(sheet).getByRole('button', { name: 'Log Out' })).toBeInTheDocument()
+    expect(within(sheet).getByRole('button', { name: 'Change Password' })).toBeInTheDocument()
   })
 })
 

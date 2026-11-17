@@ -1752,6 +1752,7 @@
   "nav.simple.recents": "Recentes",
   "nav.simple.untitled": "Projeto sem título",
   "nav.simple.mainNav": "Navegação principal",
+  "nav.simple.mobileNav": "Navegação mobile",
   "home.heading": "O que vamos construir hoje?",
   "home.subtitle": "Descreva o app que você quer e o Orbit monta o backend e as telas.",
   "home.composerLabel": "Descreva seu app",

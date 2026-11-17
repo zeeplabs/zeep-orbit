@@ -15,6 +15,7 @@ import { authFetch } from '@/lib/api'
 import { setLanguage } from '@/lib/i18n'
 import { SidebarFooter } from './SidebarFooter'
 import { SimpleSidebar } from './SimpleSidebar'
+import { SimpleMobileNav } from './SimpleMobileNav'
 import { ModeSwitch } from './ModeSwitch'
 import pkg from '../../../package.json'
 
@@ -121,10 +122,10 @@ export default function SimpleShell({
       <SimpleSidebar footer={footer} collapsed={collapsed} />
 
       <div className="flex min-h-screen min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-[var(--border)] px-6 max-md:px-4">
+        <header className="flex h-14 shrink-0 items-center justify-between gap-4 max-md:justify-end border-b border-[var(--border)] px-6 max-md:px-4">
           {/* Route links, not ARIA tabs: each one navigates to a page, and the
               WAI-ARIA tabs pattern needs a tabpanel in the same view. */}
-          <nav aria-label={t('nav.simple.mainNav')} className="flex items-center gap-1">
+          <nav aria-label={t('nav.simple.mainNav')} className="flex items-center gap-1 max-md:hidden">
             <NavLink to="/" end className={TAB_CLASS}>
               {t('nav.simple.chat')}
             </NavLink>
@@ -135,10 +136,19 @@ export default function SimpleShell({
           <ModeSwitch advanced={false} />
         </header>
 
-        <main id="main-content" ref={mainRef} tabIndex={-1} className="min-w-0 flex-1 focus:outline-none">
+        <main id="main-content" ref={mainRef} tabIndex={-1} className="min-w-0 flex-1 focus:outline-none max-md:pb-[65px]">
           {children ?? <Outlet />}
         </main>
       </div>
+
+      <SimpleMobileNav
+        user={user}
+        currentLang={i18n.language}
+        onChangePassword={() => setShowChangePassword(true)}
+        onSaveLanguage={saveLanguage}
+        onLogout={() => setShowLogoutDialog(true)}
+        version={pkg.version}
+      />
 
       <ConfirmDialog
         open={showLogoutDialog}

@@ -10,7 +10,7 @@ One commit per finished task with a green gate (authorized by the maintainer for
 
 **Spec**: `.specs/features/home-chat/spec.md`
 **Design**: `.specs/features/home-chat/design.md`
-**Status**: Spec approved 2026-11-16. H01 to H08 done (H06 visual check pending to H09). Next: H09.
+**Status**: Spec approved 2026-11-16. H01 to H08 done. H09: phone navigation implemented, browser UAT (3 widths, 2 themes) and the HCH-19 wording still pending.
 
 ---
 
@@ -66,6 +66,8 @@ H01 [verify] ─► H02 mode + landing ─► H03 shells ─┬─► H04 home +
 > **H06 note (2026-11-16)**: H01 (d) answered: `BuilderPage` relied on the advanced shell's `p-10` (its `lg:h-[calc(100vh-5rem)]` is the viewport minus 2 x 40 px). It now owns its padding (`p-6`, `p-4` on phones) and sizes to `lg:h-[calc(100vh-3.5rem)]`, where 3.5rem is the simple shell's fixed `h-14` header. `/builder/:sessionId` is under `BuilderLayout` (`SimpleShell collapsed`), which does not require the builder to be available, so a session opened by link still shows its own unavailable notice; `/builder/usage` stays in the advanced shell. The builder's back link and not-found actions now go to `/projetos` (label "Back to my projects"). `SidebarFooter` got a `collapsed` icon column; no change to its expanded layout. **Not verified in a browser yet** (no Chromium locally): the 1440/1024/390 px and two-theme check is done in H09.
 
 > **H08 note (2026-11-16)**: `HomeEntry`, `SimpleLayout` and `BuilderLayout` are exported from `App.tsx` and covered by `App.landing.test.tsx` for each of the six `BuilderUnavailableReason` values plus status error and loading (`/` and `/projetos` go to `/apps`, no chat rendered; a builder session opened by link still renders). The switch is hidden by the H05 sidebar test. The reason a superadmin sees on `/apps` is the existing tooltip of the disabled "Criar com IA" entry (`AppsPage.tsx`, all six reasons mapped), not a new banner: HCH-20 says "as AppsPage already does". UAT with the builder disabled goes into H09.
+
+> **H09 note (2026-11-16)**: below `md` the simple shell shows `SimpleMobileNav` (bottom bar Chat / My projects / More; the sheet has New project, recents and the user footer, as a modal dialog like the advanced `MobileNav`), the header drops its links and keeps the mode switch, and `main` gets bottom padding. Unit tests cover the bar and the sheet. **Browser UAT not done**: the Chrome extension stopped responding during the session; the 1440/1024/390 px and light/dark check (including the H06 builder layout) is still open, as is the HCH-19 "tablist" wording.
 
 > **H03/H04 note (2026-11-16)**: `SimpleShell` renders `/` (via `HomeEntry`, with `children`); H05 mounts it as a layout route for `/projetos`, H06 for `/builder/:sessionId`. The header uses route links with `aria-current` instead of ARIA tabs (each item navigates to a page; the tabs pattern needs a tabpanel in the same view). Mobile layout of the simple shell (nav, footer) is H09 (HCH-19); today the sidebar is hidden below `md`. Logout, language and change-password flows are duplicated from `DashboardShell` to keep its diff to the switch only; extracting a shared hook is a follow-up.
 
