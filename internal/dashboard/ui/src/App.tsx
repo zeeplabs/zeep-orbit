@@ -74,22 +74,27 @@ export function HomeEntry({ user }: { user: ShellUser | null }) {
 }
 
 // SimpleLayout wraps the simple screens that are reached by their own URL
-// (`/projetos`). They need the builder: when it is not available the user goes
-// to `/apps` (HCH-20), where a superadmin sees why.
-export function SimpleLayout({ user }: { user: ShellUser | null }) {
+// (`/projetos`, `/builder/:sessionId`). They need the builder: when it is not
+// available the user goes to `/apps` (HCH-20), where a superadmin sees why.
+export function SimpleLayout({
+  user,
+  collapsed = false,
+}: {
+  user: ShellUser | null
+  collapsed?: boolean
+}) {
   const builder = useBuilderStatus()
   if (!user) return <Navigate to="/login" replace />
   if (builder.isPending) return <LoadingScreen />
   if (builder.isError || !builder.data?.available) return <Navigate to="/apps" replace />
-  return <SimpleShell user={user} />
+  return <SimpleShell user={user} collapsed={collapsed} />
 }
 
 // BuilderLayout hosts `/builder/:sessionId` in the simple shell with the
-// collapsed sidebar (HCH-13). Unlike SimpleLayout it does not require the
-// builder to be available: a session opened by link keeps rendering its own
-// "unavailable" notice instead of bouncing the user away.
+// collapsed sidebar (HCH-13). It gates on the builder like SimpleLayout, so a
+// session opened by link while the builder is unavailable goes to `/apps`.
 export function BuilderLayout({ user }: { user: ShellUser | null }) {
-  return <SimpleShell user={user} collapsed />
+  return <SimpleLayout user={user} collapsed />
 }
 
 function LoadingScreen() {

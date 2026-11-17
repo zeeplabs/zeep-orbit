@@ -87,10 +87,10 @@ describe.each(REASONS)('builder unavailable (%s)', (reason) => {
     expect(screen.queryByText('projects page')).not.toBeInTheDocument()
   })
 
-  test('a builder session opened by link still renders, in the collapsed shell', () => {
+  test('a builder session opened by link goes to /apps', () => {
     setup('/builder/s1')
-    expect(screen.getByText('builder page')).toBeInTheDocument()
-    expect(screen.getByTestId('simple-shell')).toHaveAttribute('data-collapsed', 'true')
+    expect(screen.getByText('apps page')).toBeInTheDocument()
+    expect(screen.queryByText('builder page')).not.toBeInTheDocument()
   })
 })
 
@@ -101,6 +101,8 @@ describe('builder status failing or loading', () => {
     expect(screen.getByText('apps page')).toBeInTheDocument()
     setup('/projetos')
     expect(screen.getAllByText('apps page').length).toBeGreaterThan(1)
+    setup('/builder/s1')
+    expect(screen.getAllByText('apps page').length).toBeGreaterThan(2)
   })
 
   test('while loading neither the chat nor a redirect is shown', () => {
@@ -121,6 +123,12 @@ describe('builder available', () => {
     writeMode('advanced')
     setup('/')
     expect(screen.getByText('apps page')).toBeInTheDocument()
+  })
+
+  test('a builder session renders in the collapsed shell', () => {
+    setup('/builder/s1')
+    expect(screen.getByText('builder page')).toBeInTheDocument()
+    expect(screen.getByTestId('simple-shell')).toHaveAttribute('data-collapsed', 'true')
   })
 
   test('/projetos renders in the expanded shell', () => {
