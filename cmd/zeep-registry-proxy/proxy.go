@@ -394,6 +394,67 @@ func scopeOf(escapedPath string) string {
 	return strings.ToLower(dec)
 }
 
+// Package path grammar for [isPackagePath]. Scope and name follow npm's rules
+// loosely (legacy names may contain uppercase), but neither may start with '-',
+// '.' or '_': that keeps the registry's own namespace ("/-/whoami",
+// "/-/npm/v1/tokens", "/-/v1/search", ...) out of reach.
+var (
+	pkgScopeRE   = regexp.MustCompile(`^@[A-Za-z0-9][A-Za-z0-9._~-]*$`)
+	pkgNameRE    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._~-]*$`)
+	pkgTarballRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._~-]*\.tgz$`)
+)
+
+// isPackagePath reports whether escapedPath is one of the two read endpoints
+// npm needs to install packages:
+//
+//	/<name>                 /@scope/<name>  /@scope%2F<name>   packument
+//	/<name>/-/<file>.tgz    /@scope/<name>/-/<file>.tgz        tarball
+//
+// Everything else (account, token, search, audit, dist-tag and org endpoints)
+// is refused: the upstream token is injected on every forwarded request, so
+// any other path would let code in the builder make authenticated calls such
+// as GET /-/whoami or /-/npm/v1/tokens with the private registry's credential.
+func isPackagePath(escapedPath string) bool {
+	segs := strings.Split(strings.TrimPrefix(escapedPath, "/"), "/")
+	dec := make([]string, len(segs))
+	for i, s := range segs {
+		d, err := url.PathUnescape(s)
+		if err != nil {
+			return false
+		}
+		dec[i] = d
+	}
+
+	var rest []string
+	switch {
+	case strings.HasPrefix(dec[0], "@") && strings.Contains(dec[0], "/"):
+		// "@scope%2Fname": scope and name in one encoded segment.
+		parts := strings.SplitN(dec[0], "/", 2)
+		if !pkgScopeRE.MatchString(parts[0]) || !pkgNameRE.MatchString(parts[1]) {
+			return false
+		}
+		rest = dec[1:]
+	case strings.HasPrefix(dec[0], "@"):
+		if len(dec) < 2 || !pkgScopeRE.MatchString(dec[0]) || !pkgNameRE.MatchString(dec[1]) {
+			return false
+		}
+		rest = dec[2:]
+	default:
+		if !pkgNameRE.MatchString(dec[0]) {
+			return false
+		}
+		rest = dec[1:]
+	}
+
+	switch len(rest) {
+	case 0:
+		return true
+	case 2:
+		return rest[0] == "-" && pkgTarballRE.MatchString(rest[1])
+	}
+	return false
+}
+
 // forwardedRequestHeaders is an allowlist, not a denylist: anything not named
 // here (Authorization, Cookie, X-Forwarded-*, arbitrary npm-* headers) never
 // reaches upstream.
@@ -417,6 +478,10 @@ func (p *proxy) forward(w http.ResponseWriter, r *http.Request) string {
 	}
 
 	escaped := r.URL.EscapedPath()
+	if !isPackagePath(escaped) {
+		http.Error(w, "path not allowed: only package metadata and tarballs are proxied", http.StatusForbidden)
+		return "-"
+	}
 	up := p.ups.pick(scopeOf(escaped))
 	if up == nil {
 		http.Error(w, "forbidden", http.StatusForbidden)

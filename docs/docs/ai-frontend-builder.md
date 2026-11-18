@@ -331,6 +331,7 @@ What the shipped manifests enforce:
 - The builder runs as a non-root user with a read-only root filesystem and all capabilities dropped. In Kubernetes it also has no service-account token.
 - Orbit-to-builder requests carry a signed token that expires after 60 seconds and is bound to the session, method and path. The proxy accepts only `GET` and `HEAD`.
 - The registry proxy sends a private-registry token only to its own upstream, and refuses to send one to a plain-`http` upstream unless the host is loopback.
+- The registry proxy forwards only the two read endpoints npm needs to install: package metadata (`/<name>`, `/@scope/<name>`, `/@scope%2F<name>`) and tarballs (`/<name>/-/<file>.tgz`, `/@scope/<name>/-/<file>.tgz`). Everything else, including the registry's own `/-/...` namespace (`/-/whoami`, `/-/npm/v1/tokens`, search, audit, dist-tags), gets `403` without reaching the upstream, so build code cannot use the private-registry token for account or token endpoints.
 
 What it does **not** protect against:
 
