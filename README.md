@@ -77,7 +77,7 @@ curl -H "Authorization: Bearer $TOKEN" localhost:8080/myapp/tasks
 | **Google OAuth**       | Sign in with Google — both dashboard and per-app         |
 | **Row-Level Security** | Auto-filter data by owner (`rls: owner`/`rls: enabled`), with an optional "require RLS by default" for new tables; `rls: policy` opts a table out of the automatic owner filter entirely, delegating visibility and write permission 100% to native Postgres table policies — including policies that grant a role access to other users' rows |
 | **End-User Row Policies** | Per-table/action row policies combining an end-user's business `role` with a condition on the row's own data, enforced by native Postgres RLS (`CREATE POLICY`) — not a Go-layer filter |
-| **Configurable End-User Roles** | Define your own end-user business role list per app, used by row policies and shown in app-user management |
+| **Configurable End-User Roles** | Define your own end-user business role list per app, used by row policies and shown in app-user management, and pick which role new end users get on first sign-in |
 | **App Tokens**         | JWT management for apps without email auth (create, revoke, refresh) |
 | **Per-App Health**     | `GET /{app}/health` for monitoring and readiness probes  |
 | **Soft Delete**        | Configurable soft delete toggle (dashboard settings)     |
