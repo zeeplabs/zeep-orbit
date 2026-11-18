@@ -97,6 +97,15 @@ export function BuilderLayout({ user }: { user: ShellUser | null }) {
   return <SimpleLayout user={user} collapsed />
 }
 
+// BuilderRoute remounts BuilderPage when the session in the URL changes. Without the
+// key, going from /builder/A to /builder/B (the "Recentes" links) reuses the same
+// component: the preview iframe and its cached token, the chat draft, open question
+// answers and the publish result of A would all carry over to B.
+export function BuilderRoute() {
+  const { sessionId } = useParams()
+  return <BuilderPage key={sessionId} />
+}
+
 function LoadingScreen() {
   const { t } = useTranslation()
   return (
@@ -185,7 +194,7 @@ function App() {
           <Route path="/projetos" element={<ProjectsPage />} />
         </Route>
         <Route element={<BuilderLayout user={user} />}>
-          <Route path="/builder/:sessionId" element={<BuilderPage />} />
+          <Route path="/builder/:sessionId" element={<BuilderRoute />} />
         </Route>
         <Route
           element={<DashboardShell user={user} />}
