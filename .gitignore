@@ -11,3 +11,6 @@ docs/.docusaurus/
 .worktrees/
 .DS_Store
 .env.local
+
+# Local browser-automation scratch output
+.playwright-mcp/
