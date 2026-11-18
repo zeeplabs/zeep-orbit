@@ -1,10 +1,11 @@
 import { useEffect, useRef } from "react";
-import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { useBrandConfig, authFetch } from "../lib/api";
 import { Icon } from "@/components/ui/icon";
 import { UnsavedChangesBlocker } from "@/components/patterns/UnsavedChangesBlocker";
+import { RedirectToLogin } from "@/components/patterns/RedirectToLogin";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { SidebarFooter } from "@/components/layout/SidebarFooter";
 import { MobileNav } from "@/components/layout/MobileNav";
@@ -87,7 +88,7 @@ export default function DashboardShell({ user }: { user: User | null }) {
     document.title = [section, companyName].filter(Boolean).join(" · ");
   }, [currentNavLabelKey, companyName, i18n.language]);
 
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <RedirectToLogin />;
 
   const footer = (
     <SidebarFooter

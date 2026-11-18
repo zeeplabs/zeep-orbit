@@ -27,6 +27,7 @@ import BuilderUsagePage from './pages/BuilderUsagePage'
 import AccessDenied from './pages/AccessDenied'
 import OAuthConsent from './components/OAuthConsent'
 import { RequireRole } from './components/patterns/RequireRole'
+import { RedirectToLogin } from './components/patterns/RedirectToLogin'
 import { Toaster } from 'sonner'
 import { useBootstrapStatus, useBuilderStatus } from './lib/api'
 import { readMode, resolveLanding } from './lib/mode'
@@ -63,7 +64,7 @@ export function HomeEntry({ user }: { user: ShellUser | null }) {
     isError: builder.isError,
     available: builder.data?.available,
   })
-  if (!user) return <Navigate to="/login" replace />
+  if (!user) return <RedirectToLogin />
   if (landing === 'loading') return <LoadingScreen />
   if (landing === 'apps') return <Navigate to="/apps" replace />
   return (
@@ -84,7 +85,7 @@ export function SimpleLayout({
   collapsed?: boolean
 }) {
   const builder = useBuilderStatus()
-  if (!user) return <Navigate to="/login" replace />
+  if (!user) return <RedirectToLogin />
   if (builder.isPending) return <LoadingScreen />
   if (builder.isError || !builder.data?.available) return <Navigate to="/apps" replace />
   return <SimpleShell user={user} collapsed={collapsed} />
