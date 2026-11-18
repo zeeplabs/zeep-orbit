@@ -34,7 +34,7 @@ import type { Column } from '@/components/patterns'
 import { cn } from '@/lib/utils'
 import { authFetch, catalogModelsOf, isCatalogProvider, useBuilderCatalog } from '@/lib/api'
 import type { AIProviderKind, AIProviderStatus, AIProviderUpsertInput, GitHubTemplate } from '@/lib/api'
-import { validateAIProviderBaseUrl } from '@/lib/aiProviderBaseUrl'
+import { aiProviderBaseUrlChanged, validateAIProviderBaseUrl } from '@/lib/aiProviderBaseUrl'
 import AIBuilderSettings from '@/pages/settings/AIBuilderSettings'
 
 interface GitHubStatus {
@@ -1261,6 +1261,7 @@ function AIProviderTab() {
   const [savedModel, setSavedModel] = useState('')
   const catalogQuery = useBuilderCatalog()
   const [baseUrl, setBaseUrl] = useState('')
+  const [savedBaseUrl, setSavedBaseUrl] = useState('')
   const [baseUrlError, setBaseUrlError] = useState<string | null>(null)
   const [apiKey, setApiKey] = useState('')
   const [enabled, setEnabled] = useState(false)
@@ -1279,6 +1280,7 @@ function AIProviderTab() {
     setModel('')
     setSavedModel('')
     setBaseUrl('')
+    setSavedBaseUrl('')
     setBaseUrlError(null)
     setApiKey('')
     setShowKey(false)
@@ -1294,6 +1296,7 @@ function AIProviderTab() {
         setModel(data.model || '')
         setSavedModel(data.model || '')
         setBaseUrl(data.base_url || '')
+        setSavedBaseUrl(data.base_url || '')
         setEnabled(!!data.enabled)
         setHasKey(!!data.has_key)
       } catch {
@@ -1309,6 +1312,9 @@ function AIProviderTab() {
 
   const isCompatible = provider === 'openai_compatible'
   const isAnthropic = provider === 'anthropic'
+  // The server drops the stored key when the base URL changes without a new key (the key
+  // belongs to the old host), so say so before the save.
+  const keyWillBeDropped = isCompatible && hasKey && apiKey === '' && aiProviderBaseUrlChanged(baseUrl, savedBaseUrl)
   // openai_compatible has no catalog and takes the model as free text.
   const freeTextModel = !isCatalogProvider(provider)
   const catalogModels = catalogModelsOf(catalogQuery.data, provider)
@@ -1359,7 +1365,11 @@ function AIProviderTab() {
       setApiKey('')
       setHasKey(!!(data as AIProviderStatus).has_key)
       setSavedModel((data as AIProviderStatus).model || model)
-      if (isCompatible) setBaseUrl((data as AIProviderStatus).base_url || baseUrl.trim())
+      if (isCompatible) {
+        const saved = (data as AIProviderStatus).base_url || baseUrl.trim()
+        setBaseUrl(saved)
+        setSavedBaseUrl(saved)
+      }
       // The AI Builder tab reads the same row through this key.
       queryClient.invalidateQueries({ queryKey: ['ai-provider-status', provider] })
     } catch {
@@ -1523,6 +1533,11 @@ function AIProviderTab() {
               <p className="mt-1 text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
                 {hasKey ? t('aiProvider.apiKeyHintConfigured') : t('aiProvider.apiKeyHint')}
               </p>
+              {keyWillBeDropped && (
+                <p role="status" className="text-[12px]" style={{ color: 'var(--warning-text)' }}>
+                  {t('settings.aiBuilder.providerForm.baseUrlChangeDropsKey')}
+                </p>
+              )}
             </div>
           </div>
 
