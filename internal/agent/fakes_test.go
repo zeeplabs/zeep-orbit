@@ -167,6 +167,15 @@ func (f *fakeStore) SaveSnapshot(ctx context.Context, l store.Lease, sha string,
 	return nil
 }
 
+func (f *fakeStore) LatestSnapshotSHA(_ context.Context, _ string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.snaps) == 0 {
+		return "", nil
+	}
+	return f.snaps[len(f.snaps)-1].CommitSHA, nil
+}
+
 func (f *fakeStore) ListSnapshots(_ context.Context, _ string) ([]store.Snapshot, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
