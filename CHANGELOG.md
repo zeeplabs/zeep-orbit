@@ -49,6 +49,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - **AI Frontend Builder: opening another session from Recents no longer shows the previous one.** Going from one `/builder/:id` to another reused the page, so the preview kept showing the first session (and reused its preview token), and the half-written chat message, open question answers and publish result carried over. The page now starts fresh for each session.
+- **AI Builder settings: leaving with unsaved edits now asks first.** The general settings, persona and rules, money caps and the price form under **Integrations → AI Builder** lost edits without a warning when the superadmin switched tab, followed a link or closed the page. They now use the same unsaved-changes confirmation as the brand and app settings.
 
 ### Security
 

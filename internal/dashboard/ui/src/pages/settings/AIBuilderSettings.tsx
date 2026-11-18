@@ -37,6 +37,7 @@ import type {
 import { formatDateTime } from '@/lib/format'
 import { roleAllowed } from '@/lib/roles'
 import { useCurrentRole } from '@/lib/useCurrentRole'
+import { useUnsavedChangesGuard } from '@/lib/useUnsavedChangesGuard'
 import { BuilderCostsSection } from './BuilderCostsSection'
 import { BuilderSkillsSection } from './BuilderSkillsSection'
 import { Notice, SectionCard } from './builderSettingsParts'
@@ -234,6 +235,9 @@ function GeneralSection() {
   useEffect(() => {
     if (settingsQuery.data && form === null) setForm(toForm(settingsQuery.data))
   }, [settingsQuery.data, form])
+
+  // Leaving with edits asks first (the hook cannot sit after the early returns below).
+  useUnsavedChangesGuard(form !== null && settingsQuery.data !== undefined && !sameForm(form, toForm(settingsQuery.data)))
 
   if (settingsQuery.isLoading || (settingsQuery.data && form === null)) {
     return (
@@ -571,6 +575,12 @@ function PromptSection() {
       setHydrated(true)
     }
   }, [promptQuery.data, hydrated])
+
+  useUnsavedChangesGuard(
+    hydrated &&
+      promptQuery.data !== undefined &&
+      (persona !== promptQuery.data.persona || rules !== promptQuery.data.rules),
+  )
 
   if (promptQuery.isLoading || (promptQuery.data && !hydrated)) {
     return (
