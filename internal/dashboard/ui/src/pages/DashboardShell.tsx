@@ -1,22 +1,14 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { useQueryClient, useQuery } from "@tanstack/react-query";
-import ChangePasswordModal from "./ChangePasswordModal";
-import { setLanguage } from "../lib/i18n";
+import { useQuery } from "@tanstack/react-query";
 import { useBrandConfig, authFetch } from "../lib/api";
-import { toast } from "sonner";
 import { Icon } from "@/components/ui/icon";
-import { ConfirmDialog } from "@/components/patterns/ConfirmDialog";
 import { UnsavedChangesBlocker } from "@/components/patterns/UnsavedChangesBlocker";
-import {
-  confirmLeavingWithUnsavedChanges,
-  hasUnsavedChanges,
-  resetLeavingConfirmation,
-} from "@/lib/useUnsavedChangesGuard";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { SidebarFooter } from "@/components/layout/SidebarFooter";
 import { MobileNav } from "@/components/layout/MobileNav";
+import { useShellSession } from "@/components/layout/useShellSession";
 import { NAV_SECTIONS } from "@/components/layout/nav";
 import pkg from "../../package.json";
 
@@ -61,12 +53,9 @@ function UpdateAvailableBanner() {
 }
 
 export default function DashboardShell({ user }: { user: User | null }) {
-  const qc = useQueryClient();
   const { t, i18n } = useTranslation();
   const mainRef = useRef<HTMLElement>(null);
-  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
-  const [loggingOut, setLoggingOut] = useState(false);
-  const [showChangePassword, setShowChangePassword] = useState(false);
+  const session = useShellSession(user);
 
   // Mesma query/endpoint de BrandSettingsPage (useBrandConfig) — um fetch só, cache compartilhado.
   const { data: brandConfig, isPending: brandConfigPending } = useBrandConfig();
@@ -87,12 +76,6 @@ export default function DashboardShell({ user }: { user: User | null }) {
   const companyName =
     brandConfig?.company_name || brandAssets?.company_name || (brandLoading ? "" : t("app.title"));
 
-  useEffect(() => {
-    if (user?.language && user.language !== i18n.language) {
-      setLanguage(user.language);
-    }
-  }, [user?.language]);
-
   // SPA route changes don't reload the page, so keep document.title in step with the
   // current section (screen readers announce it, and tabs/history become distinguishable).
   const { pathname } = useLocation();
@@ -104,52 +87,15 @@ export default function DashboardShell({ user }: { user: User | null }) {
     document.title = [section, companyName].filter(Boolean).join(" · ");
   }, [currentNavLabelKey, companyName, i18n.language]);
 
-  async function saveLanguage(lang: string) {
-    setLanguage(lang);
-    try {
-      await authFetch("/dashboard/api/me/language", {
-        method: "PUT",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ language: lang }),
-      });
-    } catch {
-      // persistência é best-effort; idioma já trocou localmente
-    }
-  }
-
   if (!user) return <Navigate to="/login" replace />;
-
-  const handleLogout = async () => {
-    setLoggingOut(true);
-    // The dialog already warned about unsaved edits (logoutDescUnsaved). Without this the
-    // browser's own prompt would show after the session is revoked, and "Stay" would leave
-    // the user on a page whose saves can only fail.
-    confirmLeavingWithUnsavedChanges();
-    try {
-      const res = await fetch("/dashboard/api/logout", {
-        method: "POST",
-        credentials: "include",
-      });
-      // Sem isso o usuário ia para /login com a sessão ainda viva e voltava direto ao app.
-      if (!res.ok) throw new Error("logout failed");
-      qc.clear();
-      window.location.href = "/dashboard/login";
-    } catch {
-      resetLeavingConfirmation();
-      toast.error(t("nav.logoutError"));
-    } finally {
-      setLoggingOut(false);
-    }
-  };
 
   const footer = (
     <SidebarFooter
       user={user}
-      currentLang={i18n.language}
-      onChangePassword={() => setShowChangePassword(true)}
-      onSaveLanguage={saveLanguage}
-      onLogout={() => setShowLogoutDialog(true)}
+      currentLang={session.currentLang}
+      onChangePassword={session.openChangePassword}
+      onSaveLanguage={session.saveLanguage}
+      onLogout={session.openLogout}
       version={pkg.version}
     />
   );
@@ -193,29 +139,14 @@ export default function DashboardShell({ user }: { user: User | null }) {
 
       <MobileNav
         user={user}
-        currentLang={i18n.language}
-        onChangePassword={() => setShowChangePassword(true)}
-        onSaveLanguage={saveLanguage}
-        onLogout={() => setShowLogoutDialog(true)}
+        currentLang={session.currentLang}
+        onChangePassword={session.openChangePassword}
+        onSaveLanguage={session.saveLanguage}
+        onLogout={session.openLogout}
         version={pkg.version}
       />
 
-      <ConfirmDialog
-        open={showLogoutDialog}
-        title={t("nav.logoutConfirm")}
-        message={showLogoutDialog && hasUnsavedChanges() ? t("nav.logoutDescUnsaved") : t("nav.logoutDesc")}
-        confirmLabel={loggingOut ? t("nav.loggingOut") : t("nav.logoutConfirmBtn")}
-        cancelLabel={t("nav.logoutCancel")}
-        icon="logout"
-        loading={loggingOut}
-        onConfirm={handleLogout}
-        onCancel={() => setShowLogoutDialog(false)}
-      />
-
-      <ChangePasswordModal
-        open={showChangePassword}
-        onClose={() => setShowChangePassword(false)}
-      />
+      {session.dialogs}
     </div>
   );
 }
