@@ -48,6 +48,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **AI Frontend Builder: the token and cost caps now apply to providers that send no usage.** An `openai_compatible` server may omit the `usage` object; each of its calls was recorded as 0 tokens with no cost, so the session, monthly and cost caps never fired and a session could run turns without limit. Such a call is now recorded with a conservative estimate (every byte sent and received divided by 4, and at least the call's `max_tokens` for the output), still flagged `usage_reported = false`; the usage report says those calls are estimated, and they stay out of the build estimate as before.
 - **AI Frontend Builder: a model call is no longer retried when it may already have been answered and billed.** The OpenAI, OpenAI-compatible and Anthropic adapters retried every 5xx, so a 500, 502 or 504 returned after the provider (or a gateway in front of it) had generated an answer paid for that answer again while the usage ledger recorded a single call. They now retry only 429, 503, 529 (overloaded) and a connection that could not be opened; any other failure ends the step with `provider_unavailable` as before.
 
 ### Security

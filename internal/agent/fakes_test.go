@@ -304,7 +304,7 @@ func (p *fakeProvider) calls() int {
 func textResp(s string) provider.ChatResponse {
 	return provider.ChatResponse{
 		Message:      provider.Message{Role: provider.RoleAssistant, Content: s},
-		Usage:        provider.Usage{InputTokens: 10, OutputTokens: 5},
+		Usage:        provider.Usage{InputTokens: 10, OutputTokens: 5, Reported: true},
 		FinishReason: provider.FinishStop,
 	}
 }
@@ -313,7 +313,7 @@ func toolResp(calls ...provider.ToolCall) provider.ChatResponse {
 	return provider.ChatResponse{
 		Message:      provider.Message{Role: provider.RoleAssistant, ToolCalls: calls},
 		ToolCalls:    calls,
-		Usage:        provider.Usage{InputTokens: 10, OutputTokens: 5},
+		Usage:        provider.Usage{InputTokens: 10, OutputTokens: 5, Reported: true},
 		FinishReason: provider.FinishToolCalls,
 	}
 }

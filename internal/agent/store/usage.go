@@ -110,7 +110,10 @@ type UsageRecord struct {
 	CachedInputTokens int    // read from the provider's prompt cache
 	CacheWriteTokens  int    // written to the provider's prompt cache
 	OutputTokens      int
-	Reported          bool // false when the provider sent no usage object
+	// Reported is false when the provider sent no usage object; the token
+	// counts are then the agent's conservative estimate, so the caps still
+	// apply (stored as usage_reported = false).
+	Reported bool
 }
 
 // RecordUsage appends one ledger row and, when SessionID is set, adds the

@@ -663,6 +663,69 @@ func TestRunTurn_RecordsTokenClassesAndPurpose(t *testing.T) {
 	}
 }
 
+// A provider that sends no usage (an openai_compatible server may omit it)
+// must not make the call free: the caps would never fire. The loop records a
+// conservative estimate, marked as not reported, so the ledger can tell it
+// apart from real counts.
+func TestRunTurn_UnreportedUsageIsRecordedAsAnEstimate(t *testing.T) {
+	resp := textResp("done")
+	resp.Usage = provider.Usage{}
+	h := newHarness(t, scriptStep{resp: resp})
+	h.deps.Limits = Limits{MaxOutputTokens: 2048}
+	h.mustRun()
+
+	if len(h.st.usage) != 1 {
+		t.Fatalf("usage records = %d, want 1", len(h.st.usage))
+	}
+	got := h.st.usage[0]
+	if got.Reported {
+		t.Error("an estimate must be recorded with Reported=false")
+	}
+	req := h.prov.reqs[0]
+	if minIn := len(req.System) / 4; got.InputTokens < minIn {
+		t.Errorf("input estimate = %d, want at least the system prompt's chars/4 (%d)", got.InputTokens, minIn)
+	}
+	if got.OutputTokens != 2048 {
+		t.Errorf("output estimate = %d, want the max_tokens of the call (2048)", got.OutputTokens)
+	}
+}
+
+// Without a max_tokens the output estimate is the reply's own size.
+func TestRunTurn_UnreportedUsageWithoutMaxTokensEstimatesTheReply(t *testing.T) {
+	resp := textResp(strings.Repeat("x", 400))
+	resp.Usage = provider.Usage{}
+	h := newHarness(t, scriptStep{resp: resp})
+	h.mustRun()
+
+	if got := h.st.usage[0]; got.OutputTokens != 100 || got.InputTokens == 0 {
+		t.Errorf("estimate = %d in / %d out, want >0 in and 100 out (400 chars / 4)", got.InputTokens, got.OutputTokens)
+	}
+}
+
+// The summarization call is estimated the same way.
+func TestCompaction_UnreportedUsageIsRecordedAsAnEstimate(t *testing.T) {
+	sum := textResp("SUMMARY: tasks page.")
+	sum.Usage = provider.Usage{}
+	h := newHarness(t, scriptStep{resp: sum}, scriptStep{resp: textResp("done")})
+	seedOldTurns(h, 4)
+	h.deps.Limits = Limits{ContextWindowTokens: 8000, KeepRecentTurns: 2}
+	h.mustRun()
+
+	var found bool
+	for _, u := range h.st.usage {
+		if u.Purpose != store.PurposeCompaction {
+			continue
+		}
+		found = true
+		if u.Reported || u.InputTokens == 0 || u.OutputTokens != summaryMaxOutputTokens {
+			t.Errorf("compaction record = %+v, want an unreported estimate with output = %d", u, summaryMaxOutputTokens)
+		}
+	}
+	if !found {
+		t.Fatal("no compaction usage recorded")
+	}
+}
+
 // Provider caching is a prefix match: a step only reads what the previous step
 // wrote if it starts with the same tools, system prompt and history. The loop
 // must never rewrite them between steps of a turn.

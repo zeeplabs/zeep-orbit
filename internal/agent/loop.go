@@ -398,7 +398,10 @@ func (r *run) modelProvider() provider.Provider {
 // records its usage and returns the response. A context-too-long answer is
 // retried once with a forced compaction.
 func (r *run) chat(ctx, tctx context.Context) (provider.ChatResponse, *outcome, error) {
-	var resp provider.ChatResponse
+	var (
+		resp provider.ChatResponse
+		req  provider.ChatRequest
+	)
 	force := false
 	p := r.modelProvider()
 	for {
@@ -406,7 +409,7 @@ func (r *run) chat(ctx, tctx context.Context) (provider.ChatResponse, *outcome, 
 		if err != nil {
 			return resp, nil, err
 		}
-		resp, err = p.Chat(tctx, provider.ChatRequest{
+		req = provider.ChatRequest{
 			System:          r.system,
 			Messages:        prompt,
 			Tools:           r.toolSpecs(),
@@ -414,7 +417,8 @@ func (r *run) chat(ctx, tctx context.Context) (provider.ChatResponse, *outcome, 
 			// The system prompt is built once per turn and the history only
 			// grows, so the next step starts with this prefix.
 			CacheHint: true,
-		})
+		}
+		resp, err = p.Chat(tctx, req)
 		if err == nil {
 			break
 		}
@@ -435,13 +439,14 @@ func (r *run) chat(ctx, tctx context.Context) (provider.ChatResponse, *outcome, 
 	}
 
 	// Usage first: the tokens are spent whether or not the rest persists.
+	u := recordedUsage(req, resp)
 	if err := r.deps.Store.RecordUsage(ctx, store.UsageRecord{
 		UserID: r.sess.OwnerUserID, Feature: store.FeatureBuilder, SessionID: r.sess.ID, TurnID: r.turn.ID,
 		Provider: p.Name(), Model: p.Model(),
 		Purpose:     r.usagePurpose(),
-		InputTokens: resp.Usage.InputTokens, CachedInputTokens: resp.Usage.CachedInputTokens,
-		CacheWriteTokens: resp.Usage.CacheWriteTokens, OutputTokens: resp.Usage.OutputTokens,
-		Reported: resp.Usage.Reported,
+		InputTokens: u.InputTokens, CachedInputTokens: u.CachedInputTokens,
+		CacheWriteTokens: u.CacheWriteTokens, OutputTokens: u.OutputTokens,
+		Reported: u.Reported,
 	}); err != nil {
 		return resp, nil, fmt.Errorf("record usage: %w", err)
 	}

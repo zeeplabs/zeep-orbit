@@ -145,21 +145,23 @@ func (r *run) summarize(ctx, tctx context.Context, prev *store.Message, older []
 	if _, err := r.deps.Budget.Check(tctx, r.sess.OwnerUserID, r.sess.ID); err != nil {
 		return "", fmt.Errorf("budget check before compaction: %w", err)
 	}
-	resp, err := r.deps.Provider.Chat(tctx, provider.ChatRequest{
+	req := provider.ChatRequest{
 		System:          summarySystemPrompt,
 		Messages:        []provider.Message{{Role: provider.RoleUser, Content: renderTranscript(prev, older)}},
 		MaxOutputTokens: summaryMaxOutputTokens,
-	})
+	}
+	resp, err := r.deps.Provider.Chat(tctx, req)
 	if err != nil {
 		return "", fmt.Errorf("summarize: %w", err)
 	}
+	u := recordedUsage(req, resp)
 	if err := r.deps.Store.RecordUsage(ctx, store.UsageRecord{
 		UserID: r.sess.OwnerUserID, Feature: store.FeatureBuilder, SessionID: r.sess.ID, TurnID: r.turn.ID,
 		Provider: r.deps.Provider.Name(), Model: r.deps.Provider.Model(),
 		Purpose:     store.PurposeCompaction,
-		InputTokens: resp.Usage.InputTokens, CachedInputTokens: resp.Usage.CachedInputTokens,
-		CacheWriteTokens: resp.Usage.CacheWriteTokens, OutputTokens: resp.Usage.OutputTokens,
-		Reported: resp.Usage.Reported,
+		InputTokens: u.InputTokens, CachedInputTokens: u.CachedInputTokens,
+		CacheWriteTokens: u.CacheWriteTokens, OutputTokens: u.OutputTokens,
+		Reported: u.Reported,
 	}); err != nil {
 		return "", fmt.Errorf("record compaction usage: %w", err)
 	}
