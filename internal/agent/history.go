@@ -32,6 +32,9 @@ type toolMeta struct {
 	// when the user decides.
 	QuestionsClosed   bool `json:"questions_closed,omitempty"`
 	QuestionsReopened bool `json:"questions_reopened,omitempty"`
+	// PlanApproved marks the result of a build plan the user approved: the
+	// turn builds from there on (written by the store with the approval).
+	PlanApproved bool `json:"plan_approved,omitempty"`
 }
 
 type summaryMeta struct {
@@ -71,6 +74,13 @@ func parseAssistantCalls(m store.Message) []provider.ToolCall {
 type turnState struct {
 	// steps is the number of model calls already made in this turn.
 	steps int
+	// modeSteps is the number of those calls made in the turn's current mode,
+	// the count MaxSteps bounds: the calls after the last approved build plan,
+	// or every call when the turn has none. A plan approved in a turn starts
+	// its build in the same turn, and the planning calls before it must not
+	// eat the build's allowance. Approvals stored before the plan_approved
+	// marker existed are not seen, so such a turn counts every call.
+	modeSteps int
 	// failedBuilds is the number of failed run_build calls so far.
 	failedBuilds int
 	// skills are the distinct skills loaded so far in this turn.
@@ -107,6 +117,7 @@ func analyzeTurn(msgs []store.Message, turnID string) turnState {
 		switch m.Role {
 		case store.RoleAssistant:
 			st.steps++
+			st.modeSteps++
 			st.started = true
 			lastAssistant = m
 			for _, c := range parseAssistantCalls(*m) {
@@ -116,6 +127,9 @@ func analyzeTurn(msgs []store.Message, turnID string) turnState {
 			answered[m.ToolCallID] = true
 			meta := parseToolMeta(*m)
 			if !meta.IsError {
+				if meta.PlanApproved && callNames[m.ToolCallID] == planning.ToolProposeBuildPlan {
+					st.modeSteps = 0
+				}
 				switch callNames[m.ToolCallID] {
 				case planning.ToolAskUser:
 					if meta.QuestionsClosed {

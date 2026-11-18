@@ -305,8 +305,9 @@ func TestApproveBuildPlan_IsAtomicAndStartsTheBuild(t *testing.T) {
 	if e.phase(t, sess.ID) != store.PhaseBuilding {
 		t.Error("approval must move the session to building")
 	}
-	if msg := e.lastToolMessage(t, sess.ID); msg.Content != "approved v1" || msg.ToolCallID != "call_1" {
-		t.Errorf("tool message: %+v", msg)
+	if msg := e.lastToolMessage(t, sess.ID); msg.Content != "approved v1" || msg.ToolCallID != "call_1" ||
+		!sameJSON(msg.ToolCalls, `{"build_failed":false,"is_error":false,"plan_approved":true}`) {
+		t.Errorf("tool message: %+v %s", msg, msg.ToolCalls)
 	}
 	events, err := e.st.ListEvents(ctx, e.userA, sess.ID, 0, 50)
 	if err != nil {

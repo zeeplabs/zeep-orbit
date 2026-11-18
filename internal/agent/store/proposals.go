@@ -116,6 +116,9 @@ type resolution struct {
 	ProposalResolution
 	questionsClosed   bool
 	questionsReopened bool
+	// planApproved marks the result of an approved build plan: the steps
+	// after it are the build of the same turn (see agent.turnState).
+	planApproved bool
 }
 
 // resolve is the shared body of every proposal resolution. accept says whether
@@ -188,6 +191,9 @@ func (s *Store) resolve(
 	}
 	if res.questionsReopened {
 		metaFields["questions_reopened"] = true
+	}
+	if res.planApproved {
+		metaFields["plan_approved"] = true
 	}
 	meta, err := json.Marshal(metaFields)
 	if err != nil {

@@ -347,7 +347,7 @@ func (r *run) checkLimits(ctx, tctx context.Context) (*outcome, error) {
 	if tctx.Err() != nil || r.now().Sub(r.start) >= r.lim.MaxTurnDuration {
 		return &outcome{status: store.TurnLimitReached, limit: LimitDuration, commit: true}, nil
 	}
-	if r.state.steps >= r.lim.MaxSteps {
+	if r.state.modeSteps >= r.lim.MaxSteps {
 		return &outcome{status: store.TurnLimitReached, limit: LimitSteps, commit: true}, nil
 	}
 	if r.state.failedBuilds >= r.lim.MaxFixIterations {
@@ -506,6 +506,7 @@ func (r *run) persistAssistant(ctx context.Context, resp provider.ChatResponse) 
 	}
 	r.msgs = append(r.msgs, *m)
 	r.state.steps++
+	r.state.modeSteps++
 	if strings.TrimSpace(resp.Message.Content) != "" {
 		if err := r.emit(ctx, EventAssistantMessage, map[string]any{"content": capRunes(resp.Message.Content, maxAssistantEventChars)}); err != nil {
 			return nil, err
