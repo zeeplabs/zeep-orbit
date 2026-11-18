@@ -709,7 +709,7 @@ func TestUpdateAppEnduserRoles(t *testing.T) {
 		t.Fatalf("CreateApp: %v", err)
 	}
 
-	if err := UpdateAppEnduserRoles(ctx, pool, app.ID, []string{"member", "viewer"}); err != nil {
+	if err := UpdateAppEnduserRoles(ctx, pool, app.ID, []string{"member", "viewer"}, nil); err != nil {
 		t.Fatalf("UpdateAppEnduserRoles (populated): %v", err)
 	}
 	got, _, err := GetApp(ctx, pool, app.ID, owner)
@@ -720,7 +720,7 @@ func TestUpdateAppEnduserRoles(t *testing.T) {
 		t.Fatalf("expected [\"member\",\"viewer\"], got %+v", got.EnduserRolesConfig)
 	}
 
-	if err := UpdateAppEnduserRoles(ctx, pool, app.ID, []string{}); err != nil {
+	if err := UpdateAppEnduserRoles(ctx, pool, app.ID, []string{}, nil); err != nil {
 		t.Fatalf("UpdateAppEnduserRoles (empty): %v", err)
 	}
 	got, _, err = GetApp(ctx, pool, app.ID, owner)
@@ -731,7 +731,7 @@ func TestUpdateAppEnduserRoles(t *testing.T) {
 		t.Fatalf("expected an empty list after deliberate removal, got %+v", got.EnduserRolesConfig)
 	}
 
-	if err := UpdateAppEnduserRoles(ctx, pool, "00000000-0000-0000-0000-000000000000", []string{"member"}); !errors.Is(err, ErrNotFound) {
+	if err := UpdateAppEnduserRoles(ctx, pool, "00000000-0000-0000-0000-000000000000", []string{"member"}, nil); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("expected ErrNotFound for nonexistent app, got %v", err)
 	}
 }

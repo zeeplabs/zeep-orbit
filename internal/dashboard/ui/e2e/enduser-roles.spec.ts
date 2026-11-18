@@ -94,8 +94,16 @@ test.describe('End-user roles configuration', () => {
     await page.goto(`/dashboard/apps/${appId}?tab=auth`)
     await page.click('[role="tab"]:has-text("Login")')
 
+    // "member" is the default role and can't be removed, so make "viewer" the
+    // default first.
+    await page.fill('input[placeholder="New role (e.g. viewer)"]', 'viewer')
+    await page.click('button:has-text("Add")')
+    const viewerChip = page.getByText('viewer', { exact: true }).locator('..')
+    await viewerChip.getByRole('button', { name: 'Set as default' }).click()
+    await expect(viewerChip.getByText('default', { exact: true })).toBeVisible()
+
     // Remove the "member" chip — it's in use by the end-user just created.
-    await page.click('[title="Remove role"]')
+    await page.getByText('member', { exact: true }).locator('..').locator('[title="Remove role"]').click()
 
     await expect(page.locator('text=role in use')).toBeVisible()
     // The chip is still there — the blocked removal never persisted.

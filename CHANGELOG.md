@@ -9,6 +9,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.11.1] — 2026-11-18
+
+### Added
+
+- **Default end-user role per app.** The role a new end user gets on first sign-in (email or Google) is no longer fixed to `member`: an app admin picks any of the app's roles as the default in the app's **End-user roles** panel, or sends `default_role` to `PUT /dashboard/api/apps/{id}/roles` (a request with only `default_role` leaves the role list untouched). The default is stored in the `DEFAULT` of the app's `_auth_users.role` column, so every replica applies it at once. The default role can't be removed from the list until another one is chosen, and existing apps keep `member`.
+
 ## [1.11.0] — 2026-10-23
 
 ### Added

@@ -48,6 +48,7 @@ export interface AppDef {
   jwt_secret: string
   auth_email_enabled: boolean
   enduser_roles_config: string[]
+  default_enduser_role: string
   owner_id: string
   owner_email?: string
   owner_name?: string
@@ -544,18 +545,23 @@ export function useUpdateAppUser(): UseMutationResult<
   })
 }
 
+// roles is always sent when given (an empty list clears it); default_role is
+// omitted to keep the stored default and can only be replaced, never cleared.
 export function useUpdateAppEnduserRoles(): UseMutationResult<
-  { roles: string[] },
+  { roles: string[]; default_role: string },
   Error,
-  { id: string; roles: string[] }
+  { id: string; roles?: string[]; default_role?: string }
 > {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, roles }) =>
-      apiFetch<{ roles: string[] }>(`/dashboard/api/apps/${id}/roles`, {
+    mutationFn: ({ id, roles, default_role }) =>
+      apiFetch<{ roles: string[]; default_role: string }>(`/dashboard/api/apps/${id}/roles`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roles }),
+        body: JSON.stringify({
+          ...(roles !== undefined ? { roles } : {}),
+          ...(default_role !== undefined ? { default_role } : {}),
+        }),
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['apps'] })
