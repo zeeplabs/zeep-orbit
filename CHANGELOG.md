@@ -9,6 +9,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.12.0] — 2026-11-18
+
 ### Added
 
 - **AI Frontend Builder: chat home and My projects.** When the builder is available, `/dashboard/` opens a chat-style home: type what to build, choose a new backend or one of your existing backend apps, and the first message starts a session and opens the builder. **My projects** (`/dashboard/projetos`) lists your sessions (status, current milestone, backend) and the backend apps no session uses, with filters and search. The builder page now lives in the same simple shell, with the sidebar collapsed to icons, and the shell has a bottom navigation on phones. A switch moves between this interface and the advanced one (the existing screens, unchanged); the choice is kept per browser in `localStorage` (`orbit.mode`). `GET /dashboard/api/builder/sessions` rows gain `brief_version`, `milestones_total` and `milestones_done`. The dashboard frontend now has a vitest suite (`npm test`), run by CI next to the build. **Behavior change:** login and `/dashboard/` now land on the home instead of `/dashboard/apps` for users in simple mode on an installation where the builder is available; advanced-mode users and installations without the builder still land on `/apps`. See [Home chat and My projects](docs/docs/ai-frontend-builder.md#home-chat-and-my-projects).
