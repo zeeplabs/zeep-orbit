@@ -1,19 +1,9 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useRef, type ReactNode } from 'react'
 import { Navigate, NavLink, Outlet } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useQueryClient } from '@tanstack/react-query'
-import { toast } from 'sonner'
-import ChangePasswordModal from '@/pages/ChangePasswordModal'
-import { ConfirmDialog } from '@/components/patterns/ConfirmDialog'
 import { UnsavedChangesBlocker } from '@/components/patterns/UnsavedChangesBlocker'
-import {
-  confirmLeavingWithUnsavedChanges,
-  hasUnsavedChanges,
-  resetLeavingConfirmation,
-} from '@/lib/useUnsavedChangesGuard'
-import { authFetch } from '@/lib/api'
-import { setLanguage } from '@/lib/i18n'
 import { SidebarFooter } from './SidebarFooter'
+import { useShellSession } from './useShellSession'
 import { SimpleSidebar } from './SimpleSidebar'
 import { SimpleMobileNav } from './SimpleMobileNav'
 import { ModeSwitch } from './ModeSwitch'
@@ -33,8 +23,7 @@ const TAB_CLASS =
 /**
  * Shell of the simple interface: `/`, `/projetos` and `/builder/:sessionId`
  * (home-chat spec, assumption 2). The logout, language and change-password
- * flows mirror DashboardShell on purpose so that file stays untouched except
- * for the mode switch (HCH-09); extracting a shared hook is a follow-up.
+ * flows are shared with DashboardShell through `useShellSession`.
  * `children` replaces the <Outlet/> for a route that is not a layout route.
  */
 export default function SimpleShell({
@@ -47,58 +36,19 @@ export default function SimpleShell({
   /** Icon-only sidebar (68 px), used by the builder route (HCH-13). */
   collapsed?: boolean
 }) {
-  const qc = useQueryClient()
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const mainRef = useRef<HTMLElement>(null)
-  const [showLogoutDialog, setShowLogoutDialog] = useState(false)
-  const [loggingOut, setLoggingOut] = useState(false)
-  const [showChangePassword, setShowChangePassword] = useState(false)
-
-  useEffect(() => {
-    if (user?.language && user.language !== i18n.language) {
-      setLanguage(user.language)
-    }
-  }, [user?.language])
+  const session = useShellSession(user)
 
   if (!user) return <Navigate to="/login" replace />
-
-  async function saveLanguage(lang: string) {
-    setLanguage(lang)
-    try {
-      await authFetch('/dashboard/api/me/language', {
-        method: 'PUT',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ language: lang }),
-      })
-    } catch {
-      // best-effort persistence; the language already changed locally
-    }
-  }
-
-  const handleLogout = async () => {
-    setLoggingOut(true)
-    confirmLeavingWithUnsavedChanges()
-    try {
-      const res = await fetch('/dashboard/api/logout', { method: 'POST', credentials: 'include' })
-      if (!res.ok) throw new Error('logout failed')
-      qc.clear()
-      window.location.href = '/dashboard/login'
-    } catch {
-      resetLeavingConfirmation()
-      toast.error(t('nav.logoutError'))
-    } finally {
-      setLoggingOut(false)
-    }
-  }
 
   const footer = (
     <SidebarFooter
       user={user}
-      currentLang={i18n.language}
-      onChangePassword={() => setShowChangePassword(true)}
-      onSaveLanguage={saveLanguage}
-      onLogout={() => setShowLogoutDialog(true)}
+      currentLang={session.currentLang}
+      onChangePassword={session.openChangePassword}
+      onSaveLanguage={session.saveLanguage}
+      onLogout={session.openLogout}
       version={pkg.version}
       collapsed={collapsed}
     />
@@ -143,26 +93,14 @@ export default function SimpleShell({
 
       <SimpleMobileNav
         user={user}
-        currentLang={i18n.language}
-        onChangePassword={() => setShowChangePassword(true)}
-        onSaveLanguage={saveLanguage}
-        onLogout={() => setShowLogoutDialog(true)}
+        currentLang={session.currentLang}
+        onChangePassword={session.openChangePassword}
+        onSaveLanguage={session.saveLanguage}
+        onLogout={session.openLogout}
         version={pkg.version}
       />
 
-      <ConfirmDialog
-        open={showLogoutDialog}
-        title={t('nav.logoutConfirm')}
-        message={showLogoutDialog && hasUnsavedChanges() ? t('nav.logoutDescUnsaved') : t('nav.logoutDesc')}
-        confirmLabel={loggingOut ? t('nav.loggingOut') : t('nav.logoutConfirmBtn')}
-        cancelLabel={t('nav.logoutCancel')}
-        icon="logout"
-        loading={loggingOut}
-        onConfirm={handleLogout}
-        onCancel={() => setShowLogoutDialog(false)}
-      />
-
-      <ChangePasswordModal open={showChangePassword} onClose={() => setShowChangePassword(false)} />
+      {session.dialogs}
     </div>
   )
 }
