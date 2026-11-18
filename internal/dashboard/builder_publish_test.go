@@ -1294,6 +1294,23 @@ func TestDownloadZip_NeedsNeitherGitHubNorADeployProvider(t *testing.T) {
 
 // ---- tree helpers ----
 
+// Dotenv files are excluded whatever their case: ".ENV" or ".Env.local" can
+// hold the same secrets and tools such as dotenv on a case-insensitive disk
+// load them too. Templates stay in any case. The criterion is the dotenv
+// prefix, so a file merely ending in ".env" (config.env) is not a dotenv file.
+func TestTreeExcluded_EnvFilesAnyCase(t *testing.T) {
+	for _, p := range []string{".ENV", ".Env", ".Env.local", "a/.ENV.PRODUCTION", ".env.production", "src/.eNv.development.local"} {
+		if !treeExcluded(p) {
+			t.Errorf("treeExcluded(%q) = false, want true", p)
+		}
+	}
+	for _, p := range []string{".ENV.EXAMPLE", ".Env.Sample", "a/.env.Template", ".ENV.defaults", "config.env", "src/ENVIRONMENT.md", ".envrc"} {
+		if treeExcluded(p) {
+			t.Errorf("treeExcluded(%q) = true, want false", p)
+		}
+	}
+}
+
 func TestTreeExcludedAndCleanTreePath(t *testing.T) {
 	for _, p := range []string{"node_modules/a/b.js", "a/node_modules/b", ".git/config", "dist/index.html", ".orbit/ops.jsonl", ".env", ".env.local", "a/.env.production", ".env.Development.local"} {
 		if !treeExcluded(p) {
