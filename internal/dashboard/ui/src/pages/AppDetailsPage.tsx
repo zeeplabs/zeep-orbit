@@ -480,6 +480,7 @@ function EnduserRolesSection({ app }: { app: NonNullable<ReturnType<typeof useAp
   if (!app.auth_email_enabled) return null;
 
   const roles = app.enduser_roles_config;
+  const defaultRole = app.default_enduser_role || "member";
   const identRe = /^[a-z][a-z0-9_]{0,62}$/;
 
   const addRole = () => {
@@ -503,18 +504,46 @@ function EnduserRolesSection({ app }: { app: NonNullable<ReturnType<typeof useAp
     updateRoles.mutate({ id: app.id, roles: roles.filter((r) => r !== role) });
   };
 
+  const setDefaultRole = (role: string) => {
+    updateRoles.mutate({ id: app.id, default_role: role });
+  };
+
   return (
     <Panel title={t("appDetails.enduserRolesTitle")}>
       <p className="text-[12px] text-[var(--text-secondary)]">{t("appDetails.enduserRolesDesc")}</p>
+      <p className="text-[12px] text-[var(--text-secondary)]">{t("appDetails.enduserRolesDefaultDesc")}</p>
+      {!roles.includes(defaultRole) && (
+        <p className="text-xs text-[var(--danger)]">
+          {t("appDetails.enduserRolesDefaultMissing", { role: defaultRole })}
+        </p>
+      )}
       <div className="flex flex-wrap gap-2">
         {roles.map((role) => (
           <Badge key={role} variant="outline" className="gap-1.5 py-1">
             <span>{role}</span>
+            {role === defaultRole ? (
+              <span className="text-[10px] uppercase text-[var(--text-tertiary)]">
+                {t("appDetails.enduserRolesDefaultBadge")}
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setDefaultRole(role)}
+                disabled={updateRoles.isPending}
+                className="cursor-pointer border-none bg-transparent p-0 text-[10px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed"
+              >
+                {t("appDetails.enduserRolesSetDefault")}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => removeRole(role)}
-              disabled={updateRoles.isPending}
-              title={t("appDetails.enduserRolesRemove")}
+              disabled={updateRoles.isPending || role === defaultRole}
+              title={
+                role === defaultRole
+                  ? t("appDetails.enduserRolesRemoveDefault")
+                  : t("appDetails.enduserRolesRemove")
+              }
               className="flex cursor-pointer items-center justify-center border-none bg-transparent p-0 text-[var(--text-tertiary)] hover:text-[var(--danger)] disabled:cursor-not-allowed"
             >
               <Icon name="close" size={11} />

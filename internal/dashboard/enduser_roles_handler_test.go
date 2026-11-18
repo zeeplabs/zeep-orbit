@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
 
 // callUpdateEnduserRoles dispatches a PUT .../roles request straight to the
@@ -131,7 +132,7 @@ func TestUpdateAppEnduserRolesHandler_BlockedByEndUser(t *testing.T) {
 		t.Fatalf("GetApp: %v", err)
 	}
 	schema := schemaNameForDB(app.Name)
-	if err := UpdateAppEnduserRoles(ctx, pool, appID, []string{"member", "editor"}); err != nil {
+	if err := UpdateAppEnduserRoles(ctx, pool, appID, []string{"member", "editor"}, nil); err != nil {
 		t.Fatalf("seed enduser_roles_config: %v", err)
 	}
 	// Drop defensively before AND after: a schema outside zeep_system isn't
@@ -196,7 +197,7 @@ func TestUpdateAppEnduserRolesHandler_BlockedByPolicy(t *testing.T) {
 	defer pool.Close()
 	ctx := context.Background()
 
-	if err := UpdateAppEnduserRoles(ctx, pool, appID, []string{"member", "viewer"}); err != nil {
+	if err := UpdateAppEnduserRoles(ctx, pool, appID, []string{"member", "viewer"}, nil); err != nil {
 		t.Fatalf("seed enduser_roles_config: %v", err)
 	}
 	if _, err := pool.Exec(ctx,
@@ -230,5 +231,156 @@ func TestUpdateAppEnduserRolesHandler_BlockedByPolicy(t *testing.T) {
 	}
 	if len(after.EnduserRolesConfig) != 2 || after.EnduserRolesConfig[1] != "viewer" {
 		t.Fatalf("expected the blocked removal to leave the list untouched, got %+v", after.EnduserRolesConfig)
+	}
+}
+
+// seedAuthUsersSchema creates the app's schema with a minimal _auth_users
+// table (role defaults to 'member', like the provisioned one) and returns the
+// schema name. The schema lives outside zeep_system, so it is dropped on both
+// ends, synchronously, while the pool is still open.
+func seedAuthUsersSchema(t *testing.T, pool *db.Pool, h *Handler, appID string, actor *DashboardUser) (string, func()) {
+	t.Helper()
+	ctx := context.Background()
+	app, _, err := GetApp(ctx, pool, appID, actor)
+	if err != nil {
+		t.Fatalf("GetApp: %v", err)
+	}
+	schema := schemaNameForDB(app.Name)
+	drop := func() {
+		_, _ = pool.Exec(context.Background(), fmt.Sprintf(`DROP SCHEMA IF EXISTS %q CASCADE`, schema))
+	}
+	drop()
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE SCHEMA %q`, schema)); err != nil {
+		t.Fatalf("create app schema: %v", err)
+	}
+	if _, err := pool.Exec(ctx, fmt.Sprintf(`CREATE TABLE %q."_auth_users" (
+		id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		email         TEXT NOT NULL UNIQUE,
+		password_hash TEXT NOT NULL DEFAULT '',
+		role          TEXT NOT NULL DEFAULT 'member'
+	)`, schema)); err != nil {
+		t.Fatalf("create _auth_users: %v", err)
+	}
+	return schema, drop
+}
+
+// insertAuthUserRole inserts an end user without naming a role, like the
+// email and Google sign-up paths do, and returns the role it received.
+func insertAuthUserRole(t *testing.T, pool *db.Pool, schema, email string) string {
+	t.Helper()
+	var role string
+	err := pool.QueryRow(context.Background(),
+		fmt.Sprintf(`INSERT INTO %q."_auth_users" (email) VALUES ($1) RETURNING role`, schema), email,
+	).Scan(&role)
+	if err != nil {
+		t.Fatalf("insert end user: %v", err)
+	}
+	return role
+}
+
+// TestUpdateAppEnduserRolesHandler_DefaultRole: setting default_role makes new
+// end users get that role, persists it, and a request that only sets the
+// default does not touch the role list.
+func TestUpdateAppEnduserRolesHandler_DefaultRole(t *testing.T) {
+	pool, h, actors, appID, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	schema, drop := seedAuthUsersSchema(t, pool, h, appID, actors["loner"])
+	defer drop()
+
+	if got := insertAuthUserRole(t, pool, schema, "before@example.com"); got != "member" {
+		t.Fatalf("role before configuring a default = %q, want member", got)
+	}
+
+	w := callUpdateEnduserRoles(h, actors["loner"], appID, `{"roles":["member","basic"],"default_role":"basic"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Roles       []string `json:"roles"`
+		DefaultRole string   `json:"default_role"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.DefaultRole != "basic" || len(resp.Roles) != 2 {
+		t.Fatalf("resp = %+v, want default_role=basic and 2 roles", resp)
+	}
+	if got := insertAuthUserRole(t, pool, schema, "after@example.com"); got != "basic" {
+		t.Fatalf("role of a new end user = %q, want basic", got)
+	}
+	app, _, err := GetApp(context.Background(), pool, appID, actors["loner"])
+	if err != nil {
+		t.Fatalf("GetApp: %v", err)
+	}
+	if app.DefaultEnduserRole != "basic" {
+		t.Fatalf("persisted default = %q, want basic", app.DefaultEnduserRole)
+	}
+
+	// Only the default in the body: the list must stay as it was.
+	w = callUpdateEnduserRoles(h, actors["loner"], appID, `{"default_role":"member"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+	app, _, err = GetApp(context.Background(), pool, appID, actors["loner"])
+	if err != nil {
+		t.Fatalf("GetApp: %v", err)
+	}
+	if len(app.EnduserRolesConfig) != 2 || app.DefaultEnduserRole != "member" {
+		t.Fatalf("roles = %+v default = %q, want 2 roles and default member", app.EnduserRolesConfig, app.DefaultEnduserRole)
+	}
+}
+
+// TestUpdateAppEnduserRolesHandler_DefaultRoleNotInList: a default that is not
+// one of the app's roles is rejected and nothing changes.
+func TestUpdateAppEnduserRolesHandler_DefaultRoleNotInList(t *testing.T) {
+	pool, h, actors, appID, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+
+	w := callUpdateEnduserRoles(h, actors["loner"], appID, `{"roles":["member"],"default_role":"basic"}`)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", w.Code, w.Body.String())
+	}
+	var resp map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp["error"] != "default role must be one of the app roles" {
+		t.Fatalf("error = %q", resp["error"])
+	}
+	app, _, err := GetApp(context.Background(), pool, appID, actors["loner"])
+	if err != nil {
+		t.Fatalf("GetApp: %v", err)
+	}
+	if app.DefaultEnduserRole != "member" {
+		t.Fatalf("default changed to %q on a rejected request", app.DefaultEnduserRole)
+	}
+}
+
+// TestUpdateAppEnduserRolesHandler_RemovingDefaultBlocked: the current default
+// can't be dropped from the list unless the same request names a new one.
+func TestUpdateAppEnduserRolesHandler_RemovingDefaultBlocked(t *testing.T) {
+	pool, h, actors, appID, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	_, drop := seedAuthUsersSchema(t, pool, h, appID, actors["loner"])
+	defer drop()
+
+	if w := callUpdateEnduserRoles(h, actors["loner"], appID, `{"roles":["member","basic"],"default_role":"basic"}`); w.Code != http.StatusOK {
+		t.Fatalf("seed default: status = %d; body=%s", w.Code, w.Body.String())
+	}
+
+	w := callUpdateEnduserRoles(h, actors["loner"], appID, `{"roles":["member"]}`)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409; body=%s", w.Code, w.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp["error"] != "role is default" || resp["role"] != "basic" {
+		t.Fatalf("resp = %+v, want error=role is default role=basic", resp)
+	}
+
+	if w := callUpdateEnduserRoles(h, actors["loner"], appID, `{"roles":["member"],"default_role":"member"}`); w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 when a new default is named; body=%s", w.Code, w.Body.String())
 	}
 }

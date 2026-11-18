@@ -24,11 +24,15 @@ type AppRow struct {
 	StorageConfig      *storage.StorageConfig  `json:"storage_config,omitempty"`
 	RateLimit          *config.RateLimitConfig `json:"rate_limit,omitempty"`
 	EnduserRolesConfig []string                `json:"enduser_roles_config"`
-	OwnerID            string                  `json:"owner_id"`
-	OwnerEmail         string                  `json:"owner_email,omitempty"`
-	OwnerName          string                  `json:"owner_name,omitempty"`
-	CreatedAt          time.Time               `json:"created_at"`
-	Tables             []AppTableRow           `json:"tables"`
+	// DefaultEnduserRole is the role a new end user gets on first login. It is
+	// mirrored into the DEFAULT of the app's _auth_users.role column, so every
+	// replica applies it without reading this row (see SetAuthUserDefaultRole).
+	DefaultEnduserRole string        `json:"default_enduser_role"`
+	OwnerID            string        `json:"owner_id"`
+	OwnerEmail         string        `json:"owner_email,omitempty"`
+	OwnerName          string        `json:"owner_name,omitempty"`
+	CreatedAt          time.Time     `json:"created_at"`
+	Tables             []AppTableRow `json:"tables"`
 
 	// CanWrite reflects the requesting user's resolved AppRole for this app
 	// (GetApp handler only — never populated by ListApps/CreateApp/UpdateApp).
@@ -235,14 +239,14 @@ func ListApps(ctx context.Context, pool *db.Pool, user *DashboardUser) ([]*AppRo
 
 	if user.Role == "superadmin" || CanReadAnyApp(user.Role) {
 		rows, err = pool.Query(ctx,
-			`SELECT a.id, a.name, a.auth_email_enabled, COALESCE(a.auth_providers, '{}'), COALESCE(a.storage_config, '{}'), COALESCE(a.rate_limit_config, '{}'), COALESCE(a.enduser_roles_config, '["member"]'), a.owner_id, COALESCE(u.email, ''), COALESCE(u.name, ''), a.created_at
+			`SELECT a.id, a.name, a.auth_email_enabled, COALESCE(a.auth_providers, '{}'), COALESCE(a.storage_config, '{}'), COALESCE(a.rate_limit_config, '{}'), COALESCE(a.enduser_roles_config, '["member"]'), a.owner_id, COALESCE(u.email, ''), COALESCE(u.name, ''), a.created_at, a.default_enduser_role
 			 FROM zeep_system.apps a
 			 LEFT JOIN zeep_system.dashboard_users u ON u.id = a.owner_id
 			 ORDER BY a.created_at DESC`,
 		)
 	} else {
 		rows, err = pool.Query(ctx,
-			`SELECT a.id, a.name, a.auth_email_enabled, COALESCE(a.auth_providers, '{}'), COALESCE(a.storage_config, '{}'), COALESCE(a.rate_limit_config, '{}'), COALESCE(a.enduser_roles_config, '["member"]'), a.owner_id, COALESCE(u.email, ''), COALESCE(u.name, ''), a.created_at
+			`SELECT a.id, a.name, a.auth_email_enabled, COALESCE(a.auth_providers, '{}'), COALESCE(a.storage_config, '{}'), COALESCE(a.rate_limit_config, '{}'), COALESCE(a.enduser_roles_config, '["member"]'), a.owner_id, COALESCE(u.email, ''), COALESCE(u.name, ''), a.created_at, a.default_enduser_role
 			 FROM zeep_system.apps a
 			 LEFT JOIN zeep_system.dashboard_users u ON u.id = a.owner_id
 			 INNER JOIN zeep_system.app_members m ON m.backend_app_id = a.id AND m.user_id = $1
@@ -259,7 +263,7 @@ func ListApps(ctx context.Context, pool *db.Pool, user *DashboardUser) ([]*AppRo
 	for rows.Next() {
 		var a AppRow
 		var providersJSON, storageJSON, rateLimitJSON, enduserRolesJSON []byte
-		if err := rows.Scan(&a.ID, &a.Name, &a.AuthEmailEnabled, &providersJSON, &storageJSON, &rateLimitJSON, &enduserRolesJSON, &a.OwnerID, &a.OwnerEmail, &a.OwnerName, &a.CreatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.Name, &a.AuthEmailEnabled, &providersJSON, &storageJSON, &rateLimitJSON, &enduserRolesJSON, &a.OwnerID, &a.OwnerEmail, &a.OwnerName, &a.CreatedAt, &a.DefaultEnduserRole); err != nil {
 			return nil, fmt.Errorf("dashboard: list apps scan: %w", err)
 		}
 		if len(providersJSON) > 0 {
@@ -297,9 +301,9 @@ func CreateApp(ctx context.Context, pool *db.Pool, name, ownerID string, authEma
 	err = tx.QueryRow(ctx,
 		`INSERT INTO zeep_system.apps (name, owner_id, auth_email_enabled)
 		 VALUES ($1, $2, $3)
-		 RETURNING id, name, jwt_secret, auth_email_enabled, COALESCE(auth_providers, '{}'), COALESCE(storage_config, '{}'), COALESCE(rate_limit_config, '{}'), COALESCE(enduser_roles_config, '["member"]'), owner_id, created_at`,
+		 RETURNING id, name, jwt_secret, auth_email_enabled, COALESCE(auth_providers, '{}'), COALESCE(storage_config, '{}'), COALESCE(rate_limit_config, '{}'), COALESCE(enduser_roles_config, '["member"]'), owner_id, created_at, default_enduser_role`,
 		name, ownerID, authEmail,
-	).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.AuthProviders, &storageJSON, &rateLimitJSONCreate, &enduserRolesJSONCreate, &app.OwnerID, &app.CreatedAt)
+	).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.AuthProviders, &storageJSON, &rateLimitJSONCreate, &enduserRolesJSONCreate, &app.OwnerID, &app.CreatedAt, &app.DefaultEnduserRole)
 	decodeAppJSONColumns(&app, storageJSON, rateLimitJSONCreate, enduserRolesJSONCreate)
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: create app insert: %w", err)
@@ -345,10 +349,10 @@ func GetApp(ctx context.Context, pool *db.Pool, appID string, user *DashboardUse
 	var app AppRow
 	var storageJSON, rateLimitJSONGet, enduserRolesJSONGet []byte
 	err = pool.QueryRow(ctx,
-		`SELECT id, name, jwt_secret, auth_email_enabled, COALESCE(auth_providers, '{}'), COALESCE(storage_config, '{}'), COALESCE(rate_limit_config, '{}'), COALESCE(enduser_roles_config, '["member"]'), owner_id, created_at
+		`SELECT id, name, jwt_secret, auth_email_enabled, COALESCE(auth_providers, '{}'), COALESCE(storage_config, '{}'), COALESCE(rate_limit_config, '{}'), COALESCE(enduser_roles_config, '["member"]'), owner_id, created_at, default_enduser_role
 		 FROM zeep_system.apps WHERE id = $1`,
 		appID,
-	).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.AuthProviders, &storageJSON, &rateLimitJSONGet, &enduserRolesJSONGet, &app.OwnerID, &app.CreatedAt)
+	).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.AuthProviders, &storageJSON, &rateLimitJSONGet, &enduserRolesJSONGet, &app.OwnerID, &app.CreatedAt, &app.DefaultEnduserRole)
 	decodeAppJSONColumns(&app, storageJSON, rateLimitJSONGet, enduserRolesJSONGet)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -384,9 +388,9 @@ func UpdateApp(ctx context.Context, pool *db.Pool, appID string, user *Dashboard
 		`UPDATE zeep_system.apps
 		 SET auth_email_enabled = $2
 		 WHERE id = $1
-		 RETURNING id, name, jwt_secret, auth_email_enabled, COALESCE(auth_providers, '{}'), COALESCE(storage_config, '{}'), COALESCE(rate_limit_config, '{}'), COALESCE(enduser_roles_config, '["member"]'), owner_id, created_at`,
+		 RETURNING id, name, jwt_secret, auth_email_enabled, COALESCE(auth_providers, '{}'), COALESCE(storage_config, '{}'), COALESCE(rate_limit_config, '{}'), COALESCE(enduser_roles_config, '["member"]'), owner_id, created_at, default_enduser_role`,
 		appID, authEmail,
-	).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.AuthProviders, &storageJSON, &rateLimitJSONUpd, &enduserRolesJSONUpd, &app.OwnerID, &app.CreatedAt)
+	).Scan(&app.ID, &app.Name, &app.JWTSecret, &app.AuthEmailEnabled, &app.AuthProviders, &storageJSON, &rateLimitJSONUpd, &enduserRolesJSONUpd, &app.OwnerID, &app.CreatedAt, &app.DefaultEnduserRole)
 	decodeAppJSONColumns(&app, storageJSON, rateLimitJSONUpd, enduserRolesJSONUpd)
 	if err != nil {
 		return nil, fmt.Errorf("dashboard: update app: %w", err)
@@ -459,14 +463,15 @@ func CountTablePoliciesByRole(ctx context.Context, pool *db.Pool, appID, role st
 // and the in-use guard against removed roles all live in the handler
 // (UpdateAppEnduserRoles in handler.go), which computes the diff and calls
 // this only once every check has passed.
-func UpdateAppEnduserRoles(ctx context.Context, pool *db.Pool, appID string, roles []string) error {
+func UpdateAppEnduserRoles(ctx context.Context, pool *db.Pool, appID string, roles []string, defaultRole *string) error {
 	rolesJSON, err := json.Marshal(roles)
 	if err != nil {
 		return fmt.Errorf("dashboard: marshal enduser roles: %w", err)
 	}
+	// A nil defaultRole keeps the stored default (COALESCE on a NULL param).
 	tag, err := pool.Exec(ctx,
-		`UPDATE zeep_system.apps SET enduser_roles_config = $1 WHERE id = $2`,
-		rolesJSON, appID,
+		`UPDATE zeep_system.apps SET enduser_roles_config = $1, default_enduser_role = COALESCE($3, default_enduser_role) WHERE id = $2`,
+		rolesJSON, appID, defaultRole,
 	)
 	if err != nil {
 		return fmt.Errorf("dashboard: update enduser roles: %w", err)
