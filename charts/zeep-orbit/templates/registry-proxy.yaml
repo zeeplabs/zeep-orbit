@@ -1,4 +1,25 @@
 {{- if .Values.builder.enabled }}
+{{- if or .Values.builder.registryProxy.tokenDefault .Values.builder.registryProxy.tokenCompany }}
+# Private-registry tokens, read only by the registry proxy. They are kept out
+# of the main chart Secret because the Orbit pods load that one whole
+# (envFrom), and Orbit has no use for them.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "zeep-orbit.registryProxy.fullname" . }}
+  labels:
+    {{- include "zeep-orbit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: registry-proxy
+type: Opaque
+stringData:
+  {{- with .Values.builder.registryProxy.tokenDefault }}
+  REGISTRY_PROXY_TOKEN_DEFAULT: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.builder.registryProxy.tokenCompany }}
+  REGISTRY_PROXY_TOKEN_COMPANY: {{ . | quote }}
+  {{- end }}
+---
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -53,14 +74,14 @@ spec:
             - name: REGISTRY_PROXY_TOKEN_DEFAULT
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "zeep-orbit.fullname" . }}
+                  name: {{ include "zeep-orbit.registryProxy.fullname" . }}
                   key: REGISTRY_PROXY_TOKEN_DEFAULT
             {{- end }}
             {{- if .Values.builder.registryProxy.tokenCompany }}
             - name: REGISTRY_PROXY_TOKEN_COMPANY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "zeep-orbit.fullname" . }}
+                  name: {{ include "zeep-orbit.registryProxy.fullname" . }}
                   key: REGISTRY_PROXY_TOKEN_COMPANY
             {{- end }}
           resources:

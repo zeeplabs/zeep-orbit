@@ -74,6 +74,13 @@ const (
 	defaultMaxPreviewSize = 256 << 20
 	maxPreviewFiles       = 20000
 
+	// Disk caps on the shared /work volume (10Gi PVC by default in the chart):
+	// a default-template install is a few hundred MiB, so 1 GiB per session
+	// leaves headroom while one runaway session cannot fill the volume alone.
+	defaultMaxSessionDisk    = 1 << 30
+	defaultMaxNpmCache       = 2 << 30
+	defaultDiskCheckInterval = 5 * time.Second
+
 	// detectWindow is how much of the output is always retained internally so
 	// the npm-ci lockfile marker can be found even when the caller asked for a
 	// tiny tail.
@@ -239,6 +246,21 @@ type ExecConfig struct {
 	// MaxPreviewBytes caps the size of the dist/ copy kept as the preview
 	// (default 256 MiB).
 	MaxPreviewBytes int64
+	// MaxSessionDiskBytes caps the whole session root on disk, node_modules,
+	// dist, .git and .orbit included (default 1 GiB). It is checked while a
+	// step runs (every DiskCheckInterval; the step's process group is killed
+	// when it is crossed) and again when the step ends; a session over the cap
+	// fails the step and loses node_modules/ and dist/, which are rebuilt by
+	// the next install and build. [WorkspaceLimits.MaxSessionBytes] only covers
+	// the files the agent writes, not what npm and vite produce.
+	MaxSessionDiskBytes int64
+	// DiskCheckInterval is how often a running step's session size is
+	// measured (default 5s).
+	DiskCheckInterval time.Duration
+	// MaxNpmCacheBytes caps the shared npm cache (NpmCache, default 2 GiB).
+	// When a step ends with the cache over the cap and no other step is
+	// running, the cache is emptied; npm refills it from the registry proxy.
+	MaxNpmCacheBytes int64
 }
 
 func (c ExecConfig) withDefaults() ExecConfig {
@@ -262,6 +284,15 @@ func (c ExecConfig) withDefaults() ExecConfig {
 	}
 	if c.MaxPreviewBytes <= 0 {
 		c.MaxPreviewBytes = defaultMaxPreviewSize
+	}
+	if c.MaxSessionDiskBytes <= 0 {
+		c.MaxSessionDiskBytes = defaultMaxSessionDisk
+	}
+	if c.DiskCheckInterval <= 0 {
+		c.DiskCheckInterval = defaultDiskCheckInterval
+	}
+	if c.MaxNpmCacheBytes <= 0 {
+		c.MaxNpmCacheBytes = defaultMaxNpmCache
 	}
 	return c
 }
@@ -302,6 +333,10 @@ type Executor struct {
 	cfg          ExecConfig
 	sessionLocks keyedLocker // by session root: one build step at a time
 	opLocks      keyedLocker // by root+op_id: duplicates wait, then replay
+	// cacheMu is held shared by every running step and exclusively (TryLock,
+	// never waiting) by the npm cache prune, so the cache is never emptied
+	// under a running npm.
+	cacheMu sync.RWMutex
 }
 
 // NewExecutor validates cfg and applies defaults.
@@ -343,7 +378,10 @@ func (e *Executor) Run(ctx context.Context, root string, step BuildStep, preview
 	}
 	defer unlock()
 
+	e.cacheMu.RLock()
 	res, err := e.execute(ctx, root, step, previewBase)
+	e.cacheMu.RUnlock()
+	e.pruneNpmCacheIfOver()
 	if err != nil {
 		return BuildResult{}, err
 	}
@@ -644,6 +682,17 @@ func (e *Executor) execute(ctx context.Context, root string, step BuildStep, pre
 		res.ExitCode = -1
 		fmt.Fprintf(tb, "\n[step %s timed out after %s and was killed]\n", step, timeout)
 	}
+	if size, over := dirSizeOver(root, e.cfg.MaxSessionDiskBytes); over {
+		// node_modules and dist are what npm and vite produce and what the
+		// next install and build recreate; removing them is what gives the
+		// space back. Files the agent wrote are left alone.
+		reclaimBuildOutputs(root)
+		if res.ExitCode == 0 {
+			res.ExitCode = 1
+		}
+		fmt.Fprintf(tb, "\n[session disk usage passed the %d MiB limit (at least %d MiB) during step %s: the step failed and node_modules/ and dist/ were removed]\n",
+			e.cfg.MaxSessionDiskBytes>>20, size>>20, step)
+	}
 	res.DurationMs = time.Since(start).Milliseconds()
 	res.OutputBytes = tb.total
 	res.OutputTail = tb.render(e.cfg.MaxOutputTail)
@@ -702,7 +751,9 @@ func (e *Executor) runOnce(ctx context.Context, root, bin string, args, env []st
 		return 0, &OpError{Err: ErrExecStart, Msg: "cannot start build process", cause: err}
 	}
 	pid := cmd.Process.Pid
+	stopWatch := e.watchDisk(root, pid)
 	waitErr := cmd.Wait()
+	stopWatch()
 	// Reap stragglers (dev servers, watchers, background jobs) that outlived
 	// the leader. While any member is alive the pgid cannot be recycled, and if
 	// none is, kill returns ESRCH, so this cannot hit an unrelated group in
