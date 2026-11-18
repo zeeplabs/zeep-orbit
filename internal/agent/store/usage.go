@@ -312,6 +312,14 @@ func NewBudgetChecker(pool *db.Pool, opts ...BudgetOption) *BudgetChecker {
 // the call that crosses a cap is the last one. ErrNotFound when the session
 // does not exist.
 //
+// Concurrency: a session runs one turn at a time, so the session caps hold.
+// The monthly caps are shared by the user's sessions, and a call is recorded
+// only once the provider answers, so N sessions that check at the same time
+// all pass: the month can end over the cap by up to one call per concurrent
+// session, after which every session is blocked. This bound is accepted;
+// removing it needs a reservation (reserve before the call, settle after,
+// expire what a crashed worker never settled).
+//
 // When the call is allowed, the caps at or above 80% are returned as
 // warnings, in a fixed order.
 func (b *BudgetChecker) Check(ctx context.Context, userID, sessionID string) ([]BudgetWarning, error) {
