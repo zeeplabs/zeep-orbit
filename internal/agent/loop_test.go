@@ -204,6 +204,52 @@ func TestRunTurn_TurnDurationLimit(t *testing.T) {
 	}
 }
 
+// A resumed attempt (the previous worker died) does not get a fresh
+// MaxTurnDuration: the duration runs from the first claim of the run.
+func TestRunTurn_ResumedTurnKeepsTheRunStart(t *testing.T) {
+	t0 := time.Date(2026, 1, 1, 0, 10, 0, 0, time.UTC)
+	h := newHarness(t, scriptStep{resp: textResp("done")})
+	started := t0.Add(-11 * time.Minute)
+	h.st.turn.RunStartedAt = &started
+	h.st.turn.Attempts = 2
+	h.deps.Limits = Limits{MaxTurnDuration: 10 * time.Minute}
+	h.deps.Clock = func() time.Time { return t0 }
+	h.mustRun()
+
+	if fin := h.finished(); fin.Status != store.TurnLimitReached {
+		t.Fatalf("status = %q, want limit_reached", fin.Status)
+	}
+	if h.prov.calls() != 0 {
+		t.Errorf("provider calls = %d, want none past the turn's duration", h.prov.calls())
+	}
+}
+
+// A turn claimed more than MaxTurnAttempts times keeps crashing whatever
+// replica runs it: it fails instead of looping, and frees the session.
+func TestRunTurn_TooManyAttemptsFailsWithoutACall(t *testing.T) {
+	h := newHarness(t, scriptStep{resp: textResp("done")})
+	h.st.turn.Attempts = DefaultMaxTurnAttempts + 1
+	h.mustRun()
+
+	fin := h.finished()
+	if fin.Status != store.TurnFailed || fin.ErrorCode != CodeInternal {
+		t.Fatalf("finish = %+v, want failed/%s", fin, CodeInternal)
+	}
+	if h.prov.calls() != 0 {
+		t.Errorf("provider calls = %d, want none", h.prov.calls())
+	}
+}
+
+// At the cap the turn still runs: the last allowed attempt.
+func TestRunTurn_LastAllowedAttemptRuns(t *testing.T) {
+	h := newHarness(t, scriptStep{resp: textResp("done")})
+	h.st.turn.Attempts = DefaultMaxTurnAttempts
+	h.mustRun()
+	if fin := h.finished(); fin.Status != store.TurnCompleted {
+		t.Fatalf("status = %q, want completed", fin.Status)
+	}
+}
+
 func TestRunTurn_BudgetExceededBeforeCallMakesNoProviderCall(t *testing.T) {
 	h := newHarness(t)
 	h.bud.fn = func(int) error { return fmt.Errorf("%w: session token cap reached", store.ErrBudgetExceeded) }
@@ -660,6 +706,69 @@ func TestRunTurn_RecordsTokenClassesAndPurpose(t *testing.T) {
 	}
 	if got.Purpose != store.PurposeChat || !got.Reported {
 		t.Errorf("purpose/reported = %q/%v, want chat/true", got.Purpose, got.Reported)
+	}
+}
+
+// A provider that sends no usage (an openai_compatible server may omit it)
+// must not make the call free: the caps would never fire. The loop records a
+// conservative estimate, marked as not reported, so the ledger can tell it
+// apart from real counts.
+func TestRunTurn_UnreportedUsageIsRecordedAsAnEstimate(t *testing.T) {
+	resp := textResp("done")
+	resp.Usage = provider.Usage{}
+	h := newHarness(t, scriptStep{resp: resp})
+	h.deps.Limits = Limits{MaxOutputTokens: 2048}
+	h.mustRun()
+
+	if len(h.st.usage) != 1 {
+		t.Fatalf("usage records = %d, want 1", len(h.st.usage))
+	}
+	got := h.st.usage[0]
+	if got.Reported {
+		t.Error("an estimate must be recorded with Reported=false")
+	}
+	req := h.prov.reqs[0]
+	if minIn := len(req.System) / 4; got.InputTokens < minIn {
+		t.Errorf("input estimate = %d, want at least the system prompt's chars/4 (%d)", got.InputTokens, minIn)
+	}
+	if got.OutputTokens != 2048 {
+		t.Errorf("output estimate = %d, want the max_tokens of the call (2048)", got.OutputTokens)
+	}
+}
+
+// Without a max_tokens the output estimate is the reply's own size.
+func TestRunTurn_UnreportedUsageWithoutMaxTokensEstimatesTheReply(t *testing.T) {
+	resp := textResp(strings.Repeat("x", 400))
+	resp.Usage = provider.Usage{}
+	h := newHarness(t, scriptStep{resp: resp})
+	h.mustRun()
+
+	if got := h.st.usage[0]; got.OutputTokens != 100 || got.InputTokens == 0 {
+		t.Errorf("estimate = %d in / %d out, want >0 in and 100 out (400 chars / 4)", got.InputTokens, got.OutputTokens)
+	}
+}
+
+// The summarization call is estimated the same way.
+func TestCompaction_UnreportedUsageIsRecordedAsAnEstimate(t *testing.T) {
+	sum := textResp("SUMMARY: tasks page.")
+	sum.Usage = provider.Usage{}
+	h := newHarness(t, scriptStep{resp: sum}, scriptStep{resp: textResp("done")})
+	seedOldTurns(h, 4)
+	h.deps.Limits = Limits{ContextWindowTokens: 8000, KeepRecentTurns: 2}
+	h.mustRun()
+
+	var found bool
+	for _, u := range h.st.usage {
+		if u.Purpose != store.PurposeCompaction {
+			continue
+		}
+		found = true
+		if u.Reported || u.InputTokens == 0 || u.OutputTokens != summaryMaxOutputTokens {
+			t.Errorf("compaction record = %+v, want an unreported estimate with output = %d", u, summaryMaxOutputTokens)
+		}
+	}
+	if !found {
+		t.Fatal("no compaction usage recorded")
 	}
 }
 

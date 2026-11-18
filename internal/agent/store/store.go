@@ -163,6 +163,15 @@ type Turn struct {
 	// version the turn builds; nil when it builds none.
 	BriefVersion *int
 	Milestone    *int
+	// Attempts is the number of claims of the current run: 1 when the turn
+	// was claimed from pending or queued, one more on every reclaim after an
+	// expired lease (its worker died). 0 for a turn that is not running, and
+	// for one claimed by a replica from before this column.
+	Attempts int
+	// RunStartedAt is when the current run was first claimed. A reclaim keeps
+	// it, so the turn's duration limit spans every attempt; a pause for the
+	// user (awaiting_confirmation) clears it. Nil when not running.
+	RunStartedAt *time.Time
 }
 
 // Message is a row of zeep_system.builder_messages.
@@ -237,7 +246,8 @@ const sessionColumns = `id, owner_user_id, backend_app_id, title, template_kind,
 	frontend_app_id, published_sha, tokens_in, tokens_out, created_at, updated_at, backend_origin, phase`
 
 const turnColumns = `id, session_id, seq, kind, status, pending_proposal, commit_sha,
-	lease_owner, lease_until, error_code, created_at, finished_at, mode, brief_version, milestone`
+	lease_owner, lease_until, error_code, created_at, finished_at, mode, brief_version, milestone,
+	attempts, run_started_at`
 
 func scanSession(row pgx.Row) (*Session, error) {
 	var s Session
@@ -253,7 +263,8 @@ func scanSession(row pgx.Row) (*Session, error) {
 func scanTurn(row pgx.Row) (*Turn, error) {
 	var t Turn
 	err := row.Scan(&t.ID, &t.SessionID, &t.Seq, &t.Kind, &t.Status, &t.PendingProposal, &t.CommitSHA,
-		&t.LeaseOwner, &t.LeaseUntil, &t.ErrorCode, &t.CreatedAt, &t.FinishedAt, &t.Mode, &t.BriefVersion, &t.Milestone)
+		&t.LeaseOwner, &t.LeaseUntil, &t.ErrorCode, &t.CreatedAt, &t.FinishedAt, &t.Mode, &t.BriefVersion, &t.Milestone,
+		&t.Attempts, &t.RunStartedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -566,6 +577,11 @@ func (s *Store) ListTurns(ctx context.Context, ownerUserID, sessionID string) ([
 // the same turn (FOR UPDATE SKIP LOCKED). Turns of archived sessions are
 // skipped. Returns ErrNoTurn when nothing is claimable. The session moves to
 // 'running'.
+//
+// A claim from pending or queued starts a run (Attempts 1, RunStartedAt now);
+// a reclaim of an expired running turn counts one more attempt of the same
+// run and keeps its start (now when a replica from before these columns
+// claimed it first).
 func (s *Store) ClaimTurn(ctx context.Context, owner string, leaseTTL time.Duration) (*Turn, error) {
 	if owner == "" || leaseTTL <= 0 {
 		return nil, fmt.Errorf("%w: owner and a positive lease TTL are required", ErrInvalidArgument)
@@ -573,7 +589,9 @@ func (s *Store) ClaimTurn(ctx context.Context, owner string, leaseTTL time.Durat
 	t, err := scanTurn(s.pool.QueryRow(ctx,
 		`WITH claimed AS (
 		   UPDATE zeep_system.builder_turns
-		   SET lease_owner = $1, lease_until = now() + make_interval(secs => $2), status = 'running'
+		   SET lease_owner = $1, lease_until = now() + make_interval(secs => $2), status = 'running',
+		       attempts = CASE WHEN status = 'running' THEN attempts + 1 ELSE 1 END,
+		       run_started_at = CASE WHEN status = 'running' THEN COALESCE(run_started_at, now()) ELSE now() END
 		   WHERE id = (
 		     SELECT t.id FROM zeep_system.builder_turns t
 		     JOIN zeep_system.builder_sessions s ON s.id = t.session_id
@@ -608,7 +626,7 @@ func (s *Store) PeekClaimable(ctx context.Context) (*Turn, error) {
 	t, err := scanTurn(s.pool.QueryRow(ctx,
 		`SELECT t.id, t.session_id, t.seq, t.kind, t.status, t.pending_proposal, t.commit_sha,
 		        t.lease_owner, t.lease_until, t.error_code, t.created_at, t.finished_at,
-		        t.mode, t.brief_version, t.milestone
+		        t.mode, t.brief_version, t.milestone, t.attempts, t.run_started_at
 		 FROM zeep_system.builder_turns t
 		 JOIN zeep_system.builder_sessions s ON s.id = t.session_id
 		 WHERE s.status <> 'archived'
@@ -742,7 +760,10 @@ func (s *Store) FinishTurn(ctx context.Context, l Lease, p FinishParams) error {
 		`UPDATE zeep_system.builder_turns
 		 SET status = $3, commit_sha = $4, error_code = $5, pending_proposal = $6,
 		     lease_owner = NULL, lease_until = NULL,
-		     finished_at = CASE WHEN $7 THEN now() ELSE NULL END
+		     finished_at = CASE WHEN $7 THEN now() ELSE NULL END,
+		     -- A pause ends the run: the resume is a new run (ABP-06).
+		     attempts = CASE WHEN $7 THEN attempts ELSE 0 END,
+		     run_started_at = CASE WHEN $7 THEN run_started_at ELSE NULL END
 		 WHERE id = $1 AND lease_owner = $2 AND status = 'running'
 		 RETURNING session_id, seq`,
 		l.TurnID, l.Owner, p.Status, p.CommitSHA, errorCode, proposal, terminal,

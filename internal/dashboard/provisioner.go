@@ -1002,6 +1002,16 @@ func provisionZeepSystemOnce(ctx context.Context, pool *db.Pool) error {
 		   ADD COLUMN IF NOT EXISTS mode          TEXT NOT NULL DEFAULT 'build' CHECK (mode IN ('plan', 'build')),
 		   ADD COLUMN IF NOT EXISTS brief_version INT,
 		   ADD COLUMN IF NOT EXISTS milestone     INT`,
+		// Retry bound of a turn whose worker keeps dying. attempts counts the
+		// claims of the current run (1 from pending/queued, +1 on each reclaim
+		// after an expired lease); run_started_at is the first claim of the
+		// run, kept across reclaims so the duration limit spans them. Both are
+		// cleared when the turn pauses for the user. Additive and defaulted: a
+		// replica from before this change neither reads nor writes them, and
+		// the loop treats 0 / NULL as "unknown" (no cap, a fresh start).
+		`ALTER TABLE zeep_system.builder_turns
+		   ADD COLUMN IF NOT EXISTS attempts       INT NOT NULL DEFAULT 0,
+		   ADD COLUMN IF NOT EXISTS run_started_at TIMESTAMPTZ`,
 		// One row per approved build plan; the newest version is the session's
 		// brief. plan is the approved propose_build_plan arguments.
 		`CREATE TABLE IF NOT EXISTS zeep_system.builder_briefs (

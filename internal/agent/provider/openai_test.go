@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -322,14 +324,14 @@ func TestChatServerErrorExhausted(t *testing.T) {
 	var calls int32
 	srv := serve(t, func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&calls, 1)
-		writeJSON(w, 500, `{"error":"`+bodySecret+`"}`)
+		writeJSON(w, 503, `{"error":"`+bodySecret+`"}`)
 	})
 	p, _ := newTestProvider(t, srv)
 
 	_, err := p.Chat(context.Background(), userHi)
 	var pe *ErrProvider
-	if !errors.As(err, &pe) || pe.Status != 500 {
-		t.Fatalf("err = %v, want *ErrProvider{500}", err)
+	if !errors.As(err, &pe) || pe.Status != 503 {
+		t.Fatalf("err = %v, want *ErrProvider{503}", err)
 	}
 	if atomic.LoadInt32(&calls) != maxAttempts {
 		t.Fatalf("calls = %d", calls)
@@ -338,6 +340,78 @@ func TestChatServerErrorExhausted(t *testing.T) {
 	if !strings.Contains(pe.Body, bodySecret) {
 		t.Fatalf("Body must stay available for server logs, got %q", pe.Body)
 	}
+}
+
+// Generation is not idempotent: a 500, 502 or 504 may come from a request the
+// provider (or a gateway in front of it) already processed and billed, so only
+// the statuses that mean "not processed" are retried.
+func TestChatRetriesOnlyUnprocessedStatuses(t *testing.T) {
+	for _, tt := range []struct {
+		status int
+		calls  int32
+	}{
+		{500, 1}, {502, 1}, {504, 1},
+		{503, maxAttempts}, {529, maxAttempts},
+	} {
+		t.Run(strconv.Itoa(tt.status), func(t *testing.T) {
+			var calls int32
+			srv := serve(t, func(w http.ResponseWriter, r *http.Request) {
+				atomic.AddInt32(&calls, 1)
+				writeJSON(w, tt.status, `{"error":"boom"}`)
+			})
+			p, _ := newTestProvider(t, srv)
+			_, err := p.Chat(context.Background(), userHi)
+			var pe *ErrProvider
+			if !errors.As(err, &pe) || pe.Status != tt.status {
+				t.Fatalf("err = %v, want *ErrProvider{%d}", err, tt.status)
+			}
+			if got := atomic.LoadInt32(&calls); got != tt.calls {
+				t.Fatalf("calls = %d, want %d", got, tt.calls)
+			}
+		})
+	}
+}
+
+// A connection that never opened cannot have reached the provider, so it is
+// retried; a connection dropped after the request was sent is not.
+func TestChatRetriesDialFailureOnly(t *testing.T) {
+	t.Run("dial refused", func(t *testing.T) {
+		l, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		addr := l.Addr().String()
+		l.Close()
+		p, err := NewOpenAI(OpenAIConfig{BaseURL: "http://" + addr + "/v1", APIKey: testAPIKey, Model: "m"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rec := &sleepRecorder{}
+		p.sleep = rec.sleep
+		if _, err := p.Chat(context.Background(), userHi); err == nil {
+			t.Fatal("want an error")
+		}
+		if len(rec.waits) != maxAttempts-1 {
+			t.Fatalf("waits = %v, want %d retries", rec.waits, maxAttempts-1)
+		}
+	})
+	t.Run("dropped after send", func(t *testing.T) {
+		var calls int32
+		srv := serve(t, func(w http.ResponseWriter, r *http.Request) {
+			atomic.AddInt32(&calls, 1)
+			conn, _, err := w.(http.Hijacker).Hijack()
+			if err == nil {
+				conn.Close()
+			}
+		})
+		p, rec := newTestProvider(t, srv)
+		if _, err := p.Chat(context.Background(), userHi); err == nil {
+			t.Fatal("want an error")
+		}
+		if got := atomic.LoadInt32(&calls); got != 1 || len(rec.waits) != 0 {
+			t.Fatalf("calls = %d, waits = %v, want a single attempt", got, rec.waits)
+		}
+	})
 }
 
 func TestChatMalformedJSON(t *testing.T) {

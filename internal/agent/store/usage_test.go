@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -118,6 +119,53 @@ func TestBudget_MonthlyCapReached(t *testing.T) {
 	}
 	if _, err := bc.Check(ctx, e.userB, sB.ID); err != nil {
 		t.Errorf("another user must be unaffected: %v", err)
+	}
+}
+
+// The accepted bound of the monthly caps under concurrency: Check reads what
+// was recorded, and a call is recorded only after the provider answers, so N
+// sessions of one user that check at the same time all pass and the month can
+// end over the cap by up to N calls (the same rule as "the call that crosses a
+// cap is the last one", once per concurrent session). Once those calls are
+// recorded, every session of the user is blocked. A reservation would remove
+// the overshoot but needs a reserve/settle/expire cycle for calls that crash
+// mid-flight; with at most BUILDER_WORKER_CONCURRENCY turns per replica the
+// bound is small, so it is accepted.
+func TestBudget_ConcurrentSessionsOfOneUserOvershootByAtMostOneCallEach(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	e.setCaps(t, 1_000_000, 1000)
+	const n = 4
+	bc := store.NewBudgetChecker(e.pool)
+	sessions := make([]*store.Session, n)
+	for i := range sessions {
+		sessions[i] = e.session(t, e.userA, e.appA)
+	}
+	e.record(t, e.userA, sessions[0].ID, 900, 0) // 100 tokens left this month
+
+	var wg sync.WaitGroup
+	errs := make([]error, n)
+	for i := range sessions {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, errs[i] = bc.Check(ctx, e.userA, sessions[i].ID)
+		}(i)
+	}
+	wg.Wait()
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("session %d: concurrent checks under the cap all pass, got %v", i, err)
+		}
+	}
+	// Each in-flight call is recorded after its answer: 4 x 300 tokens.
+	for _, s := range sessions {
+		e.record(t, e.userA, s.ID, 200, 100)
+	}
+	for i, s := range sessions {
+		if _, err := bc.Check(ctx, e.userA, s.ID); !errors.Is(err, store.ErrMonthlyCapReached) {
+			t.Errorf("session %d after the overshoot: want ErrMonthlyCapReached, got %v", i, err)
+		}
 	}
 }
 

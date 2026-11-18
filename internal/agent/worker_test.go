@@ -173,7 +173,7 @@ func (p *gateProvider) Chat(ctx context.Context, _ provider.ChatRequest) (provid
 	}
 	return provider.ChatResponse{
 		Message:      provider.Message{Role: provider.RoleAssistant, Content: "done"},
-		Usage:        provider.Usage{InputTokens: 1, OutputTokens: 1},
+		Usage:        provider.Usage{InputTokens: 1, OutputTokens: 1, Reported: true},
 		FinishReason: provider.FinishStop,
 	}, nil
 }

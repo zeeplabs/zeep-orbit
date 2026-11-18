@@ -217,11 +217,25 @@ func RunTurn(ctx context.Context, deps Deps, lease store.Lease) error {
 	}
 	r.turn = turn
 	r.planMode = turn.Mode == store.ModePlan
+	// The duration limit spans every attempt of the run.
+	if turn.RunStartedAt != nil && turn.RunStartedAt.Before(r.start) {
+		r.start = *turn.RunStartedAt
+	}
 	sess, err := deps.Store.GetSessionByID(ctx, turn.SessionID)
 	if err != nil {
 		return fmt.Errorf("agent: load session: %w", err)
 	}
 	r.sess = sess
+
+	// Every earlier attempt of this run stopped without finishing the turn:
+	// another try would most likely fail the same way, after paying for the
+	// same model calls again. 0 is a claim by a replica from before attempts
+	// were counted.
+	if turn.Attempts > r.lim.MaxTurnAttempts {
+		r.log.Error("agent turn failed: too many attempts", "turn", turn.ID, "session", turn.SessionID,
+			"attempts", turn.Attempts, "max", r.lim.MaxTurnAttempts)
+		return r.finish(ctx, &outcome{status: store.TurnFailed, code: CodeInternal})
+	}
 
 	out, err := r.run(ctx)
 	if err != nil {
@@ -261,7 +275,7 @@ func (r *run) run(ctx context.Context) (*outcome, error) {
 	r.state = analyzeTurn(msgs, r.turn.ID)
 	r.wrote = r.state.started // work from before a crash may be uncommitted
 
-	tctx, cancel := context.WithTimeout(ctx, r.lim.MaxTurnDuration)
+	tctx, cancel := context.WithTimeout(ctx, r.lim.MaxTurnDuration-r.now().Sub(r.start))
 	defer cancel()
 
 	if err := r.emit(ctx, EventTurnStarted, map[string]any{"seq": r.turn.Seq, "resumed": r.state.started}); err != nil {
@@ -333,7 +347,7 @@ func (r *run) checkLimits(ctx, tctx context.Context) (*outcome, error) {
 	if tctx.Err() != nil || r.now().Sub(r.start) >= r.lim.MaxTurnDuration {
 		return &outcome{status: store.TurnLimitReached, limit: LimitDuration, commit: true}, nil
 	}
-	if r.state.steps >= r.lim.MaxSteps {
+	if r.state.modeSteps >= r.lim.MaxSteps {
 		return &outcome{status: store.TurnLimitReached, limit: LimitSteps, commit: true}, nil
 	}
 	if r.state.failedBuilds >= r.lim.MaxFixIterations {
@@ -398,7 +412,10 @@ func (r *run) modelProvider() provider.Provider {
 // records its usage and returns the response. A context-too-long answer is
 // retried once with a forced compaction.
 func (r *run) chat(ctx, tctx context.Context) (provider.ChatResponse, *outcome, error) {
-	var resp provider.ChatResponse
+	var (
+		resp provider.ChatResponse
+		req  provider.ChatRequest
+	)
 	force := false
 	p := r.modelProvider()
 	for {
@@ -406,7 +423,7 @@ func (r *run) chat(ctx, tctx context.Context) (provider.ChatResponse, *outcome, 
 		if err != nil {
 			return resp, nil, err
 		}
-		resp, err = p.Chat(tctx, provider.ChatRequest{
+		req = provider.ChatRequest{
 			System:          r.system,
 			Messages:        prompt,
 			Tools:           r.toolSpecs(),
@@ -414,7 +431,8 @@ func (r *run) chat(ctx, tctx context.Context) (provider.ChatResponse, *outcome, 
 			// The system prompt is built once per turn and the history only
 			// grows, so the next step starts with this prefix.
 			CacheHint: true,
-		})
+		}
+		resp, err = p.Chat(tctx, req)
 		if err == nil {
 			break
 		}
@@ -435,13 +453,14 @@ func (r *run) chat(ctx, tctx context.Context) (provider.ChatResponse, *outcome, 
 	}
 
 	// Usage first: the tokens are spent whether or not the rest persists.
+	u := recordedUsage(req, resp)
 	if err := r.deps.Store.RecordUsage(ctx, store.UsageRecord{
 		UserID: r.sess.OwnerUserID, Feature: store.FeatureBuilder, SessionID: r.sess.ID, TurnID: r.turn.ID,
 		Provider: p.Name(), Model: p.Model(),
 		Purpose:     r.usagePurpose(),
-		InputTokens: resp.Usage.InputTokens, CachedInputTokens: resp.Usage.CachedInputTokens,
-		CacheWriteTokens: resp.Usage.CacheWriteTokens, OutputTokens: resp.Usage.OutputTokens,
-		Reported: resp.Usage.Reported,
+		InputTokens: u.InputTokens, CachedInputTokens: u.CachedInputTokens,
+		CacheWriteTokens: u.CacheWriteTokens, OutputTokens: u.OutputTokens,
+		Reported: u.Reported,
 	}); err != nil {
 		return resp, nil, fmt.Errorf("record usage: %w", err)
 	}
@@ -487,6 +506,7 @@ func (r *run) persistAssistant(ctx context.Context, resp provider.ChatResponse) 
 	}
 	r.msgs = append(r.msgs, *m)
 	r.state.steps++
+	r.state.modeSteps++
 	if strings.TrimSpace(resp.Message.Content) != "" {
 		if err := r.emit(ctx, EventAssistantMessage, map[string]any{"content": capRunes(resp.Message.Content, maxAssistantEventChars)}); err != nil {
 			return nil, err

@@ -239,6 +239,52 @@ func TestPlanMode_QuestionsAndPlanPauseAndResumeIntoTheBuild(t *testing.T) {
 	}
 }
 
+// The build that starts in the same turn as an approved plan gets the whole
+// MaxSteps: the planning steps before the approval were spent in plan mode and
+// do not count against the build of milestone 1.
+func TestPlanMode_ApprovedBuildGetsItsOwnStepAllowance(t *testing.T) {
+	h := newPlanHarness(t, store.ModePlan,
+		scriptStep{resp: toolResp(askCall("a1"))},
+		scriptStep{resp: toolResp(planCall("p1"))},
+		scriptStep{resp: toolResp(writeCall("w1", "src/Patients.tsx"))},
+		scriptStep{resp: textResp("The patient list is ready.")},
+	)
+	h.deps.Limits = Limits{MaxSteps: 2}
+	h.mustRun()
+	h.resolve("a1", "The user answered: Team", `{"build_failed":false,"is_error":false}`, "")
+	h.mustRun()
+	h.resolve("p1", "The user approved the plan.", `{"build_failed":false,"is_error":false,"plan_approved":true}`, store.ModeBuild)
+	h.mustRun()
+
+	if fin := h.finished(); fin.Status != store.TurnCompleted {
+		t.Fatalf("status = %q, want completed: two build steps fit a MaxSteps of 2 (events %v)", fin.Status, h.st.eventTypes())
+	}
+	if h.prov.calls() != 4 {
+		t.Errorf("provider calls = %d, want 2 planning + 2 build", h.prov.calls())
+	}
+}
+
+// The build steps still count: a third build step is over a MaxSteps of 2.
+func TestPlanMode_ApprovedBuildStillHitsMaxSteps(t *testing.T) {
+	h := newPlanHarness(t, store.ModePlan,
+		scriptStep{resp: toolResp(planCall("p1"))},
+		scriptStep{resp: toolResp(writeCall("w1", "src/A.tsx"))},
+		scriptStep{resp: toolResp(writeCall("w2", "src/B.tsx"))},
+		scriptStep{resp: textResp("never reached")},
+	)
+	h.deps.Limits = Limits{MaxSteps: 2}
+	h.mustRun()
+	h.resolve("p1", "The user approved the plan.", `{"build_failed":false,"is_error":false,"plan_approved":true}`, store.ModeBuild)
+	h.mustRun()
+
+	if fin := h.finished(); fin.Status != store.TurnLimitReached {
+		t.Fatalf("status = %q, want limit_reached", fin.Status)
+	}
+	if h.prov.calls() != 3 {
+		t.Errorf("provider calls = %d, want 1 planning + 2 build", h.prov.calls())
+	}
+}
+
 func TestPlanMode_InvalidPlanIsAToolErrorNotAPause(t *testing.T) {
 	bad := provider.ToolCall{ID: "p1", Name: planning.ToolProposeBuildPlan, Arguments: json.RawMessage(`{"summary":"x","screens":[],"milestones":[]}`)}
 	h := newPlanHarness(t, store.ModePlan, scriptStep{resp: toolResp(bad)}, scriptStep{resp: toolResp(planCall("p2"))})

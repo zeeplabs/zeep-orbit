@@ -16,6 +16,12 @@ const (
 	DefaultCompactionThreshold = 0.8
 	DefaultKeepRecentTurns     = 2
 	DefaultMaxOutputTokens     = 0 // provider default
+	// DefaultMaxTurnAttempts is how many times one run of a turn may be
+	// claimed. A reclaim happens when the worker running it stopped without
+	// finishing it (process killed, replica lost, shutdown past the grace
+	// period); past this count the turn fails with internal_error instead of
+	// being retried by every replica in turn.
+	DefaultMaxTurnAttempts = 3
 
 	// MaxSkillLoadsPerTurn is the number of distinct skills one turn may load.
 	MaxSkillLoadsPerTurn = 5
@@ -32,9 +38,14 @@ type Limits struct {
 	// ends limit_reached as soon as the count reaches it, so the model gets
 	// MaxFixIterations-1 chances to react to a failure after the first one.
 	MaxFixIterations int
-	// MaxTurnDuration bounds the wall-clock time of one RunTurn invocation. A
-	// resumed turn gets a fresh allowance.
+	// MaxTurnDuration bounds the wall-clock time of one run of a turn,
+	// measured from its first claim (store.Turn.RunStartedAt): a turn resumed
+	// after its worker died does not get a fresh allowance. A turn resumed
+	// after a pause for the user (proposal, questions, plan) starts a new run.
 	MaxTurnDuration time.Duration
+	// MaxTurnAttempts is how many times one run may be claimed before it
+	// fails (see DefaultMaxTurnAttempts).
+	MaxTurnAttempts int
 	// ContextWindowTokens is the model's context window, used by compaction.
 	ContextWindowTokens int
 	// CompactionThreshold is the fraction of the window above which older turns
@@ -61,6 +72,9 @@ func (l Limits) withDefaults() Limits {
 	}
 	if l.MaxTurnDuration <= 0 {
 		l.MaxTurnDuration = DefaultMaxTurnDuration
+	}
+	if l.MaxTurnAttempts <= 0 {
+		l.MaxTurnAttempts = DefaultMaxTurnAttempts
 	}
 	if l.ContextWindowTokens <= 0 {
 		l.ContextWindowTokens = DefaultContextWindowTokens

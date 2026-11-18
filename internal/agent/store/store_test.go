@@ -441,6 +441,103 @@ func TestClaimTurn_ExpiredLeaseReclaimable(t *testing.T) {
 	}
 }
 
+// A claim from pending starts a run: attempt 1, run_started_at = now. A
+// reclaim after an expired lease (the worker died or panicked) is another
+// attempt of the same run: the counter grows and the start is kept, so the
+// loop can cap the retries and measure the duration across them.
+func TestClaimTurn_CountsAttemptsAndKeepsTheRunStart(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	sess := e.session(t, e.userA, e.appA)
+	turn, _ := e.claimed(t, sess, "worker-a")
+	if turn.Attempts != 1 || turn.RunStartedAt == nil {
+		t.Fatalf("first claim: attempts=%d started=%v, want 1 and a start", turn.Attempts, turn.RunStartedAt)
+	}
+	start := *turn.RunStartedAt
+
+	for want := 2; want <= 3; want++ {
+		e.expireLease(t, turn.ID)
+		re, err := e.st.ClaimTurn(ctx, fmt.Sprintf("worker-%d", want), 30*time.Second)
+		if err != nil {
+			t.Fatalf("reclaim %d: %v", want, err)
+		}
+		if re.Attempts != want {
+			t.Errorf("reclaim: attempts=%d, want %d", re.Attempts, want)
+		}
+		if re.RunStartedAt == nil || !re.RunStartedAt.Equal(start) {
+			t.Errorf("reclaim: started=%v, want the first claim's %v", re.RunStartedAt, start)
+		}
+	}
+}
+
+// During a rollout a replica from before attempts/run_started_at claims turns
+// with the old statement, which leaves both columns alone. A new replica that
+// reclaims such a turn sees attempts 0 and no start: it counts from there and
+// starts the clock now, rather than failing the turn or ending it at once.
+func TestClaimTurn_ReclaimOfATurnClaimedByAnOldReplica(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	sess := e.session(t, e.userA, e.appA)
+	turn, err := e.st.CreateTurn(ctx, e.userA, sess.ID, store.KindChat, "go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The pre-change ClaimTurn statement.
+	if _, err := e.pool.Exec(ctx,
+		`UPDATE zeep_system.builder_turns
+		 SET lease_owner = 'old-replica', lease_until = now() - interval '1 second', status = 'running'
+		 WHERE id = $1`, turn.ID); err != nil {
+		t.Fatal(err)
+	}
+	re, err := e.st.ClaimTurn(ctx, "new-replica", 30*time.Second)
+	if err != nil {
+		t.Fatalf("reclaim: %v", err)
+	}
+	if re.Attempts != 1 || re.RunStartedAt == nil || time.Since(*re.RunStartedAt) > time.Minute {
+		t.Errorf("reclaim: attempts=%d started=%v, want 1 and now", re.Attempts, re.RunStartedAt)
+	}
+}
+
+// A pause for the user (awaiting_confirmation) ends the run: the resumed turn
+// is claimed from pending and starts a new run, so the time the user took to
+// answer is not charged to the turn (ai-builder-planning ABP-06).
+func TestClaimTurn_AfterAPauseStartsANewRun(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	sess := e.session(t, e.userA, e.appA)
+	turn, _ := e.claimed(t, sess, "w1")
+	e.expireLease(t, turn.ID)
+	re, err := e.st.ClaimTurn(ctx, "w2", 30*time.Second)
+	if err != nil || re.Attempts != 2 {
+		t.Fatalf("reclaim: %+v, %v", re, err)
+	}
+	if _, err := e.pool.Exec(ctx,
+		`UPDATE zeep_system.builder_turns SET run_started_at = now() - interval '1 hour' WHERE id = $1`, turn.ID); err != nil {
+		t.Fatal(err)
+	}
+	proposal := json.RawMessage(`{"tool_call_id":"call_1"}`)
+	if err := e.st.FinishTurn(ctx, store.Lease{TurnID: turn.ID, Owner: "w2"},
+		store.FinishParams{Status: store.TurnAwaitingConfirmation, PendingProposal: proposal}); err != nil {
+		t.Fatalf("pause: %v", err)
+	}
+	paused, _ := e.st.GetTurn(ctx, turn.ID)
+	if paused.Attempts != 0 || paused.RunStartedAt != nil {
+		t.Errorf("paused: attempts=%d started=%v, want both cleared", paused.Attempts, paused.RunStartedAt)
+	}
+	// What a resolution does (ResolveProposal): back to pending.
+	if _, err := e.pool.Exec(ctx,
+		`UPDATE zeep_system.builder_turns SET status = 'pending', pending_proposal = NULL WHERE id = $1`, turn.ID); err != nil {
+		t.Fatal(err)
+	}
+	resumed, err := e.st.ClaimTurn(ctx, "w3", 30*time.Second)
+	if err != nil {
+		t.Fatalf("claim resumed: %v", err)
+	}
+	if resumed.Attempts != 1 || resumed.RunStartedAt == nil || time.Since(*resumed.RunStartedAt) > time.Minute {
+		t.Errorf("resumed: attempts=%d started=%v, want a fresh run", resumed.Attempts, resumed.RunStartedAt)
+	}
+}
+
 // AFB-18: every write by a stale lease holder is rejected with ErrLeaseLost
 // and has no effect.
 func TestLeaseChecked_StaleLeaseWritesRejected(t *testing.T) {

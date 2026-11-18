@@ -468,7 +468,7 @@ func (s *Store) ApproveBuildPlan(
 				Content:      a.Content(b.Version),
 				EventType:    EventPlanApproved,
 				EventPayload: map[string]any{"tool_call_id": p.ToolCallID, "version": b.Version, "milestones": a.Milestones, "milestone": a.Milestone},
-			}}, nil
+			}, planApproved: true}, nil
 		})
 	if err != nil {
 		return nil, nil, err
