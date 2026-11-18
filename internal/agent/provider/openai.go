@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -116,9 +117,10 @@ func (o *OpenAI) Name() string { return o.name }
 // Model implements Provider.
 func (o *OpenAI) Model() string { return o.model }
 
-// Chat implements Provider. It retries 429 and 5xx up to maxAttempts total,
-// honoring Retry-After on 429; transport failures are not retried because the
-// request may already have been processed and generation is not idempotent.
+// Chat implements Provider. It retries up to maxAttempts total only the
+// failures that mean the request was not processed (see retryable), honoring
+// Retry-After on 429; generation is not idempotent, so anything that may have
+// been processed is returned as is.
 func (o *OpenAI) Chat(ctx context.Context, req ChatRequest) (ChatResponse, error) {
 	payload, err := json.Marshal(o.buildRequest(req))
 	if err != nil {
@@ -144,16 +146,34 @@ func (o *OpenAI) Chat(ctx context.Context, req ChatRequest) (ChatResponse, error
 	return ChatResponse{}, lastErr
 }
 
-// retryable reports whether err is worth another attempt: 429 within the
-// bounded wait, or a 5xx.
+// retryable reports whether err is worth another attempt. Generation is not
+// idempotent and every generated answer is billed, so only failures that mean
+// the request was not processed are retried: 429 within the bounded wait, 503
+// (unavailable), 529 (Anthropic overloaded), and a connection that could not
+// be opened. A 500, 502 or 504, or a connection dropped after the request was
+// sent, may come from a request that was generated and billed: retrying it
+// would pay twice while the usage ledger records one call.
 func retryable(err error) bool {
 	var rl *ErrRateLimited
 	if errors.As(err, &rl) {
 		return rl.RetryAfter <= maxRetryWait
 	}
 	var pe *ErrProvider
-	return errors.As(err, &pe) && pe.Status >= 500
+	if !errors.As(err, &pe) {
+		return false
+	}
+	switch pe.Status {
+	case http.StatusServiceUnavailable, statusOverloaded:
+		return true
+	case 0:
+		var op *net.OpError
+		return errors.As(pe.Err, &op) && op.Op == "dial"
+	}
+	return false
 }
+
+// statusOverloaded is Anthropic's 529 overloaded_error.
+const statusOverloaded = 529
 
 // attempt performs one HTTP round-trip and classifies the outcome.
 func (o *OpenAI) attempt(ctx context.Context, payload []byte) (ChatResponse, error) {

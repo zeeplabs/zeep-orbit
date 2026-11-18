@@ -441,7 +441,8 @@ func TestAnthropicErrorMapping(t *testing.T) {
 		{"400 of another type mentioning context", 400, anErrBody("billing_error", "context window add-on not purchased"),
 			func(err error) bool { return errors.As(err, &pe) && !errors.Is(err, ErrContextTooLong) }, 1},
 		{"404 model", 404, anErrBody("not_found_error", "model: nope"), func(err error) bool { return errors.As(err, &pe) && pe.Status == 404 }, 1},
-		{"500 is retried", 500, anErrBody("api_error", "boom"), func(err error) bool { return errors.As(err, &pe) && pe.Status == 500 }, 3},
+		{"500 is not retried", 500, anErrBody("api_error", "boom"), func(err error) bool { return errors.As(err, &pe) && pe.Status == 500 }, 1},
+		{"503 is retried", 503, anErrBody("api_error", "unavailable"), func(err error) bool { return errors.As(err, &pe) && pe.Status == 503 }, 3},
 		{"529 is retried", 529, anErrBody("overloaded_error", "overloaded"), func(err error) bool { return errors.As(err, &pe) && pe.Status == 529 }, 3},
 	}
 	for _, tt := range tests {
@@ -554,7 +555,9 @@ func TestAnthropicResponseSizeGuard(t *testing.T) {
 }
 
 func TestAnthropicContextCancelled(t *testing.T) {
-	srv := serve(t, func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 500, anErrBody("api_error", "boom")) })
+	srv := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 529, anErrBody("overloaded_error", "overloaded"))
+	})
 	p, _ := newAnthropicTest(t, srv)
 	ctx, cancel := context.WithCancel(context.Background())
 	p.sleep = func(ctx context.Context, d time.Duration) error {

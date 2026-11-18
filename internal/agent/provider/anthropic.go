@@ -110,9 +110,9 @@ func (a *Anthropic) Name() string { return anthropicName }
 // Model implements Provider.
 func (a *Anthropic) Model() string { return a.model }
 
-// Chat implements Provider. Like the OpenAI adapter it retries 429 and 5xx
-// (which covers 529 overloaded) up to maxAttempts total, honoring Retry-After
-// on 429, and does not retry transport failures.
+// Chat implements Provider. Like the OpenAI adapter it retries, up to
+// maxAttempts total, only what retryable accepts (429, 503, 529 overloaded and
+// a connection that could not be opened), honoring Retry-After on 429.
 func (a *Anthropic) Chat(ctx context.Context, req ChatRequest) (ChatResponse, error) {
 	payload, err := json.Marshal(a.buildRequest(req))
 	if err != nil {
