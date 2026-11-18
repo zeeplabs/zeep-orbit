@@ -34,7 +34,7 @@ type Store interface {
 	AppendMessage(ctx context.Context, l store.Lease, m store.NewMessage) (*store.Message, error)
 	AppendEvent(ctx context.Context, l store.Lease, eventType string, payload any) (int64, error)
 	SaveSnapshot(ctx context.Context, l store.Lease, commitSHA string, bundle []byte) error
-	ListSnapshots(ctx context.Context, sessionID string) ([]store.Snapshot, error)
+	LatestSnapshotSHA(ctx context.Context, sessionID string) (string, error)
 	FinishTurn(ctx context.Context, l store.Lease, p store.FinishParams) error
 	RecordUsage(ctx context.Context, r store.UsageRecord) error
 	AppendBudgetWarning(ctx context.Context, l store.Lease, w store.BudgetWarning) (bool, error)
@@ -718,13 +718,11 @@ func (r *run) loadSnapshotState(ctx context.Context) error {
 	if r.snapLoaded {
 		return nil
 	}
-	snaps, err := r.deps.Store.ListSnapshots(ctx, r.sess.ID)
+	sha, err := r.deps.Store.LatestSnapshotSHA(ctx, r.sess.ID)
 	if err != nil {
-		return fmt.Errorf("list snapshots: %w", err)
+		return fmt.Errorf("latest snapshot: %w", err)
 	}
-	if len(snaps) > 0 {
-		r.lastSHA = snaps[len(snaps)-1].CommitSHA
-	}
+	r.lastSHA = sha
 	r.snapLoaded = true
 	return nil
 }
