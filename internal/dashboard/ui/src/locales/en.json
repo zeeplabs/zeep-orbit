@@ -639,6 +639,7 @@
   "settings.aiBuilder.providerForm.configDesc": "Any server that speaks the OpenAI chat API (for example Ollama, vLLM or a gateway). Used by the AI Builder.",
   "settings.aiBuilder.providerForm.baseUrl": "Base URL",
   "settings.aiBuilder.providerForm.baseUrlHint": "Absolute http or https URL of the API, without credentials or query string. Link-local and cloud metadata addresses are rejected.",
+  "settings.aiBuilder.providerForm.baseUrlChangeDropsKey": "The base URL changed: saving removes the stored API key, which belongs to the previous server. Enter the key again if the new server needs one.",
   "settings.aiBuilder.providerForm.modelPlaceholder": "e.g. llama3.1:70b",
   "settings.aiBuilder.providerForm.anthropicDesc": "The Anthropic API (Claude models). Used by the AI Builder only.",
   "settings.aiBuilder.providerForm.baseUrlError.required": "The base URL is required for this provider.",

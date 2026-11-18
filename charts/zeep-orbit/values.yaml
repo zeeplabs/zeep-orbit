@@ -187,7 +187,9 @@ builder:
       pullPolicy: IfNotPresent
     # Comma separated npm upstreams (REGISTRY_PROXY_UPSTREAMS).
     upstreams: "https://registry.npmjs.org"
-    # Optional bearer tokens for private upstreams (kept in the chart Secret).
+    # Optional bearer tokens for private upstreams. Stored in their own Secret
+    # (<release>-zeep-orbit-registry-proxy), read only by the registry proxy;
+    # never in the main chart Secret that the Orbit pods load with envFrom.
     tokenDefault: ""
     tokenCompany: ""
     resources:

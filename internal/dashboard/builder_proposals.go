@@ -45,11 +45,19 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
 
 	"github.com/zeeplabs/zeep-orbit/internal/agent/store"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/tools"
+	"github.com/zeeplabs/zeep-orbit/internal/db"
 	"github.com/zeeplabs/zeep-orbit/internal/provisioner"
 )
+
+// isBuilderLockTimeout reports a DDL lock-wait timeout: the change was rolled
+// back and can be retried in a few seconds.
+func isBuilderLockTimeout(err error) bool {
+	return errors.Is(err, provisioner.ErrDDLLockTimeout) || db.IsLockTimeout(err)
+}
 
 // builderAuditOrigin is the audit ip_address (origin marker) of schema changes
 // applied from a confirmed builder proposal.
@@ -232,7 +240,8 @@ func (h *BuilderHandler) ConfirmProposal(w http.ResponseWriter, r *http.Request)
 				var aerr error
 				outcome, aerr = h.dashboard.applyBuilderPlan(ctx, user, sess.BackendAppID, plan)
 				if aerr != nil {
-					if !errors.Is(aerr, ErrForbidden) {
+					// Nothing applied: the turn stays paused and can be retried.
+					if !errors.Is(aerr, ErrForbidden) && !isBuilderLockTimeout(aerr) {
 						applyErr = aerr
 					}
 					return nil, aerr
@@ -287,6 +296,10 @@ func (h *BuilderHandler) ConfirmProposal(w http.ResponseWriter, r *http.Request)
 			case errors.Is(aerr, ErrForbidden):
 				// Lost write access between the check above and now.
 				return nil, aerr
+			case isBuilderLockTimeout(aerr):
+				// Rolled back, nothing changed: keep the proposal paused so
+				// the user can confirm again (409).
+				return nil, aerr
 			default:
 				msg, safe := builderApplyErrorMessage(aerr)
 				if !safe {
@@ -322,6 +335,11 @@ func (h *BuilderHandler) ConfirmProposal(w http.ResponseWriter, r *http.Request)
 	case errors.Is(err, ErrForbidden):
 		h.writeError(w, http.StatusForbidden, builderForbiddenMsg)
 		return
+	case isBuilderLockTimeout(err):
+		h.logger.Warn("builder proposal confirm hit a DDL lock timeout",
+			zap.String("session_id", sess.ID), zap.Int("turn_seq", turn.Seq), zap.Error(err))
+		h.writeError(w, http.StatusConflict, provisioner.ErrDDLLockTimeout.Error())
+		return
 	case errors.Is(err, errBuilderPlanStale):
 		msg := builderPlanStaleMsg
 		var stale *builderPlanStaleError
@@ -338,6 +356,14 @@ func (h *BuilderHandler) ConfirmProposal(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	if outcome.Cause != nil {
+		// The plan stopped part way on an error with no safe message; the
+		// turn was resolved with what applied, the real error is only logged.
+		h.logger.Error("builder plan stopped by an unexpected error",
+			zap.String("session_id", sess.ID), zap.Int("turn_seq", turn.Seq),
+			zap.Int("applied_count", outcome.Applied), zap.Int("failed_index", outcome.FailedIndex),
+			zap.Error(outcome.Cause))
+	}
 	if h.poke != nil {
 		h.poke()
 	}

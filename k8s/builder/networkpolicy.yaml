@@ -29,6 +29,9 @@ spec:
       ports:
         - port: 4873
           protocol: TCP
+    # DNS to the cluster resolver (needed to resolve the proxy Service).
+    # Residual risk: recursive lookups can carry data out; see "DNS is an
+    # exfiltration channel" in docs/docs/ai-frontend-builder.md.
     - to:
         - namespaceSelector:
             matchLabels:

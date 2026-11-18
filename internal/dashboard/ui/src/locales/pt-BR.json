@@ -640,6 +640,7 @@
   "settings.aiBuilder.providerForm.configDesc": "Qualquer servidor que fale a API de chat da OpenAI (por exemplo Ollama, vLLM ou um gateway). Usado pelo AI Builder.",
   "settings.aiBuilder.providerForm.baseUrl": "URL base",
   "settings.aiBuilder.providerForm.baseUrlHint": "URL absoluta http ou https da API, sem credenciais nem query string. Endereços link-local e de metadados de nuvem são rejeitados.",
+  "settings.aiBuilder.providerForm.baseUrlChangeDropsKey": "A URL base mudou: ao salvar, a chave de API gravada, que pertence ao servidor anterior, é removida. Informe a chave de novo se o novo servidor precisar de uma.",
   "settings.aiBuilder.providerForm.modelPlaceholder": "ex.: llama3.1:70b",
   "settings.aiBuilder.providerForm.anthropicDesc": "A API da Anthropic (modelos Claude). Usada apenas pelo AI Builder.",
   "settings.aiBuilder.providerForm.baseUrlError.required": "A URL base é obrigatória para este provedor.",

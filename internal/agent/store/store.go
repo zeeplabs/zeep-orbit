@@ -1066,6 +1066,26 @@ func (s *Store) SaveInitialSnapshot(ctx context.Context, ownerUserID, sessionID,
 	return nil
 }
 
+// LatestSnapshotSHA returns the commit of a session's last snapshot in
+// (turn_seq, part) order, or "" when it has none. It reads one column of one
+// row: the agent loop only needs the head of the chain, and loading every
+// bundle (ListSnapshots) grows with the session's history. Internal; not
+// owner-scoped.
+func (s *Store) LatestSnapshotSHA(ctx context.Context, sessionID string) (string, error) {
+	var sha string
+	err := s.pool.QueryRow(ctx,
+		`SELECT commit_sha FROM zeep_system.builder_snapshots
+		 WHERE session_id = $1 ORDER BY turn_seq DESC, part DESC LIMIT 1`, sessionID,
+	).Scan(&sha)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("builder store: latest snapshot: %w", err)
+	}
+	return sha, nil
+}
+
 // ListSnapshots returns every snapshot of a session in (turn_seq, part) order,
 // bundles included (the builder replays them in order to restore a workspace).
 // Internal; not owner-scoped.

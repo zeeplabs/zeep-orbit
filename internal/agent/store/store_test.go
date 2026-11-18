@@ -909,6 +909,52 @@ func TestSnapshots_MultiplePartsPerTurnOrdered(t *testing.T) {
 	}
 }
 
+// LatestSnapshotSHA returns the commit of the last snapshot in (turn_seq,
+// part) order without loading any bundle, and "" for a session without one.
+func TestLatestSnapshotSHA(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	sess := e.session(t, e.userA, e.appA)
+
+	if sha, err := e.st.LatestSnapshotSHA(ctx, sess.ID); err != nil || sha != "" {
+		t.Fatalf("no snapshot: got %q, %v; want \"\", nil", sha, err)
+	}
+	if err := e.st.SaveInitialSnapshot(ctx, e.userA, sess.ID, "sha0", []byte("full")); err != nil {
+		t.Fatal(err)
+	}
+	if sha, err := e.st.LatestSnapshotSHA(ctx, sess.ID); err != nil || sha != "sha0" {
+		t.Fatalf("initial snapshot: got %q, %v", sha, err)
+	}
+
+	// Two turns; the first has more parts (12) than the second (2), so the
+	// latest is the second turn's last part, and part 11 sorts after part 2.
+	for turnN, parts := range []int{12, 2} {
+		_, lease := e.claimed(t, sess, "w1")
+		for part := 0; part < parts; part++ {
+			if err := e.st.SaveSnapshot(ctx, lease, fmt.Sprintf("sha-%d-%d", turnN, part), []byte("b")); err != nil {
+				t.Fatalf("SaveSnapshot: %v", err)
+			}
+		}
+		if turnN == 0 {
+			if sha, err := e.st.LatestSnapshotSHA(ctx, sess.ID); err != nil || sha != "sha-0-11" {
+				t.Fatalf("after turn 1: got %q, %v; want sha-0-11", sha, err)
+			}
+		}
+		if err := e.st.FinishTurn(ctx, lease, store.FinishParams{Status: store.TurnCompleted}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if sha, err := e.st.LatestSnapshotSHA(ctx, sess.ID); err != nil || sha != "sha-1-1" {
+		t.Fatalf("after turn 2: got %q, %v; want sha-1-1", sha, err)
+	}
+
+	// Another session's snapshots do not leak in.
+	other := e.session(t, e.userA, e.appA)
+	if sha, err := e.st.LatestSnapshotSHA(ctx, other.ID); err != nil || sha != "" {
+		t.Fatalf("other session: got %q, %v", sha, err)
+	}
+}
+
 // Concurrent saves of the same leased turn must each get a distinct part with
 // no gaps and no primary-key failure (the part is assigned under a row lock).
 func TestSnapshots_PartAssignedAtomicallyUnderConcurrentSaves(t *testing.T) {

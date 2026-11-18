@@ -165,17 +165,29 @@ func validateBuilderSettingsInput(in *BuilderSettingsInput) error {
 	if v := in.MaxTurnSeconds; v != nil && (*v < builderMinMaxTurnSeconds || *v > builderMaxMaxTurnSeconds) {
 		return fmt.Errorf("max_turn_seconds must be between %d and %d", builderMinMaxTurnSeconds, builderMaxMaxTurnSeconds)
 	}
+	// "auto" and "block" are the column's other valid values, but nothing
+	// reads either setting yet (ai-builder-backend B07, B09): refuse them
+	// rather than store a mode that changes nothing, which for "block" would
+	// read as a publish protection that does not exist.
 	if v := in.BackendApprovalMode; v != nil {
 		m := strings.TrimSpace(*v)
-		if m != BuilderApprovalAsk && m != BuilderApprovalAuto {
-			return errors.New("backend_approval_mode must be 'ask' or 'auto'")
+		switch m {
+		case BuilderApprovalAsk:
+		case BuilderApprovalAuto:
+			return errors.New("backend_approval_mode 'auto' is not supported yet; every backend change waits for the user ('ask')")
+		default:
+			return errors.New("backend_approval_mode must be 'ask'")
 		}
 		in.BackendApprovalMode = &m
 	}
 	if v := in.PublishRLSGate; v != nil {
 		g := strings.TrimSpace(*v)
-		if g != BuilderRLSGateWarn && g != BuilderRLSGateBlock {
-			return errors.New("publish_rls_gate must be 'warn' or 'block'")
+		switch g {
+		case BuilderRLSGateWarn:
+		case BuilderRLSGateBlock:
+			return errors.New("publish_rls_gate 'block' is not supported yet; publishing does not check open tables")
+		default:
+			return errors.New("publish_rls_gate must be 'warn'")
 		}
 		in.PublishRLSGate = &g
 	}

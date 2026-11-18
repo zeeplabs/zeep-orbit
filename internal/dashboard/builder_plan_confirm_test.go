@@ -14,6 +14,7 @@ import (
 
 	"github.com/zeeplabs/zeep-orbit/internal/agent/store"
 	"github.com/zeeplabs/zeep-orbit/internal/config"
+	"github.com/zeeplabs/zeep-orbit/internal/provisioner"
 )
 
 const (
@@ -338,5 +339,123 @@ func TestPlanConfirm_ProposalChangeStillWorks(t *testing.T) {
 	}
 	if got := decodeJSON[builderProposalResult](t, w); got.Kind != "add_column" || got.Total != 0 {
 		t.Errorf("response = %+v", got)
+	}
+}
+
+// bplanLockedThird creates two tables and then alters "todos", which the test
+// keeps locked: the third operation hits the DDL lock timeout, an error the
+// apply path does not map to a user message.
+const bplanLockedThird = `{"summary":"two tables then a flag","operations":[
+	{"kind":"add_table","add_table":{"name":"alpha","columns":[{"name":"body","type":"text"}],"access":"public","access_reason":"shared"}},
+	{"kind":"add_table","add_table":{"name":"beta","columns":[{"name":"body","type":"text"}],"access":"public","access_reason":"shared"}},
+	{"kind":"add_column","add_column":{"table":"todos","column":{"name":"done","type":"boolean"}}}]}`
+
+// bplanLockedFirst alters the locked "todos" first: nothing applies.
+const bplanLockedFirst = `{"summary":"flag then a table","operations":[
+	{"kind":"add_column","add_column":{"table":"todos","column":{"name":"done","type":"boolean"}}},
+	{"kind":"add_table","add_table":{"name":"alpha","columns":[{"name":"body","type":"text"}],"access":"public","access_reason":"shared"}}]}`
+
+// lockTodos holds a read lock on bprop_app.todos until the returned release
+// runs, so any ALTER on it waits for the (shortened) DDL lock timeout.
+func (e *bpropEnv) lockTodos(t *testing.T) (release func()) {
+	t.Helper()
+	shortDashboardDDLLockTimeout(t)
+	ctx := context.Background()
+	holder, err := e.pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("holder begin: %v", err)
+	}
+	if _, err := holder.Exec(ctx, `SELECT * FROM `+schemaNameForDB("bprop_app")+`.todos`); err != nil {
+		_ = holder.Rollback(ctx)
+		t.Fatalf("holder select: %v", err)
+	}
+	var once sync.Once
+	release = func() { once.Do(func() { _ = holder.Rollback(ctx) }) }
+	t.Cleanup(release)
+	return release
+}
+
+// An error the apply path does not map (here a DDL lock timeout) after some
+// operations applied must still resolve the turn with what ran: those
+// operations cannot be undone, and a paused turn could only be re-confirmed
+// into a stale plan (400) or rejected, hiding the partial apply from the agent.
+func TestPlanConfirm_UnmappedFailureAfterPartialApplyResolvesTurn(t *testing.T) {
+	e := newBPropEnv(t)
+	sess, turn := e.awaitingTool(t, e.owner, ToolProposeBackendPlan, bplanLockedThird)
+	release := e.lockTodos(t)
+
+	w := e.confirm(t, e.owner, sess.ID, turn.ID)
+	release()
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "applied 2 of 3 operations; operation 3 (add_column todos) failed") {
+		t.Errorf("user message = %s", w.Body.String())
+	}
+	if names := e.tableNames(t); !names["alpha"] || !names["beta"] {
+		t.Errorf("operations 1 and 2 should stay applied: %v", names)
+	}
+	if e.hasColumn(t, "done") {
+		t.Error("operation 3 must not be applied")
+	}
+	if st := e.turn(t, turn.ID); st.Status != store.TurnPending {
+		t.Errorf("turn must resume so the agent learns what ran: %+v", st)
+	}
+	tm := e.toolMessages(t, sess.ID)
+	if len(tm) != 1 || !strings.Contains(tm[0].Content, "Applied 2 of 3 operations: add_table alpha, add_table beta.") ||
+		!strings.Contains(tm[0].Content, "Operation 3 (add_column todos) failed:") {
+		t.Errorf("tool messages = %+v", tm)
+	}
+	p := e.lastEventPayload(t, e.owner, sess.ID, store.EventProposalConfirmed)
+	if p["applied"] != false || p["applied_count"] != float64(2) || p["failed_index"] != float64(2) || p["total"] != float64(3) {
+		t.Errorf("event payload = %v", p)
+	}
+	if d := e.confirmAuditDetails(t); d["applied"] != false || d["applied_count"] != float64(2) {
+		t.Errorf("audit details = %v", d)
+	}
+}
+
+// A lock timeout before anything applied changed nothing: the turn stays
+// paused and the answer is a retryable 409, like every other DDL route.
+func TestPlanConfirm_LockTimeoutBeforeAnyOperationIs409(t *testing.T) {
+	e := newBPropEnv(t)
+	sess, turn := e.awaitingTool(t, e.owner, ToolProposeBackendPlan, bplanLockedFirst)
+	release := e.lockTodos(t)
+
+	w := e.confirm(t, e.owner, sess.ID, turn.ID)
+	release()
+	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), provisioner.ErrDDLLockTimeout.Error()) {
+		t.Fatalf("want 409 lock timeout, got %d: %s", w.Code, w.Body.String())
+	}
+	if st := e.turn(t, turn.ID); st.Status != store.TurnAwaitingConfirmation {
+		t.Fatalf("turn must stay paused: %+v", st)
+	}
+	if n := len(e.toolMessages(t, sess.ID)); n != 0 {
+		t.Errorf("%d tool results written for a plan that changed nothing", n)
+	}
+	// Once the lock is gone the same confirm applies the whole plan.
+	if w := e.confirm(t, e.owner, sess.ID, turn.ID); w.Code != http.StatusOK {
+		t.Fatalf("retry: want 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if !e.hasColumn(t, "done") || !e.tableNames(t)["alpha"] {
+		t.Error("the retried plan was not applied")
+	}
+}
+
+func TestProposalConfirm_LockTimeoutIs409AndStaysPaused(t *testing.T) {
+	e := newBPropEnv(t)
+	sess, turn := e.awaiting(t, e.owner, bpropAddColumn)
+	release := e.lockTodos(t)
+
+	w := e.confirm(t, e.owner, sess.ID, turn.ID)
+	release()
+	if w.Code != http.StatusConflict {
+		t.Fatalf("want 409, got %d: %s", w.Code, w.Body.String())
+	}
+	if st := e.turn(t, turn.ID); st.Status != store.TurnAwaitingConfirmation {
+		t.Fatalf("turn must stay paused: %+v", st)
+	}
+	if w := e.confirm(t, e.owner, sess.ID, turn.ID); w.Code != http.StatusOK {
+		t.Fatalf("retry: want 200, got %d: %s", w.Code, w.Body.String())
 	}
 }

@@ -76,10 +76,14 @@ type BuilderSettings struct {
 	MaxStepsPerTurn     int   `json:"max_steps_per_turn"`
 	MaxFixIterations    int   `json:"max_fix_iterations"`
 	MaxTurnSeconds      int   `json:"max_turn_seconds"`
-	// BackendApprovalMode: "ask" (every backend change waits for the user) or
-	// "auto" (additive changes on a builder-created backend apply directly).
+	// BackendApprovalMode: "ask" (every backend change waits for the user).
+	// "auto" (additive changes on a builder-created backend apply directly) is
+	// planned (ai-builder-backend B07) and refused by the API until the loop
+	// reads this setting.
 	BackendApprovalMode string `json:"backend_approval_mode"`
-	// PublishRLSGate: "warn" lists open tables on publish, "block" refuses.
+	// PublishRLSGate: "warn" (the default) will list open tables on publish
+	// and "block" refuse it (ai-builder-backend B09). Publish does not read
+	// this yet, so the API refuses "block" until it does.
 	PublishRLSGate string `json:"publish_rls_gate"`
 	// CostCurrency is the currency of prices and stored costs: always "USD"
 	// since ai-model-catalog (the catalog's currency). CostCurrencyChangedAt

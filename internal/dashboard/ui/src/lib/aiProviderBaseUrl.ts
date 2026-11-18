@@ -28,3 +28,13 @@ export function validateAIProviderBaseUrl(raw: string): AIProviderBaseUrlError |
   if (s.includes('?') || s.includes('#')) return 'query'
   return null
 }
+
+/**
+ * True when saving `typed` would replace the stored base URL `saved`. The server compares the
+ * normalized forms (trimmed, no trailing slash) and drops the stored API key when they differ
+ * and no new key is sent, so the form warns before that happens.
+ */
+export function aiProviderBaseUrlChanged(typed: string, saved: string): boolean {
+  const norm = (s: string) => s.trim().replace(/\/+$/, '')
+  return norm(typed) !== norm(saved)
+}

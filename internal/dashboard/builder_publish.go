@@ -647,12 +647,14 @@ func treeExcluded(name string) bool {
 }
 
 // isEnvFile reports whether a file name is a dotenv file that can hold values,
-// as opposed to a committed template of one.
+// as opposed to a committed template of one. The match ignores case: ".ENV"
+// or ".Env.local" can hold the same secrets and would otherwise be published.
 func isEnvFile(base string) bool {
+	base = strings.ToLower(base)
 	if base != ".env" && !strings.HasPrefix(base, ".env.") {
 		return false
 	}
-	switch strings.ToLower(strings.TrimPrefix(base, ".env.")) {
+	switch strings.TrimPrefix(base, ".env.") {
 	case "example", "sample", "template", "defaults":
 		return false
 	}

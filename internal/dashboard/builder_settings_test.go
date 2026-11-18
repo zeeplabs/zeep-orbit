@@ -240,19 +240,36 @@ func TestBuilderSettings_BackendSettingsMergeAndDefault(t *testing.T) {
 		t.Fatalf("first save must default to ask/warn: %+v", got)
 	}
 
-	got = put(`{"backend_approval_mode":"auto","publish_rls_gate":"block"}`)
-	if got.BackendApprovalMode != "auto" || got.PublishRLSGate != "block" || !got.Enabled {
+	// The implemented values are accepted explicitly and keep the rest.
+	got = put(`{"backend_approval_mode":"ask","publish_rls_gate":"warn"}`)
+	if got.BackendApprovalMode != "ask" || got.PublishRLSGate != "warn" || !got.Enabled {
 		t.Fatalf("both settings must apply and keep the rest: %+v", got)
 	}
-
-	// Sending one key keeps the other; unrelated keys keep both.
-	got = put(`{"backend_approval_mode":"ask"}`)
-	if got.BackendApprovalMode != "ask" || got.PublishRLSGate != "block" {
-		t.Errorf("approval-only update must keep the publish check: %+v", got)
-	}
 	got = put(`{"max_steps_per_turn":12}`)
-	if got.BackendApprovalMode != "ask" || got.PublishRLSGate != "block" || got.MaxStepsPerTurn != 12 {
+	if got.BackendApprovalMode != "ask" || got.PublishRLSGate != "warn" || got.MaxStepsPerTurn != 12 {
 		t.Errorf("an unrelated update must keep both backend settings: %+v", got)
+	}
+}
+
+// "auto" approval and the "block" publish check are not implemented yet
+// (ai-builder-backend B07, B09): nothing reads them, so storing them would
+// claim a protection (block) or a behavior (auto) that does not exist. They
+// are refused with a 400 that says so, and nothing is written.
+func TestBuilderSettings_UnimplementedBackendModesRefused(t *testing.T) {
+	pool, h := builderSettingsTestPool(t)
+	super := mustCreateSuperadmin(t, pool)
+
+	for body, want := range map[string]string{
+		`{"backend_approval_mode":"auto"}`: "backend_approval_mode 'auto' is not supported yet",
+		`{"publish_rls_gate":"block"}`:     "publish_rls_gate 'block' is not supported yet",
+	} {
+		w := callBuilder(t, h.UpsertBuilderSettingsConfig, super, http.MethodPut, "/x", body)
+		if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), want) {
+			t.Errorf("PUT %s: want 400 %q, got %d: %s", body, want, w.Code, w.Body.String())
+		}
+	}
+	if n := builderSettingsRowCount(t, pool); n != 0 {
+		t.Fatalf("refused PUTs must not create the row, found %d", n)
 	}
 }
 

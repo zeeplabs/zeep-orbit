@@ -84,7 +84,12 @@ func GetAIProvider(ctx context.Context, pool *db.Pool, provider string) (*AIProv
 // key (if any) is preserved untouched — merge-on-absent-key, same semantics
 // as auth_providers_store.go's mergeProviderConfig (AIBC-03). input.BaseURL
 // follows the same rule: nil keeps the stored value (the caller must already
-// have validated a non-nil one with normalizeAIProviderBaseURL).
+// have validated a non-nil one with normalizeAIProviderBaseURL). One
+// exception: a base URL different from the stored one with no new key drops
+// the stored key, because the key was given for the old host and the provider
+// sends it as a Bearer header to whatever host the URL names. Without this, a
+// PUT that only changes base_url (one stolen superadmin session) would
+// exfiltrate a key that is never readable over the API.
 func UpsertAIProvider(ctx context.Context, pool *db.Pool, provider string, input *aiProviderUpsertInput) (*AIProviderResponse, error) {
 	encrypted := ""
 	if input.APIKey != "" {
@@ -112,7 +117,10 @@ func UpsertAIProvider(ctx context.Context, pool *db.Pool, provider string, input
 		 VALUES ($1, $2, $3, $4, $6, now())
 		 ON CONFLICT (provider) DO UPDATE SET
 		   model             = $2,
-		   api_key_encrypted = CASE WHEN $3 = '' THEN ai_providers.api_key_encrypted ELSE $3 END,
+		   api_key_encrypted = CASE
+		     WHEN $3 <> '' THEN $3
+		     WHEN $5::boolean AND $6 IS DISTINCT FROM ai_providers.base_url THEN ''
+		     ELSE ai_providers.api_key_encrypted END,
 		   enabled           = $4,
 		   base_url          = CASE WHEN $5::boolean THEN $6 ELSE ai_providers.base_url END,
 		   updated_at        = now()

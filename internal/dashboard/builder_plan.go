@@ -436,30 +436,52 @@ type builderPlanOutcome struct {
 	Applied     int
 	FailedIndex int // -1 when every operation applied
 	FailedMsg   string
+	// Cause is the unexpected error (no safe message) that stopped the plan
+	// after some operations had applied. The caller logs it; it is never
+	// shown to the user or the model.
+	Cause error
 }
 
 // applyBuilderPlan applies the operations in order through the edit chat's
 // path and stops at the first failure. It is not atomic: operations before
 // the failing one stay applied (spec assumption 5). A failure the app reports
-// with a safe message ends in the outcome; any other error (infrastructure,
-// lost access) is returned as is, with the outcome of what ran before it.
+// with a safe message ends in the outcome. Any other error (infrastructure,
+// lock timeout, lost access) is returned as is only while nothing has applied,
+// so the caller can leave the proposal paused for a retry; once an operation
+// applied it cannot be undone, so the error ends in the outcome too, with a
+// generic message and the real error in Cause.
 func (h *Handler) applyBuilderPlan(ctx context.Context, user *DashboardUser, appID string, plan *BuilderPlan) (builderPlanOutcome, error) {
 	out := builderPlanOutcome{FailedIndex: -1}
 	for i, po := range plan.Ops {
 		if _, err := h.applyEditOperation(ctx, user, appID, po.Op, builderAuditOrigin); err != nil {
-			if errors.Is(err, ErrForbidden) {
+			if !errors.Is(err, ErrForbidden) {
+				if msg, safe := builderApplyErrorMessage(err); safe {
+					out.FailedIndex, out.FailedMsg = i, msg
+					return out, nil
+				}
+			}
+			if out.Applied == 0 {
 				return out, err
 			}
-			msg, safe := builderApplyErrorMessage(err)
-			if !safe {
-				return out, err
-			}
-			out.FailedIndex, out.FailedMsg = i, msg
+			out.FailedIndex, out.FailedMsg, out.Cause = i, builderPlanStopMessage(err), err
 			return out, nil
 		}
 		out.Applied++
 	}
 	return out, nil
+}
+
+// builderPlanStopMessage is the safe message for an error without one that
+// stopped a plan part way: what the user and the model may know about it.
+func builderPlanStopMessage(err error) string {
+	switch {
+	case isBuilderLockTimeout(err):
+		return "the table was busy with another operation and this operation timed out without changing anything."
+	case errors.Is(err, ErrForbidden):
+		return "you no longer have write access to this app."
+	default:
+		return "an unexpected server error stopped it; check the schema before retrying."
+	}
 }
 
 // builderOpTable is the table an operation targets ("" for toggle_auth).

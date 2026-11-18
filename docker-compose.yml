@@ -10,9 +10,11 @@ services:
       # in .env and start with `docker compose --profile builder up -d`.
       BUILDER_URL: ${BUILDER_URL:-}
       BUILDER_SHARED_SECRET: ${BUILDER_SHARED_SECRET:-}
+    # Not on builder_internal: generated code in the builder must not reach
+    # zeep:8080. zeep calls the builder through builder-edge instead.
     networks:
       - default
-      - builder_internal
+      - builder_edge
     depends_on:
       db:
         condition: service_healthy
@@ -36,8 +38,17 @@ services:
 
   # ---- AI frontend builder (profile "builder") ----
   # Runs generated, untrusted code. It sits ONLY on builder_internal (no
-  # gateway, no DNS to the outside), so it can reach neither db:5432 nor the
-  # internet. Its single way out is the registry proxy (npm, GET/HEAD only).
+  # gateway, no DNS to the outside), so it can reach neither db:5432, nor
+  # zeep:8080, nor the internet. Its single way out is the registry proxy (npm
+  # package metadata and tarballs, GET/HEAD only).
+  #
+  #   zeep --(builder_edge)--> builder-edge --(builder_internal)--> builder:8081
+  #   builder --(builder_internal)--> registry-proxy --(egress)--> npm
+  #
+  # zeep is not on builder_internal: it reaches the builder through
+  # builder-edge, a plain TCP forwarder that answers as "builder" on
+  # builder_edge, so BUILDER_URL=http://builder:8081 keeps working. The
+  # builder never opens a connection to zeep; zeep is the one that calls it.
   builder:
     profiles: [builder]
     build:
@@ -46,7 +57,11 @@ services:
     image: zeep-builder:local
     restart: unless-stopped
     networks:
-      - builder_internal
+      builder_internal:
+        # Unique name for builder-edge to dial: on builder-edge itself
+        # "builder" is also its own alias on builder_edge.
+        aliases:
+          - builder-daemon
     environment:
       BUILDER_ADDR: ":8081"
       # `:?` would make plain `docker compose up` fail for everyone, because
@@ -115,8 +130,36 @@ services:
       retries: 5
       start_period: 2s
 
+  # TCP forwarder from zeep to the builder (same image and pattern as `edge`
+  # in deploy/builder.compose.yml). No application logic, no shell, no
+  # internet route: both of its networks are internal.
+  builder-edge:
+    profiles: [builder]
+    image: alpine/socat:1.8.0.3
+    restart: unless-stopped
+    command: ["TCP-LISTEN:8081,fork,reuseaddr", "TCP:builder-daemon:8081"]
+    user: "65534:65534"
+    networks:
+      builder_internal: {}
+      builder_edge:
+        aliases:
+          - builder
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 64m
+    depends_on:
+      builder:
+        condition: service_healthy
+
 networks:
   builder_internal:
+    internal: true
+  # zeep <-> builder-edge only. Internal too: nothing on it needs a gateway
+  # (zeep keeps its internet route through `default`).
+  builder_edge:
     internal: true
   egress: {}
 

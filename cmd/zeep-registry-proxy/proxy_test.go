@@ -411,3 +411,75 @@ func TestParseUpstreams(t *testing.T) {
 		})
 	}
 }
+
+func TestIsPackagePath(t *testing.T) {
+	allowed := []string{
+		"/left-pad",
+		"/JSONStream",
+		"/left-pad/-/left-pad-1.0.0.tgz",
+		"/@company/pkg",
+		"/@company%2Fpkg",
+		"/@company%2fpkg",
+		"/@company/pkg/-/pkg-1.0.0.tgz",
+		"/@company%2Fpkg/-/pkg-1.0.0.tgz",
+		"/@types/node/-/node-20.11.0.tgz",
+	}
+	for _, p := range allowed {
+		if !isPackagePath(p) {
+			t.Errorf("%s: rejected, want allowed", p)
+		}
+	}
+	rejected := []string{
+		"/",
+		"/-/whoami",
+		"/-/npm/v1/tokens",
+		"/-/npm/v1/user",
+		"/-/v1/search",
+		"/-/package/left-pad/dist-tags",
+		"/-/org/company/user",
+		"/-/npm/v1/security/advisories/bulk",
+		"/left-pad/latest",
+		"/left-pad/-/left-pad-1.0.0.tgz/extra",
+		"/left-pad/-/left-pad-1.0.0.zip",
+		"/left-pad/",
+		"/@company",
+		"/@company/",
+		"/@company/-/whoami",
+		"/@company%2F-whoami",
+		"/.hidden",
+		"/_session",
+		"/%2D/whoami",
+		"/a%zz",
+	}
+	for _, p := range rejected {
+		if isPackagePath(p) {
+			t.Errorf("%s: allowed, want rejected", p)
+		}
+	}
+}
+
+func TestNonPackagePathsAreRejectedBeforeUpstream(t *testing.T) {
+	up := newFakeUpstream(t, "def", nil)
+	p, _ := newTestProxy(t, up.URL, map[string]string{"REGISTRY_PROXY_TOKEN_DEFAULT": "tok-default"})
+
+	for _, target := range []string{"/-/whoami", "/-/npm/v1/tokens", "/-/v1/search?text=x", "/left-pad/latest"} {
+		rec := do(p, http.MethodGet, target, nil)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("%s: status = %d, want 403", target, rec.Code)
+		}
+		if !strings.Contains(rec.Body.String(), "path not allowed") {
+			t.Errorf("%s: body = %q, want an English explanation", target, rec.Body.String())
+		}
+	}
+	if n := len(up.hits()); n != 0 {
+		t.Fatalf("upstream received %d requests, want 0 (the token must never be sent for them)", n)
+	}
+
+	// Package endpoints still carry the token.
+	if rec := do(p, http.MethodGet, "/left-pad/-/left-pad-1.0.0.tgz", nil); rec.Code != http.StatusOK {
+		t.Fatalf("tarball: status = %d, want 200", rec.Code)
+	}
+	if got := up.hits()[0].auth; got != "Bearer tok-default" {
+		t.Errorf("tarball auth = %q, want the upstream token", got)
+	}
+}

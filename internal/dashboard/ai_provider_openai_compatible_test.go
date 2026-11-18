@@ -92,21 +92,54 @@ func TestOpenAICompatible_ModelOnlyUpdateKeepsKeyAndBaseURL(t *testing.T) {
 	}
 }
 
-// An explicit new base_url replaces the stored one while the key is kept.
-func TestOpenAICompatible_BaseURLChangeKeepsKey(t *testing.T) {
+// A new base_url without a new api_key drops the stored key: the key was
+// given for the old host, and keeping it would send it (as a Bearer header)
+// to whatever host the new URL names. Re-sending the same base_url (the form
+// always sends it) keeps the key, and a new key with the new URL is stored.
+func TestOpenAICompatible_BaseURLChangeClearsKeyUnlessResent(t *testing.T) {
 	pool, h := aiProviderHandlerTestPool(t)
 	super := mustCreateSuperadmin(t, pool)
+	resolve := func() *AIProviderRuntime {
+		t.Helper()
+		rt, err := ResolveAIProviderRuntime(context.Background(), pool, ocProvider)
+		if err != nil {
+			t.Fatalf("resolve: %v", err)
+		}
+		return rt
+	}
 
 	putOpenAICompatible(t, h, super, ocProvider, `{"model":"m","api_key":"sk-stay","base_url":"https://a.example/v1","enabled":true}`)
-	if w := putOpenAICompatible(t, h, super, ocProvider, `{"model":"m","base_url":"https://b.example/v1","enabled":true}`); w.Code != http.StatusOK {
-		t.Fatalf("PUT: %d %s", w.Code, w.Body.String())
+
+	// Same URL (written differently, normalized to the same value): key kept.
+	if w := putOpenAICompatible(t, h, super, ocProvider, `{"model":"m","base_url":" https://a.example/v1/ ","enabled":true}`); w.Code != http.StatusOK {
+		t.Fatalf("PUT same URL: %d %s", w.Code, w.Body.String())
 	}
-	rt, err := ResolveAIProviderRuntime(context.Background(), pool, ocProvider)
-	if err != nil {
-		t.Fatalf("resolve: %v", err)
+	if rt := resolve(); rt.APIKey != "sk-stay" {
+		t.Fatalf("re-sending the same base_url must keep the key, keyKept=%v", rt.APIKey == "sk-stay")
 	}
-	if rt.BaseURL != "https://b.example/v1" || rt.APIKey != "sk-stay" {
-		t.Fatalf("unexpected runtime: baseURL=%q keyKept=%v", rt.BaseURL, rt.APIKey == "sk-stay")
+
+	// New URL, no key: the stored key is dropped.
+	w := putOpenAICompatible(t, h, super, ocProvider, `{"model":"m","base_url":"https://b.example/v1","enabled":true}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("PUT new URL: %d %s", w.Code, w.Body.String())
+	}
+	var put AIProviderResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &put); err != nil {
+		t.Fatalf("unmarshal PUT: %v", err)
+	}
+	if put.HasKey || put.BaseURL != "https://b.example/v1" {
+		t.Fatalf("PUT body = %+v, want has_key false and the new base_url", put)
+	}
+	if rt := resolve(); rt.APIKey != "" || rt.BaseURL != "https://b.example/v1" {
+		t.Fatalf("the old key must not follow the base_url to a new host: baseURL=%q keyKept=%v", rt.BaseURL, rt.APIKey == "sk-stay")
+	}
+
+	// New URL with a new key: the new key is stored.
+	if w := putOpenAICompatible(t, h, super, ocProvider, `{"model":"m","api_key":"sk-new","base_url":"https://c.example/v1","enabled":true}`); w.Code != http.StatusOK {
+		t.Fatalf("PUT new URL and key: %d %s", w.Code, w.Body.String())
+	}
+	if rt := resolve(); rt.APIKey != "sk-new" || rt.BaseURL != "https://c.example/v1" {
+		t.Fatalf("unexpected runtime: baseURL=%q newKey=%v", rt.BaseURL, rt.APIKey == "sk-new")
 	}
 }
 
