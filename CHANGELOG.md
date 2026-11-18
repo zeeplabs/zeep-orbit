@@ -9,7 +9,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [1.12.0] — 2026-11-18
+## [1.12.0-beta.1] — 2026-11-18
 
 ### Added
 
@@ -73,6 +73,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **The AI Frontend Builder no longer tells users that sign-up is closed.** A real session for a clinic CRM created `pacientes` with access `public` (no row protection) and said "only staff can enter". Email sign-up on an Orbit app is open and cannot be closed, so any stranger could create an account and read and change every patient. The agent prompt now states that rule and forbids claiming a team-only or administrator-created access; tables with data about people are not `public` unless the user asks for it after being told; the confirmation cards, the plan cards, the `public` and `signed_in` descriptions and the validator messages now say that every account (and so anyone who signs up) can reach the table. Orbit can limit a table to a role (a row policy per action bound to a role such as `staff`, with the role assigned in the dashboard), but the builder cannot create that policy yet because it only offers the six policy templates. This fix changes what the user is told, not what the builder can enforce; `.specs/features/ai-builder-role-access/` covers the missing template.
 - **Model output can no longer trigger a network request from the AI chat drawers.** A remote `<img>` in a model reply is a data-exfiltration channel under prompt injection (the browser fetches the URL, leaking whatever the injected text put in it). `ChatMarkdown` drops it for the existing "Build with AI" and "Edit with AI" drawers as well as the builder chat. Links are unchanged: they open only when the user clicks.
 - **AI Frontend Builder runs untrusted code, so it is isolated by design, and the limits of that isolation are documented.** No route from the builder to Postgres or the internet (Compose `internal: true` network, Kubernetes NetworkPolicy), no LLM, GitHub or Render key in the builder, no `docker.sock` in any manifest, signed and expiring Orbit-to-builder requests, a sandboxed preview with a scoped, path-carried token (redacted from logs), and provider errors logged on the server but never returned to users. What it does not protect against is written down in `docs/docs/ai-frontend-builder.md`: all sessions share one builder container, user and volume (no isolation between hostile users), code the agent writes (`npm run lint`, the Vite config) still executes inside the container, NetworkPolicy needs a CNI that enforces it, and isolation on Easypanel and Swarm is unverified.
+
+## [1.11.1] — 2026-11-18
+
+### Added
+
+- **Default end-user role per app.** The role a new end user gets on first sign-in (email or Google) is no longer fixed to `member`: an app admin picks any of the app's roles as the default in the app's **End-user roles** panel, or sends `default_role` to `PUT /dashboard/api/apps/{id}/roles` (a request with only `default_role` leaves the role list untouched). The default is stored in the `DEFAULT` of the app's `_auth_users.role` column, so every replica applies it at once. The default role can't be removed from the list until another one is chosen, and existing apps keep `member`.
 
 ## [1.11.0] — 2026-10-23
 

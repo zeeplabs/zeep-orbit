@@ -59,9 +59,15 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}${{ matrix.suffix }}
+          # latest is explicit and stable-only: a pre-release tag (v1.2.3-beta.1,
+          # any tag with a "-") is published under its own version and never moves
+          # latest or the major.minor tag.
+          flavor: |
+            latest=false
           tags: |
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ !contains(github.ref_name, '-') }}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
             type=ref,event=branch
             type=sha,prefix=sha-,format=short
 
@@ -137,3 +143,6 @@ jobs:
           files: .helm-packages/*.tgz
           body_path: release-body.md
           generate_release_notes: ${{ steps.notes.outputs.found != 'true' }}
+          # A pre-release is never the repository's "latest" release, which the
+          # dashboard's update banner reads (/releases/latest).
+          prerelease: ${{ contains(github.ref_name, '-') }}

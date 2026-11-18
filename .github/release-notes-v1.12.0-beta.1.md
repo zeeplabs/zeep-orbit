@@ -1,4 +1,17 @@
-## v1.12.0
+## v1.12.0-beta.1
+
+> **Pre-release (beta).** It is published only under its own version: `latest`, `1.12` and the GitHub "Latest release" stay on v1.11.1, so nothing upgrades to it by accident. Use it in a controlled environment and report what you find; the stable v1.12.0 follows after real use.
+>
+> **Install it by version, and set the image tag explicitly.** The chart's default `image.tag` is `latest`, which is still v1.11.1:
+>
+> ```bash
+> docker pull ghcr.io/zeeplabs/zeep-orbit:1.12.0-beta.1
+> helm upgrade --install zeep-orbit <chart-1.12.0-beta.1.tgz from this release> --set image.tag=1.12.0-beta.1
+> ```
+>
+> The builder and registry-proxy images use the chart `appVersion` by default (`1.12.0-beta.1`). The beta chart is attached to this release and is not in the Helm repository, so a plain `helm install` never picks it up.
+>
+> The dashboard of a beta install shows "New version available: v1.11.1", because the update banner only compares for equality. Ignore it.
 
 Minor release that adds the **AI Frontend Builder**: describe a frontend in a chat, preview it live against a backend app, and publish it. It ships with a chat-style home, planning, cost accounting and two new services (the builder and an npm registry proxy). **The builder is off by default.** An installation that does not set `BUILDER_URL` behaves as in v1.11.0, apart from the text changes listed below.
 

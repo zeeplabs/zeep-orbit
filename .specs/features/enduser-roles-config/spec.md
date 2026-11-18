@@ -147,3 +147,7 @@ Toda ambiguidade está resolvida ou registrada aqui — nada fica silenciosament
 - [x] Nenhum dos dois pontos de UI (`RoleCell`, `TablePolicies`) aceita mais texto livre pra role quando `enduser_roles_config` não está vazio.
 - [x] Nenhum app existente perde acesso/funcionalidade após a migração (roles órfãs continuam funcionando, seed automático garante lista não-vazia).
 - [x] Tentativa de remover role em uso retorna erro claro (contagem de usos), nunca falha silenciosa.
+
+## Atualização 2026-11-18 — papel padrão configurável
+
+O default deixou de ser fixo em `member`: cada app tem `apps.default_enduser_role` (padrão `member`, apps existentes inalterados), espelhado no `DEFAULT` de `_auth_users.role` na mesma transação (`PUT /apps/{id}/roles` com `default_role`). O papel padrão não pode ser removido da lista (409 `role is default`) enquanto for o padrão; um app legado com `member` fora da lista continua funcionando e a tela avisa.
