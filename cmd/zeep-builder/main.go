@@ -126,6 +126,11 @@ func loadConfig(getenv func(string) string) (config, error) {
 }
 
 func run() error {
+	// First, before any build step can start: keep same-uid children from
+	// reading the shared secret out of /proc/<pid>/environ.
+	if err := hardenProcess(); err != nil {
+		return err
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 

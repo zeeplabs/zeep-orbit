@@ -27,6 +27,7 @@ import type {
   BuilderSettingsUpdate,
 } from '@/lib/api'
 import { formatCalendarDate, formatDateTime } from '@/lib/format'
+import { useUnsavedChangesGuard } from '@/lib/useUnsavedChangesGuard'
 import { decimalFromMicros, formatMoney, isDecimalAmount, microsFromDecimal } from '@/lib/money'
 import { CatalogPricesTable } from './CatalogPricesTable'
 import { Notice, SectionCard } from './builderSettingsParts'
@@ -88,6 +89,15 @@ function CostSettingsCard() {
   useEffect(() => {
     if (settingsQuery.data && form === null) setForm(toCostForm(settingsQuery.data))
   }, [settingsQuery.data, form])
+
+  // Only typed edits count: a pending currency review alone is not something the user
+  // would lose by leaving. The hook cannot sit after the early returns below.
+  const serverSettings = settingsQuery.data
+  useUnsavedChangesGuard(
+    form !== null &&
+      serverSettings !== undefined &&
+      CAP_KEYS.some((key) => parseCap(form[key]) !== serverSettings[key]),
+  )
 
   const title = t('settings.aiBuilder.costs.title')
   if (settingsQuery.isLoading || (settingsQuery.data && form === null)) {
@@ -294,8 +304,11 @@ function PriceTableCard() {
   const upsert = useUpsertBuilderPrice()
   const del = useDeleteBuilderPrice()
   const [form, setForm] = useState<PriceForm | null>(null)
+  // What the form held when it was opened, so an untouched open form does not count as edited.
+  const [opened, setOpened] = useState<PriceForm | null>(null)
   const [submitted, setSubmitted] = useState(false)
   const [toDelete, setToDelete] = useState<BuilderModelPrice | null>(null)
+  useUnsavedChangesGuard(form !== null && JSON.stringify(form) !== JSON.stringify(opened))
 
   const title = t('settings.aiBuilder.prices.title')
   if (pricesQuery.isLoading) {
@@ -324,18 +337,22 @@ function PriceTableCard() {
 
   const openNew = (model?: string) => {
     setSubmitted(false)
-    setForm({ ...EMPTY_PRICE_FORM, model: model ?? '' })
+    const next = { ...EMPTY_PRICE_FORM, model: model ?? '' }
+    setForm(next)
+    setOpened(next)
   }
   const openEdit = (price: BuilderModelPrice) => {
     setSubmitted(false)
-    setForm({
+    const next = {
       editing: true,
       model: price.model,
       input: price.input_per_mtok,
       cachedInput: price.cached_input_per_mtok ?? '',
       cacheWrite: price.cache_write_per_mtok ?? '',
       output: price.output_per_mtok,
-    })
+    }
+    setForm(next)
+    setOpened(next)
   }
   const handleSave = () => {
     if (!form) return

@@ -27,6 +27,7 @@ import BuilderUsagePage from './pages/BuilderUsagePage'
 import AccessDenied from './pages/AccessDenied'
 import OAuthConsent from './components/OAuthConsent'
 import { RequireRole } from './components/patterns/RequireRole'
+import { RedirectToLogin } from './components/patterns/RedirectToLogin'
 import { Toaster } from 'sonner'
 import { useBootstrapStatus, useBuilderStatus } from './lib/api'
 import { readMode, resolveLanding } from './lib/mode'
@@ -63,7 +64,7 @@ export function HomeEntry({ user }: { user: ShellUser | null }) {
     isError: builder.isError,
     available: builder.data?.available,
   })
-  if (!user) return <Navigate to="/login" replace />
+  if (!user) return <RedirectToLogin />
   if (landing === 'loading') return <LoadingScreen />
   if (landing === 'apps') return <Navigate to="/apps" replace />
   return (
@@ -84,7 +85,7 @@ export function SimpleLayout({
   collapsed?: boolean
 }) {
   const builder = useBuilderStatus()
-  if (!user) return <Navigate to="/login" replace />
+  if (!user) return <RedirectToLogin />
   if (builder.isPending) return <LoadingScreen />
   if (builder.isError || !builder.data?.available) return <Navigate to="/apps" replace />
   return <SimpleShell user={user} collapsed={collapsed} />
@@ -95,6 +96,15 @@ export function SimpleLayout({
 // session opened by link while the builder is unavailable goes to `/apps`.
 export function BuilderLayout({ user }: { user: ShellUser | null }) {
   return <SimpleLayout user={user} collapsed />
+}
+
+// BuilderRoute remounts BuilderPage when the session in the URL changes. Without the
+// key, going from /builder/A to /builder/B (the "Recentes" links) reuses the same
+// component: the preview iframe and its cached token, the chat draft, open question
+// answers and the publish result of A would all carry over to B.
+export function BuilderRoute() {
+  const { sessionId } = useParams()
+  return <BuilderPage key={sessionId} />
 }
 
 function LoadingScreen() {
@@ -185,7 +195,7 @@ function App() {
           <Route path="/projetos" element={<ProjectsPage />} />
         </Route>
         <Route element={<BuilderLayout user={user} />}>
-          <Route path="/builder/:sessionId" element={<BuilderPage />} />
+          <Route path="/builder/:sessionId" element={<BuilderRoute />} />
         </Route>
         <Route
           element={<DashboardShell user={user} />}

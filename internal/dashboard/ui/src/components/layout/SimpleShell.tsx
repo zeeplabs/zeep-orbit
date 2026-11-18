@@ -1,7 +1,8 @@
 import { useRef, type ReactNode } from 'react'
-import { Navigate, NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { UnsavedChangesBlocker } from '@/components/patterns/UnsavedChangesBlocker'
+import { RedirectToLogin } from '@/components/patterns/RedirectToLogin'
 import { SidebarFooter } from './SidebarFooter'
 import { useShellSession } from './useShellSession'
 import { SimpleSidebar } from './SimpleSidebar'
@@ -40,7 +41,7 @@ export default function SimpleShell({
   const mainRef = useRef<HTMLElement>(null)
   const session = useShellSession(user)
 
-  if (!user) return <Navigate to="/login" replace />
+  if (!user) return <RedirectToLogin />
 
   const footer = (
     <SidebarFooter
