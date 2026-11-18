@@ -29,6 +29,26 @@ export function resetLeavingConfirmation(): void {
   leavingConfirmed = false
 }
 
+let pendingLeaveAction: (() => void) | null = null
+
+/**
+ * Para um efeito colateral que só deve acontecer se a navegação que o acompanha for de fato
+ * feita (ex.: gravar o modo da interface ao trocar de modo). Quando há edição não salva e a
+ * navegação vai ser bloqueada, registre aqui: <UnsavedChangesBlocker /> executa a ação se o
+ * usuário confirmar a saída (antes de seguir para a próxima tela) e a descarta se ele ficar.
+ * Só existe uma ação pendente: registrar outra substitui a anterior.
+ */
+export function runWhenLeaveConfirmed(action: () => void): void {
+  pendingLeaveAction = action
+}
+
+/** Uso de <UnsavedChangesBlocker />: devolve e limpa a ação pendente. */
+export function takePendingLeaveAction(): (() => void) | null {
+  const action = pendingLeaveAction
+  pendingLeaveAction = null
+  return action
+}
+
 export function subscribeUnsavedChanges(listener: () => void): () => void {
   listeners.add(listener)
   return () => {
