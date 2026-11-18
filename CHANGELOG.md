@@ -51,6 +51,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **AI Frontend Builder: opening another session from Recents no longer shows the previous one.** Going from one `/builder/:id` to another reused the page, so the preview kept showing the first session (and reused its preview token), and the half-written chat message, open question answers and publish result carried over. The page now starts fresh for each session.
 - **AI Builder settings: leaving with unsaved edits now asks first.** The general settings, persona and rules, money caps and the price form under **Integrations → AI Builder** lost edits without a warning when the superadmin switched tab, followed a link or closed the page. They now use the same unsaved-changes confirmation as the brand and app settings.
 - **Dashboard: signing in from a link now returns to that link.** Opening a dashboard URL (for example `/dashboard/builder/<id>`, `/dashboard/projetos` or `/dashboard/apps/<id>`) without a session sent the user to the login screen and, after signing in, to the home instead of the page they asked for. The login screen now gets the page as `return_to` (validated as a same-origin path, as for the OAuth consent screen).
+- **Dashboard: choosing "Stay" after the "Advanced mode" switch no longer changes the mode.** With unsaved edits on the page, the switch saved the new mode before asking about leaving, so staying still changed where `/dashboard/` landed next time. The mode is now saved only when the user confirms leaving.
 
 ### Security
 
