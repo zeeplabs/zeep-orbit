@@ -109,7 +109,7 @@ Relevant values (see `charts/zeep-orbit/values.yaml` for the full list):
 | `builder.resources.limits.cpu` | `2` | |
 | `builder.persistence.size` | `10Gi` | |
 | `builder.registryProxy.upstreams` | `https://registry.npmjs.org` | Becomes `REGISTRY_PROXY_UPSTREAMS`. |
-| `builder.registryProxy.tokenDefault`, `tokenCompany` | empty | Stored in the chart Secret and exposed to the proxy as `REGISTRY_PROXY_TOKEN_DEFAULT` and `REGISTRY_PROXY_TOKEN_COMPANY`. |
+| `builder.registryProxy.tokenDefault`, `tokenCompany` | empty | Stored in a Secret of their own (`<fullname>-registry-proxy`, rendered only when a token is set) and exposed only to the proxy as `REGISTRY_PROXY_TOKEN_DEFAULT` and `REGISTRY_PROXY_TOKEN_COMPANY`. They are not in the main chart Secret, which the Orbit pods load whole with `envFrom`. |
 
 ### Kustomize
 
