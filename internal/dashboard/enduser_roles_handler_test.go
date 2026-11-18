@@ -3,6 +3,7 @@ package dashboard
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -379,8 +380,107 @@ func TestUpdateAppEnduserRolesHandler_RemovingDefaultBlocked(t *testing.T) {
 	if resp["error"] != "role is default" || resp["role"] != "basic" {
 		t.Fatalf("resp = %+v, want error=role is default role=basic", resp)
 	}
+	if app, _, err := GetApp(context.Background(), pool, appID, actors["loner"]); err != nil {
+		t.Fatalf("GetApp: %v", err)
+	} else if len(app.EnduserRolesConfig) != 2 || app.DefaultEnduserRole != "basic" {
+		t.Fatalf("a blocked removal changed state: roles=%+v default=%q", app.EnduserRolesConfig, app.DefaultEnduserRole)
+	}
 
 	if w := callUpdateEnduserRoles(h, actors["loner"], appID, `{"roles":["member"],"default_role":"member"}`); w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 when a new default is named; body=%s", w.Code, w.Body.String())
+	}
+}
+
+// TestUpdateAppEnduserRolesHandler_DefaultRoleWithoutAuthTable: an app whose
+// _auth_users table doesn't exist (end-user auth never enabled) gets a clear
+// 400 instead of a 500, and nothing is persisted.
+func TestUpdateAppEnduserRolesHandler_DefaultRoleWithoutAuthTable(t *testing.T) {
+	pool, h, actors, appID, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	app, _, err := GetApp(context.Background(), pool, appID, actors["loner"])
+	if err != nil {
+		t.Fatalf("GetApp: %v", err)
+	}
+	schema := schemaNameForDB(app.Name)
+	_, _ = pool.Exec(context.Background(), fmt.Sprintf(`DROP SCHEMA IF EXISTS %q CASCADE`, schema))
+
+	w := callUpdateEnduserRoles(h, actors["loner"], appID, `{"default_role":"member"}`)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", w.Code, w.Body.String())
+	}
+	var resp map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp["error"] != "end-user auth is not enabled for this app" {
+		t.Fatalf("error = %q", resp["error"])
+	}
+}
+
+// TestUpdateAppEnduserRolesHandler_LegacyDefaultOutsideList: apps whose list
+// never had "member" (the stored default is still member) keep working: roles
+// can be edited without a 409 and the default stays as it was.
+func TestUpdateAppEnduserRolesHandler_LegacyDefaultOutsideList(t *testing.T) {
+	pool, h, actors, appID, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+	if err := UpdateAppEnduserRoles(ctx, pool, appID, []string{"basic"}, nil); err != nil {
+		t.Fatalf("seed roles: %v", err)
+	}
+
+	w := callUpdateEnduserRoles(h, actors["loner"], appID, `{"roles":["basic","viewer"]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+	app, _, err := GetApp(ctx, pool, appID, actors["loner"])
+	if err != nil {
+		t.Fatalf("GetApp: %v", err)
+	}
+	if len(app.EnduserRolesConfig) != 2 || app.DefaultEnduserRole != "member" {
+		t.Fatalf("roles=%+v default=%q, want 2 roles and default member", app.EnduserRolesConfig, app.DefaultEnduserRole)
+	}
+}
+
+// TestSetAuthUserDefaultRole_RollsBackWithMetadata: when the metadata write
+// after the DDL fails, the DEFAULT of _auth_users.role is rolled back too, so
+// the schema and the apps row never disagree.
+func TestSetAuthUserDefaultRole_RollsBackWithMetadata(t *testing.T) {
+	pool, h, actors, appID, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	schema, drop := seedAuthUsersSchema(t, pool, h, appID, actors["loner"])
+	defer drop()
+
+	err := h.prov.SetAuthUserDefaultRole(context.Background(), schema, "basic", func(q db.Querier) error {
+		return fmt.Errorf("simulated metadata failure")
+	})
+	if err == nil {
+		t.Fatal("expected the simulated failure to be returned")
+	}
+	if got := insertAuthUserRole(t, pool, schema, "rolledback@example.com"); got != "member" {
+		t.Fatalf("role after a rolled-back change = %q, want member", got)
+	}
+}
+
+// TestUpdateAppDefaultEnduserRole_KeepsList: the default-only store call must
+// not rewrite enduser_roles_config.
+func TestUpdateAppDefaultEnduserRole_KeepsList(t *testing.T) {
+	pool, _, actors, appID, _ := appsHandlerTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+	if err := UpdateAppEnduserRoles(ctx, pool, appID, []string{"member", "a", "b"}, nil); err != nil {
+		t.Fatalf("seed roles: %v", err)
+	}
+	if err := UpdateAppDefaultEnduserRole(ctx, pool, appID, "a"); err != nil {
+		t.Fatalf("UpdateAppDefaultEnduserRole: %v", err)
+	}
+	app, _, err := GetApp(ctx, pool, appID, actors["loner"])
+	if err != nil {
+		t.Fatalf("GetApp: %v", err)
+	}
+	if len(app.EnduserRolesConfig) != 3 || app.DefaultEnduserRole != "a" {
+		t.Fatalf("roles=%+v default=%q, want the 3 roles untouched and default a", app.EnduserRolesConfig, app.DefaultEnduserRole)
+	}
+	if err := UpdateAppDefaultEnduserRole(ctx, pool, "00000000-0000-0000-0000-000000000000", "a"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown app: err = %v, want ErrNotFound", err)
 	}
 }

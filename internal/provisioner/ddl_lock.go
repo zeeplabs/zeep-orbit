@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgconn"
+
 	"github.com/zeeplabs/zeep-orbit/internal/config"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
 )
@@ -102,19 +104,35 @@ func (p *Provisioner) EnsureAuthUserColumns(ctx context.Context, schema string) 
 	})
 }
 
-// SetAuthUserDefaultRole sets the DEFAULT of the app's _auth_users.role column,
-// which is the role every new end user (email or Google sign-up) receives.
-// The default lives in the schema, not in process memory, so every replica
-// applies it at once. role must already be validated against the identifier
-// pattern: DDL cannot take bind parameters, so it is quoted as a literal.
-// Idempotent.
-func (p *Provisioner) SetAuthUserDefaultRole(ctx context.Context, schema, role string) error {
+// ErrNoAuthUsersTable is returned by SetAuthUserDefaultRole when the app has
+// no _auth_users table, i.e. end-user auth was never enabled for it. The
+// message is safe to show to users.
+var ErrNoAuthUsersTable = errors.New("end-user auth is not enabled for this app")
+
+// SetAuthUserDefaultRole sets the DEFAULT of the app's _auth_users.role
+// column, which is the role every new end user (email or Google sign-up)
+// receives, and then runs after (when non-nil) in the same locked
+// transaction, so the caller's metadata write commits only together with the
+// DDL: a failure in either rolls both back. The default lives in the schema,
+// not in process memory, so every replica applies it at once. role must
+// already be validated against the identifier pattern: DDL cannot take bind
+// parameters, so it is quoted as a literal. Idempotent. A missing
+// _auth_users table is reported as ErrNoAuthUsersTable.
+func (p *Provisioner) SetAuthUserDefaultRole(ctx context.Context, schema, role string, after func(q db.Querier) error) error {
 	return p.withAppLock(ctx, schema, func(tp *Provisioner) error {
 		_, err := tp.q.Exec(ctx, fmt.Sprintf(`ALTER TABLE %q."_auth_users" ALTER COLUMN "role" SET DEFAULT '%s'`, schema, strings.ReplaceAll(role, "'", "''")))
 		if err != nil {
+			// 42P01: table missing; 3F000: the app schema itself is missing.
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && (pgErr.Code == "42P01" || pgErr.Code == "3F000") {
+				return ErrNoAuthUsersTable
+			}
 			return fmt.Errorf("provisioner: set default role on %q: %w", schema, err)
 		}
-		return nil
+		if after == nil {
+			return nil
+		}
+		return after(tp.q)
 	})
 }
 

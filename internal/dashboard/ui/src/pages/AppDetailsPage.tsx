@@ -537,14 +537,24 @@ function EnduserRolesSection({ app }: { app: NonNullable<ReturnType<typeof useAp
             )}
             <button
               type="button"
-              onClick={() => removeRole(role)}
-              disabled={updateRoles.isPending || role === defaultRole}
+              onClick={() => {
+                if (role !== defaultRole) removeRole(role);
+              }}
+              disabled={updateRoles.isPending}
+              aria-disabled={role === defaultRole}
+              aria-label={
+                role === defaultRole
+                  ? t("appDetails.enduserRolesRemoveDefault")
+                  : t("appDetails.enduserRolesRemove")
+              }
               title={
                 role === defaultRole
                   ? t("appDetails.enduserRolesRemoveDefault")
                   : t("appDetails.enduserRolesRemove")
               }
-              className="flex cursor-pointer items-center justify-center border-none bg-transparent p-0 text-[var(--text-tertiary)] hover:text-[var(--danger)] disabled:cursor-not-allowed"
+              className={`flex items-center justify-center border-none bg-transparent p-0 text-[var(--text-tertiary)] disabled:cursor-not-allowed ${
+                role === defaultRole ? "cursor-not-allowed opacity-40" : "cursor-pointer hover:text-[var(--danger)]"
+              }`}
             >
               <Icon name="close" size={11} />
             </button>

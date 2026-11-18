@@ -67,7 +67,7 @@ test('new end users get the role chosen as default', async ({ page }) => {
   await expect(badge(page, 'member').getByRole('button', { name: 'Set as default' })).toBeVisible()
 
   // The default role can't be removed while it is the default.
-  await expect(badge(page, 'basic').locator('button[disabled]')).toHaveCount(1)
+  await expect(badge(page, 'basic').locator('button[aria-disabled="true"]')).toHaveCount(1)
 
   // A user created now gets "basic" (the real sign-up path, no manual fix-up).
   expect(await registerAndGetRole(page, appId, appName, `after-${Date.now()}@test.com`)).toBe('basic')

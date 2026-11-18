@@ -3433,9 +3433,11 @@ func (h *Handler) UpdateAppEnduserRoles(w http.ResponseWriter, r *http.Request) 
 	if !h.decodeJSONBody(w, r, &body) {
 		return
 	}
+	// rolesOmitted: the request only touches the default, so the stored list
+	// is validated against but never rewritten.
+	rolesOmitted := body.Roles == nil && body.DefaultRole != nil
 	if body.Roles == nil {
-		if body.DefaultRole != nil {
-			// A request that only sets the default must not wipe the list.
+		if rolesOmitted {
 			body.Roles = append([]string{}, app.EnduserRolesConfig...)
 		} else {
 			body.Roles = []string{}
@@ -3490,21 +3492,33 @@ func (h *Handler) UpdateAppEnduserRoles(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	// The default is enforced by the DEFAULT of _auth_users.role, so it goes
-	// first: if the DDL fails nothing is persisted, and a retry of the same
-	// request repeats it (it is idempotent).
 	effectiveDefault := app.DefaultEnduserRole
 	var auditMeta json.RawMessage
 	if body.DefaultRole != nil {
-		if err := h.prov.SetAuthUserDefaultRole(r.Context(), schema, *body.DefaultRole); err != nil {
-			h.writeError(w, r, http.StatusInternalServerError, "failed to set default role", err)
+		// The default is enforced by the DEFAULT of _auth_users.role, so the
+		// DDL and the apps row change in one locked transaction: both commit
+		// or neither does, and a retry of the same request is idempotent.
+		role := *body.DefaultRole
+		err := h.prov.SetAuthUserDefaultRole(r.Context(), schema, role, func(q db.Querier) error {
+			if rolesOmitted {
+				return UpdateAppDefaultEnduserRole(r.Context(), q, app.ID, role)
+			}
+			return UpdateAppEnduserRoles(r.Context(), q, app.ID, body.Roles, &role)
+		})
+		switch {
+		case errors.Is(err, provisioner.ErrNoAuthUsersTable):
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": provisioner.ErrNoAuthUsersTable.Error()})
+			return
+		case errors.Is(err, ErrNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "app not found"})
+			return
+		case err != nil:
+			h.writeError(w, r, http.StatusInternalServerError, "failed to update enduser roles", err)
 			return
 		}
-		effectiveDefault = *body.DefaultRole
-		auditMeta, _ = json.Marshal(map[string]string{"default_role": effectiveDefault})
-	}
-
-	if err := UpdateAppEnduserRoles(r.Context(), h.pool, app.ID, body.Roles, body.DefaultRole); err != nil {
+		effectiveDefault = role
+		auditMeta, _ = json.Marshal(map[string]string{"default_role": role, "previous_default_role": app.DefaultEnduserRole})
+	} else if err := UpdateAppEnduserRoles(r.Context(), h.pool, app.ID, body.Roles, nil); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "app not found"})
 			return
@@ -3513,6 +3527,9 @@ func (h *Handler) UpdateAppEnduserRoles(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	if rolesOmitted {
+		body.Roles = app.EnduserRolesConfig
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"roles": body.Roles, "default_role": effectiveDefault})
 	h.audit(r.Context(), user.ID, user.Email, "app.roles.update", "app", appID, app.Name, auditMeta, r.RemoteAddr)
 }

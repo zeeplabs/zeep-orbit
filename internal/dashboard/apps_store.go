@@ -463,18 +463,37 @@ func CountTablePoliciesByRole(ctx context.Context, pool *db.Pool, appID, role st
 // and the in-use guard against removed roles all live in the handler
 // (UpdateAppEnduserRoles in handler.go), which computes the diff and calls
 // this only once every check has passed.
-func UpdateAppEnduserRoles(ctx context.Context, pool *db.Pool, appID string, roles []string, defaultRole *string) error {
+func UpdateAppEnduserRoles(ctx context.Context, q db.Querier, appID string, roles []string, defaultRole *string) error {
 	rolesJSON, err := json.Marshal(roles)
 	if err != nil {
 		return fmt.Errorf("dashboard: marshal enduser roles: %w", err)
 	}
 	// A nil defaultRole keeps the stored default (COALESCE on a NULL param).
-	tag, err := pool.Exec(ctx,
+	tag, err := q.Exec(ctx,
 		`UPDATE zeep_system.apps SET enduser_roles_config = $1, default_enduser_role = COALESCE($3, default_enduser_role) WHERE id = $2`,
 		rolesJSON, appID, defaultRole,
 	)
 	if err != nil {
 		return fmt.Errorf("dashboard: update enduser roles: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// UpdateAppDefaultEnduserRole sets only the default end-user role, leaving
+// enduser_roles_config untouched, so a request that only changes the default
+// can't overwrite a role another admin added in the meantime. Pure
+// persistence: the handler validates the role and keeps the schema's
+// _auth_users.role DEFAULT in step with it.
+func UpdateAppDefaultEnduserRole(ctx context.Context, q db.Querier, appID, role string) error {
+	tag, err := q.Exec(ctx,
+		`UPDATE zeep_system.apps SET default_enduser_role = $1 WHERE id = $2`,
+		role, appID,
+	)
+	if err != nil {
+		return fmt.Errorf("dashboard: update default enduser role: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound
