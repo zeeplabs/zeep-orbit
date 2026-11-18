@@ -95,6 +95,7 @@ B12 credential guard (independent, P2)        B13 docs + CHANGELOG (last)       
 - **Where**: `internal/agent/tools/registry.go`, `internal/agent/loop.go`, `internal/dashboard/builder_plan.go`, `builder_settings*.go`.
 - **Done when**: loop test with fakes (auto does not pause; ask pauses; existing + auto pauses); integration test for inline apply and its audit; settings API validates the value.
 - **Requirements**: BBE-15. **Depends**: B06. **Tests**: unit (loop) + integration. **Gate**: Full.
+- **Note (2026-11-17)**: until this lands, `PUT /dashboard/api/builder/settings` refuses `backend_approval_mode: "auto"` with a 400 (`validateBuilderSettingsInput`), because nothing reads the setting. Re-enable the value in the same change that wires it; `TestBuilderSettings_UnimplementedBackendModesRefused` must change with it.
 
 ### B08 — Plan card in the timeline
 - **What**: pending-proposal view for the plan (summary, ordered operations, the access line and reason of each new table with `public` visually distinct, confirm/reject), then the result line "applied N of M" and the failed operation; reuse the existing proposal components; i18n.
@@ -108,6 +109,7 @@ B12 credential guard (independent, P2)        B13 docs + CHANGELOG (last)       
 - **Where**: `internal/dashboard/builder_publish.go`, new `builder_publish_gate.go`.
 - **Done when**: unit tests for the decision table; integration tests for builder + warn (default), builder + block, existing; a table declared public by a confirmed plan is not listed; a table from the single-op tool is listed; a partially applied plan only declares tables that were applied; no row read (asserted by query inspection or by using only metadata functions).
 - **Requirements**: BBE-13, BBE-14. **Depends**: B01. **Tests**: unit + integration. **Gate**: Full.
+- **Note (2026-11-17)**: until this lands, the settings API refuses `publish_rls_gate: "block"` with a 400, because `Publish` does not read the setting and a stored `block` would read as a protection that does not exist. Re-enable the value in the same change that wires it.
 
 ### B10 — Publish error panel and settings UI
 - **What**: inline handling of the warning and of the 409 under `block` (table list, "review the access of these tables" prefilled prompt, publish still possible under `warn`); builder settings selects for approval mode and publish check, always sending both keys; i18n.
