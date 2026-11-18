@@ -79,7 +79,7 @@ The shipped topology:
 
 - `builder` is attached **only** to `builder_internal`, a network declared `internal: true` (no gateway, no outbound route). It cannot reach `db:5432` or the internet.
 - `registry-proxy` is attached to `builder_internal` and to `egress` (a normal network). It is the only service on `egress`.
-- `zeep` is attached to `default` and `builder_internal`, so it can reach the builder.
+- `zeep` is attached to `default` and `builder_edge`, **not** to `builder_internal`, so code running in the builder cannot open a connection to `zeep:8080`. It reaches the builder through `builder-edge`, a TCP forwarder (`alpine/socat`, no application logic) on `builder_edge` and `builder_internal`, both `internal: true`. On `builder_edge` the forwarder answers as `builder`, so `BUILDER_URL=http://builder:8081` is unchanged. The builder never initiates a connection to Orbit; Orbit always calls the builder.
 - The builder runs as uid 1000 with a read-only root filesystem, all capabilities dropped, `no-new-privileges`, `pids_limit: 512`, `cpus: 2` and `mem_limit: 4g`. Workspaces live on the `builder_work` volume.
 
 Optional variables for the proxy are read from `.env` (`REGISTRY_PROXY_UPSTREAMS`, `REGISTRY_PROXY_TOKEN_DEFAULT`, `REGISTRY_PROXY_TOKEN_COMPANY`).
