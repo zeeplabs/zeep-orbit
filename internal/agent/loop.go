@@ -217,11 +217,25 @@ func RunTurn(ctx context.Context, deps Deps, lease store.Lease) error {
 	}
 	r.turn = turn
 	r.planMode = turn.Mode == store.ModePlan
+	// The duration limit spans every attempt of the run.
+	if turn.RunStartedAt != nil && turn.RunStartedAt.Before(r.start) {
+		r.start = *turn.RunStartedAt
+	}
 	sess, err := deps.Store.GetSessionByID(ctx, turn.SessionID)
 	if err != nil {
 		return fmt.Errorf("agent: load session: %w", err)
 	}
 	r.sess = sess
+
+	// Every earlier attempt of this run stopped without finishing the turn:
+	// another try would most likely fail the same way, after paying for the
+	// same model calls again. 0 is a claim by a replica from before attempts
+	// were counted.
+	if turn.Attempts > r.lim.MaxTurnAttempts {
+		r.log.Error("agent turn failed: too many attempts", "turn", turn.ID, "session", turn.SessionID,
+			"attempts", turn.Attempts, "max", r.lim.MaxTurnAttempts)
+		return r.finish(ctx, &outcome{status: store.TurnFailed, code: CodeInternal})
+	}
 
 	out, err := r.run(ctx)
 	if err != nil {
@@ -261,7 +275,7 @@ func (r *run) run(ctx context.Context) (*outcome, error) {
 	r.state = analyzeTurn(msgs, r.turn.ID)
 	r.wrote = r.state.started // work from before a crash may be uncommitted
 
-	tctx, cancel := context.WithTimeout(ctx, r.lim.MaxTurnDuration)
+	tctx, cancel := context.WithTimeout(ctx, r.lim.MaxTurnDuration-r.now().Sub(r.start))
 	defer cancel()
 
 	if err := r.emit(ctx, EventTurnStarted, map[string]any{"seq": r.turn.Seq, "resumed": r.state.started}); err != nil {

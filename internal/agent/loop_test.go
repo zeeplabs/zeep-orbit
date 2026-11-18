@@ -204,6 +204,52 @@ func TestRunTurn_TurnDurationLimit(t *testing.T) {
 	}
 }
 
+// A resumed attempt (the previous worker died) does not get a fresh
+// MaxTurnDuration: the duration runs from the first claim of the run.
+func TestRunTurn_ResumedTurnKeepsTheRunStart(t *testing.T) {
+	t0 := time.Date(2026, 1, 1, 0, 10, 0, 0, time.UTC)
+	h := newHarness(t, scriptStep{resp: textResp("done")})
+	started := t0.Add(-11 * time.Minute)
+	h.st.turn.RunStartedAt = &started
+	h.st.turn.Attempts = 2
+	h.deps.Limits = Limits{MaxTurnDuration: 10 * time.Minute}
+	h.deps.Clock = func() time.Time { return t0 }
+	h.mustRun()
+
+	if fin := h.finished(); fin.Status != store.TurnLimitReached {
+		t.Fatalf("status = %q, want limit_reached", fin.Status)
+	}
+	if h.prov.calls() != 0 {
+		t.Errorf("provider calls = %d, want none past the turn's duration", h.prov.calls())
+	}
+}
+
+// A turn claimed more than MaxTurnAttempts times keeps crashing whatever
+// replica runs it: it fails instead of looping, and frees the session.
+func TestRunTurn_TooManyAttemptsFailsWithoutACall(t *testing.T) {
+	h := newHarness(t, scriptStep{resp: textResp("done")})
+	h.st.turn.Attempts = DefaultMaxTurnAttempts + 1
+	h.mustRun()
+
+	fin := h.finished()
+	if fin.Status != store.TurnFailed || fin.ErrorCode != CodeInternal {
+		t.Fatalf("finish = %+v, want failed/%s", fin, CodeInternal)
+	}
+	if h.prov.calls() != 0 {
+		t.Errorf("provider calls = %d, want none", h.prov.calls())
+	}
+}
+
+// At the cap the turn still runs: the last allowed attempt.
+func TestRunTurn_LastAllowedAttemptRuns(t *testing.T) {
+	h := newHarness(t, scriptStep{resp: textResp("done")})
+	h.st.turn.Attempts = DefaultMaxTurnAttempts
+	h.mustRun()
+	if fin := h.finished(); fin.Status != store.TurnCompleted {
+		t.Fatalf("status = %q, want completed", fin.Status)
+	}
+}
+
 func TestRunTurn_BudgetExceededBeforeCallMakesNoProviderCall(t *testing.T) {
 	h := newHarness(t)
 	h.bud.fn = func(int) error { return fmt.Errorf("%w: session token cap reached", store.ErrBudgetExceeded) }

@@ -275,6 +275,7 @@ func (w *Worker) safeRun(ctx context.Context, lease store.Lease) (err error) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			w.log.Error("agent worker: turn panicked", "turn", lease.TurnID, "panic", fmt.Sprint(rec))
+			w.failPanicked(ctx, lease)
 			err = fmt.Errorf("turn panicked")
 		}
 	}()
@@ -283,6 +284,30 @@ func (w *Worker) safeRun(ctx context.Context, lease store.Lease) (err error) {
 		deps = w.cfg.PrepareDeps(ctx, deps)
 	}
 	return RunTurn(ctx, deps, lease)
+}
+
+// failPanicked ends a turn whose loop panicked as failed (internal_error),
+// best effort. Left running, its lease would expire and every replica would
+// claim it and panic in turn, while the session stays blocked behind it. A
+// panic is a bug, not a transient failure, so it is not retried. Nothing is
+// committed: the panic may have come from the commit itself. The writes take
+// the lease, so a turn another replica already owns is left alone.
+func (w *Worker) failPanicked(ctx context.Context, lease store.Lease) {
+	fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if _, err := w.deps.Store.AppendEvent(fctx, lease, EventError, map[string]any{"code": CodeInternal}); err != nil {
+		if !errors.Is(err, store.ErrLeaseLost) {
+			w.log.Error("agent worker: append error event after panic failed", "turn", lease.TurnID, "err", err)
+		}
+		return
+	}
+	if _, err := w.deps.Store.AppendEvent(fctx, lease, EventTurnFinished, map[string]any{"status": store.TurnFailed, "sha": ""}); err != nil {
+		w.log.Error("agent worker: append turn_finished after panic failed", "turn", lease.TurnID, "err", err)
+	}
+	if err := w.deps.Store.FinishTurn(fctx, lease, store.FinishParams{Status: store.TurnFailed, ErrorCode: CodeInternal}); err != nil &&
+		!errors.Is(err, store.ErrLeaseLost) {
+		w.log.Error("agent worker: fail turn after panic failed", "turn", lease.TurnID, "err", err)
+	}
 }
 
 // renewLoop extends the lease every RenewEvery while the turn runs. Losing the

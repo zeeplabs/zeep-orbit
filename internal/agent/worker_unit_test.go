@@ -313,6 +313,35 @@ func TestWorkerPoke_NeverBlocks(t *testing.T) {
 
 // PrepareDeps runs once per claimed turn and the Deps it returns are the ones
 // the turn runs with: a runtime-resolved provider reaches the loop.
+type panicProv struct{}
+
+func (panicProv) Name() string  { return "fake" }
+func (panicProv) Model() string { return "fake-1" }
+func (panicProv) Chat(context.Context, provider.ChatRequest) (provider.ChatResponse, error) {
+	panic("boom")
+}
+
+// A panic in the loop must end the turn: left running, its lease would
+// expire, another replica would claim it and panic again, forever, and the
+// session would stay blocked behind it.
+func TestWorkerUnit_PanicFailsTheTurn(t *testing.T) {
+	q := newFakeQueue()
+	w := unitWorker(t, q, panicProv{}, newFakeSandbox(), WorkerConfig{})
+	cancel, done := runWorker(w)
+	defer func() { cancel(); <-done }()
+
+	eventually(t, "turn failed", func() bool { return q.status() == store.TurnFailed })
+	q.fakeStore.mu.Lock()
+	fin := q.finish
+	q.fakeStore.mu.Unlock()
+	if fin == nil || fin.ErrorCode != CodeInternal {
+		t.Fatalf("finish = %+v, want failed/%s", fin, CodeInternal)
+	}
+	if _, claims, _ := q.snapshot(); claims != 1 {
+		t.Errorf("claims = %d, want 1", claims)
+	}
+}
+
 func TestWorkerUnit_PrepareDepsProviderIsUsedPerTurn(t *testing.T) {
 	q := newFakeQueue()
 	base := &fakeProvider{}
