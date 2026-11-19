@@ -1,0 +1,776 @@
+package provider
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"reflect"
+	"strconv"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+)
+
+const (
+	testAPIKey = "sk-test-key-DO-NOT-LEAK"
+	// bodySecret stands in for any upstream payload fragment (prompt echo,
+	// account id, ...) that must stay out of error text.
+	bodySecret = "SECRET-UPSTREAM-PAYLOAD-123"
+)
+
+// sleepRecorder replaces real sleeping so retry tests run instantly and can
+// assert the waits the adapter chose.
+type sleepRecorder struct{ waits []time.Duration }
+
+func (s *sleepRecorder) sleep(_ context.Context, d time.Duration) error {
+	s.waits = append(s.waits, d)
+	return nil
+}
+
+func newTestProvider(t *testing.T, srv *httptest.Server) (*OpenAI, *sleepRecorder) {
+	t.Helper()
+	p, err := NewOpenAI(OpenAIConfig{BaseURL: srv.URL + "/v1", APIKey: testAPIKey, Model: "test-model"})
+	if err != nil {
+		t.Fatalf("NewOpenAI: %v", err)
+	}
+	rec := &sleepRecorder{}
+	p.sleep = rec.sleep
+	p.backoffBase = 10 * time.Millisecond
+	return p, rec
+}
+
+func serve(t *testing.T, h http.HandlerFunc) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(h)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func writeJSON(w http.ResponseWriter, status int, body string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_, _ = io.WriteString(w, body)
+}
+
+var userHi = ChatRequest{Messages: []Message{{Role: RoleUser, Content: "hi"}}}
+
+// assertNoLeak fails if err's text exposes the API key or upstream body data.
+func assertNoLeak(t *testing.T, err error) {
+	t.Helper()
+	for _, s := range []string{testAPIKey, bodySecret} {
+		if strings.Contains(err.Error(), s) {
+			t.Fatalf("error text leaks %q: %q", s, err.Error())
+		}
+	}
+}
+
+func TestChatPlainMessage(t *testing.T) {
+	srv := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, `{"choices":[{"message":{"role":"assistant","content":"hello there"},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":2}}`)
+	})
+	p, _ := newTestProvider(t, srv)
+
+	resp, err := p.Chat(context.Background(), userHi)
+	if err != nil {
+		t.Fatalf("Chat: %v", err)
+	}
+	if resp.Message.Role != RoleAssistant || resp.Message.Content != "hello there" {
+		t.Fatalf("message = %+v", resp.Message)
+	}
+	if len(resp.ToolCalls) != 0 || len(resp.Message.ToolCalls) != 0 {
+		t.Fatalf("unexpected tool calls: %+v", resp.ToolCalls)
+	}
+	if resp.FinishReason != FinishStop {
+		t.Fatalf("finish = %q", resp.FinishReason)
+	}
+}
+
+func TestChatSingleToolCall(t *testing.T) {
+	srv := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, `{"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[
+			{"id":"call_a","type":"function","function":{"name":"read_file","arguments":"{\"path\":\"src/App.tsx\"}"}}]},
+			"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":10,"completion_tokens":5}}`)
+	})
+	p, _ := newTestProvider(t, srv)
+
+	resp, err := p.Chat(context.Background(), userHi)
+	if err != nil {
+		t.Fatalf("Chat: %v", err)
+	}
+	if resp.FinishReason != FinishToolCalls {
+		t.Fatalf("finish = %q", resp.FinishReason)
+	}
+	if len(resp.ToolCalls) != 1 {
+		t.Fatalf("tool calls = %+v", resp.ToolCalls)
+	}
+	tc := resp.ToolCalls[0]
+	if tc.ID != "call_a" || tc.Name != "read_file" || string(tc.Arguments) != `{"path":"src/App.tsx"}` {
+		t.Fatalf("tool call = %+v", tc)
+	}
+	if !reflect.DeepEqual(resp.Message.ToolCalls, resp.ToolCalls) {
+		t.Fatalf("Message.ToolCalls must mirror ToolCalls")
+	}
+}
+
+func TestChatParallelToolCallsKeepOrder(t *testing.T) {
+	srv := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, `{"choices":[{"message":{"role":"assistant","tool_calls":[
+			{"id":"c1","type":"function","function":{"name":"first","arguments":"{\"n\":1}"}},
+			{"id":"c2","type":"function","function":{"name":"second","arguments":"{\"n\":2}"}},
+			{"id":"c3","type":"function","function":{"name":"third","arguments":"{}"}}]},
+			"finish_reason":"tool_calls"}]}`)
+	})
+	p, _ := newTestProvider(t, srv)
+
+	resp, err := p.Chat(context.Background(), userHi)
+	if err != nil {
+		t.Fatalf("Chat: %v", err)
+	}
+	var got []string
+	for _, tc := range resp.ToolCalls {
+		got = append(got, tc.ID+":"+tc.Name)
+	}
+	if want := []string{"c1:first", "c2:second", "c3:third"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("order = %v, want %v", got, want)
+	}
+}
+
+func TestChatUsagePopulated(t *testing.T) {
+	srv := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, `{"choices":[{"message":{"content":"x"},"finish_reason":"length"}],"usage":{"prompt_tokens":123,"completion_tokens":45,"total_tokens":168}}`)
+	})
+	p, _ := newTestProvider(t, srv)
+
+	resp, err := p.Chat(context.Background(), userHi)
+	if err != nil {
+		t.Fatalf("Chat: %v", err)
+	}
+	if resp.Usage != (Usage{InputTokens: 123, OutputTokens: 45, Reported: true}) {
+		t.Fatalf("usage = %+v", resp.Usage)
+	}
+	if resp.FinishReason != FinishLength {
+		t.Fatalf("finish = %q", resp.FinishReason)
+	}
+}
+
+// The token classes drive the cost: cached input is billed at another rate, so
+// it must be split out of prompt_tokens, which counts it too.
+func TestChatUsageTokenClasses(t *testing.T) {
+	cases := []struct {
+		name  string
+		usage string
+		want  Usage
+	}{
+		{
+			name:  "cached tokens are split out of prompt_tokens",
+			usage: `"usage":{"prompt_tokens":2006,"completion_tokens":300,"prompt_tokens_details":{"cached_tokens":1920}}`,
+			want:  Usage{InputTokens: 86, CachedInputTokens: 1920, OutputTokens: 300, Reported: true},
+		},
+		{
+			name:  "details present with nothing cached",
+			usage: `"usage":{"prompt_tokens":500,"completion_tokens":10,"prompt_tokens_details":{"cached_tokens":0}}`,
+			want:  Usage{InputTokens: 500, OutputTokens: 10, Reported: true},
+		},
+		{
+			name:  "details null",
+			usage: `"usage":{"prompt_tokens":500,"completion_tokens":10,"prompt_tokens_details":null}`,
+			want:  Usage{InputTokens: 500, OutputTokens: 10, Reported: true},
+		},
+		{
+			name:  "cached above prompt_tokens is clamped",
+			usage: `"usage":{"prompt_tokens":100,"completion_tokens":1,"prompt_tokens_details":{"cached_tokens":900}}`,
+			want:  Usage{InputTokens: 0, CachedInputTokens: 100, OutputTokens: 1, Reported: true},
+		},
+		{
+			name:  "no usage object means unknown, not zero",
+			usage: `"x":1`,
+			want:  Usage{},
+		},
+		{
+			name:  "usage null",
+			usage: `"usage":null`,
+			want:  Usage{},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := serve(t, func(w http.ResponseWriter, r *http.Request) {
+				writeJSON(w, 200, `{"choices":[{"message":{"content":"x"},"finish_reason":"stop"}],`+tc.usage+`}`)
+			})
+			p, _ := newTestProvider(t, srv)
+			resp, err := p.Chat(context.Background(), userHi)
+			if err != nil {
+				t.Fatalf("Chat: %v", err)
+			}
+			if resp.Usage != tc.want {
+				t.Fatalf("usage = %+v, want %+v", resp.Usage, tc.want)
+			}
+			if got, want := resp.Usage.Total(), tc.want.TotalInput()+tc.want.OutputTokens; got != want {
+				t.Fatalf("Total() = %d, want %d", got, want)
+			}
+		})
+	}
+}
+
+func TestChatAuthError(t *testing.T) {
+	for _, status := range []int{401, 403} {
+		srv := serve(t, func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(w, status, `{"error":{"message":"bad key `+bodySecret+`"}}`)
+		})
+		p, rec := newTestProvider(t, srv)
+
+		_, err := p.Chat(context.Background(), userHi)
+		if !errors.Is(err, ErrAuth) {
+			t.Fatalf("status %d: err = %v, want ErrAuth", status, err)
+		}
+		assertNoLeak(t, err)
+		if len(rec.waits) != 0 {
+			t.Fatalf("auth errors must not be retried, waits = %v", rec.waits)
+		}
+	}
+}
+
+func TestChatRateLimitedRetryThenSuccess(t *testing.T) {
+	var calls int32
+	srv := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&calls, 1) == 1 {
+			w.Header().Set("Retry-After", "2")
+			writeJSON(w, 429, `{"error":{"message":"slow down"}}`)
+			return
+		}
+		writeJSON(w, 200, `{"choices":[{"message":{"content":"ok"},"finish_reason":"stop"}]}`)
+	})
+	p, rec := newTestProvider(t, srv)
+
+	resp, err := p.Chat(context.Background(), userHi)
+	if err != nil {
+		t.Fatalf("Chat: %v", err)
+	}
+	if resp.Message.Content != "ok" || atomic.LoadInt32(&calls) != 2 {
+		t.Fatalf("content=%q calls=%d", resp.Message.Content, calls)
+	}
+	if want := []time.Duration{2 * time.Second}; !reflect.DeepEqual(rec.waits, want) {
+		t.Fatalf("waits = %v, want Retry-After honored: %v", rec.waits, want)
+	}
+}
+
+func TestChatRateLimitedExhausted(t *testing.T) {
+	var calls int32
+	srv := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		w.Header().Set("Retry-After", "1")
+		writeJSON(w, 429, `{"error":{"message":"`+bodySecret+`"}}`)
+	})
+	p, rec := newTestProvider(t, srv)
+
+	_, err := p.Chat(context.Background(), userHi)
+	var rl *ErrRateLimited
+	if !errors.As(err, &rl) {
+		t.Fatalf("err = %v, want *ErrRateLimited", err)
+	}
+	if rl.RetryAfter != time.Second {
+		t.Fatalf("RetryAfter = %v", rl.RetryAfter)
+	}
+	if atomic.LoadInt32(&calls) != maxAttempts || len(rec.waits) != maxAttempts-1 {
+		t.Fatalf("calls=%d waits=%v, want %d attempts", calls, rec.waits, maxAttempts)
+	}
+	assertNoLeak(t, err)
+}
+
+func TestChatRateLimitedHugeRetryAfterNotBlocked(t *testing.T) {
+	var calls int32
+	srv := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		w.Header().Set("Retry-After", "3600")
+		writeJSON(w, 429, `{}`)
+	})
+	p, rec := newTestProvider(t, srv)
+
+	_, err := p.Chat(context.Background(), userHi)
+	var rl *ErrRateLimited
+	if !errors.As(err, &rl) || rl.RetryAfter != time.Hour {
+		t.Fatalf("err = %v, want *ErrRateLimited{1h}", err)
+	}
+	if atomic.LoadInt32(&calls) != 1 || len(rec.waits) != 0 {
+		t.Fatalf("must return immediately: calls=%d waits=%v", calls, rec.waits)
+	}
+}
+
+func TestChatServerErrorRetriesWithBackoff(t *testing.T) {
+	var calls int32
+	srv := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&calls, 1) < 3 {
+			writeJSON(w, 503, `{"error":"`+bodySecret+`"}`)
+			return
+		}
+		writeJSON(w, 200, `{"choices":[{"message":{"content":"ok"},"finish_reason":"stop"}]}`)
+	})
+	p, rec := newTestProvider(t, srv)
+
+	if _, err := p.Chat(context.Background(), userHi); err != nil {
+		t.Fatalf("Chat: %v", err)
+	}
+	// Exponential from the 10ms base, each wait spread over [0.5x, 1.5x).
+	if len(rec.waits) != 2 {
+		t.Fatalf("waits = %v, want 2", rec.waits)
+	}
+	for i, nominal := range []time.Duration{10 * time.Millisecond, 20 * time.Millisecond} {
+		if got := rec.waits[i]; got < nominal/2 || got >= nominal+nominal/2 {
+			t.Fatalf("wait %d = %v, want within [%v, %v)", i, got, nominal/2, nominal+nominal/2)
+		}
+	}
+}
+
+// Jitter must actually spread the waits: turns that hit the same 429 together
+// would otherwise retry in lockstep.
+func TestRetryDelayForJittersBackoffButNotRetryAfter(t *testing.T) {
+	seen := map[time.Duration]bool{}
+	for i := 0; i < 200; i++ {
+		d := retryDelayFor(time.Second, &ErrProvider{Status: 503}, 1)
+		if d < time.Second || d >= 3*time.Second {
+			t.Fatalf("delay %v outside [1s, 3s) for a 2s nominal backoff", d)
+		}
+		seen[d] = true
+	}
+	if len(seen) < 20 {
+		t.Errorf("only %d distinct delays in 200 draws: backoff is not jittered", len(seen))
+	}
+	if got := retryDelayFor(time.Second, &ErrRateLimited{RetryAfter: 7 * time.Second}, 1); got != 7*time.Second {
+		t.Errorf("Retry-After must be honored exactly, got %v", got)
+	}
+}
+
+func TestBuildRequestToolChoiceNone(t *testing.T) {
+	tools := []ToolSpec{{Name: "write_file", Description: "d"}}
+	base := ChatRequest{System: "s", Messages: []Message{{Role: RoleUser, Content: "hi"}}, Tools: tools}
+
+	p, err := NewOpenAI(OpenAIConfig{Model: "m"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := p.buildRequest(base).ToolChoice; got != "" {
+		t.Errorf("default tool_choice = %q, want omitted", got)
+	}
+	withNone := base
+	withNone.ToolChoice = ToolChoiceNone
+	if got := p.buildRequest(withNone).ToolChoice; got != "none" {
+		t.Errorf("tool_choice = %q, want none", got)
+	}
+	noTools := withNone
+	noTools.Tools = nil
+	if got := p.buildRequest(noTools).ToolChoice; got != "" {
+		t.Errorf("tool_choice without tools = %q, want omitted (the API rejects it)", got)
+	}
+
+	a, err := NewAnthropic(AnthropicConfig{APIKey: "k", Model: "m"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := a.buildRequest(base).ToolChoice; got != nil {
+		t.Errorf("anthropic default tool_choice = %+v, want omitted", got)
+	}
+	if got := a.buildRequest(withNone).ToolChoice; got == nil || got.Type != "none" {
+		t.Errorf("anthropic tool_choice = %+v, want type none", got)
+	}
+	if got := a.buildRequest(noTools).ToolChoice; got != nil {
+		t.Errorf("anthropic tool_choice without tools = %+v, want omitted", got)
+	}
+}
+
+func TestChatServerErrorExhausted(t *testing.T) {
+	var calls int32
+	srv := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		writeJSON(w, 503, `{"error":"`+bodySecret+`"}`)
+	})
+	p, _ := newTestProvider(t, srv)
+
+	_, err := p.Chat(context.Background(), userHi)
+	var pe *ErrProvider
+	if !errors.As(err, &pe) || pe.Status != 503 {
+		t.Fatalf("err = %v, want *ErrProvider{503}", err)
+	}
+	if atomic.LoadInt32(&calls) != maxAttempts {
+		t.Fatalf("calls = %d", calls)
+	}
+	assertNoLeak(t, err)
+	if !strings.Contains(pe.Body, bodySecret) {
+		t.Fatalf("Body must stay available for server logs, got %q", pe.Body)
+	}
+}
+
+// Generation is not idempotent: a 500, 502 or 504 may come from a request the
+// provider (or a gateway in front of it) already processed and billed, so only
+// the statuses that mean "not processed" are retried.
+func TestChatRetriesOnlyUnprocessedStatuses(t *testing.T) {
+	for _, tt := range []struct {
+		status int
+		calls  int32
+	}{
+		{500, 1}, {502, 1}, {504, 1},
+		{503, maxAttempts}, {529, maxAttempts},
+	} {
+		t.Run(strconv.Itoa(tt.status), func(t *testing.T) {
+			var calls int32
+			srv := serve(t, func(w http.ResponseWriter, r *http.Request) {
+				atomic.AddInt32(&calls, 1)
+				writeJSON(w, tt.status, `{"error":"boom"}`)
+			})
+			p, _ := newTestProvider(t, srv)
+			_, err := p.Chat(context.Background(), userHi)
+			var pe *ErrProvider
+			if !errors.As(err, &pe) || pe.Status != tt.status {
+				t.Fatalf("err = %v, want *ErrProvider{%d}", err, tt.status)
+			}
+			if got := atomic.LoadInt32(&calls); got != tt.calls {
+				t.Fatalf("calls = %d, want %d", got, tt.calls)
+			}
+		})
+	}
+}
+
+// A connection that never opened cannot have reached the provider, so it is
+// retried; a connection dropped after the request was sent is not.
+func TestChatRetriesDialFailureOnly(t *testing.T) {
+	t.Run("dial refused", func(t *testing.T) {
+		l, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		addr := l.Addr().String()
+		l.Close()
+		p, err := NewOpenAI(OpenAIConfig{BaseURL: "http://" + addr + "/v1", APIKey: testAPIKey, Model: "m"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rec := &sleepRecorder{}
+		p.sleep = rec.sleep
+		if _, err := p.Chat(context.Background(), userHi); err == nil {
+			t.Fatal("want an error")
+		}
+		if len(rec.waits) != maxAttempts-1 {
+			t.Fatalf("waits = %v, want %d retries", rec.waits, maxAttempts-1)
+		}
+	})
+	t.Run("dropped after send", func(t *testing.T) {
+		var calls int32
+		srv := serve(t, func(w http.ResponseWriter, r *http.Request) {
+			atomic.AddInt32(&calls, 1)
+			conn, _, err := w.(http.Hijacker).Hijack()
+			if err == nil {
+				conn.Close()
+			}
+		})
+		p, rec := newTestProvider(t, srv)
+		if _, err := p.Chat(context.Background(), userHi); err == nil {
+			t.Fatal("want an error")
+		}
+		if got := atomic.LoadInt32(&calls); got != 1 || len(rec.waits) != 0 {
+			t.Fatalf("calls = %d, waits = %v, want a single attempt", got, rec.waits)
+		}
+	})
+}
+
+func TestChatMalformedJSON(t *testing.T) {
+	srv := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, `{"choices": [`+bodySecret)
+	})
+	p, rec := newTestProvider(t, srv)
+
+	_, err := p.Chat(context.Background(), userHi)
+	var pe *ErrProvider
+	if !errors.As(err, &pe) {
+		t.Fatalf("err = %v, want *ErrProvider", err)
+	}
+	if pe.Unwrap() == nil {
+		t.Fatalf("raw decode error must be wrapped for logs")
+	}
+	assertNoLeak(t, err)
+	if len(rec.waits) != 0 {
+		t.Fatalf("malformed 200 must not be retried, waits = %v", rec.waits)
+	}
+}
+
+func TestChatNoChoicesAndErrorObject(t *testing.T) {
+	for name, body := range map[string]string{
+		"no choices":   `{"choices":[]}`,
+		"error object": `{"error":{"message":"boom"}}`,
+	} {
+		srv := serve(t, func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, body) })
+		p, _ := newTestProvider(t, srv)
+		_, err := p.Chat(context.Background(), userHi)
+		var pe *ErrProvider
+		if !errors.As(err, &pe) {
+			t.Fatalf("%s: err = %v, want *ErrProvider", name, err)
+		}
+	}
+}
+
+func TestChatContextTooLong(t *testing.T) {
+	bodies := map[string]string{
+		"code":    `{"error":{"code":"context_length_exceeded","message":"` + bodySecret + `"}}`,
+		"message": `{"error":{"message":"This model's maximum context length is 128000 tokens. ` + bodySecret + `"}}`,
+	}
+	for name, body := range bodies {
+		srv := serve(t, func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 400, body) })
+		p, rec := newTestProvider(t, srv)
+
+		_, err := p.Chat(context.Background(), userHi)
+		if !errors.Is(err, ErrContextTooLong) {
+			t.Fatalf("%s: err = %v, want ErrContextTooLong", name, err)
+		}
+		assertNoLeak(t, err)
+		if len(rec.waits) != 0 {
+			t.Fatalf("%s: must not retry", name)
+		}
+	}
+}
+
+func TestChatOtherBadRequestIsProviderError(t *testing.T) {
+	srv := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 400, `{"error":{"message":"invalid tool schema `+bodySecret+`"}}`)
+	})
+	p, _ := newTestProvider(t, srv)
+
+	_, err := p.Chat(context.Background(), userHi)
+	var pe *ErrProvider
+	if !errors.As(err, &pe) || pe.Status != 400 {
+		t.Fatalf("err = %v, want *ErrProvider{400}", err)
+	}
+	assertNoLeak(t, err)
+}
+
+func TestChatInsufficientQuotaNotRetried(t *testing.T) {
+	var calls int32
+	srv := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		writeJSON(w, 429, `{"error":{"code":"insufficient_quota","message":"billing"}}`)
+	})
+	p, _ := newTestProvider(t, srv)
+
+	_, err := p.Chat(context.Background(), userHi)
+	var pe *ErrProvider
+	if !errors.As(err, &pe) || pe.Status != 429 || atomic.LoadInt32(&calls) != 1 {
+		t.Fatalf("err = %v calls = %d, want single *ErrProvider{429}", err, calls)
+	}
+}
+
+func TestChatContextCancelledDuringBackoff(t *testing.T) {
+	srv := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "10")
+		writeJSON(w, 429, `{}`)
+	})
+	p, err := NewOpenAI(OpenAIConfig{BaseURL: srv.URL, Model: "m"}) // real sleep
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	_, err = p.Chat(ctx, userHi)
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("backoff ignored ctx, took %v", elapsed)
+	}
+	var pe *ErrProvider
+	if !errors.As(err, &pe) || !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v, want *ErrProvider wrapping DeadlineExceeded", err)
+	}
+}
+
+func TestChatRequestShape(t *testing.T) {
+	var (
+		gotPath, gotAuth, gotCT string
+		gotBody                 map[string]any
+	)
+	srv := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		gotPath, gotAuth, gotCT = r.URL.Path, r.Header.Get("Authorization"), r.Header.Get("Content-Type")
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
+		writeJSON(w, 200, `{"choices":[{"message":{"content":"done"},"finish_reason":"stop"}]}`)
+	})
+	// Trailing slash on the base URL must not produce "//chat/completions".
+	p, err := NewOpenAI(OpenAIConfig{Name: "openai_compatible", BaseURL: srv.URL + "/v1beta/openai/", APIKey: testAPIKey, Model: "gemini-x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	schema := json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}`)
+	_, err = p.Chat(context.Background(), ChatRequest{
+		System: "be brief",
+		Messages: []Message{
+			{Role: RoleUser, Content: "read it"},
+			{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "call_1", Name: "read_file", Arguments: json.RawMessage(`{"path":"a.ts"}`)}}},
+			{Role: RoleTool, ToolCallID: "call_1", Content: "file contents"},
+		},
+		Tools:           []ToolSpec{{Name: "read_file", Description: "reads a file", Schema: schema}},
+		MaxOutputTokens: 777,
+	})
+	if err != nil {
+		t.Fatalf("Chat: %v", err)
+	}
+
+	if p.Name() != "openai_compatible" || p.Model() != "gemini-x" {
+		t.Fatalf("Name/Model = %q/%q", p.Name(), p.Model())
+	}
+	if gotPath != "/v1beta/openai/chat/completions" {
+		t.Fatalf("path = %q", gotPath)
+	}
+	if gotAuth != "Bearer "+testAPIKey || gotCT != "application/json" {
+		t.Fatalf("headers auth=%q ct=%q", gotAuth, gotCT)
+	}
+	if gotBody["model"] != "gemini-x" || gotBody["max_tokens"] != float64(777) {
+		t.Fatalf("model/max_tokens = %v/%v", gotBody["model"], gotBody["max_tokens"])
+	}
+
+	msgs := gotBody["messages"].([]any)
+	if len(msgs) != 4 {
+		t.Fatalf("messages = %v", msgs)
+	}
+	sys := msgs[0].(map[string]any)
+	if sys["role"] != "system" || sys["content"] != "be brief" {
+		t.Fatalf("system message = %v", sys)
+	}
+	asst := msgs[2].(map[string]any)
+	if asst["role"] != "assistant" || asst["content"] != nil {
+		t.Fatalf("assistant tool-call message must have null content: %v", asst)
+	}
+	call := asst["tool_calls"].([]any)[0].(map[string]any)
+	fn := call["function"].(map[string]any)
+	if call["id"] != "call_1" || call["type"] != "function" || fn["name"] != "read_file" || fn["arguments"] != `{"path":"a.ts"}` {
+		t.Fatalf("assistant tool call = %v", call)
+	}
+	tool := msgs[3].(map[string]any)
+	if tool["role"] != "tool" || tool["tool_call_id"] != "call_1" || tool["content"] != "file contents" {
+		t.Fatalf("tool message = %v", tool)
+	}
+
+	tools := gotBody["tools"].([]any)
+	if len(tools) != 1 {
+		t.Fatalf("tools = %v", tools)
+	}
+	spec := tools[0].(map[string]any)
+	specFn := spec["function"].(map[string]any)
+	if spec["type"] != "function" || specFn["name"] != "read_file" || specFn["description"] != "reads a file" {
+		t.Fatalf("tool spec = %v", spec)
+	}
+	wantParams := map[string]any{}
+	_ = json.Unmarshal(schema, &wantParams)
+	if !reflect.DeepEqual(specFn["parameters"], wantParams) {
+		t.Fatalf("parameters = %v, want %v", specFn["parameters"], wantParams)
+	}
+}
+
+func TestChatOmitsOptionalFields(t *testing.T) {
+	var gotAuth string
+	var gotBody map[string]any
+	srv := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		writeJSON(w, 200, `{"choices":[{"message":{"content":"ok"}}]}`)
+	})
+	p, err := NewOpenAI(OpenAIConfig{BaseURL: srv.URL, Model: "llama"}) // keyless, e.g. Ollama
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Chat(context.Background(), userHi); err != nil {
+		t.Fatalf("Chat: %v", err)
+	}
+	if gotAuth != "" {
+		t.Fatalf("Authorization sent without a key: %q", gotAuth)
+	}
+	for _, k := range []string{"max_tokens", "tools"} {
+		if _, ok := gotBody[k]; ok {
+			t.Fatalf("%s must be omitted when unset", k)
+		}
+	}
+}
+
+func TestToolCallNormalization(t *testing.T) {
+	srv := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, `{"choices":[{"message":{"tool_calls":[
+			{"function":{"name":"no_id","arguments":""}},
+			{"id":"x","function":{"name":"bad_args","arguments":"not json"}}]},
+			"finish_reason":"stop"}]}`)
+	})
+	p, _ := newTestProvider(t, srv)
+
+	resp, err := p.Chat(context.Background(), userHi)
+	if err != nil {
+		t.Fatalf("Chat: %v", err)
+	}
+	if resp.FinishReason != FinishToolCalls {
+		t.Fatalf("stop with tool calls must normalize to tool_calls, got %q", resp.FinishReason)
+	}
+	if resp.ToolCalls[0].ID == "" || string(resp.ToolCalls[0].Arguments) != `{}` {
+		t.Fatalf("call 0 = %+v", resp.ToolCalls[0])
+	}
+	// Invalid arguments must survive json.Marshal (they are persisted).
+	if _, err := json.Marshal(resp); err != nil {
+		t.Fatalf("response not serializable: %v", err)
+	}
+	if string(resp.ToolCalls[1].Arguments) != `"not json"` {
+		t.Fatalf("call 1 args = %s", resp.ToolCalls[1].Arguments)
+	}
+}
+
+func TestMessageJSONRoundTrip(t *testing.T) {
+	in := ChatResponse{
+		Message: Message{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "c", Name: "n", Arguments: json.RawMessage(`{"a":1}`)}}},
+		Usage:   Usage{InputTokens: 1, OutputTokens: 2},
+	}
+	raw, err := json.Marshal(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out ChatResponse
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Message.ToolCalls[0].ID != "c" || string(out.Message.ToolCalls[0].Arguments) != `{"a":1}` || out.Usage != in.Usage {
+		t.Fatalf("round trip = %+v", out)
+	}
+}
+
+func TestNewOpenAIValidation(t *testing.T) {
+	if _, err := NewOpenAI(OpenAIConfig{}); err == nil {
+		t.Fatal("empty model must be rejected")
+	}
+	if _, err := NewOpenAI(OpenAIConfig{Model: "m", BaseURL: "not a url"}); err == nil {
+		t.Fatal("invalid base URL must be rejected")
+	}
+	if _, err := NewOpenAI(OpenAIConfig{Model: "m", BaseURL: "ftp://example.com"}); err == nil {
+		t.Fatal("non-http scheme must be rejected")
+	}
+	p, err := NewOpenAI(OpenAIConfig{Model: "m"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Name() != "openai" || p.endpoint != "https://api.openai.com/v1/chat/completions" {
+		t.Fatalf("defaults: name=%q endpoint=%q", p.Name(), p.endpoint)
+	}
+}
+
+func TestParseRetryAfter(t *testing.T) {
+	if got := parseRetryAfter("3"); got != 3*time.Second {
+		t.Fatalf("seconds = %v", got)
+	}
+	if got := parseRetryAfter("1.5"); got != 1500*time.Millisecond {
+		t.Fatalf("fractional = %v", got)
+	}
+	if got := parseRetryAfter(""); got != 0 {
+		t.Fatalf("empty = %v", got)
+	}
+	if got := parseRetryAfter("garbage"); got != 0 {
+		t.Fatalf("garbage = %v", got)
+	}
+	if got := parseRetryAfter("-5"); got != 0 {
+		t.Fatalf("negative = %v", got)
+	}
+}

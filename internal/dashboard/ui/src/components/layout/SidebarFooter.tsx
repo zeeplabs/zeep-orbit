@@ -66,6 +66,8 @@ interface SidebarFooterProps {
   onLogout: () => void
   className?: string
   version?: string
+  /** Icon-only column for the 68 px rail of the simple shell's builder route. */
+  collapsed?: boolean
   /** Callback executado quando o usuário fecha o bottom-sheet (mobile only). */
   onNavigate?: () => void
 }
@@ -80,10 +82,40 @@ export function SidebarFooter({
   className,
   version,
   onNavigate,
+  collapsed = false,
 }: SidebarFooterProps) {
   const { t } = useTranslation()
   const { mode, toggle } = useTheme()
   const isPt = currentLang === 'pt-BR'
+
+  if (collapsed) {
+    const name = user.name ? firstLastName(user.name) : user.email
+    return (
+      <div className={cn('flex w-full flex-col items-stretch gap-1.5 border-t border-[var(--border)] pt-3.5 pb-1', className)}>
+        <div
+          role="img"
+          aria-label={name}
+          title={name}
+          className="mx-auto mb-1 h-8 w-8 shrink-0 rounded-full"
+          style={{ background: 'linear-gradient(135deg, var(--primary), var(--accent))' }}
+        />
+        <GitHubBtn />
+        <IconBtn
+          icon={mode === 'dark' ? 'light_mode' : 'dark_mode'}
+          title={mode === 'dark' ? t('theme.light') : t('theme.dark')}
+          onClick={toggle}
+        />
+        <IconBtn
+          title={isPt ? t('language.ptBR') : t('language.en')}
+          onClick={() => onSaveLanguage(isPt ? 'en' : 'pt-BR')}
+        >
+          <span className="text-[15px] leading-none">{isPt ? '🇧🇷' : '🇺🇸'}</span>
+        </IconBtn>
+        <IconBtn icon="lock" title={t('nav.changePassword')} onClick={onChangePassword} />
+        <IconBtn icon="logout" title={t('nav.logout')} onClick={onLogout} />
+      </div>
+    )
+  }
 
   return (
     <div className={cn('border-t border-[var(--border)] pt-3.5', className)}>

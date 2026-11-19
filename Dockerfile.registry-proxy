@@ -1,0 +1,43 @@
+# Image of the npm registry proxy (cmd/zeep-registry-proxy), the only internet
+# path of the AI Frontend Builder (see .specs/features/ai-frontend-builder/design.md,
+# section 7). Needed by deploy/builder.compose.yml; Helm/Easypanel can reuse it.
+#
+# Static Go binary on a minimal Alpine runtime: ca-certificates for the HTTPS
+# upstreams and busybox wget for the compose/orchestrator /healthz probe. It
+# bakes NO upstream list and NO token: REGISTRY_PROXY_UPSTREAMS and
+# REGISTRY_PROXY_TOKEN_<NAME> arrive at runtime.
+
+ARG GO_IMAGE=golang:1.26-alpine
+ARG RUNTIME_IMAGE=alpine:3.22
+
+FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS gobuild
+
+ARG TARGETARCH
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY cmd ./cmd
+COPY internal ./internal
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags="-s -w" -o /out/zeep-registry-proxy ./cmd/zeep-registry-proxy
+
+FROM ${RUNTIME_IMAGE} AS runtime
+
+RUN apk add --no-cache ca-certificates \
+    && addgroup -g 10001 -S proxy \
+    && adduser -u 10001 -S -G proxy -H -s /sbin/nologin proxy
+
+COPY --from=gobuild /out/zeep-registry-proxy /usr/local/bin/zeep-registry-proxy
+
+USER 10001:10001
+
+EXPOSE 4873
+
+# /healthz never contacts an upstream, so a registry outage cannot flag a
+# healthy proxy as dead.
+HEALTHCHECK --interval=10s --timeout=3s --start-period=3s --retries=3 \
+    CMD wget -q -O /dev/null http://127.0.0.1:4873/healthz || exit 1
+
+ENTRYPOINT ["/usr/local/bin/zeep-registry-proxy"]

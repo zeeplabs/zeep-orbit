@@ -35,6 +35,11 @@ type FrontendAppsHandler struct {
 	pool *db.Pool
 
 	httpClient *http.Client
+
+	// newDeployProvider overrides how attemptDeploy builds the deploy provider.
+	// nil in production (the Render provider); the AI Frontend Builder's
+	// publish (builder_publish.go) and tests inject a fake.
+	newDeployProvider DeployProviderFactory
 }
 
 func NewFrontendAppsHandler(pool *db.Pool) *FrontendAppsHandler {
@@ -612,7 +617,11 @@ func (h *FrontendAppsHandler) attemptDeploy(ctx context.Context, app *FrontendAp
 		return
 	}
 
-	provider, err := buildDeployProvider(ctx, dcfg)
+	build := buildDeployProvider
+	if h.newDeployProvider != nil {
+		build = h.newDeployProvider
+	}
+	provider, err := build(ctx, dcfg)
 	if err != nil {
 		_, _ = UpdateFrontendAppDeploy(ctx, h.pool, app.ID, "", "", "failed", err.Error())
 		return

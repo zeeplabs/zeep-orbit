@@ -44,7 +44,9 @@ export default function LoginPage() {
 
       qc.clear()
       const returnTo = safeReturnTo(location.search)
-      window.location.href = returnTo ? `/dashboard${returnTo}` : '/dashboard/apps'
+      // `/` is the landing: HomeEntry sends advanced-mode users, and users without the
+      // builder, to /apps (home-chat HCH-10).
+      window.location.href = returnTo ? `/dashboard${returnTo}` : '/dashboard/'
     } catch {
       setError(t('common.connectionError'))
     } finally {

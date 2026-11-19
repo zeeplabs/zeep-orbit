@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # zeep-orbit
 
-**zeep-orbit** is an open-source, self-hosted BaaS (Backend-as-a-Service) platform. Define your data model — get instant REST APIs + PostgreSQL schemas. Built for AI-generated frontends that need a backend fast.
+**zeep-orbit** is an open-source, self-hosted platform for building apps with AI the right way. Define your data model — get instant REST APIs + PostgreSQL schemas. Let AI build the frontend already wired to that backend, or connect a frontend you already have.
 
 ```yaml
 apps:

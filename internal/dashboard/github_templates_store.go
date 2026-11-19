@@ -24,6 +24,9 @@ type GitHubTemplate struct {
 	BuildCommand      string    `json:"build_command"`
 	PublishPath       string    `json:"publish_path"`
 	StartCommand      string    `json:"start_command"`
+	// BuilderEnabled marks the template as a base template of the AI Frontend
+	// Builder (ai-frontend-builder AFB-26). Independent of Active.
+	BuilderEnabled bool `json:"builder_enabled"`
 }
 
 type GitHubTemplateInput struct {
@@ -40,18 +43,18 @@ type GitHubTemplateInput struct {
 }
 
 const githubTemplateCols = `id, name, description, github_owner, github_repo, framework, active, created_by, created_at,
-	COALESCE(render_service_type, ''), COALESCE(build_command, ''), COALESCE(publish_path, ''), COALESCE(start_command, '')`
+	COALESCE(render_service_type, ''), COALESCE(build_command, ''), COALESCE(publish_path, ''), COALESCE(start_command, ''), builder_enabled`
 
 func scanTemplate(t *GitHubTemplate, row pgx.Row) error {
 	return row.Scan(&t.ID, &t.Name, &t.Description, &t.GitHubOwner, &t.GitHubRepo,
 		&t.Framework, &t.Active, &t.CreatedBy, &t.CreatedAt,
-		&t.RenderServiceType, &t.BuildCommand, &t.PublishPath, &t.StartCommand)
+		&t.RenderServiceType, &t.BuildCommand, &t.PublishPath, &t.StartCommand, &t.BuilderEnabled)
 }
 
 func scanTemplateRows(t *GitHubTemplate, rows pgx.Rows) error {
 	return rows.Scan(&t.ID, &t.Name, &t.Description, &t.GitHubOwner, &t.GitHubRepo,
 		&t.Framework, &t.Active, &t.CreatedBy, &t.CreatedAt,
-		&t.RenderServiceType, &t.BuildCommand, &t.PublishPath, &t.StartCommand)
+		&t.RenderServiceType, &t.BuildCommand, &t.PublishPath, &t.StartCommand, &t.BuilderEnabled)
 }
 
 func ListGitHubTemplates(ctx context.Context, pool *db.Pool, onlyActive bool) ([]GitHubTemplate, error) {
@@ -141,4 +144,78 @@ func SetGitHubTemplateActive(ctx context.Context, pool *db.Pool, id string, acti
 		return ErrNotFound
 	}
 	return nil
+}
+
+// SetGitHubTemplateBuilderEnabled marks (or unmarks) a template as a base
+// template of the AI Frontend Builder and returns the updated row. ErrNotFound
+// when id matches no template (a malformed id counts as not found, instead of
+// surfacing Postgres' uuid syntax error as a 500).
+func SetGitHubTemplateBuilderEnabled(ctx context.Context, pool *db.Pool, id string, enabled bool) (*GitHubTemplate, error) {
+	if !looksLikeUUID(id) {
+		return nil, ErrNotFound
+	}
+	var t GitHubTemplate
+	err := scanTemplate(&t, pool.QueryRow(ctx,
+		`UPDATE zeep_system.github_templates SET builder_enabled = $2 WHERE id = $1
+		 RETURNING `+githubTemplateCols,
+		id, enabled,
+	))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("dashboard: set github template builder_enabled: %w", err)
+	}
+	return &t, nil
+}
+
+// ListBuilderEnabledGitHubTemplates returns the templates a builder user may
+// start from: builder_enabled AND active (a deactivated template stays hidden
+// even if it was enabled before), ordered by name.
+func ListBuilderEnabledGitHubTemplates(ctx context.Context, pool *db.Pool) ([]GitHubTemplate, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT `+githubTemplateCols+`
+		 FROM zeep_system.github_templates
+		 WHERE builder_enabled = true AND active = true
+		 ORDER BY name, created_at`)
+	if err != nil {
+		return nil, fmt.Errorf("dashboard: list builder github templates: %w", err)
+	}
+	defer rows.Close()
+
+	templates := make([]GitHubTemplate, 0)
+	for rows.Next() {
+		var t GitHubTemplate
+		if err := scanTemplateRows(&t, rows); err != nil {
+			return nil, fmt.Errorf("dashboard: list builder github templates scan: %w", err)
+		}
+		templates = append(templates, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("dashboard: list builder github templates rows: %w", err)
+	}
+	return templates, nil
+}
+
+// looksLikeUUID reports whether s has the canonical 8-4-4-4-12 hex shape, so a
+// path parameter can be rejected as "not found" before it reaches a uuid
+// column.
+func looksLikeUUID(s string) bool {
+	if len(s) != 36 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		switch i {
+		case 8, 13, 18, 23:
+			if s[i] != '-' {
+				return false
+			}
+		default:
+			c := s[i]
+			if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F') {
+				return false
+			}
+		}
+	}
+	return true
 }

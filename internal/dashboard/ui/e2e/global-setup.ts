@@ -27,11 +27,15 @@ export default async function globalSetup() {
     })
   }
 
+  // The suite drives the advanced interface. Without this, a stack whose AI builder is
+  // available would land `/` on the chat home (home-chat HCH-10) instead of /apps.
+  await page.addInitScript(() => localStorage.setItem('orbit.mode', 'advanced'))
   await page.goto(`${BASE}/dashboard`)
   await page.waitForURL('**/login')
   await page.fill('input[type="email"]', 'admin@test.com')
   await page.fill('input[type="password"]', 'test1234')
   await page.click('button[type="submit"]')
+  // Login lands on `/dashboard/`, which redirects to /apps in advanced mode.
   await page.waitForURL('**/apps')
 
   await page.context().storageState({ path: STORAGE_STATE_PATH })

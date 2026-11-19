@@ -1,6 +1,6 @@
 # zeeplabs/orbit-client
 
-PHP client for [Zeep Orbit](https://github.com/zeeplabs/zeep-orbit) — an open-source, self-hosted BaaS platform.
+PHP client for [Zeep Orbit](https://github.com/zeeplabs/zeep-orbit) — an open-source, self-hosted platform for building apps with AI on a real backend.
 
 ```php
 $orbit = new Zeeplabs\Orbit\OrbitClient(

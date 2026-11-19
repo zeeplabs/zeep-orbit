@@ -5,7 +5,7 @@ package mcpserver
 // correctly without a separately-installed skill (the orbit-usage skill in
 // zeeplabs/zeep-orbit-agent-skills covers the same ground for humans/agents
 // that install it explicitly; this is the zero-install baseline).
-const serverInstructions = `This is the Zeep Orbit MCP server: it manages apps, tables, columns, RLS policies, webhooks, and tokens for a self-hosted Backend-as-a-Service. Tool calls run through the same provisioner/audit path as the Dashboard UI and REST API — no shortcuts.
+const serverInstructions = `This is the Zeep Orbit MCP server: it manages apps, tables, columns, RLS policies, webhooks, and tokens for a self-hosted platform for building apps on a backend generated from the database schema. Tool calls run through the same provisioner/audit path as the Dashboard UI and REST API — no shortcuts.
 
 Always call tools/list first for exact, current tool names and input schemas. Tool names below are illustrative categories, not a schema reference:
 - App lifecycle: orbit_list_apps, orbit_get_app, orbit_get_app_schema, orbit_create_app, orbit_update_app

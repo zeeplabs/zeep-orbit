@@ -1,0 +1,76 @@
+[
+  {
+    "id": "v1",
+    "kind": "vague",
+    "locale": "pt-BR",
+    "message": "Quero um app para minha padaria."
+  },
+  {
+    "id": "v2",
+    "kind": "vague",
+    "locale": "pt-BR",
+    "message": "Preciso de um sistema para controlar as aulas da minha academia."
+  },
+  {
+    "id": "v3",
+    "kind": "vague",
+    "locale": "pt-BR",
+    "message": "Faz um painel para a minha loja de bicicletas."
+  },
+  {
+    "id": "v4",
+    "kind": "vague",
+    "locale": "pt-BR",
+    "message": "Quero algo para organizar os pedidos de conserto de uma oficina."
+  },
+  {
+    "id": "c1",
+    "kind": "complete",
+    "locale": "pt-BR",
+    "message": "Quero um cadastro de clientes de uma loja de bicicletas (exemplo: Bike Norte). Cada cliente tem nome, telefone e e-mail. Telas: lista de clientes com busca por nome, página de cadastro e página de edição. Só a equipe da loja entra, com e-mail e senha. Visual simples, azul e branco. Não precisa de relatórios nem de pagamento."
+  },
+  {
+    "id": "c2",
+    "kind": "complete",
+    "locale": "pt-BR",
+    "message": "Preciso de uma agenda de aulas para uma academia de exemplo (Academia Central). Cada aula tem modalidade, professor, dia da semana, horário e vagas. O aluno vê a grade da semana e reserva uma vaga; a recepção cria e edita aulas. Login por e-mail para a recepção; alunos entram só com o nome e e-mail. Sem cobrança nesta versão."
+  },
+  {
+    "id": "c3",
+    "kind": "complete",
+    "locale": "pt-BR",
+    "message": "Quero uma lista de pedidos de conserto para a oficina Mecânica Sul (exemplo). Campos: cliente, veículo, defeito, status (aberto, em andamento, pronto, entregue) e data de entrada. Telas: lista com filtro por status, detalhe do pedido e formulário. Apenas os mecânicos acessam, com e-mail e senha. Tema escuro."
+  },
+  {
+    "id": "c4",
+    "kind": "complete",
+    "locale": "pt-BR",
+    "message": "Faz um controle de estoque simples para uma padaria de exemplo (Pão Quente): produtos com nome, quantidade e quantidade mínima. Tela de lista que destaca o que está abaixo do mínimo, tela para dar entrada e saída, e histórico de movimentos. Acesso só do dono, com e-mail e senha."
+  },
+  {
+    "id": "b1",
+    "kind": "backend",
+    "locale": "pt-BR",
+    "message": "Faz as telas para usar as tabelas que já existem no backend.",
+    "schema": "App schema:\n- table clients (id uuid, name text, email text, phone text, created_at timestamptz)\n- table visits (id uuid, client_id uuid -> clients.id, visited_on date, note text)"
+  },
+  {
+    "id": "b2",
+    "kind": "backend",
+    "locale": "pt-BR",
+    "message": "Quero uma tela para acompanhar as tarefas que já estão no backend e marcar como concluídas.",
+    "schema": "App schema:\n- table tasks (id uuid, title text, done boolean default false, due_on date, created_at timestamptz)\n- table task_notes (id uuid, task_id uuid -> tasks.id, body text)"
+  },
+  {
+    "id": "e1",
+    "kind": "english",
+    "locale": "en",
+    "message": "I want an app for my small bookshop."
+  },
+  {
+    "id": "e2",
+    "kind": "english",
+    "locale": "en",
+    "message": "Build a waiting list for a dental clinic (example: Bright Smile). Each entry has a patient name, phone, reason for the visit and the time they arrived. Staff sign in with email and password, see the list ordered by arrival, mark someone as called or done, and add walk-ins. No online booking and no payments in this version. Clean, light look."
+  }
+]

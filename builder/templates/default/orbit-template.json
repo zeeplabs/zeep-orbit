@@ -1,0 +1,6 @@
+{
+  "version": "1",
+  "render_service_type": "static_site",
+  "build_command": "npm ci && npm run build",
+  "publish_path": "dist"
+}

@@ -189,6 +189,15 @@ cd clients/php
 - [ ] PyPI: `pip install zeeplabs-orbit-client==0.1.0`
 - [ ] crates.io: `cargo search orbit-client`
 
+## Model catalog (when models or prices change)
+
+The OpenAI and Anthropic models of the AI builder and their list prices live in `internal/agent/catalog/models.go` and reach installations only through a release.
+
+1. Check the providers' pricing pages: developers.openai.com/api/docs/pricing (Standard tier, short context) and platform.claude.com/docs/en/about-claude/pricing.
+2. A price change is a **new** `PriceVersion` with its `EffectiveFrom`; never edit a version that already shipped (calls were priced with it). A known future change (a promotion ending, an announced increase) can ship ahead with a later `EffectiveFrom`.
+3. A model the provider still serves is marked `Deprecated`, never removed: removing it makes the builder unavailable (`model_not_in_catalog`) on every installation that uses it.
+4. Set `ReviewedAt` to the day of the check, run `go test ./internal/agent/catalog/` (it rejects duplicated models, malformed prices, unordered versions or tiers), and add a CHANGELOG line that names the changed models and prices.
+
 ## Checklist
 
 - [ ] Release branch `release-vX.Y.Z` created from `develop`
@@ -204,3 +213,4 @@ cd clients/php
 - [ ] Docker pull works
 - [ ] Helm install works (`helm repo update && helm install zeeplabs/zeep-orbit`)
 - [ ] SDK clients published, if changed (TS / Go / Python / Rust / Java / PHP)
+- [ ] Model catalog checked against the providers' pricing pages, if this release changes it
