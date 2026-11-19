@@ -293,6 +293,9 @@ type oaRequest struct {
 	// reject it would need a per-model switch, which is out of scope until one
 	// is configured.
 	MaxTokens int `json:"max_tokens,omitempty"`
+	// ToolChoice is only ever "none" here; the API rejects the field on a
+	// request without tools, so it is set only when tools are sent.
+	ToolChoice string `json:"tool_choice,omitempty"`
 }
 
 type oaMessage struct {
@@ -390,6 +393,9 @@ func (o *OpenAI) buildRequest(req ChatRequest) oaRequest {
 			Type:     "function",
 			Function: oaToolFunc{Name: t.Name, Description: t.Description, Parameters: schema},
 		})
+	}
+	if req.ToolChoice == ToolChoiceNone && len(out.Tools) > 0 {
+		out.ToolChoice = ToolChoiceNone
 	}
 	return out
 }

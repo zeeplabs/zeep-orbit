@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"net/url"
 	"strings"
@@ -206,14 +207,19 @@ func isAnthropicContextTooLong(body []byte) bool {
 }
 
 // retryDelayFor is the provider's Retry-After when it gave one, otherwise
-// exponential backoff from base. failures is the count of failed attempts
-// minus one (0 for the first retry).
+// exponential backoff from base, spread over [0.5x, 1.5x) so that turns that
+// hit the same 429 together do not retry in lockstep. failures is the count of
+// failed attempts minus one (0 for the first retry).
 func retryDelayFor(base time.Duration, err error, failures int) time.Duration {
 	var rl *ErrRateLimited
 	if errors.As(err, &rl) && rl.RetryAfter > 0 {
 		return rl.RetryAfter
 	}
-	return base << failures
+	d := base << failures
+	if d <= 0 {
+		return d
+	}
+	return d/2 + rand.N(d)
 }
 
 // --- wire format ---------------------------------------------------------
@@ -228,6 +234,14 @@ type anRequest struct {
 	// it on the last cacheable block and moves it forward as the history
 	// grows, so each step of a loop reads the previous step's prefix.
 	CacheControl *anCacheControl `json:"cache_control,omitempty"`
+	// ToolChoice is only ever {"type":"none"} here. Changing it between calls
+	// invalidates the cached message blocks (tools and system stay cached), so
+	// the loop sets it on the closing step of a turn only.
+	ToolChoice *anToolChoice `json:"tool_choice,omitempty"`
+}
+
+type anToolChoice struct {
+	Type string `json:"type"`
 }
 
 // anCacheControl is the default 5 minute entry. A loop step starts well
@@ -323,6 +337,9 @@ func (a *Anthropic) buildRequest(req ChatRequest) anRequest {
 			schema = emptyObjectSchema
 		}
 		out.Tools = append(out.Tools, anTool{Name: t.Name, Description: t.Description, InputSchema: schema})
+	}
+	if req.ToolChoice == ToolChoiceNone && len(out.Tools) > 0 {
+		out.ToolChoice = &anToolChoice{Type: "none"}
 	}
 	return out
 }

@@ -280,8 +280,8 @@ func TestPlanMode_ApprovedBuildStillHitsMaxSteps(t *testing.T) {
 	if fin := h.finished(); fin.Status != store.TurnLimitReached {
 		t.Fatalf("status = %q, want limit_reached", fin.Status)
 	}
-	if h.prov.calls() != 3 {
-		t.Errorf("provider calls = %d, want 1 planning + 2 build", h.prov.calls())
+	if h.prov.calls() != 4 {
+		t.Errorf("provider calls = %d, want 1 planning + 2 build + 1 closing call", h.prov.calls())
 	}
 }
 
