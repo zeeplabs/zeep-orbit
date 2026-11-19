@@ -315,8 +315,70 @@ func TestChatServerErrorRetriesWithBackoff(t *testing.T) {
 	if _, err := p.Chat(context.Background(), userHi); err != nil {
 		t.Fatalf("Chat: %v", err)
 	}
-	if want := []time.Duration{10 * time.Millisecond, 20 * time.Millisecond}; !reflect.DeepEqual(rec.waits, want) {
-		t.Fatalf("waits = %v, want exponential %v", rec.waits, want)
+	// Exponential from the 10ms base, each wait spread over [0.5x, 1.5x).
+	if len(rec.waits) != 2 {
+		t.Fatalf("waits = %v, want 2", rec.waits)
+	}
+	for i, nominal := range []time.Duration{10 * time.Millisecond, 20 * time.Millisecond} {
+		if got := rec.waits[i]; got < nominal/2 || got >= nominal+nominal/2 {
+			t.Fatalf("wait %d = %v, want within [%v, %v)", i, got, nominal/2, nominal+nominal/2)
+		}
+	}
+}
+
+// Jitter must actually spread the waits: turns that hit the same 429 together
+// would otherwise retry in lockstep.
+func TestRetryDelayForJittersBackoffButNotRetryAfter(t *testing.T) {
+	seen := map[time.Duration]bool{}
+	for i := 0; i < 200; i++ {
+		d := retryDelayFor(time.Second, &ErrProvider{Status: 503}, 1)
+		if d < time.Second || d >= 3*time.Second {
+			t.Fatalf("delay %v outside [1s, 3s) for a 2s nominal backoff", d)
+		}
+		seen[d] = true
+	}
+	if len(seen) < 20 {
+		t.Errorf("only %d distinct delays in 200 draws: backoff is not jittered", len(seen))
+	}
+	if got := retryDelayFor(time.Second, &ErrRateLimited{RetryAfter: 7 * time.Second}, 1); got != 7*time.Second {
+		t.Errorf("Retry-After must be honored exactly, got %v", got)
+	}
+}
+
+func TestBuildRequestToolChoiceNone(t *testing.T) {
+	tools := []ToolSpec{{Name: "write_file", Description: "d"}}
+	base := ChatRequest{System: "s", Messages: []Message{{Role: RoleUser, Content: "hi"}}, Tools: tools}
+
+	p, err := NewOpenAI(OpenAIConfig{Model: "m"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := p.buildRequest(base).ToolChoice; got != "" {
+		t.Errorf("default tool_choice = %q, want omitted", got)
+	}
+	withNone := base
+	withNone.ToolChoice = ToolChoiceNone
+	if got := p.buildRequest(withNone).ToolChoice; got != "none" {
+		t.Errorf("tool_choice = %q, want none", got)
+	}
+	noTools := withNone
+	noTools.Tools = nil
+	if got := p.buildRequest(noTools).ToolChoice; got != "" {
+		t.Errorf("tool_choice without tools = %q, want omitted (the API rejects it)", got)
+	}
+
+	a, err := NewAnthropic(AnthropicConfig{APIKey: "k", Model: "m"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := a.buildRequest(base).ToolChoice; got != nil {
+		t.Errorf("anthropic default tool_choice = %+v, want omitted", got)
+	}
+	if got := a.buildRequest(withNone).ToolChoice; got == nil || got.Type != "none" {
+		t.Errorf("anthropic tool_choice = %+v, want type none", got)
+	}
+	if got := a.buildRequest(noTools).ToolChoice; got != nil {
+		t.Errorf("anthropic tool_choice without tools = %+v, want omitted", got)
 	}
 }
 

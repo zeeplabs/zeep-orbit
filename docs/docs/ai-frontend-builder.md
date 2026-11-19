@@ -175,6 +175,8 @@ After deployment, a superadmin completes setup in the dashboard, under **Integra
    | Planning | `required` | `required`, `suggested` or `off` (see [Planning](#planning)) |
    | Planning model | empty (the provider's own model) | a model of the selected provider (see [Planning model](#planning-model)) |
 
+   **Max steps per turn** counts the model calls that do work. A turn stopped by it ends `limit_reached` after one extra closing call, outside the limit and with tools disabled, that asks the model for what is done, what is missing and what to ask next. A turn that finishes within the limit has no closing call, and a closing call that fails or does not fit the budget or the turn time only means there is no handover. The closing call is billed like any other.
+
    Token budgets count every token of a call: input, cached input, cache write and output. **Both token budgets must be greater than zero.** With either one at `0`, the builder reports itself unavailable (`budget_not_configured`) and **Create with AI** is disabled; sending a message to an existing session is refused the same way. If a cap is set back to `0` while a turn is already running, that turn's next model call is refused and the turn ends with a `budget_exceeded` event. The budget is checked before each model call, against what was already recorded, so the call that crosses the limit is the last one. The monthly budget counts the calendar month in UTC. A settings change applies to the next turn without restarting Orbit.
 
    The two cost budgets are optional and work the same way, in money: see [Usage and cost](#usage-and-cost). When usage reaches 80% of any budget, the session timeline shows a notice, once per session and budget.

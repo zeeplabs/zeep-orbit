@@ -62,7 +62,16 @@ type ChatRequest struct {
 	// compaction summary leaves it false: the write premium would never be
 	// read back.
 	CacheHint bool
+	// ToolChoice constrains tool use for this call. "" leaves it to the model.
+	// ToolChoiceNone keeps the tool definitions in the request (a history with
+	// tool calls needs them, and dropping them would change the cached
+	// prefix) but tells the model to answer in text only. It has no effect on
+	// a request that carries no tools.
+	ToolChoice string
 }
+
+// ChatRequest.ToolChoice values.
+const ToolChoiceNone = "none"
 
 // ChatResponse is the model's reply to one ChatRequest.
 type ChatResponse struct {
