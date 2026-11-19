@@ -171,6 +171,14 @@ type run struct {
 	// warned: caps this run already tried to warn about, so the store is
 	// asked once per cap and turn (it keeps the once-per-session rule).
 	warned map[string]bool
+	// closingNotice is set while the closing call after a count limit is being
+	// made (see closeAtLimit): tools disabled, this notice added as the last
+	// message. Empty for every other call.
+	closingNotice string
+	// truncatedCalls holds the ids of tool calls whose arguments the model cut
+	// off by hitting the output limit. runCalls answers them without
+	// dispatching, with a message that says what happened.
+	truncatedCalls map[string]bool
 
 	// snapshot chain bookkeeping, loaded lazily on the first commit.
 	snapLoaded bool
@@ -315,6 +323,9 @@ func (r *run) run(ctx context.Context) (*outcome, error) {
 
 	for {
 		if out, err := r.checkLimits(ctx, tctx); out != nil || err != nil {
+			if err == nil && (out.limit == LimitSteps || out.limit == LimitFixes) {
+				return r.closeAtLimit(ctx, tctx, out)
+			}
 			return out, err
 		}
 		if out, err := r.checkBudget(ctx, tctx); out != nil || err != nil {
@@ -328,6 +339,9 @@ func (r *run) run(ctx context.Context) (*outcome, error) {
 		calls, err := r.persistAssistant(ctx, resp)
 		if err != nil {
 			return nil, err
+		}
+		if resp.FinishReason == provider.FinishLength {
+			r.markTruncated(calls)
 		}
 		if len(calls) == 0 {
 			return &outcome{status: store.TurnCompleted, commit: true}, nil
@@ -431,6 +445,14 @@ func (r *run) chat(ctx, tctx context.Context) (provider.ChatResponse, *outcome, 
 			// The system prompt is built once per turn and the history only
 			// grows, so the next step starts with this prefix.
 			CacheHint: true,
+		}
+		if r.closingNotice != "" {
+			// No step follows, so a cache write would never be read back. The
+			// tools stay in the request: the history holds tool calls, and
+			// ToolChoice none is what stops the model from making new ones.
+			req.Messages = append(prompt[:len(prompt):len(prompt)], provider.Message{Role: provider.RoleUser, Content: r.closingNotice})
+			req.ToolChoice = provider.ToolChoiceNone
+			req.CacheHint = false
 		}
 		resp, err = p.Chat(tctx, req)
 		if err == nil {
@@ -541,7 +563,10 @@ func (r *run) runCalls(ctx, tctx context.Context, calls []provider.ToolCall) (*o
 		if err := r.emit(ctx, EventToolCall, map[string]any{"name": c.Name, "summary": toolSummary(c.Arguments)}); err != nil {
 			return nil, err
 		}
-		res, gated := r.gatePlanning(c)
+		res, gated := r.gateTruncated(c)
+		if !gated {
+			res, gated = r.gatePlanning(c)
+		}
 		if !gated {
 			res, gated = r.gateSkillCall(c)
 		}
@@ -651,6 +676,93 @@ func (r *run) gateSkillCall(c provider.ToolCall) (tools.Result, bool) {
 		}, true
 	}
 	return tools.Result{}, false
+}
+
+// Closing notices are appended (never persisted) to the closing call of a turn
+// that a count limit stopped. Orbit's core rules still apply; they only ask for
+// a handover.
+const (
+	stepLimitNotice = "System notice: this is your last step in this turn and tools are now disabled. " +
+		"Do not call any tool. Reply to the user with a short summary of what is done, " +
+		"what is still missing, and what they should ask next to continue."
+	// The fix limit stops the turn on a failing build, so the notice also keeps
+	// the model from promising a fix it can no longer make in this turn.
+	fixLimitNotice = "System notice: the limit of failed builds for this turn was reached and tools are now disabled. " +
+		"Do not call any tool, and do not say you will fix or retry anything in this reply. " +
+		"Tell the user briefly what you were building, which build error persists (quote its key line), " +
+		"what you already tried, and what they should check or ask next."
+)
+
+// closeAtLimit makes one extra model call, outside the MaxSteps and
+// MaxFixIterations allowance and with tools disabled, so a turn stopped by one
+// of those limits leaves the user a handover instead of ending mid-work. A turn
+// that finishes within its limits never gets here, so its outcome does not
+// change.
+//
+// stop is the limit_reached outcome and always stands: when the budget is
+// spent, the provider fails or the turn's time is up there is simply no
+// handover, and the turn is not failed for it. Tool calls in the reply (a
+// server that ignores tool_choice none) are dropped rather than persisted:
+// they would have no result.
+func (r *run) closeAtLimit(ctx, tctx context.Context, stop *outcome) (*outcome, error) {
+	if out, err := r.checkBudget(ctx, tctx); out != nil || err != nil {
+		if err != nil {
+			return nil, err
+		}
+		return stop, nil
+	}
+	r.closingNotice = stepLimitNotice
+	if stop.limit == LimitFixes {
+		r.closingNotice = fixLimitNotice
+	}
+	resp, out, err := r.chat(ctx, tctx)
+	r.closingNotice = ""
+	if err != nil {
+		return nil, err
+	}
+	if out != nil {
+		return stop, nil
+	}
+	resp.Message.ToolCalls, resp.ToolCalls = nil, nil
+	if strings.TrimSpace(resp.Message.Content) != "" {
+		if _, err := r.persistAssistant(ctx, resp); err != nil {
+			return nil, err
+		}
+	}
+	return stop, nil
+}
+
+// markTruncated records which calls of a reply cut by the output limit
+// (finish reason length) did not arrive whole. The last call is always one of
+// them: the cut falls inside the block being written, and a provider may still
+// hand back a partial object that happens to parse. An earlier call is one only
+// when its arguments are not a JSON object.
+func (r *run) markTruncated(calls []provider.ToolCall) {
+	for i, c := range calls {
+		var obj map[string]json.RawMessage
+		if i == len(calls)-1 || json.Unmarshal(c.Arguments, &obj) != nil {
+			if r.truncatedCalls == nil {
+				r.truncatedCalls = map[string]bool{}
+			}
+			r.truncatedCalls[c.ID] = true
+		}
+	}
+}
+
+// gateTruncated answers a call that was cut off by the output limit without
+// dispatching it. The generic "invalid arguments" error does not tell the
+// model why the call failed, so it tends to send the same oversized call again
+// and burn steps; this one says what to do instead.
+func (r *run) gateTruncated(c provider.ToolCall) (tools.Result, bool) {
+	if !r.truncatedCalls[c.ID] {
+		return tools.Result{}, false
+	}
+	return tools.Result{
+		Content: fmt.Sprintf("Your reply reached the output length limit, so the arguments of this call were cut off and nothing was applied. "+
+			"Send it again with less content: for a large file, %s a short first version and extend it with %s in several smaller steps.",
+			tools.ToolWriteFile, tools.ToolEditFile),
+		IsError: true,
+	}, true
 }
 
 // toolFailure ends the turn for a Go error from a tool. The error text is
