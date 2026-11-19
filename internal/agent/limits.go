@@ -32,7 +32,8 @@ const (
 type Limits struct {
 	// MaxSteps is the maximum number of model calls that do work in one turn.
 	// A turn that reaches it ends limit_reached (with a commit), after one
-	// extra closing call without tools that asks the model for a handover.
+	// extra closing call without tools that asks the model for a handover (the
+	// same goes for MaxFixIterations).
 	MaxSteps int
 	// MaxFixIterations is the maximum number of failed run_build calls in one
 	// turn (design: "max_fix_iterations = failed run_build calls"). The turn

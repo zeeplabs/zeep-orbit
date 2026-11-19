@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/zeeplabs/zeep-orbit/internal/agent/provider"
+	"github.com/zeeplabs/zeep-orbit/internal/agent/sandbox"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/store"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/tools"
 )
@@ -57,7 +58,7 @@ func TestRunTurn_StepLimitMakesOneClosingCallWithoutTools(t *testing.T) {
 	if last.CacheHint {
 		t.Error("closing call must not ask for a cache write that nothing will read")
 	}
-	if n := len(last.Messages); n == 0 || last.Messages[n-1].Role != provider.RoleUser || last.Messages[n-1].Content != finalStepNotice {
+	if n := len(last.Messages); n == 0 || last.Messages[n-1].Role != provider.RoleUser || last.Messages[n-1].Content != stepLimitNotice {
 		t.Errorf("closing call must end with the closing notice as a user message, got %+v", last.Messages)
 	}
 
@@ -73,7 +74,7 @@ func TestRunTurn_StepLimitMakesOneClosingCallWithoutTools(t *testing.T) {
 	}
 	for _, role := range []string{store.RoleUser, store.RoleAssistant, store.RoleTool} {
 		for _, m := range h.st.messagesOf(role) {
-			if m.Content == finalStepNotice {
+			if m.Content == stepLimitNotice {
 				t.Errorf("the closing notice must not be persisted (%s message)", role)
 			}
 		}
@@ -227,5 +228,57 @@ func TestRunTurn_BadArgumentsWithoutALengthCutKeepTheToolError(t *testing.T) {
 	res := h.st.messagesOf(store.RoleTool)
 	if len(res) != 1 || strings.Contains(res[0].Content, "output length limit") {
 		t.Fatalf("tool results = %+v, want the tool's own invalid-arguments error", res)
+	}
+}
+
+// The fix limit stops the turn on a failing build: the user gets the same kind
+// of handover, with a notice that explains the failure and does not promise a
+// fix the model can no longer make in this turn.
+func TestRunTurn_FixLimitMakesOneClosingCallWithoutTools(t *testing.T) {
+	failing := sandbox.BuildResult{ExitCode: 1, OutputTail: "error TS2304: Cannot find name 'x'"}
+	h := newHarness(t,
+		scriptStep{resp: toolResp(writeCall("w", "src/a.ts"))},
+		scriptStep{resp: toolResp(buildCall("b1", "typecheck"))},
+		scriptStep{resp: toolResp(buildCall("b2", "typecheck"))},
+		scriptStep{resp: textResp("The build still fails on TS2304 in src/a.ts.")},
+	)
+	h.sb.builds = []sandbox.BuildResult{failing}
+	h.deps.Limits = Limits{MaxFixIterations: 2}
+	h.mustRun()
+
+	fin := h.finished()
+	if fin.Status != store.TurnLimitReached {
+		t.Fatalf("status = %q, want limit_reached", fin.Status)
+	}
+	if fin.CommitSHA == "" {
+		t.Error("the partial work must still be committed")
+	}
+	if lim := h.st.eventsOf(EventLimitReached); len(lim) != 1 || !strings.Contains(string(lim[0].Payload), LimitFixes) {
+		t.Errorf("limit_reached events = %v, want one with %q", lim, LimitFixes)
+	}
+	if got := h.prov.calls(); got != 4 {
+		t.Fatalf("provider calls = %d, want 3 + 1 closing call", got)
+	}
+	last := h.prov.reqs[3]
+	if last.ToolChoice != provider.ToolChoiceNone || len(last.Tools) == 0 || last.CacheHint {
+		t.Errorf("closing call: ToolChoice=%q tools=%d CacheHint=%v, want none, tools kept, no cache write", last.ToolChoice, len(last.Tools), last.CacheHint)
+	}
+	if n := len(last.Messages); n == 0 || last.Messages[n-1].Content != fixLimitNotice {
+		t.Errorf("closing call must end with the fix-limit notice, got %+v", last.Messages)
+	}
+	if fixLimitNotice == stepLimitNotice {
+		t.Error("the fix-limit notice must differ from the step-limit one")
+	}
+	var summary bool
+	for _, m := range h.st.messagesOf(store.RoleAssistant) {
+		if strings.Contains(m.Content, "TS2304 in src/a.ts") {
+			summary = true
+		}
+		if m.Content == fixLimitNotice {
+			t.Error("the closing notice must not be persisted")
+		}
+	}
+	if !summary {
+		t.Error("the handover reply was not persisted")
 	}
 }
