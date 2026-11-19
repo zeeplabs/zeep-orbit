@@ -149,8 +149,8 @@ func TestRunTurn_FixIterationLimitEndsLimitReachedWithCommit(t *testing.T) {
 	if fin.Status != store.TurnLimitReached {
 		t.Fatalf("status = %q, want limit_reached", fin.Status)
 	}
-	if got := h.prov.calls(); got != 3 {
-		t.Errorf("provider calls = %d, want 3 (write, build fail, build fail, then stop)", got)
+	if got := h.prov.calls(); got != 4 {
+		t.Errorf("provider calls = %d, want 3 (write, build fail, build fail) + 1 closing call", got)
 	}
 	lim := h.st.eventsOf(EventLimitReached)
 	if len(lim) != 1 || !strings.Contains(string(lim[0].Payload), LimitFixes) {
