@@ -2,8 +2,8 @@ apiVersion: v2
 name: zeep-orbit
 description: Self-hosted platform for building apps with AI on a real backend (database schema → REST API on PostgreSQL)
 type: application
-version: 1.12.0-beta.1
-appVersion: "1.12.0-beta.1"
+version: 1.12.0-beta.2
+appVersion: "1.12.0-beta.2"
 icon: https://raw.githubusercontent.com/zeeplabs/zeep-orbit/main/.github/logo.svg
 keywords:
   - baas
