@@ -165,3 +165,18 @@ Change: the core rule, `orbit-crud-screens` (now version 2) and `orbit-frontend-
 ## 6. Kit eval (T10), spike (T12)
 
 Not run yet.
+
+## 6. Fix for screens of restricted tables (PR #58), measured once on the real model
+
+Image `zeep-orbit:dq-p1c` = P1 + reply-language fix + the #58 rule, same stack and models as before, "Decide for me" on every question, backend proposals confirmed, stopped after milestone 1. One run per brief, so this is an observation, not a rate.
+
+| Run | Brief | What the plan said | First screen after M1 | M1 cost |
+| --- | --- | --- | --- | --- |
+| A | c2 as written | `classes` any account; sign-in flow first | Sign-in screen: black brand panel with orange accent, "Sua aula, sua vaga.", form on the right. No error. | $0.3856 (estimate $0.19-$0.25) |
+| B | c2 rewritten so the grid is the first screen but the table is not public | `classes` any account, "Visitante sem login não lê nada"; first screen "Grade semanal (inicial)" | Empty weekly grid with a banner "Entre para ver as aulas" and a button to sign in or create an account. No error. | $0.3876 |
+
+- **Run A does not test the rule.** The plan already started on sign-in, so the baseline failure (public grid reading a signed-in table) could not happen.
+- **Run B is the baseline condition** (grid first, table closed to visitors) and the app handled it: empty grid and an invitation to sign in instead of a red `unauthorized`. In B the planner also caught the conflict at planning time, asking how the grid should appear before login and offering only safe options, so part of the result may be the planner and not the #58 rule. The run cannot separate the two.
+- **Not tested:** the exact baseline sequence (plan says visitors see the grid, table `signed_in`, no question asked). One run, M1 only; the signed-in screens were not opened.
+- **Cost:** M1 came out above the estimate shown by Orbit in both runs ($0.3856 and $0.3876 against $0.19-$0.26).
+- Screenshots: run A `screenshot-1795463339272-34.jpg`, run B `screenshot-1795463630080-35.jpg` (Chrome screenshots folder, not in the repo).
