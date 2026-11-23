@@ -220,3 +220,26 @@ Totals: P1 6, baseline 0, tie 0.
 - **Limits:** one reviewer who knows the project, one run per brief, five briefs, and the baseline is a single older run. A 6-0 result from one person is a strong signal for this sample, not a measured effect size. The same reviewer's section 7 verdicts on c1, c3 list and e1 went the other way, so the preference is not stable across runs of the same brief.
 - **Cost (M1 counters on the screen):** c1 $0.2233, c3 $0.3639, c4 $0.2733, e1 $0.1835, about $1.04 for the four runs; c2 run A was $0.3856 earlier.
 - **Decision input:** this removes the main reason to adjust skill v3 before P2. It does not replace an independent reviewer or the P3 visual check. Moving to P2 stays Julio's call.
+
+## 9. T8: default template with Tailwind and the Orbit kit (measured 2026-11-23)
+
+Decisions (design §3.2, left open there):
+- **Tailwind 4.3.5 with `@tailwindcss/vite` 4.3.5**, both exact and in `devDependencies` (like Vite). CSS-first theme: the tokens are plain `:root` variables, mapped to utilities with `@theme inline`, so the "tokens first" rule edits one file.
+- **No component library and no icon package.** The 14 kit pieces (Button, Label, Input, Textarea, Select, Checkbox, FormField, Card, Badge, Table, Dialog, Tabs, Toast, EmptyState, Skeleton) are hand-written, with the native `<select>` and `<dialog>` for keyboard and focus behavior. Icons stay inline SVG, as the skill already says. The only added packages are Tailwind and its Vite plugin plus their transitive dependencies; no Radix, no `lucide-react`, no `clsx`, no `tailwind-merge` (a 3-line `cn` helper instead).
+- Reason: each added package is supply-chain surface (AGENTS.md §9 spirit) and the native elements cover the accessibility needs of a first kit. The cost is that Select and Dialog are less styleable than a headless library; revisit if a brief needs a custom listbox.
+
+Measurements, same machine, warm npm cache:
+
+| | Old template | New template |
+| --- | --- | --- |
+| `npm ci` | 1.9 s | about 4 s (node 22 bookworm container, cold install) |
+| `npm run build` | 1.8 s | 2.0 s on the host; 4 s `tsc` + `vite build` in the container |
+| `node_modules` | 108 MB | 143 MB in the container (130 MB on the host) |
+| CSS in `dist` | 0.74 kB | 13.3 kB (3.75 kB gzip) |
+| JS in `dist` | 265 kB | 267 kB |
+
+The two columns are not an identical setup (host warm cache versus a fresh container), so the install times are indicative, not a benchmark. The lockfile carries the native binaries for linux glibc and musl, arm64 and x64, and the install and build ran green in `node:22-bookworm-slim`, the base of `Dockerfile.builder`. `npm run lint` and `npx tsc -b` are green. `vite build --base ./` keeps the relative asset paths the preview needs.
+
+Not yet done for T8: a built session on the local stack previewing under the token path with the new template (needs an image build), and a visual check of the new default screens.
+
+Found while doing it, left for T9 because they change prompts and skills: `core.md` says the template uses "plain CSS", and the skills `orbit-react-patterns` and `orbit-responsive-layout` say "plain CSS" or "no framework". Both are wrong for the default template now, and wrong-for-some-templates if they only say Tailwind, so the wording should become template-neutral ("follow the template guide").
