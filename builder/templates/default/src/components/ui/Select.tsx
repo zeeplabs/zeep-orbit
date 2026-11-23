@@ -48,7 +48,7 @@ export function Select({
         </BaseSelect.Icon>
       </BaseSelect.Trigger>
       <BaseSelect.Portal>
-        <BaseSelect.Positioner sideOffset={4} className="z-50 select-none outline-none">
+        <BaseSelect.Positioner alignItemWithTrigger={false} sideOffset={4} className="z-50 select-none outline-none">
           <BaseSelect.Popup className="min-w-[var(--anchor-width)] origin-[var(--transform-origin)] rounded-md border border-border bg-surface-raised py-1 text-sm text-foreground shadow-card transition duration-100 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 data-[ending-style]:scale-95 data-[ending-style]:opacity-0">
             <BaseSelect.List className="max-h-[var(--available-height)] overflow-y-auto">
               {items.map((item) => (

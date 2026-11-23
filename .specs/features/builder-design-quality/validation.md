@@ -255,3 +255,13 @@ The first T8 cut used native `<select>` and `<dialog>` and no icon package. Afte
 Measured in a temp copy before adopting: Dialog + Select + Tabs + 5 icons added +86 kB JS (+29 kB gzip) and `node_modules` went from 143 MB to 205 MB (+62 MB, 51 MB of it the Lucide package on disk; only used icons are bundled). In the committed default template the home page imports none of them, so the production build is unchanged at 266.7 kB JS (84.7 kB gzip) and 16.65 kB CSS; an app pays only for what its screens import.
 
 Checks after the change: `npm run lint`, `npx tsc -b`, `vite build --base ./` and `npm ci --dry-run` (lockfile in sync) are green. **Not verified yet:** the real behavior of the three Base UI components in a browser (open, keyboard, focus, positioning under the relative base) and in a builder session; the browser tool did not respond when tried.
+
+### 9.2 Browser check of the kit (2026-11-23, Chrome, demo page outside the repo)
+
+Dialog, Select, Tabs, Toast and the empty state were exercised on a throwaway page built from the template (all five imported, so the library code was in the bundle):
+
+- **Dialog:** opens centered over a dimmed backdrop, focuses its first field, closes with Escape, and focus goes back to the button that opened it.
+- **Select:** opens, ArrowDown plus Enter picks an option and the controlled value updates; clicking the label focuses the trigger (same `id`).
+- **Toast:** appears bottom right with the success color.
+- **Two changes found by looking:** (1) arrow keys only moved focus between tabs, Base UI's default being manual activation, so `Tabs` now sets `activateOnFocus`; (2) the Select list opened over the trigger and wider than it (Base UI aligns the selected item with the trigger), so it now uses `alignItemWithTrigger={false}` and opens below at the trigger's width.
+- Not checked: a screen reader, Firefox and Safari, a phone-width viewport, and the kit inside a real builder session (needs the image build; next step).

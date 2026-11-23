@@ -11,7 +11,7 @@ export interface TabItem {
 export function Tabs({ items, initial }: { items: TabItem[]; initial?: string }) {
   return (
     <BaseTabs.Root defaultValue={initial ?? items[0]?.id}>
-      <BaseTabs.List className="flex gap-1 border-b border-border">
+      <BaseTabs.List activateOnFocus className="flex gap-1 border-b border-border">
         {items.map((item) => (
           <BaseTabs.Tab
             key={item.id}
