@@ -59,11 +59,11 @@ One short paragraph in `core.md` (target: under 600 characters, no new section):
 - Changes from "restraint" to "intent": a short table of directions with what each implies for type, density, shape and motion; "motion with a purpose" (page entry, state change, user-action feedback) with durations/easing guidance and `prefers-reduced-motion`; every state designed (loading, empty, error, success).
 - Removes "you cannot see the result" wording once P3 exists; until then keeps it and says to keep CSS simple.
 - Adds a "when a kit is present" section: use its components and tokens; extend only what is missing.
-- Description rewritten to match task wording ("build or change a screen, restyle, make it look better"), checked by the skills trigger eval (parent T42 runner, `[not verified]` that the runner is runnable on this branch: confirm in T6).
+- Description rewritten to match task wording ("build or change a screen, restyle, make it look better"), checked by the skills trigger eval (measured manually from the session timeline: the parent T42 runner does not exist, see tasks T6 and T14).
 
 ### 2.4 Baseline and rubric (DQ-20)
 
-Before T2..T6 change anything: run the 12 eval briefs on the current prompt in the local beta stack with one reference model, save the rendered builds (`dist` + manual screenshots by the maintainer for now), and score with the rubric in `validation.md` (created in T1): hierarchy, distinctiveness between project types, state coverage, contrast, kit usage. Automation waits for P3.
+Before T2..T6 change anything: run 5 of the 12 planning-eval briefs (different project kinds) on the current prompt in the local beta stack with one reference model, save a screenshot per build, and score with the rubric in `validation.md` (created in T1): hierarchy, distinctiveness between project types, state coverage, contrast, kit usage. Automation waits for P3.
 
 ## 3. P2: template UI kit and default library
 
@@ -126,7 +126,7 @@ Decision output: go/no-go and a design addendum (§4.1+). If go, the loop adds a
 | `scanWorkspaceFiles` kit capture | unit with tar fixtures: valid kit, `..` path, missing file, unknown key, oversized manifest. |
 | Skill v2 | existing skill lint tests (`lint_test.go`) and `builtin.lock` check. |
 | Template build | CI-style: `npm ci && npm run build && npm run lint` on the template (new check, T8). |
-| Quality | visual eval (DQ-20) and kit eval (DQ-13), opt-in real LLM, same tag as the existing evals. |
+| Quality | visual eval (DQ-20) and kit eval (DQ-13): manual on the local stack with a fixed rubric until T14 (build-level eval runner, optional) exists. The existing planning eval (`-tags planningeval`) already measures the plan stage with a real provider and can be reused for `Look` distinctness. |
 
 ## 6. Decisions to confirm at implementation
 

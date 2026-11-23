@@ -27,16 +27,16 @@ P2:  T8 (template + Tailwind + library) -> T9 (ui_kit scan + prompt block) -> T1
 P3:  T12 (spike, independent) -> decision -> addendum -> T13..
 ```
 
-T1 (baseline) must finish before T2, T4 and T5 change any behavior. T8 can start in parallel with P1 once T1 exists.
+T14 is optional and independent. T1 (baseline) must finish before T2, T4 and T5 change any behavior. T8 can start in parallel with P1 once T1 exists.
 
 ---
 
 ## P1: good by default
 
 ### T1: Baseline and rubric (DQ-20)
-- **What**: Create `validation.md` with the scoring rubric (hierarchy, distinctiveness between project types, state coverage, contrast, kit usage, 1-5 each, blind-review instructions). Run the 12 eval briefs on the current build (beta.2 stack or `develop`) with one reference model, keep the produced `dist` and a screenshot per brief, score them.
+- **What**: Create `validation.md` with the scoring rubric and run protocol. Run a baseline set of briefs on the current build (beta.2 stack) with one reference model, keep a screenshot per brief, score them blind. There is no build-level eval runner (parent T42 was never started; `internal/agent/eval` does not exist, checked 2026-11-23) and the planning eval uses fakes and stops at the plan, so the baseline is manual through the dashboard and spends real model credits: the set is 5 briefs from `internal/agent/testdata/planeval/briefs.json` that differ in project kind (c1 bike shop customers, c2 gym schedule, c3 repair orders, c4 bakery stock, e1 bookshop in English), not all 12. Model, caps and spend are confirmed with the maintainer before the first run.
 - **Where**: `.specs/features/builder-design-quality/validation.md`; outputs outside the repo if large (design §6).
-- **Done when**: baseline scores recorded; brief size of the 12 plans before the change recorded (design §2.1).
+- **Done when**: rubric written; baseline scores recorded for the 5 briefs; the plans' rendered brief sizes recorded (design §2.1).
 - **Tests**: none (evidence task). **Gate**: none.
 
 ### T2: `Look` fields and validation (DQ-01, DQ-02)
@@ -68,11 +68,11 @@ T1 (baseline) must finish before T2, T4 and T5 change any behavior. T8 can start
 - **Tests**: existing lint tests. **Gate**: `go test ./internal/agent/skills/...`.
 
 ### T6: Skill trigger eval (DQ-09)
-- **What**: Confirm the skills eval runner works on this branch; add positive tasks ("build a dashboard screen", "make it prettier") and negative ones ("add a column", "fix the login error"); record load rates per reference model.
-- **Where**: `internal/agent/eval` (opt-in, tag `eval`).
+- **What**: Measure whether the model loads the skill: run a small fixed set of positive turns ("build a dashboard screen", "make it prettier") and negative ones ("add a column", "fix the login error") on the local stack and read the skill usage from the session timeline (skills spec SKL-09). Record load rates per model. Automating this needs a build-level eval runner, which does not exist: see T14.
+- **Where**: local stack; results in `validation.md`.
 - **Depends on**: T5.
 - **Done when**: rates recorded in `validation.md`; no negative task loads the skill more often than the baseline.
-- **Tests**: eval. **Gate**: `go test -tags eval ./internal/agent/eval/...`.
+- **Tests**: manual measurement. **Gate**: none.
 
 ### T7: Compare with baseline (success criteria)
 - **What**: Re-run T1's briefs on the new build; blind comparison against the baseline using the rubric; record results and whether two project types still share palette and type.
@@ -100,10 +100,10 @@ T1 (baseline) must finish before T2, T4 and T5 change any behavior. T8 can start
 - **Tests**: unit. **Gate**: Go gate.
 
 ### T10: Kit eval (DQ-13, DQ-16)
-- **What**: Fixture template with a kit; briefs whose screens need buttons, forms, dialogs, tables; check imports from the kit path and absence of re-implemented primitives. Two apps with different `Look` rendered from the default library compared for visible difference.
+- **What**: Fixture template with a kit (a GitHub-template-shaped repo or a local template directory); briefs whose screens need buttons, forms, dialogs, tables; check by grep on the session workspace that screens import from the kit path and do not re-implement primitives. Two apps with different `Look` built from the default library compared for visible difference. Manual until T14 exists.
 - **Depends on**: T8, T9.
 - **Done when**: results recorded in `validation.md`.
-- **Tests**: eval. **Gate**: `go test -tags eval ./internal/agent/eval/...`.
+- **Tests**: manual measurement. **Gate**: none.
 
 ### T11: Docs (DQ-18)
 - **What**: `docs/` page for template authors (`ui_kit`, `UI_KIT.md`, `ORBIT_AGENT.md`, token names, precedence); `CHANGELOG.md`; README feature table row if user-facing, mirrored in the three translated READMEs (AGENTS.md §6).
@@ -122,6 +122,14 @@ T1 (baseline) must finish before T2, T4 and T5 change any behavior. T8 can start
 
 ---
 
+## Optional automation
+
+### T14: Build-level eval runner (optional, after P1)
+- **What**: Minimal opt-in runner (real provider, in-memory or local builder) that runs a brief to a finished build, records the file tree and `dist`, counts `load_skill` calls and kit imports. It is the parent spec's T42; take its scope from `.specs/features/ai-frontend-builder/tasks.md` T42 and re-check it before starting.
+- **Depends on**: T7 shows the manual loop is too slow or too noisy to keep. Not started unless the maintainer decides so.
+
+---
+
 ## Traceability
 
 | Requirement | Tasks |
@@ -136,4 +144,4 @@ T1 (baseline) must finish before T2, T4 and T5 change any behavior. T8 can start
 | DQ-14, DQ-15, DQ-16, DQ-17 | T8 (DQ-16 verified in T10) |
 | DQ-18 | T8, T11 |
 | DQ-19, DQ-21 | T12 (T13+ after the decision) |
-| DQ-20 | T1, T7, T12 |
+| DQ-20 | T1, T7, T12; automation T14 |
