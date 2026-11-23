@@ -22,6 +22,13 @@ that the company design system and the template guide take precedence; removed
 references to screenshots, external fonts and hosts, and to other products;
 added motion, copy and quality-floor sections specific to this builder.
 
+Version 2 (builder-design-quality): rewritten from restraint to intent. It now
+starts from the APP BRIEF's Look (direction, type, density, motion), gives a
+range of directions with what each implies, system-font stacks instead of
+external fonts, composition and state rules, and motion with a purpose
+(page entry, state changes, feedback to actions, reduced-motion respected). The
+anti-tells list and the quality floor are kept.
+
 ## orbit-accessibility
 
 Adapted from the `fixing-accessibility` skill in the `ibelick/ui-skills`
