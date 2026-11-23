@@ -1141,3 +1141,67 @@ func TestCreateSession_BackendOrigin(t *testing.T) {
 		t.Errorf("GetSessionByID origin = %q, want %q", byID.BackendOrigin, store.BackendOriginBuilder)
 	}
 }
+
+func TestRenameSession_LocksTitleAndIsOwnerOnly(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	sess, err := e.st.CreateSession(ctx, store.CreateSessionParams{
+		OwnerUserID: e.userA, BackendAppID: e.appA, Title: "first draft",
+		TemplateKind: store.TemplateDefault, TemplateVersion: "v0",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sess.TitleLocked {
+		t.Fatal("a new session must not be locked")
+	}
+
+	if _, err := e.st.RenameSession(ctx, e.userB, sess.ID, "stolen"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("rename by another user = %v, want ErrNotFound", err)
+	}
+	renamed, err := e.st.RenameSession(ctx, e.userA, sess.ID, "Clinic agenda")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if renamed.Title != "Clinic agenda" || !renamed.TitleLocked {
+		t.Errorf("renamed = %q locked=%v, want the new title and locked", renamed.Title, renamed.TitleLocked)
+	}
+}
+
+func TestSetPlanTitle_SkipsLockedTitles(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	mk := func(title string) *store.Session {
+		s, err := e.st.CreateSession(ctx, store.CreateSessionParams{
+			OwnerUserID: e.userA, BackendAppID: e.appA, Title: title,
+			TemplateKind: store.TemplateDefault, TemplateVersion: "v0",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+
+	open := mk("draft")
+	changed, err := e.st.SetPlanTitle(ctx, open.ID, "Bike shop customers")
+	if err != nil || !changed {
+		t.Fatalf("SetPlanTitle on an unlocked session = %v, %v; want changed", changed, err)
+	}
+	if got, _ := e.st.GetSession(ctx, e.userA, open.ID); got.Title != "Bike shop customers" || got.TitleLocked {
+		t.Errorf("title = %q locked=%v, want the plan title and still unlocked", got.Title, got.TitleLocked)
+	}
+	if changed, _ := e.st.SetPlanTitle(ctx, open.ID, "Bike shop customers"); changed {
+		t.Error("the same title must report no change")
+	}
+
+	locked := mk("draft")
+	if _, err := e.st.RenameSession(ctx, e.userA, locked.ID, "My own name"); err != nil {
+		t.Fatal(err)
+	}
+	if changed, _ := e.st.SetPlanTitle(ctx, locked.ID, "Plan name"); changed {
+		t.Error("a locked title must not be replaced")
+	}
+	if got, _ := e.st.GetSession(ctx, e.userA, locked.ID); got.Title != "My own name" {
+		t.Errorf("title = %q, want the user's name kept", got.Title)
+	}
+}
