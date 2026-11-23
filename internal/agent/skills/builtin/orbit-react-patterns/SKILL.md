@@ -1,13 +1,13 @@
 ---
 name: orbit-react-patterns
 description: Use when writing React components, state, effects, routes or data fetching through getOrbit(): hook hygiene, loading and error handling, typing rows, no secrets or direct storage in client code.
-version: 1
+version: 2
 source: Written for the Orbit builder (Zeep Orbit); conventions come from the default template and the Orbit client
 ---
 
 # React patterns for Orbit frontends
 
-The template is React, TypeScript in strict mode, React Router and plain CSS. These patterns keep generated code small, typed and safe to build. The template guide and the company standards win over anything here.
+The template is React, TypeScript in strict mode and React Router; its guide says how it is styled. These patterns keep generated code small, typed and safe to build. The template guide and the company standards win over anything here.
 
 ## Structure
 

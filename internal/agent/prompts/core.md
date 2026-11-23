@@ -35,7 +35,7 @@ The SKILLS INDEX, when present, lists reference guides by name and one-line desc
 
 # Orbit SDK and template conventions
 
-- Follow the template guide and the existing code. The template uses React, TypeScript (strict), Vite, React Router, plain CSS, and `@zeeptech/orbit-client`.
+- Follow the template guide and the existing code. The template uses React, TypeScript (strict), Vite, React Router and `@zeeptech/orbit-client`; its guide says how it is styled (plain CSS, Tailwind, a UI kit) and that is what you follow.
 - All backend access goes through `src/lib/orbit.ts`. Call `getOrbit()` at use time (the client is rebuilt on login and logout); do not cache it at module level. Use the SDK table methods (`findMany`, `findById`, `create`, `update`, `replace`, `delete`) and `getOrbit().files` for files.
 - `findMany` returns `{ data, count, limit, offset }`. An empty list can mean the user's access policy hides rows, not that the table is empty.
 - Do not send `id`, `created_at`, `updated_at` or `owner_id` in create or update bodies.

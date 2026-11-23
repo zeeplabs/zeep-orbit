@@ -1,13 +1,13 @@
 ---
 name: orbit-responsive-layout
 description: Use when laying out pages for phone, tablet and desktop: mobile-first CSS, grid and flex, breakpoints, wide tables, navigation and touch targets, without horizontal scrolling.
-version: 1
-source: Written for the Orbit builder (Zeep Orbit); plain CSS only, no framework assumed
+version: 2
+source: Written for the Orbit builder (Zeep Orbit); CSS rules, valid with plain CSS or Tailwind utilities
 ---
 
 # Responsive layout
 
-The template uses plain CSS in `src/index.css` and a centered `.app-main` container. You cannot look at the result, so build layouts that are hard to break: flexible by default, with few fixed sizes and few breakpoints.
+The template guide says how the app is styled: plain CSS in `src/index.css`, or Tailwind utilities (the same rules below, written as `grid`, `flex`, `md:` and so on). Keep the page inside one centered container. You cannot look at the result, so build layouts that are hard to break: flexible by default, with few fixed sizes and few breakpoints.
 
 ## Rules of thumb
 

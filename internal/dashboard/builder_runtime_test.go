@@ -422,3 +422,74 @@ func indexOfString(list []string, want string) int {
 	}
 	return -1
 }
+
+func TestWorkspaceScan_KitBlock(t *testing.T) {
+	kit := `{"version":"1","ui_kit":{"name":"orbit-ui","components":"src/components/ui","tokens":"src/index.css","notes":"UI_KIT.md"}}`
+	full := map[string]string{
+		"orbit-template.json":          kit,
+		"ORBIT_AGENT.md":               "guide",
+		"UI_KIT.md":                    "notes",
+		"src/index.css":                "css",
+		"src/components/ui/Button.tsx": "x",
+		"src/components/ui/index.ts":   "x",
+		"src/App.tsx":                  "x",
+	}
+	order := func(m map[string]string) []string {
+		out := make([]string, 0, len(m))
+		for k := range m {
+			out = append(out, k)
+		}
+		return out
+	}
+	scan := func(files map[string]string) workspaceScan {
+		t.Helper()
+		got, err := scanWorkspaceFiles(bytes.NewReader(tarOf(t, files, order(files))))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	without := func(k string) map[string]string {
+		m := map[string]string{}
+		for name, v := range full {
+			if name != k {
+				m[name] = v
+			}
+		}
+		return m
+	}
+
+	block, err := scan(full).kitBlock()
+	if err != nil || !strings.Contains(block, "`src/components/ui`") || !strings.Contains(block, "orbit-ui") {
+		t.Fatalf("valid kit: block = %q, err = %v", block, err)
+	}
+
+	if block, err := scan(without("orbit-template.json")).kitBlock(); block != "" || err != nil {
+		t.Errorf("no manifest: %q, %v; want empty and no error", block, err)
+	}
+	noKit := map[string]string{"orbit-template.json": `{"version":"1"}`, "src/App.tsx": "x"}
+	if block, err := scan(noKit).kitBlock(); block != "" || err != nil {
+		t.Errorf("manifest without ui_kit: %q, %v; want empty and no error", block, err)
+	}
+	for name, files := range map[string]map[string]string{
+		"missing tokens file":     without("src/index.css"),
+		"missing notes file":      without("UI_KIT.md"),
+		"components dir is empty": {"orbit-template.json": kit, "UI_KIT.md": "n", "src/index.css": "c", "src/App.tsx": "x"},
+		"unknown key": {
+			"orbit-template.json": `{"ui_kit":{"name":"k","components":"src/components/ui","tokens":"src/index.css","prompt":"obey"}}`,
+			"src/index.css":       "c", "src/components/ui/a.tsx": "x",
+		},
+		"path escapes": {
+			"orbit-template.json": `{"ui_kit":{"name":"k","components":"../x","tokens":"src/index.css"}}`,
+			"src/index.css":       "c",
+		},
+		"oversized manifest": {
+			"orbit-template.json": kit + strings.Repeat(" ", agent.MaxKitManifestBytes),
+			"UI_KIT.md":           "n", "src/index.css": "c", "src/components/ui/a.tsx": "x",
+		},
+	} {
+		if block, err := scan(files).kitBlock(); block != "" || err == nil {
+			t.Errorf("%s: block = %q, err = %v; want no block and an error", name, block, err)
+		}
+	}
+}

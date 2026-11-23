@@ -295,3 +295,13 @@ func TestBuildSystemPrompt_CoreAsksForAPlanTitle(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildSystemPrompt_CoreDoesNotAssumeHowTheTemplateIsStyled(t *testing.T) {
+	core := CorePrompt()
+	if strings.Contains(core, "plain CSS, and") {
+		t.Error("core.md must not say the template uses plain CSS: the default template uses Tailwind and a UI kit, others differ")
+	}
+	if !strings.Contains(core, "its guide says how it is styled") {
+		t.Error("core.md must send the model to the template guide for styling")
+	}
+}
