@@ -19,6 +19,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -368,6 +369,11 @@ func (e *bhEnv) get(t *testing.T, user *DashboardUser, id string) *httptest.Resp
 func (e *bhEnv) del(t *testing.T, user *DashboardUser, id string) *httptest.ResponseRecorder {
 	t.Helper()
 	return e.do(t, e.h.DeleteSession, user, http.MethodDelete, "/dashboard/api/builder/sessions/"+id, "", "id", id)
+}
+
+func (e *bhEnv) rename(t *testing.T, user *DashboardUser, id, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	return e.do(t, e.h.RenameSession, user, http.MethodPatch, "/dashboard/api/builder/sessions/"+id, body, "id", id)
 }
 
 func (e *bhEnv) sessionCount(t *testing.T) int {
@@ -1272,5 +1278,58 @@ func TestBuilderDetail_KeepsTheBriefProgressKeysOnce(t *testing.T) {
 		if n := strings.Count(w.Body.String(), `"`+key+`"`); n != 1 {
 			t.Errorf("detail has %q %d times, want 1", key, n)
 		}
+	}
+}
+
+func TestBuilderRename_SetsTitleLocksItAndAudits(t *testing.T) {
+	e := newBHEnv(t)
+	sess := e.createOK(t, e.owner, e.appA)
+
+	w := e.rename(t, e.owner, sess.ID, `{"title":"  Clinic agenda \u0007 "}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var view BuilderSessionView
+	if err := json.Unmarshal(w.Body.Bytes(), &view); err != nil {
+		t.Fatal(err)
+	}
+	if view.Title != "Clinic agenda" {
+		t.Errorf("title = %q, want trimmed and control characters dropped", view.Title)
+	}
+	var locked bool
+	_ = e.pool.QueryRow(context.Background(),
+		`SELECT title_locked FROM zeep_system.builder_sessions WHERE id = $1`, sess.ID).Scan(&locked)
+	if !locked {
+		t.Error("a user rename must lock the title")
+	}
+	var n int
+	_ = e.pool.QueryRow(context.Background(),
+		`SELECT count(*) FROM zeep_system.audit_log WHERE action = 'builder.session.rename' AND resource_id = $1`, sess.ID).Scan(&n)
+	if n != 1 {
+		t.Errorf("want one rename audit row, got %d", n)
+	}
+}
+
+func TestBuilderRename_RejectsBadTitlesAndOtherUsers(t *testing.T) {
+	e := newBHEnv(t)
+	sess := e.createOK(t, e.owner, e.appA)
+
+	for name, body := range map[string]string{
+		"empty":    `{"title":""}`,
+		"blank":    `{"title":"   "}`,
+		"too long": `{"title":"` + strings.Repeat("a", builderMaxTitleRunes+1) + `"}`,
+		"bad json": `{"title":`,
+	} {
+		if w := e.rename(t, e.owner, sess.ID, body); w.Code != http.StatusBadRequest {
+			t.Errorf("%s: want 400, got %d", name, w.Code)
+		}
+	}
+	for name, user := range map[string]*DashboardUser{"other": e.other, "viewer": e.viewer, "superadmin": e.super} {
+		if w := e.rename(t, user, sess.ID, `{"title":"mine now"}`); w.Code != http.StatusNotFound {
+			t.Errorf("%s: want 404, got %d", name, w.Code)
+		}
+	}
+	if w := e.get(t, e.owner, sess.ID); !strings.Contains(w.Body.String(), `"title":`+strconv.Quote(sess.Title)) {
+		t.Errorf("a rejected rename must leave the title alone: %s", w.Body.String())
 	}
 }

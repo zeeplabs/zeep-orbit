@@ -9,6 +9,7 @@ package dashboard
 //	POST   /api/builder/sessions       CreateSession   >= viewer on the backend app
 //	GET    /api/builder/sessions       ListSessions    owner only
 //	GET    /api/builder/sessions/{id}  GetSession      owner only (+ turns, usage)
+//	PATCH  /api/builder/sessions/{id}  RenameSession   owner only (title)
 //	DELETE /api/builder/sessions/{id}  DeleteSession   owner only
 //
 // Status answers even when no builder is wired. Every other route answers
@@ -51,6 +52,7 @@ const (
 // Limits of the create-session request.
 const (
 	builderCreateBodyLimit = 16 << 10
+	builderRenameBodyLimit = 2 << 10
 	builderMaxTitleRunes   = 120
 	builderMaxLocaleLen    = 35
 
@@ -701,6 +703,45 @@ func (h *BuilderHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 		detail.Turns = append(detail.Turns, newBuilderTurnView(&turns[i]))
 	}
 	writeJSON(w, http.StatusOK, detail)
+}
+
+type renameBuilderSessionRequest struct {
+	Title string `json:"title"`
+}
+
+// RenameSession handles PATCH /dashboard/api/builder/sessions/{id}: the owner
+// sets the project title. The title is then locked, so a plan's proposed title
+// never replaces it. The backend app keeps its name (it is the schema key).
+func (h *BuilderHandler) RenameSession(w http.ResponseWriter, r *http.Request) {
+	user, sess, ok := h.ownedSession(w, r, false)
+	if !ok {
+		return
+	}
+	var req renameBuilderSessionRequest
+	if !h.decodeBuilderBody(w, r, &req, builderRenameBodyLimit) {
+		return
+	}
+	title := cleanBuilderTitle(req.Title)
+	if title == "" {
+		h.writeError(w, http.StatusBadRequest, "title is required")
+		return
+	}
+	if utf8.RuneCountInString(title) > builderMaxTitleRunes {
+		h.writeError(w, http.StatusBadRequest, "title is too long")
+		return
+	}
+	updated, err := h.store.RenameSession(r.Context(), user.ID, sess.ID, title)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			h.writeError(w, http.StatusNotFound, builderSessionNotFoundMsg)
+			return
+		}
+		h.serverError(w, r, err)
+		return
+	}
+	h.audit(r.Context(), user, "builder.session.rename", sess.ID, updated.Title,
+		map[string]string{"previous_title": sess.Title}, r.RemoteAddr)
+	writeJSON(w, http.StatusOK, newBuilderSessionView(updated))
 }
 
 // DeleteSession handles DELETE /dashboard/api/builder/sessions/{id}: archive,
