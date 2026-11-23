@@ -109,6 +109,50 @@ Three sessions cannot say whether T2 raised the load rate (T2 does not touch ski
 - It does not by itself make the output "designed". The direction stays close to "warm/clean/practical + one accent", and the skill that turns a direction into craft (T5) is still v1, which asks for restraint. Expect the main gain from T4 (always load the skill) and T5 (skill v2), not from T2.
 - Not yet scored; needs the blind review (section 2, step 5) with baseline and T2 screenshots shuffled.
 
-## 5. Skill load rates (T6), kit eval (T10), spike (T12)
+## 5. P1 complete: T2 + T3 + T4 + T5 on the real model (T6 and T7), 2026-11-23
+
+Image `zeep-orbit:dq-p1` = `develop` (same as beta.2) + commits `91f6481`, `00de0ff`, `2d89d54`, `392c94e`. Same stack, same models, same empty persona, same protocol as the baseline ("Decide for me" on every question, plan approved as proposed, backend proposals confirmed, no follow-up about visuals). To limit cost each brief was built to **milestone 1 only**; baseline numbers below are the baseline's milestone 1 for a like-for-like comparison. One run per brief: observations, not a statistical result. Scores are not recorded (blind review pending).
+
+### Skill loads (T6)
+
+| | `orbit-frontend-design` loaded in the first build turn |
+| --- | --- |
+| Baseline (beta.2) | 1 of 5 |
+| T2 only (3 sessions) | 2 of 3 |
+| **T2 to T5** | **5 of 5** (all loaded version 2) |
+
+Negative case, one sample: on the e1 session a follow-up "Change the text of the Sign out button to Leave." loaded no skill (0 of 1, 4 tool calls). One negative sample proves nothing about false positives; a fixed set of positive and negative turns is still to be run (T6 is open for that, or T14 for automating it).
+
+### What the planner and the build produced
+
+| Brief | `direction` (plan) | M1 cost (baseline M1) | First screen, in words |
+| --- | --- | --- | --- |
+| c1 bike shop | "Simples, limpo e funcional para balcão de loja: azul e branco, leitura rápida" | $0.1811 ($0.2052) | Blue header and a centered sign-in card, in Portuguese. Same as the baseline: the brief fixed "simples, azul e branco". |
+| c2 gym | "Esportivo e organizado: grade clara, cores fortes só nas modalidades" (`ui_language` came out as "en") | $0.1966 ($0.1711) | Brand mark "AC", title "This week at Academia Central", day selector with class counts, class cards with large time, colored modality tags, spots-left bars and a "Full" state, orange accent, fade-and-rise on day change. Baseline: a title and a red `unauthorized` error. |
+| c3 repair | "Oficina à noite: escuro, denso e direto, com leitura rápida de status" | $0.3200 ($0.2526) | Split sign-in: graphite panel with diagonal stripes and a large "Mecânica Sul / Pedidos de conserto" with the second line in orange, form on the right. List: header with an orange icon, large title with a count ("0 pedidos"), status filter pills, empty state with heading, help text and a dashed border. |
+| c4 bakery | "Warm and practical for a bakery owner checking stock on a phone at the counter" | $0.2551 ($0.3512, includes the failed attempt) | Brown header with an icon, centered brand block (round icon, large name, tagline) over a sign-in card on cream. No sign-up in M1, so the list was not seen. |
+| e1 bookshop | "Warm and bookish, calm like a printed catalogue, easy to read at the counter" | $0.2899 ($0.2051) | Split sign-in: deep-green panel with a serif "Bookshop Catalogue", a short rule and a tagline; cream form side. Catalogue: green header with serif brand, large serif "Books", "0 titles in your catalogue", a rule, empty state "Your shelves are empty" with help text in a dashed box. |
+
+- **Cost:** milestone 1 summed over the five briefs: $1.2427 now against $1.1852 in the baseline (+4.8%), and the baseline figure includes the c4 failed attempt. Per brief the change ranges from -27% to +41%, so with one run each this is within noise but suggests a modest increase from the larger prompt and the extra skill load.
+- **Look question:** c2 now asks "Which direction fits Academia Central best?" with Energetic and bold (dark, strong accent, big type) / Clean and welcoming / Sporty and structured; e1 asks "Which feel suits your shop?". The classic light-or-dark pair is gone.
+- **Motion:** plans now carry motion lines ("light fade-in on page entry", "smooth transition when switching day"); the c2 build shows day-switch animation described by the model, the others describe a light fade. The generated CSS was not inspected.
+- **Language:** the English-for-Portuguese problem is still there in this image (c2 `ui_language` "en", e1 in English for an English brief is expected); it is the separate fix on `fix/builder-reply-language`.
+
+### Side effects to check
+
+1. **Sample data in c2.** Because the backend had no tables yet at milestone 1, the model filled the schedule with example classes and showed a banner "Example schedule: these classes are sample data while the real schedule is being set up". It was disclosed, but the core rule says never to fake data pretending to be real; the new skill's "never invent data to fill a screen" line did not prevent it. Needs a look in T5 follow-up or a core wording fix.
+2. **Larger first build.** c3 M1 cost 27% more than the baseline M1; watch the cost per milestone before shipping.
+3. **Plans have 4 milestones in c1 and c2** (baseline had 3), one of them a finishing pass ("Acabamento"); not caused by this feature but worth watching.
+
+### Reading (T7)
+
+- The effect is large where the baseline was weakest: c2 and e1 are now clearly different from the baseline (layout, hierarchy, typography, state design), c3 changed its structure (split sign-in), c4 is a modest improvement, c1 is unchanged because the user dictated the look.
+- Most of the gain came after T4 and T5 (the skill is always loaded, and v2 asks for composition and states). T2 alone changed the plan text and the look question, and visually only e1.
+- The earlier risk of a new uniform style is real: two of five first screens became a split panel with a brand block. Distinctiveness across project types should be checked in the blind review, with more than one run per brief.
+- Success criteria from the spec: "blind comparison, reviewer prefers the new output in a clear majority" is **not yet checked** (needs a reviewer who did not run the sessions); "no two project types share palette and type" holds by hue and typography for these five. P1 is therefore implemented and measured informally, and not yet accepted.
+
+Screenshots (maintainer's scratchpad, to move): c1 `...-1795451664390-21.jpg`; c2 `-22`, `-23`, `-24`; c3 `-25` (sign-in), `-27` (list); c4 `-28`, `-29`; e1 `-31` (sign-in), `-32` (catalogue); all `screenshot-17954…` under `/var/folders/…/claude-chrome-screenshots-4hMJLY/`.
+
+## 6. Kit eval (T10), spike (T12)
 
 Not run yet.
