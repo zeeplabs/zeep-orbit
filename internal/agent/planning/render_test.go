@@ -16,7 +16,7 @@ Data (intent; tables are created through backend proposals):
 - patients [any signed-in user (anyone can create an account, so this is not limited to a team)]: People the clinic attends
 - notes [by role; doctors write, reception reads]: Notes per visit
 
-Look: style: clean; colors: teal; interface language: pt-BR
+Look: direction: calm and clinical; type: humanist sans, generous size; density: airy; motion: short fades when a record opens and when a save succeeds; style: clean; colors: teal; interface language: pt-BR
 
 Assumptions (decided by the agent, not said by the user):
 - Email and password sign-in
@@ -234,5 +234,31 @@ func TestRevisionResult(t *testing.T) {
 	}
 	if _, err = RevisionResult(strings.Repeat("x", MaxFeedbackChars+1), false); err == nil || !strings.Contains(err.Error(), "too long") {
 		t.Errorf("long feedback: %v", err)
+	}
+}
+
+func TestRenderBrief_LookDirectionFirst(t *testing.T) {
+	p, err := ParsePlan(mustJSON(t, validPlan()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := RenderBrief(p)
+	line := ""
+	for _, l := range strings.Split(got, "\n") {
+		if strings.HasPrefix(l, "Look: ") {
+			line = l
+		}
+	}
+	if line == "" {
+		t.Fatalf("no Look line:\n%s", got)
+	}
+	for _, want := range []string{"direction: calm and clinical", "type: humanist sans", "density: airy", "motion: short fades", "style: clean", "colors: teal", "interface language: pt-BR"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("Look line misses %q: %s", want, line)
+		}
+	}
+	// The direction leads, so a truncated read still carries the decision.
+	if !strings.HasPrefix(line, "Look: direction:") {
+		t.Errorf("direction must come first: %s", line)
 	}
 }

@@ -99,7 +99,19 @@ func accessText(d DataEntry) string {
 }
 
 func lookText(l Look) string {
-	parts := make([]string, 0, 4)
+	parts := make([]string, 0, 8)
+	if l.Direction != "" {
+		parts = append(parts, "direction: "+l.Direction)
+	}
+	if l.Type != "" {
+		parts = append(parts, "type: "+l.Type)
+	}
+	if l.Density != "" {
+		parts = append(parts, "density: "+l.Density)
+	}
+	if l.Motion != "" {
+		parts = append(parts, "motion: "+l.Motion)
+	}
 	if l.Style != "" {
 		parts = append(parts, "style: "+l.Style)
 	}

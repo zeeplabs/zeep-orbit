@@ -75,6 +75,42 @@ func TestBuildSystemPrompt_EmbeddedCoreRules(t *testing.T) {
 	}
 }
 
+// The first-pass look depends on the model loading the design skill and building
+// the brief's Look as tokens. Baseline runs loaded the skill in 1 of 5 sessions
+// (.specs/features/builder-design-quality/validation.md), so the rule is pinned.
+func TestBuildSystemPrompt_CoreTellsTheModelToApplyTheLook(t *testing.T) {
+	core := CorePrompt()
+	for _, want := range []string{
+		"load `orbit-frontend-design` first", "APP BRIEF's `Look`", "tokens in the stylesheet",
+		"Company standards and the template guide win",
+	} {
+		if !strings.Contains(core, want) {
+			t.Errorf("core.md must state %q", want)
+		}
+	}
+	// A rule that grows is a rule that stops being read: the section stays short.
+	start := strings.Index(core, "# Look of the app")
+	end := strings.Index(core, "# Never invent the backend")
+	if start < 0 || end < start || end-start > 700 {
+		t.Errorf("the look section must exist and stay under 700 characters, got %d", end-start)
+	}
+}
+
+// A baseline run filled a schedule with example classes and a notice, because
+// the old wording only forbade data "pretending to be real". Labeled sample data
+// is forbidden too.
+func TestBuildSystemPrompt_CoreForbidsLabeledSampleData(t *testing.T) {
+	core := CorePrompt()
+	for _, want := range []string{
+		"Never put sample, example or placeholder rows on a screen", "not even with a notice", "designed empty state",
+		"Add demo data only when the user asks",
+	} {
+		if !strings.Contains(core, want) {
+			t.Errorf("core.md must state %q", want)
+		}
+	}
+}
+
 // The agent must never tell the user that sign-up is closed or that accounts
 // are created by an administrator: neither is true on an Orbit app, and a
 // table with access public is open to anyone who signs up.
@@ -85,6 +121,20 @@ func TestBuildSystemPrompt_CoreStatesThatSignUpIsOpen(t *testing.T) {
 		"an administrator creates the accounts", "bound to a role", `Do not label that access as "staff only"`,
 	} {
 		if !strings.Contains(core, want) {
+			t.Errorf("core.md must state %q", want)
+		}
+	}
+}
+
+// A screen that reads a table that is not public must sit behind sign-in, or
+// the first thing a signed-out visitor sees is an unauthorized error.
+func TestBuildSystemPrompt_CoreGatesScreensOfRestrictedTables(t *testing.T) {
+	core := CorePrompt()
+	for _, want := range []string{
+		"answers `unauthorized` to a visitor who is not signed in", "behind sign-in",
+		"never make a screen that reads such a table the first screen of a signed-out visitor",
+	} {
+		if !strings.Contains(strings.ToLower(core), strings.ToLower(want)) {
 			t.Errorf("core.md must state %q", want)
 		}
 	}

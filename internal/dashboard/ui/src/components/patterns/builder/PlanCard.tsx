@@ -68,6 +68,10 @@ function DataRow({ entry }: { entry: BuilderPlan['data'][number] }) {
 export function PlanBody({ plan }: { plan: BuilderPlan }) {
   const { t } = useTranslation()
   const look = [
+    { key: 'direction', value: plan.look.direction },
+    { key: 'type', value: plan.look.type },
+    { key: 'density', value: plan.look.density },
+    { key: 'motion', value: plan.look.motion },
     { key: 'style', value: plan.look.style },
     { key: 'colors', value: plan.look.colors },
     { key: 'uiLanguage', value: plan.look.ui_language },

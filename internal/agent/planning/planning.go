@@ -66,6 +66,10 @@ const (
 	maxLineChars        = 240
 	maxMilestoneTitle   = 80
 	maxLookFieldChars   = 200
+	maxLookDirection    = 100
+	maxLookType         = 160
+	maxLookDensity      = 40
+	maxLookMotion       = 200
 	maxAccessNoteChars  = 160
 	maxOutOfScopeChars  = 160
 	maxUILanguageChars  = 40
@@ -172,11 +176,29 @@ type DataEntry struct {
 }
 
 // Look is how the app should look.
+//
+// Direction, Type, Density and Motion are the visual direction the planner
+// chooses from the audience and the job of the app (see
+// .specs/features/builder-design-quality). Style and Colors stay as the free
+// description of what the user asked for. Plans approved before these fields
+// existed have them empty and stay valid: only a new proposal must carry a
+// direction ([Plan.RequireLook]).
 type Look struct {
 	Style      string `json:"style,omitempty"`
 	Colors     string `json:"colors,omitempty"`
 	UILanguage string `json:"ui_language,omitempty"`
 	Reference  string `json:"reference,omitempty"`
+	// Direction names the visual direction in a few words, for example
+	// "editorial and calm" or "dense, operational". Free text, not an enum, so a
+	// company can say "our brand".
+	Direction string `json:"direction,omitempty"`
+	// Type is the typographic feel and pairing, system-font safe.
+	Type string `json:"type,omitempty"`
+	// Density is how tight the layout is: airy, balanced or compact.
+	Density string `json:"density,omitempty"`
+	// Motion says where movement goes and why (page entry, state change,
+	// feedback to an action), or that there is none.
+	Motion string `json:"motion,omitempty"`
 }
 
 // Milestone is one step of the plan, small enough to end in one visible build.
@@ -272,6 +294,18 @@ func ParsePlan(raw json.RawMessage) (*Plan, error) {
 	if p.Look.Reference, err = field("look.reference", p.Look.Reference, 0, maxLookFieldChars); err != nil {
 		return nil, err
 	}
+	if p.Look.Direction, err = field("look.direction", p.Look.Direction, 0, maxLookDirection); err != nil {
+		return nil, err
+	}
+	if p.Look.Type, err = field("look.type", p.Look.Type, 0, maxLookType); err != nil {
+		return nil, err
+	}
+	if p.Look.Density, err = field("look.density", p.Look.Density, 0, maxLookDensity); err != nil {
+		return nil, err
+	}
+	if p.Look.Motion, err = field("look.motion", p.Look.Motion, 0, maxLookMotion); err != nil {
+		return nil, err
+	}
 	if p.Assumptions, err = lines("assumptions", p.Assumptions, MaxAssumptions, maxLineChars); err != nil {
 		return nil, err
 	}
@@ -300,6 +334,16 @@ func ParsePlan(raw json.RawMessage) (*Plan, error) {
 			n, MaxBriefChars, n-MaxBriefChars)
 	}
 	return &p, nil
+}
+
+// RequireLook reports whether a plan being proposed names a visual direction.
+// It is not part of [ParsePlan]: ParsePlan also reads briefs approved before the
+// direction existed, and those must keep working.
+func (p *Plan) RequireLook() error {
+	if p.Look.Direction == "" {
+		return errors.New("look.direction: required. Choose a visual direction that fits what this app is for and who uses it (mood, and how it differs from a plain light page with one accent color), and fill look.type, look.density and look.motion to match. If the user asked for a style or colors, keep them in look.style and look.colors and make the direction agree with them")
+	}
+	return nil
 }
 
 // NextMilestone returns the 1-based index of the first milestone that is not
