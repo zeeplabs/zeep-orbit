@@ -50,7 +50,7 @@ export function SimpleSidebar({ footer, collapsed = false }: { footer: ReactNode
         <span className="mb-1 px-3 text-[12px] font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
           {t('nav.simple.recents')}
         </span>
-        <ul className="m-0 flex min-h-0 flex-1 list-none flex-col gap-0.5 overflow-y-auto p-0">
+        <ul className="m-0 flex min-h-0 flex-1 list-none flex-col gap-0.5 overflow-y-auto p-0 soft-scroll">
           {recents.map((s) => (
             <li key={s.id}>
               <NavLink
@@ -103,7 +103,7 @@ function CollapsedSidebar({ recents, footer }: { recents: BuilderSession[]; foot
         </IconEntry>
 
         <nav aria-label={t('nav.simple.recents')} className="flex min-h-0 flex-1 flex-col">
-          <ul className="m-0 flex min-h-0 flex-1 list-none flex-col gap-1 overflow-y-auto p-0">
+          <ul className="m-0 flex min-h-0 flex-1 list-none flex-col gap-1 overflow-y-auto p-0 soft-scroll">
             {recents.map((s) => {
               const title = s.title || t('nav.simple.untitled')
               const initial = projectInitial(s.title)
