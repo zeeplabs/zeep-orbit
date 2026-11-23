@@ -20,12 +20,14 @@ func CorePrompt() string { return coreMD }
 // Per-section size caps, in characters (runes). The core is never truncated:
 // it ships with the binary and is reviewed as code. The company layer is also
 // capped at save time; the cap here is a defensive second bound so a bad row
-// can never blow up the prompt.
+// can never blow up the prompt. MaxSessionContextChars must stay above the
+// schema summary, file tree and directive limits plus the fixed lines: the cut
+// falls on the end, which is the turn directive (a test pins it).
 const (
 	MaxCompanyChars         = 8000
 	MaxTemplateGuideChars   = 12000
 	MaxSkillsIndexChars     = 8000
-	MaxSessionContextChars  = 16000
+	MaxSessionContextChars  = 17000
 	maxFileTreeChars        = 6000
 	maxSchemaSummaryChars   = 8000
 	maxDirectiveChars       = 1500
@@ -52,9 +54,11 @@ type SessionContext struct {
 	BackendAppName string
 	SchemaSummary  string
 	FileTree       string
-	// Locale is the user's locale (for example "pt-BR"). Empty or invalid
-	// values fall back to "en" so the value can never carry free text into
-	// the prompt.
+	// Locale is the language of the user's interface (for example "pt-BR").
+	// It is only the fallback reply language: the language the user writes in
+	// wins, because the interface language is often not the one they type in.
+	// Empty or invalid values fall back to "en" so the value can never carry
+	// free text into the prompt.
 	Locale string
 	// Directive is what this turn must do (mode, plan progress, milestone).
 	// It changes from turn to turn, which is why it lives here, after the
@@ -124,8 +128,13 @@ func CompanyLayer(persona, rules string) string {
 func renderSessionContext(c SessionContext) string {
 	var b strings.Builder
 	locale := normalizeLocale(c.Locale)
-	fmt.Fprintf(&b, "Reply language: %s. Write every message to the user in this language. "+
-		"UI copy inside the app follows it too; code, identifiers and code comments stay in English.\n", locale)
+	// The user's own language comes first and the interface locale is only the
+	// fallback: telling the model to reply in the locale made it answer in
+	// English to a user who wrote in Portuguese from an English interface.
+	fmt.Fprintf(&b, "Reply language: the language the user writes in (their latest message long enough to tell; "+
+		"keep the conversation's language for a short one like \"ok\"). Use %s, their interface language, only when "+
+		"nothing they wrote tells. Write every message in it, including each ask_user question and option and the "+
+		"build plan. App UI copy follows it; code, identifiers and code comments stay in English.\n", locale)
 
 	if id, name := strings.TrimSpace(c.BackendAppID), strings.TrimSpace(c.BackendAppName); id != "" || name != "" {
 		fmt.Fprintf(&b, "Backend app: %s (id: %s)\n", orDash(name), orDash(id))
