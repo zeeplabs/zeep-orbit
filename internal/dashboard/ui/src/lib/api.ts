@@ -2331,7 +2331,17 @@ export interface BuilderPlan {
   summary: string
   screens: { name: string; purpose: string }[]
   data: { table: string; holds: string; access: BuilderPlanAccess | string; access_note?: string }[]
-  look: { style?: string; colors?: string; ui_language?: string; reference?: string }
+  /** direction, type, density and motion are the visual direction the planner chooses; absent on plans approved before it existed. */
+  look: {
+    direction?: string
+    type?: string
+    density?: string
+    motion?: string
+    style?: string
+    colors?: string
+    ui_language?: string
+    reference?: string
+  }
   assumptions: string[]
   out_of_scope: string[]
   /** `done` only on a revision of an approved plan: what is already built. */
