@@ -180,3 +180,23 @@ Image `zeep-orbit:dq-p1c` = P1 + reply-language fix + the #58 rule, same stack a
 - **Not tested:** the exact baseline sequence (plan says visitors see the grid, table `signed_in`, no question asked). One run, M1 only; the signed-in screens were not opened.
 - **Cost:** M1 came out above the estimate shown by Orbit in both runs ($0.3856 and $0.3876 against $0.19-$0.26).
 - Screenshots: run A `screenshot-1795463339272-34.jpg`, run B `screenshot-1795463630080-35.jpg` (Chrome screenshots folder, not in the repo).
+
+## 7. Blind review, first pass (one reviewer, 7 pairs)
+
+Method: previews cropped from the saved screenshots (chat panel removed), baseline and P1 sorted into A/B at random per pair, one reviewer (the maintainer) chose the better side or a tie. Rubric scores (1-3) were not given, only the preference. The key was read after the answers.
+
+| Pair | Preference |
+| --- | --- |
+| c2 weekly grid | P1 (confounded: baseline shows a red `unauthorized`, P1 shows labeled sample rows, both since fixed) |
+| c3 sign-in | P1 |
+| e1 catalogue | baseline |
+| c1 sign-in | baseline (brief fixed "simples, azul e branco"; baseline image had a higher resolution) |
+| c4 sign-in | P1 |
+| c3 order list | baseline (same resolution on both sides) |
+| c4 products | tie |
+
+Totals: P1 3, baseline 3, tie 1. Without the confounded c2 pair: P1 2, baseline 3, tie 1.
+
+- **Reading:** no visual improvement is shown by this sample. What is shown is that the skill is loaded (1 of 5 to 5 of 5). One reviewer, one run per brief, mixed screen types and image resolutions: it does not show that P1 is worse either.
+- **Correction:** section 5 describes the change as large for c2 and e1. The blind pass preferred the baseline for e1; that wording was an unblinded impression.
+- **Open:** the reviewer's reason for the three baseline preferences (e1, c1, c3 list) is needed to decide between adjusting the skill and moving to P2; a second draw of the five briefs on `dq-p1c` (about $2) would add samples.
