@@ -243,3 +243,15 @@ The two columns are not an identical setup (host warm cache versus a fresh conta
 Not yet done for T8: a built session on the local stack previewing under the token path with the new template (needs an image build), and a visual check of the new default screens.
 
 Found while doing it, left for T9 because they change prompts and skills: `core.md` says the template uses "plain CSS", and the skills `orbit-react-patterns` and `orbit-responsive-layout` say "plain CSS" or "no framework". Both are wrong for the default template now, and wrong-for-some-templates if they only say Tailwind, so the wording should become template-neutral ("follow the template guide").
+
+### 9.1 Decision change after web research (same day)
+
+The first T8 cut used native `<select>` and `<dialog>` and no icon package. After checking the options (shadcn/ui changelog of 2026-07-02 makes Base UI its default and says Radix stays supported; npm facts read on 2026-11-23), the maintainer chose to use libraries for the interactive parts:
+
+- **`@base-ui/react` 1.9.0** (MIT, React 17-19 peer, 5 direct dependencies) behind the kit's `Dialog`, `Select` and `Tabs`. The agent imports only from `components/ui`, so the library stays an implementation detail.
+- **`lucide-react` 1.78.0** (ISC, no dependencies) for icons, named imports only.
+- Not chosen: Radix (many small packages, ecosystem moving to Base UI), React Aria Components (6.9 MB unpacked), Phosphor (last npm release 2025-05), HeroUI/MUI/Chakra (ship their own look, which conflicts with the tokens-first rule).
+
+Measured in a temp copy before adopting: Dialog + Select + Tabs + 5 icons added +86 kB JS (+29 kB gzip) and `node_modules` went from 143 MB to 205 MB (+62 MB, 51 MB of it the Lucide package on disk; only used icons are bundled). In the committed default template the home page imports none of them, so the production build is unchanged at 266.7 kB JS (84.7 kB gzip) and 16.65 kB CSS; an app pays only for what its screens import.
+
+Checks after the change: `npm run lint`, `npx tsc -b`, `vite build --base ./` and `npm ci --dry-run` (lockfile in sync) are green. **Not verified yet:** the real behavior of the three Base UI components in a browser (open, keyboard, focus, positioning under the relative base) and in a builder session; the browser tool did not respond when tried.

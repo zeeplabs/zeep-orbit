@@ -1,6 +1,5 @@
-import { useState } from 'react'
+import { Tabs as BaseTabs } from '@base-ui/react/tabs'
 import type { ReactNode } from 'react'
-import { cn } from '../../lib/cn'
 
 export interface TabItem {
   id: string
@@ -8,38 +7,26 @@ export interface TabItem {
   content: ReactNode
 }
 
+// Base UI tabs: arrow-key navigation and tab/tabpanel roles included.
 export function Tabs({ items, initial }: { items: TabItem[]; initial?: string }) {
-  const [active, setActive] = useState(initial ?? items[0]?.id)
-  const current = items.find((i) => i.id === active)
-
   return (
-    <div>
-      <div role="tablist" className="flex gap-1 border-b border-border">
+    <BaseTabs.Root defaultValue={initial ?? items[0]?.id}>
+      <BaseTabs.List className="flex gap-1 border-b border-border">
         {items.map((item) => (
-          <button
+          <BaseTabs.Tab
             key={item.id}
-            type="button"
-            role="tab"
-            id={`tab-${item.id}`}
-            aria-selected={item.id === active}
-            aria-controls={`panel-${item.id}`}
-            onClick={() => setActive(item.id)}
-            className={cn(
-              '-mb-px border-b-2 px-3 py-2 text-sm font-medium transition',
-              item.id === active
-                ? 'border-primary text-foreground'
-                : 'border-transparent text-muted-foreground hover:text-foreground',
-            )}
+            value={item.id}
+            className="-mb-px border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground transition hover:text-foreground data-[active]:border-primary data-[active]:text-foreground"
           >
             {item.label}
-          </button>
+          </BaseTabs.Tab>
         ))}
-      </div>
-      {current && (
-        <div role="tabpanel" id={`panel-${current.id}`} aria-labelledby={`tab-${current.id}`} className="pt-4">
-          {current.content}
-        </div>
-      )}
-    </div>
+      </BaseTabs.List>
+      {items.map((item) => (
+        <BaseTabs.Panel key={item.id} value={item.id} className="pt-4">
+          {item.content}
+        </BaseTabs.Panel>
+      ))}
+    </BaseTabs.Root>
   )
 }

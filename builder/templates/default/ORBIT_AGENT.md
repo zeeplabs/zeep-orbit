@@ -41,7 +41,7 @@ await signIn(email, password) // stores the JWT; call getOrbit() again afterward
 - The app runs under a changing sub-path in preview (the build base is relative):
   import assets from `src/` or use relative paths, never absolute `/something` URLs
   for assets (use `<Link to="/x">` for navigation).
-- No new dependencies unless the task cannot be done without them. Tailwind and the kit are already installed; do not add a component library or an icon package (draw small inline SVG).
+- No new dependencies unless the task cannot be done without them. Tailwind, the kit (built on `@base-ui/react`) and `lucide-react` for icons are already installed; do not add another component library or icon package.
 - Text files only. Do not touch `node_modules`, `dist`, `.git`.
 - Keep `npm run lint` and `npx tsc -b` green before finishing a turn.
 - UI copy follows the user's language; code, identifiers and comments in English.
