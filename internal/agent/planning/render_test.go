@@ -6,7 +6,8 @@ import (
 	"testing"
 )
 
-const wantBrief = `Summary: A CRM for a small clinic.
+const wantBrief = `Title: Clinic CRM
+Summary: A CRM for a small clinic.
 
 Screens:
 - Patients: List and search patients
@@ -260,5 +261,24 @@ func TestRenderBrief_LookDirectionFirst(t *testing.T) {
 	// The direction leads, so a truncated read still carries the decision.
 	if !strings.HasPrefix(line, "Look: direction:") {
 		t.Errorf("direction must come first: %s", line)
+	}
+}
+
+func TestRenderBrief_CarriesTheTitleSoARevisionKeepsIt(t *testing.T) {
+	m := validPlan()
+	p, err := ParsePlan(mustJSON(t, m))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := RenderBrief(p); !strings.HasPrefix(got, "Title: Clinic CRM\nSummary:") {
+		t.Errorf("brief must start with the title:\n%s", got)
+	}
+	delete(m, "title")
+	old, err := ParsePlan(mustJSON(t, m))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := RenderBrief(old); strings.Contains(got, "Title:") {
+		t.Errorf("a plan without a title renders no Title line:\n%s", got)
 	}
 }

@@ -45,6 +45,7 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/agent/planning"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/store"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
+	"go.uber.org/zap"
 )
 
 // Limits and public messages of the planning routes.
@@ -261,6 +262,7 @@ func (h *BuilderHandler) ApprovePlan(w http.ResponseWriter, r *http.Request) {
 		brief      *store.Brief
 		milestones int
 		milestone  int
+		planTitle  string
 	)
 	err := retryWhileBusy(r.Context(), func() error {
 		var err error
@@ -280,6 +282,7 @@ func (h *BuilderHandler) ApprovePlan(w http.ResponseWriter, r *http.Request) {
 					return nil, err
 				}
 				milestones, milestone = len(plan.Milestones), plan.NextMilestone(nil)
+				planTitle = plan.Title
 				return &store.PlanApproval{
 					Plan: normalized, Milestones: milestones, Milestone: milestone,
 					Content: func(version int) string { return planning.ApprovedResult(plan, version, milestone) },
@@ -289,6 +292,14 @@ func (h *BuilderHandler) ApprovePlan(w http.ResponseWriter, r *http.Request) {
 	})
 	if !h.planningResolved(w, r, turn, err, store.EventPlanApproved, req.ToolCallID, builderNotBuildPlanMsg) {
 		return
+	}
+	// The approved plan names the project, unless the user already renamed it.
+	// A failure here must not undo the approval: the title stays as it was.
+	if planTitle != "" {
+		if _, err := h.store.SetPlanTitle(r.Context(), sess.ID, planTitle); err != nil {
+			h.logger.Warn("builder: set the session title from the approved plan",
+				zap.String("session_id", sess.ID), zap.Error(err))
+		}
 	}
 	if h.poke != nil {
 		h.poke()

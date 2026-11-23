@@ -109,6 +109,7 @@ func TestParseQuestions_Bounds(t *testing.T) {
 
 func validPlan() map[string]any {
 	return map[string]any{
+		"title":   "Clinic CRM",
 		"summary": "A CRM for a small clinic.",
 		"screens": []map[string]any{
 			{"name": "Patients", "purpose": "List and search patients"},
@@ -396,5 +397,28 @@ func TestParsePlan_WorstCaseLookStillFitsTheBrief(t *testing.T) {
 	}
 	if n := utf8.RuneCountInString(RenderBrief(p)); n > MaxBriefChars {
 		t.Fatalf("a small plan with a worst-case look renders to %d characters, over %d", n, MaxBriefChars)
+	}
+}
+
+func TestParsePlan_TitleRequiredOnProposalButToleratedWhenStored(t *testing.T) {
+	m := validPlan()
+	delete(m, "title")
+	old, err := ParsePlan(mustJSON(t, m))
+	if err != nil {
+		t.Fatalf("a stored plan without a title must still decode: %v", err)
+	}
+	if err := old.RequireTitle(); err == nil || !strings.Contains(err.Error(), "title: required") {
+		t.Errorf("RequireTitle on a plan without title = %v, want a model-readable error", err)
+	}
+
+	m["title"] = "  Clinic \n CRM  "
+	got, err := ParsePlan(mustJSON(t, m))
+	if err != nil || got.Title != "Clinic CRM" || got.RequireTitle() != nil {
+		t.Errorf("title = %q, err = %v, want it cleaned and accepted", got.Title, err)
+	}
+
+	m["title"] = strings.Repeat("x", MaxPlanTitleChars+1)
+	if _, err := ParsePlan(mustJSON(t, m)); err == nil || !strings.Contains(err.Error(), "title: at most") {
+		t.Errorf("an over-long title = %v, want a bound error", err)
 	}
 }

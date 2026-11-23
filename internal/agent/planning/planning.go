@@ -56,7 +56,9 @@ const (
 	// truncated.
 	MaxBriefChars = 6000
 
-	MaxSummaryChars     = 600
+	MaxSummaryChars = 600
+	// MaxPlanTitleChars bounds Plan.Title (the project's display name).
+	MaxPlanTitleChars   = 60
 	MaxScreens          = 20
 	MaxDataEntries      = 20
 	MaxAssumptions      = 15
@@ -213,6 +215,9 @@ type Milestone struct {
 // Plan is the arguments of propose_build_plan and, once approved, the brief of
 // the session.
 type Plan struct {
+	// Title is the project's short display name. Optional when reading a stored
+	// plan, required when one is proposed ([Plan.RequireTitle]).
+	Title       string      `json:"title,omitempty"`
 	Summary     string      `json:"summary"`
 	Screens     []Screen    `json:"screens"`
 	Data        []DataEntry `json:"data"`
@@ -241,6 +246,9 @@ func ParsePlan(raw json.RawMessage) (*Plan, error) {
 	}
 
 	var err error
+	if p.Title, err = field("title", p.Title, 0, MaxPlanTitleChars); err != nil {
+		return nil, err
+	}
 	if p.Summary, err = field("summary", p.Summary, 1, MaxSummaryChars); err != nil {
 		return nil, err
 	}
@@ -334,6 +342,16 @@ func ParsePlan(raw json.RawMessage) (*Plan, error) {
 			n, MaxBriefChars, n-MaxBriefChars)
 	}
 	return &p, nil
+}
+
+// RequireTitle reports whether a plan being proposed carries a project title.
+// It is separate from [ParsePlan] for the same reason as [Plan.RequireLook]:
+// stored plans from before titles existed must keep decoding.
+func (p *Plan) RequireTitle() error {
+	if p.Title == "" {
+		return errors.New("title: required. Give the project a short name a person would use (2 to 5 words, in the user's language, not a sentence). Ask the user for a name only when the project is ambiguous or they want to choose one")
+	}
+	return nil
 }
 
 // RequireLook reports whether a plan being proposed names a visual direction.

@@ -50,6 +50,7 @@ const askUserSchema = `{
 
 const proposeBuildPlanDescription = "Propose the build plan for the user to approve. It does NOT build anything: the turn pauses until the user approves it, asks for changes or goes back to questions. " +
 	"Once approved it becomes the app brief you receive on every later turn. " +
+	"\"title\" is the project's short name; choose it from what the app is, and ask the user for a name only when the project is ambiguous or they want to choose one. " +
 	"Put everything you decided without the user saying it under \"assumptions\". " +
 	"\"data\" is what the app stores, in words, and who can reach it; the tables themselves are created later with a backend proposal. " +
 	"\"milestones\" are in build order and each one is small enough to end in one working build the user can see; the first one must already show something usable. " +
@@ -59,8 +60,9 @@ const proposeBuildPlanDescription = "Propose the build plan for the user to appr
 const proposeBuildPlanSchema = `{
   "type": "object",
   "additionalProperties": false,
-  "required": ["summary", "screens", "look", "assumptions", "milestones"],
+  "required": ["title", "summary", "screens", "look", "assumptions", "milestones"],
   "properties": {
+    "title": {"type": "string", "description": "The project's short name, 2 to 5 words, in the user's language, for example \"Agenda da Clínica\" (at most 60 characters). Not a sentence."},
     "summary": {"type": "string", "description": "One paragraph: what the app is, for whom (at most 600 characters)."},
     "screens": {
       "type": "array", "minItems": 1, "maxItems": 20,
@@ -142,6 +144,9 @@ func Tools() []tools.Tool {
 			Kind:        tools.KindPlanning,
 			Handler: func(_ context.Context, call tools.Call) (tools.Result, error) {
 				plan, err := ParsePlan(call.Arguments)
+				if err == nil {
+					err = plan.RequireTitle()
+				}
 				if err == nil {
 					err = plan.RequireLook()
 				}
