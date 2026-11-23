@@ -71,6 +71,44 @@ Total: $2.90 for 5 sessions (monthly counter $1.89 to $4.79). Orbit's own estima
 
 Cross-brief and rubric scores: **not recorded; needs a blind reviewer** (section 2, step 5).
 
-## 4. After P1 (T7), skill load rates (T6), kit eval (T10), spike (T12)
+## 4. T2 retest on the real model (2026-11-23)
+
+Image `zeep-orbit:dq-local` = `develop` (`f392c0b`, same as beta.2) + T2 (`91f6481`) and nothing else; only the `zeep` container was swapped, builder, registry proxy, database and settings unchanged (same models, same empty persona). Same protocol as the baseline ("Decide for me" on every question, plan approved as proposed, no follow-up about visuals). To limit cost the builds were stopped early: c2 after 2 of 4 milestones, c4 and e1 after milestone 1 (the first screen and the list were already visible). Cost of the three: about $0.89 (monthly counter $4.79 to $5.68). One sample per brief, so these are observations, not a measured improvement.
+
+### What the planner produced (stored plan `look`, read from the database)
+
+| Brief | direction | type | density | motion | colors |
+| --- | --- | --- | --- | --- | --- |
+| c2 gym | "Energetic and clean, readable at a glance on a phone at the gym" | system sans, large time and modality labels, compact secondary text | balanced | "Subtle feedback on booking and cancelling only; no decorative animation" | light background, one strong accent for booking buttons, clear status colors |
+| c4 bakery | "Warm and practical: cream, toasted brown, red alert for low stock" | system fonts, large readable numbers | balanced | "soft feedback when saving a movement and when a low-stock alert appears; no decorative animation" | cream, toasted brown, red for low stock |
+| e1 bookshop | "Warm and practical: cream tones, green accent, quick to scan" | system serif headings, system sans body | balanced | "Light fade on page entry; short confirmation after saving or deleting" | cream background, deep green accent, dark brown text |
+
+- All three plans carried a direction (the tool call is refused without one, so this is by construction). The direction was in English even for pt-BR plans (the language fix is not in this image).
+- `density` was "balanced" three times out of three. The direction is closer to a restatement of the palette ("warm, cream, green") than to a distinct design idea, and two of three motion lines still say "no decorative animation": the planner keeps the restraint that the v1 skill teaches.
+- The look question changed. Baseline c2 offered "Clean and simple" or "Dark and energetic". Now: c2 "Que clima visual combina com a Academia Central?" with Energético e limpo / Escuro e esportivo / Sóbrio e organizado (still two classic presets); e1 "Warm and bookish: cream paper tones, deep green or brown accents, serif headings" / "Clean and calm" / "Simple and practical" (specific to the business); c4 asked a look question (it did not in the baseline) with a "Warm and practical" and a "Clean and compact" option.
+
+### What the screens look like now (descriptions, not scores)
+
+- **c2 (M1, M2):** white header, orange accent (was indigo), red-bordered error box with an orange button. Same layout as the baseline and the same `unauthorized` error on the first screen: a logic problem the visual direction does not touch.
+- **c4 (M1):** toasted-brown header bar with a bread icon, cream page, bordered login card, interface in Portuguese (baseline c4 was English). List screen: title, primary button, empty state as a bordered card in Portuguese. Same structure as the baseline.
+- **e1 (M1):** cream "paper" background, serif headings, deep green button, dashed-border empty state with a heading and helper text, light fade on entry stated in the plan. Visibly different from the baseline e1 (sans, off-white, empty state as plain text). The strongest change of the three.
+- Screenshots (maintainer's scratchpad, to move): `c2` `screenshot-1795447652252-12.jpg`, `c4` `screenshot-1795447925054-14.jpg` (sign-in) and `screenshot-1795447936210-16.jpg` (list), `e1` `screenshot-1795448124254-17.jpg` (sign-in) and `screenshot-1795448135275-19.jpg` (catalogue), all under `/var/folders/.../claude-chrome-screenshots-4hMJLY/`.
+
+### Skill loads (from `builder_events`, type `skill_loaded`)
+
+| | Sessions where `orbit-frontend-design` was loaded in the first build turn |
+| --- | --- |
+| Baseline (5 sessions) | 1 of 5 (c4). c1 loaded only `orbit-crud-screens`, c2 only `orbit-forms-and-states`, c3 and e1 none. |
+| With T2 (3 sessions) | 2 of 3 (c2, e1); c4 none. |
+
+Three sessions cannot say whether T2 raised the load rate (T2 does not touch skills); it only shows the baseline rate was low, which is the reason for T4.
+
+### Reading
+
+- T2 does what it was built for: every plan now has a direction, type, density and motion, and the look question is more specific. Visible effect on the generated screens: clear in e1, small in c4, none beyond the accent color in c2.
+- It does not by itself make the output "designed". The direction stays close to "warm/clean/practical + one accent", and the skill that turns a direction into craft (T5) is still v1, which asks for restraint. Expect the main gain from T4 (always load the skill) and T5 (skill v2), not from T2.
+- Not yet scored; needs the blind review (section 2, step 5) with baseline and T2 screenshots shuffled.
+
+## 5. Skill load rates (T6), kit eval (T10), spike (T12)
 
 Not run yet.
