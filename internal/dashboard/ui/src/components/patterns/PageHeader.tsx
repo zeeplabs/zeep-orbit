@@ -7,7 +7,8 @@ interface Crumb {
 }
 
 interface PageHeaderProps {
-  title: string
+  /** A string renders as the page heading; a node (e.g. an editable title) is rendered as is. */
+  title: ReactNode
   subtitle?: ReactNode
   actions?: ReactNode
   breadcrumb?: Crumb[]
@@ -38,12 +39,16 @@ export function PageHeader({ title, subtitle, actions, breadcrumb, className }: 
             ))}
           </nav>
         )}
-        <h1
-          className="truncate text-[22px] font-bold leading-tight text-[var(--text-primary)] sm:text-[26px]"
-          style={{ fontFamily: 'var(--font-display)' }}
-        >
-          {title}
-        </h1>
+        {typeof title === 'string' ? (
+          <h1
+            className="truncate text-[22px] font-bold leading-tight text-[var(--text-primary)] sm:text-[26px]"
+            style={{ fontFamily: 'var(--font-display)' }}
+          >
+            {title}
+          </h1>
+        ) : (
+          title
+        )}
         {subtitle && <p className="mt-1 text-sm text-[var(--text-secondary)]">{subtitle}</p>}
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
