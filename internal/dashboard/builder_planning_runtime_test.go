@@ -16,7 +16,7 @@ import (
 	"github.com/zeeplabs/zeep-orbit/internal/agent/tools"
 )
 
-const testBuildPlan = `{"summary":"A CRM for a clinic.","screens":[{"name":"Patients","purpose":"List patients"}],"assumptions":["Email sign-in"],` +
+const testBuildPlan = `{"summary":"A CRM for a clinic.","screens":[{"name":"Patients","purpose":"List patients"}],"look":{"direction":"calm and clinical"},"assumptions":["Email sign-in"],` +
 	`"milestones":[{"title":"Patient list","deliverable":"See the list"},{"title":"Patient record","deliverable":"Open one"}]}`
 
 func setPlanningMode(t *testing.T, e *bhEnv, mode string) {

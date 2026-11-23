@@ -532,6 +532,10 @@ export function parsePlan(args: unknown): BuilderPlan | null {
       .map((d) => ({ table: str(d.table), holds: str(d.holds), access: str(d.access), access_note: str(d.access_note) || undefined }))
       .filter((d) => d.table !== ''),
     look: {
+      direction: str(look.direction) || undefined,
+      type: str(look.type) || undefined,
+      density: str(look.density) || undefined,
+      motion: str(look.motion) || undefined,
       style: str(look.style) || undefined,
       colors: str(look.colors) || undefined,
       ui_language: str(look.ui_language) || undefined,

@@ -16,7 +16,7 @@ import (
 
 const (
 	testQuestions = `{"questions":[{"id":"sign_in","title":"Sign-in","question":"Who signs in?","options":[{"label":"Team"},{"label":"Anyone"}]}]}`
-	testPlan      = `{"summary":"A CRM for a clinic.","screens":[{"name":"Patients","purpose":"List patients"}],"assumptions":["Email sign-in"],` +
+	testPlan      = `{"summary":"A CRM for a clinic.","screens":[{"name":"Patients","purpose":"List patients"}],"look":{"direction":"calm and clinical"},"assumptions":["Email sign-in"],` +
 		`"milestones":[{"title":"Patient list","deliverable":"See the list"},{"title":"Patient record","deliverable":"Open one"},{"title":"Notes","deliverable":"Add a note"}]}`
 )
 
