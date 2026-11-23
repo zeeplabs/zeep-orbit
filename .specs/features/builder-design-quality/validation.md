@@ -200,3 +200,23 @@ Totals: P1 3, baseline 3, tie 1. Without the confounded c2 pair: P1 2, baseline 
 - **Reading:** no visual improvement is shown by this sample. What is shown is that the skill is loaded (1 of 5 to 5 of 5). One reviewer, one run per brief, mixed screen types and image resolutions: it does not show that P1 is worse either.
 - **Correction:** section 5 describes the change as large for c2 and e1. The blind pass preferred the baseline for e1; that wording was an unblinded impression.
 - **Open:** the reviewer's reason for the three baseline preferences (e1, c1, c3 list) is needed to decide between adjusting the skill and moving to P2; a second draw of the five briefs on `dq-p1c` (about $2) would add samples.
+
+## 8. Blind review, second pass (one reviewer, 6 pairs, equal resolution)
+
+Method: same as section 7, with two changes. Every image was resampled to the same width (940 px) before cropping, so resolution cannot tell the sides apart. The P1 side is image `dq-p1c` (P1 plus the #56 language fix and the #58 gating fix), a fresh run of each brief; the baseline side is the section 3 capture. c2 was left out (confounded, see section 7). Same reviewer as section 7, so this is not an independent second opinion. The key was read after the answers.
+
+| Pair | Preference |
+| --- | --- |
+| c1 sign-in | P1 |
+| e1 catalogue | P1 |
+| c3 sign-in | P1 |
+| c3 order list | P1 |
+| c4 products | P1 |
+| c4 sign-in | P1 |
+
+Totals: P1 6, baseline 0, tie 0.
+
+- **Reading:** with resolution equalized and a fresh run per brief, the reviewer preferred the P1 result in every pair. Section 7 (P1 3, baseline 3, tie 1) is not reproduced. The likely differences are the resolution mismatch in section 7 and the #58 fix and language fix now in the image; this was not isolated, so the cause is a hypothesis.
+- **Limits:** one reviewer who knows the project, one run per brief, five briefs, and the baseline is a single older run. A 6-0 result from one person is a strong signal for this sample, not a measured effect size. The same reviewer's section 7 verdicts on c1, c3 list and e1 went the other way, so the preference is not stable across runs of the same brief.
+- **Cost (M1 counters on the screen):** c1 $0.2233, c3 $0.3639, c4 $0.2733, e1 $0.1835, about $1.04 for the four runs; c2 run A was $0.3856 earlier.
+- **Decision input:** this removes the main reason to adjust skill v3 before P2. It does not replace an independent reviewer or the P3 visual check. Moving to P2 stays Julio's call.
