@@ -820,6 +820,10 @@ func provisionZeepSystemOnce(ctx context.Context, pool *db.Pool) error {
 		`ALTER TABLE zeep_system.builder_sessions
 		   ADD COLUMN IF NOT EXISTS backend_origin TEXT NOT NULL DEFAULT 'existing'
 		   CHECK (backend_origin IN ('existing', 'builder'))`,
+		// Project title (builder-project-title spec, T1). True once the user
+		// renamed the session: the plan's title never overwrites it. Additive.
+		`ALTER TABLE zeep_system.builder_sessions
+		   ADD COLUMN IF NOT EXISTS title_locked BOOLEAN NOT NULL DEFAULT false`,
 		`ALTER TABLE zeep_system.builder_settings
 		   ADD COLUMN IF NOT EXISTS backend_approval_mode TEXT NOT NULL DEFAULT 'ask'
 		   CHECK (backend_approval_mode IN ('ask', 'auto'))`,

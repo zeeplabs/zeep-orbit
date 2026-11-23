@@ -35,6 +35,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 
+	"github.com/zeeplabs/zeep-orbit/internal/agent/provider"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/sandbox"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/store"
 	"github.com/zeeplabs/zeep-orbit/internal/db"
@@ -99,6 +100,10 @@ type BuilderHandlerConfig struct {
 	// DeployProviderFactory overrides how publish (T32) builds the deploy
 	// provider. nil in production (the Render provider); tests inject a fake.
 	DeployProviderFactory DeployProviderFactory
+	// NamingProvider returns the model client used to name a new project (title
+	// and backend name). Optional: nil, or a nil result, makes naming use the
+	// heuristic fallback.
+	NamingProvider func(ctx context.Context) provider.Provider
 }
 
 // BuilderHandler serves the /dashboard/api/builder/sessions* routes and the
@@ -116,6 +121,7 @@ type BuilderHandler struct {
 	dashboard     *Handler
 	previewSigner PreviewTokenSigner
 	deployFactory DeployProviderFactory
+	naming        func(ctx context.Context) provider.Provider
 }
 
 // NewBuilderHandler builds the handler. pool is the zeep_system pool (settings,
@@ -135,6 +141,7 @@ func NewBuilderHandler(pool *db.Pool, cfg BuilderHandlerConfig) *BuilderHandler 
 		dashboard:     cfg.Dashboard,
 		previewSigner: cfg.PreviewSigner,
 		deployFactory: cfg.DeployProviderFactory,
+		naming:        cfg.NamingProvider,
 	}
 	if h.logger == nil {
 		h.logger = zap.NewNop()

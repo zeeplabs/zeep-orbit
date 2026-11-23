@@ -10,6 +10,7 @@ import { Icon } from '@/components/ui/icon'
 import { BriefButton } from '@/components/patterns/builder/BriefDrawer'
 import { ChatPanel } from '@/components/patterns/builder/ChatPanel'
 import { PreviewPanel } from '@/components/patterns/builder/PreviewPanel'
+import { ProjectTitleField } from '@/components/patterns/builder/ProjectTitleField'
 import { SessionActions } from '@/components/patterns/builder/SessionActions'
 import { SessionUsageStrip } from '@/components/patterns/builder/UsageSummary'
 import {
@@ -29,6 +30,7 @@ import {
   useBuilderSession,
   useBuilderSessionUsage,
   useBuilderStatus,
+  useRenameBuilderSession,
   useRevertBuilderSession,
   type BuilderEvent,
 } from '@/lib/api'
@@ -49,6 +51,7 @@ export default function BuilderPage() {
   const usageQuery = useBuilderSessionUsage(sessionId)
   const statusQuery = useBuilderStatus()
   const revert = useRevertBuilderSession(sessionId)
+  const rename = useRenameBuilderSession(sessionId)
   const [restoreSeq, setRestoreSeq] = useState<number | null>(null)
 
   const session = sessionQuery.data
@@ -145,7 +148,13 @@ export default function BuilderPage() {
     <div className="flex flex-col p-6 max-md:p-4 lg:h-[calc(100vh-3.5rem)]">
       <PageHeader
         className="mb-4 lg:flex-nowrap"
-        title={session.title || t('builder.page.untitled')}
+        title={
+          <ProjectTitleField
+            value={session.title || t('builder.page.untitled')}
+            onSave={(next) => rename.mutate(next)}
+            saving={rename.isPending}
+          />
+        }
         subtitle={
           <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <Link

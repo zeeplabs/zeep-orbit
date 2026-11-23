@@ -524,6 +524,7 @@ export function parsePlan(args: unknown): BuilderPlan | null {
   if (milestones.length === 0) return null
   const look = record(a.look)
   return {
+    title: str(a.title),
     summary: str(a.summary),
     screens: list(a.screens)
       .map((s) => ({ name: str(s.name), purpose: str(s.purpose) }))

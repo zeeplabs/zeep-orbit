@@ -654,3 +654,34 @@ func TestSanitizeBuilderEventPayload_PlanningEvents(t *testing.T) {
 		t.Errorf("plan_approved = %v", got)
 	}
 }
+
+func TestBuilderPlanning_ApproveNamesTheProjectUnlessTheUserRenamedIt(t *testing.T) {
+	e := newBHEnv(t)
+	ctx := context.Background()
+	titleOf := func(id string) (string, bool) {
+		s, err := e.st.GetSession(ctx, e.owner.ID, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s.Title, s.TitleLocked
+	}
+
+	open, openTurn := e.pausePlanning(t, store.PhaseBriefing, planning.ToolProposeBuildPlan, "call_p1", testBuildPlan)
+	if w := e.approve(e.owner, open.ID, openTurn.ID, `{"tool_call_id":"call_p1"}`); w.Code != http.StatusAccepted {
+		t.Fatalf("approve: %d %s", w.Code, w.Body.String())
+	}
+	if title, locked := titleOf(open.ID); title != "Clinic CRM" || locked {
+		t.Errorf("title = %q locked=%v, want the plan's title and still unlocked", title, locked)
+	}
+
+	mine, mineTurn := e.pausePlanning(t, store.PhaseBriefing, planning.ToolProposeBuildPlan, "call_p1", testBuildPlan)
+	if _, err := e.st.RenameSession(ctx, e.owner.ID, mine.ID, "My clinic"); err != nil {
+		t.Fatal(err)
+	}
+	if w := e.approve(e.owner, mine.ID, mineTurn.ID, `{"tool_call_id":"call_p1"}`); w.Code != http.StatusAccepted {
+		t.Fatalf("approve: %d %s", w.Code, w.Body.String())
+	}
+	if title, _ := titleOf(mine.ID); title != "My clinic" {
+		t.Errorf("title = %q, a user rename must survive the approval", title)
+	}
+}

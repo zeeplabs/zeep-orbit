@@ -7,6 +7,7 @@ import {
   BUILDER_FEEDBACK_MAX_CHARS,
   useApproveBuilderPlan,
   useBuilderPlanEstimate,
+  useRenameBuilderSession,
   useReviseBuilderPlan,
   type BuilderEstimateRange,
   type BuilderPlan,
@@ -15,6 +16,7 @@ import {
 } from '@/lib/api'
 import { formatMoney, formatTokens } from '@/lib/money'
 import { parsePlan, planAccess, type ApprovedPlan } from './builderModel'
+import { ProjectTitleField } from './ProjectTitleField'
 
 interface PlanCardProps {
   sessionId: string
@@ -182,6 +184,31 @@ export function PlanBody({ plan }: { plan: BuilderPlan }) {
   )
 }
 
+/**
+ * The project name the plan proposes, editable before approving. Saving renames the session
+ * right away (which also locks it), so approving the plan keeps the user's name.
+ */
+function ProjectNameRow({ sessionId, title }: { sessionId: string; title: string }) {
+  const { t } = useTranslation()
+  const rename = useRenameBuilderSession(sessionId)
+  const [shown, setShown] = useState(title)
+  return (
+    <div className="flex items-center gap-2 text-[12px]" style={{ color: 'var(--text-secondary)' }}>
+      <span className="shrink-0">{t('builder.page.plan.projectName')}</span>
+      <ProjectTitleField
+        variant="inline"
+        value={shown}
+        saving={rename.isPending}
+        onSave={(next) =>
+          rename.mutate(next, {
+            onSuccess: () => setShown(next),
+          })
+        }
+      />
+    </div>
+  )
+}
+
 /** "40K–80K tokens · $0.40–$0.80", or tokens only when the sample has no full price. */
 function useRangeText(): (range: BuilderEstimateRange, currency: string) => string {
   const { t } = useTranslation()
@@ -299,6 +326,7 @@ export function PlanCard({ sessionId, turn, proposal, disabled }: PlanCardProps)
         {t(plan ? 'builder.page.plan.description' : 'builder.page.plan.unreadable')}
       </p>
 
+      {plan?.title && <ProjectNameRow sessionId={sessionId} title={plan.title} />}
       {plan && <PlanBody plan={plan} />}
       {plan && <EstimateLine sessionId={sessionId} turnId={turn.id} toolCallId={proposal.tool_call_id} />}
 

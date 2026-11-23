@@ -138,6 +138,9 @@ type Session struct {
 	BackendOrigin string
 	// Phase is PhaseBriefing or PhaseBuilding (see planning.go).
 	Phase string
+	// TitleLocked is true once the user renamed the session; a plan's title
+	// then never replaces it.
+	TitleLocked bool
 }
 
 // Turn is a row of zeep_system.builder_turns.
@@ -243,7 +246,7 @@ type CreateSessionParams struct {
 
 const sessionColumns = `id, owner_user_id, backend_app_id, title, template_kind, template_id,
 	template_version, prompt_version_id, locale, status, head_sha, head_turn_seq,
-	frontend_app_id, published_sha, tokens_in, tokens_out, created_at, updated_at, backend_origin, phase`
+	frontend_app_id, published_sha, tokens_in, tokens_out, created_at, updated_at, backend_origin, phase, title_locked`
 
 const turnColumns = `id, session_id, seq, kind, status, pending_proposal, commit_sha,
 	lease_owner, lease_until, error_code, created_at, finished_at, mode, brief_version, milestone,
@@ -253,7 +256,7 @@ func scanSession(row pgx.Row) (*Session, error) {
 	var s Session
 	err := row.Scan(&s.ID, &s.OwnerUserID, &s.BackendAppID, &s.Title, &s.TemplateKind, &s.TemplateID,
 		&s.TemplateVersion, &s.PromptVersionID, &s.Locale, &s.Status, &s.HeadSHA, &s.HeadTurnSeq,
-		&s.FrontendAppID, &s.PublishedSHA, &s.TokensIn, &s.TokensOut, &s.CreatedAt, &s.UpdatedAt, &s.BackendOrigin, &s.Phase)
+		&s.FrontendAppID, &s.PublishedSHA, &s.TokensIn, &s.TokensOut, &s.CreatedAt, &s.UpdatedAt, &s.BackendOrigin, &s.Phase, &s.TitleLocked)
 	if err != nil {
 		return nil, err
 	}
@@ -369,6 +372,41 @@ func (s *Store) ListSessions(ctx context.Context, ownerUserID string) ([]Session
 		return nil, fmt.Errorf("builder store: list sessions: %w", err)
 	}
 	return out, nil
+}
+
+// RenameSession sets the title of a session the user owns and locks it, so a
+// later plan title does not replace the user's choice. ErrNotFound when the
+// session does not exist or belongs to someone else.
+func (s *Store) RenameSession(ctx context.Context, ownerUserID, sessionID, title string) (*Session, error) {
+	sess, err := scanSession(s.pool.QueryRow(ctx,
+		`UPDATE zeep_system.builder_sessions
+		    SET title = $3, title_locked = true, updated_at = now()
+		  WHERE id = $1 AND owner_user_id = $2
+		  RETURNING `+sessionColumns,
+		sessionID, ownerUserID, title,
+	))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("builder store: rename session: %w", err)
+	}
+	return sess, nil
+}
+
+// SetPlanTitle sets the session title from an approved plan unless the user
+// already renamed it. It reports whether the title changed.
+func (s *Store) SetPlanTitle(ctx context.Context, sessionID, title string) (bool, error) {
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE zeep_system.builder_sessions
+		    SET title = $2, updated_at = now()
+		  WHERE id = $1 AND title_locked = false AND title <> $2`,
+		sessionID, title,
+	)
+	if err != nil {
+		return false, fmt.Errorf("builder store: set plan title: %w", err)
+	}
+	return tag.RowsAffected() > 0, nil
 }
 
 // ArchiveSession marks the owner's session archived. Archived sessions are

@@ -8,7 +8,6 @@ import {
   UseMutationResult,
 } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { projectTitleFromPrompt } from './projectTitle'
 
 
 export interface ReferenceDef {
@@ -2328,6 +2327,8 @@ export type BuilderPlanAccess = 'public' | 'signed_in' | 'owner' | 'role'
 
 /** The propose_build_plan arguments (planning.Plan). Words only: tables are created later, by a backend plan. */
 export interface BuilderPlan {
+  /** The project's short name; absent on plans approved before titles existed. */
+  title?: string
   summary: string
   screens: { name: string; purpose: string }[]
   data: { table: string; holds: string; access: BuilderPlanAccess | string; access_note?: string }[]
@@ -3378,7 +3379,7 @@ export interface StartBuilderProjectInput {
 }
 
 /**
- * Chat home flow: creates a session (title from the prompt) and posts the prompt as its
+ * Chat home flow: creates a session (the server names the project from the prompt) and posts the prompt as its
  * first message. If the message is refused (429, 4xx, a network error) the session just
  * created is kept and reused by the next attempt with the same backend choice, so a retry
  * never creates a second session or a second backend. Deleting it would archive the session
@@ -3402,10 +3403,9 @@ export function useStartBuilderProject(): UseMutationResult<
       if (pending.current && pending.current.backendKey === backendKey) {
         session = pending.current.session
       } else {
-        const title = projectTitleFromPrompt(content)
         session = await apiFetch<BuilderSession>(
           `${BUILDER_BASE}/sessions`,
-          jsonRequest('POST', { backend, locale, ...(title ? { title } : {}) }),
+          jsonRequest('POST', { backend, locale, prompt: content }),
         )
         pending.current = { session, backendKey }
       }
@@ -3553,6 +3553,25 @@ export function useAnswerBuilderQuestions(
       apiFetch<BuilderPlanningResult>(builderTurnPath(sessionId, turn, 'answers'), jsonRequest('POST', input)),
     onSettled: () => {
       invalidateBuilderSession(qc, sessionId)
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+}
+
+/**
+ * Renames the project (PATCH). The server then keeps the name: a plan's proposed title never
+ * replaces it. The backend app keeps its technical name, which cannot change.
+ */
+export function useRenameBuilderSession(sessionId: string): UseMutationResult<BuilderSession, Error, string> {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (title: string) =>
+      apiFetch<BuilderSession>(builderSessionPath(sessionId), jsonRequest('PATCH', { title })),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: builderKeys.session(sessionId) })
+      qc.invalidateQueries({ queryKey: builderKeys.sessions() })
     },
     onError: (error) => {
       toast.error(error.message)

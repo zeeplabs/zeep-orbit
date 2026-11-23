@@ -9,6 +9,7 @@ package dashboard
 //	POST   /api/builder/sessions       CreateSession   >= viewer on the backend app
 //	GET    /api/builder/sessions       ListSessions    owner only
 //	GET    /api/builder/sessions/{id}  GetSession      owner only (+ turns, usage)
+//	PATCH  /api/builder/sessions/{id}  RenameSession   owner only (title)
 //	DELETE /api/builder/sessions/{id}  DeleteSession   owner only
 //
 // Status answers even when no builder is wired. Every other route answers
@@ -33,6 +34,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/zeeplabs/zeep-orbit/internal/agent/provider"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/sandbox"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/store"
 	"github.com/zeeplabs/zeep-orbit/internal/github"
@@ -51,6 +53,7 @@ const (
 // Limits of the create-session request.
 const (
 	builderCreateBodyLimit = 16 << 10
+	builderRenameBodyLimit = 2 << 10
 	builderMaxTitleRunes   = 120
 	builderMaxLocaleLen    = 35
 
@@ -170,9 +173,13 @@ type createBuilderSessionRequest struct {
 	// TemplateID is a github_templates id from GET /api/builder/templates;
 	// empty selects the built-in default template.
 	TemplateID string `json:"template_id"`
-	// Title is optional; it defaults to the backend app's name ("Untitled
-	// app" for a new backend).
+	// Title is optional. Empty, it is generated from Prompt when one is sent,
+	// else it defaults to the backend app's name ("Untitled app" for a new
+	// backend). A title the caller sends is kept as is.
 	Title string `json:"title"`
+	// Prompt is the user's first message. It is only read to name the project
+	// (title and new backend name); it is not stored and not sent to the agent.
+	Prompt string `json:"prompt"`
 	// Locale is the language of the user's UI (e.g. "pt-BR"); it defaults to
 	// the first tag of Accept-Language, then "en". The agent replies in it.
 	Locale string `json:"locale"`
@@ -321,12 +328,26 @@ func (h *BuilderHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusServiceUnavailable, builderNotConfiguredMsg)
 			return
 		}
-		backendName = deriveBuilderAppName(title, randomSuffix())
 	}
 
 	health, ok := h.requireAvailable(w, r)
 	if !ok {
 		return
+	}
+
+	// Naming runs after the cheap checks and the availability probe, and
+	// before the backend exists, because the app name cannot change later.
+	slugSource := title
+	if title == "" && strings.TrimSpace(req.Prompt) != "" {
+		var p provider.Provider
+		if h.naming != nil {
+			p = h.naming(r.Context())
+		}
+		names := generateProjectNames(r.Context(), p, h.logger, req.Prompt)
+		title, slugSource = names.Title, names.Slug
+	}
+	if mode == builderBackendModeNew {
+		backendName = deriveBuilderAppName(slugSource, randomSuffix())
 	}
 
 	apiURL, ok := h.apiBaseURL(r)
@@ -701,6 +722,45 @@ func (h *BuilderHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 		detail.Turns = append(detail.Turns, newBuilderTurnView(&turns[i]))
 	}
 	writeJSON(w, http.StatusOK, detail)
+}
+
+type renameBuilderSessionRequest struct {
+	Title string `json:"title"`
+}
+
+// RenameSession handles PATCH /dashboard/api/builder/sessions/{id}: the owner
+// sets the project title. The title is then locked, so a plan's proposed title
+// never replaces it. The backend app keeps its name (it is the schema key).
+func (h *BuilderHandler) RenameSession(w http.ResponseWriter, r *http.Request) {
+	user, sess, ok := h.ownedSession(w, r, false)
+	if !ok {
+		return
+	}
+	var req renameBuilderSessionRequest
+	if !h.decodeBuilderBody(w, r, &req, builderRenameBodyLimit) {
+		return
+	}
+	title := cleanBuilderTitle(req.Title)
+	if title == "" {
+		h.writeError(w, http.StatusBadRequest, "title is required")
+		return
+	}
+	if utf8.RuneCountInString(title) > builderMaxTitleRunes {
+		h.writeError(w, http.StatusBadRequest, "title is too long")
+		return
+	}
+	updated, err := h.store.RenameSession(r.Context(), user.ID, sess.ID, title)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			h.writeError(w, http.StatusNotFound, builderSessionNotFoundMsg)
+			return
+		}
+		h.serverError(w, r, err)
+		return
+	}
+	h.audit(r.Context(), user, "builder.session.rename", sess.ID, updated.Title,
+		map[string]string{"previous_title": sess.Title}, r.RemoteAddr)
+	writeJSON(w, http.StatusOK, newBuilderSessionView(updated))
 }
 
 // DeleteSession handles DELETE /dashboard/api/builder/sessions/{id}: archive,

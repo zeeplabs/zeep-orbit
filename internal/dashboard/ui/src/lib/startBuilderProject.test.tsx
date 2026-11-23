@@ -50,7 +50,7 @@ beforeEach(() => toastError.mockReset())
 afterEach(() => vi.unstubAllGlobals())
 
 describe('useStartBuilderProject', () => {
-  test('creates the session with the title and locale, then posts the prompt', async () => {
+  test('creates the session with the prompt and locale, then posts the prompt', async () => {
     const calls = stubFetch({
       'POST /builder/sessions': () => json(201, session),
       'POST /builder/sessions/s1/messages': () => json(202, { id: 't1' }),
@@ -66,7 +66,7 @@ describe('useStartBuilderProject', () => {
     expect(calls[0].body).toEqual({
       backend: { mode: 'new' },
       locale: 'pt-BR',
-      title: 'Quero um app para a minha clínica',
+      prompt: 'Quero um app para a minha clínica',
     })
     expect(calls[1].body).toEqual({ content: 'Quero um app para a minha clínica' })
     await waitFor(() => expect(result.current.data).toEqual(session))

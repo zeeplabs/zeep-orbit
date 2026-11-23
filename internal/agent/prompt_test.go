@@ -283,3 +283,15 @@ func TestBuildSystemPrompt_SessionContextCaps(t *testing.T) {
 		t.Fatal("app identity missing from session context")
 	}
 }
+
+func TestBuildSystemPrompt_CoreAsksForAPlanTitle(t *testing.T) {
+	core := CorePrompt()
+	for _, want := range []string{
+		"Every plan has a `title`",
+		"Ask for a name with `ask_user` only when the project is ambiguous",
+	} {
+		if !strings.Contains(core, want) {
+			t.Errorf("core.md must state %q", want)
+		}
+	}
+}
