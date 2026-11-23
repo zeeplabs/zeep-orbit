@@ -1,7 +1,7 @@
 ---
 name: orbit-crud-screens
 description: Use when building list, detail and edit screens over Orbit tables: schema first, pagination, filters and search, safe payloads, and empty lists that may be hidden by access policies.
-version: 1
+version: 2
 source: Written for the Orbit builder (Zeep Orbit); the behavior described is the Orbit table REST API and its TypeScript client
 ---
 
@@ -12,7 +12,7 @@ A list, a detail view and a form for one table. Build them against the real sche
 ## 1. Start from the schema
 
 - Call `orbit_get_app_schema` before writing code. Use the exact table and column names, column types, nullability, enum values and relations it returns. Do not invent columns, and do not fake rows.
-- If the table or column you need does not exist, call `propose_backend_change` with the smallest change and tell the user that the screen waits for their confirmation. Never hardcode sample data as if it were real.
+- If the table or column you need does not exist, call `propose_backend_change` with the smallest change and tell the user that the screen waits for their confirmation. Never hardcode sample, example or placeholder rows, labeled or not: until the table exists and has rows, the screen shows its designed empty state.
 - Plan the files: a list page, a form component used by "new" and "edit", and routes in `src/App.tsx` (`/customers`, `/customers/new`, `/customers/:id`). Link between them with `<Link>`.
 
 ## 2. List screen

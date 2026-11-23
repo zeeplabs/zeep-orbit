@@ -153,6 +153,15 @@ Negative case, one sample: on the e1 session a follow-up "Change the text of the
 
 Screenshots (maintainer's scratchpad, to move): c1 `...-1795451664390-21.jpg`; c2 `-22`, `-23`, `-24`; c3 `-25` (sign-in), `-27` (list); c4 `-28`, `-29`; e1 `-31` (sign-in), `-32` (catalogue); all `screenshot-17954…` under `/var/folders/…/claude-chrome-screenshots-4hMJLY/`.
 
+### Sample-data fix, verified once (2026-11-23)
+
+Change: the core rule, `orbit-crud-screens` (now version 2) and `orbit-frontend-design` (now version 3) forbid sample, example or placeholder rows even with a notice; the old wording only forbade data "pretending to be real". Image `zeep-orbit:dq-p1b`. Re-run of c2 with the same protocol, M1 only (session `ada0248d-b096-4f68-be8d-8d1aac21da6f`, $0.2727):
+
+- This time the planner asked no questions and went straight to a plan; direction "Clara e energética para uma academia: legível em celular, na porta da academia", `ui_language` pt-BR (the language came out right in this run).
+- The build proposed the backend change first (the behavior the rule asks for), then built the screen: **no sample rows**. The first screen is "GRADE DA SEMANA" in heavy condensed capitals, a black bar with an orange underline, a date selector with "HOJE", and the model's note that the empty state appears when a day has no classes.
+- The screen shows "NÃO FOI POSSÍVEL CARREGAR A GRADE / unauthorized" instead of the empty state: the public grid reads a table that requires sign-in. That is the same logic problem as the baseline and the first P1 run (finding 4 in section 3), now visible in all three runs. It is separate from this fix: the plan says students see the grid without signing in, while the table is created with access for signed-in users only. Candidate for a separate fix (a planning or backend-proposal rule: a table read by a public screen must be public or the screen must sign in first).
+- One run: it shows the wording no longer produces labeled sample data in the case that did before, not that it never will.
+
 ## 6. Kit eval (T10), spike (T12)
 
 Not run yet.

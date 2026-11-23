@@ -2,7 +2,7 @@
 name: orbit-frontend-design
 description: Use for any new screen or restyle: turn the brief's Look into CSS tokens, type, layout, states and purposeful motion, avoiding the generic AI look. Yields to company standards and the template guide.
 license: Apache-2.0
-version: 2
+version: 3
 source: Adapted from the frontend-design skill in anthropics/skills (Apache-2.0), rewritten for the Orbit builder
 ---
 
@@ -66,7 +66,7 @@ System stacks that give character without loading anything:
 Loading, empty, error and success are screens too.
 
 - Loading: a skeleton of the real layout, not a bare "Loading...". A very light shimmer is fine.
-- Empty: a short heading, one line that says what will appear here, and the primary action. Never only a plain sentence.
+- Empty: a short heading, one line that says what will appear here, and the primary action. Never only a plain sentence. This is also what a screen shows before its data exists: never fill it with example or sample rows, even with a notice, because the preview then looks finished while the data is not real.
 - Error: what happened, what to do, a retry button. Keep what the user typed.
 - Success: a confirmation that uses the same word as the action ("Changes saved"), visible for a moment.
 
@@ -97,4 +97,4 @@ Do not ship these unless the brief points there: a white page with one blue or p
 
 Check contrast: normal text at least 4.5 to 1, large text and icons at least 3 to 1, and never rely on color alone for a state. Keep a visible keyboard focus. Make it work at phone width with no horizontal scroll. Do not link to external fonts, icons or images: the preview and the published app must not call third-party hosts. Dark mode only when asked, driven by the same variables.
 
-Write UI text in the user's language, name things the way the user does, and never invent data to fill a screen. You cannot see the result, so keep the CSS simple enough to reason about: a few well-named classes over deep selectors, and watch specificity so one rule does not cancel another. After changing styles run `run_build` with step `build` and fix what it reports.
+Write UI text in the user's language, name things the way the user does, and never invent data to fill a screen, not even labeled as example data. You cannot see the result, so keep the CSS simple enough to reason about: a few well-named classes over deep selectors, and watch specificity so one rule does not cancel another. After changing styles run `run_build` with step `build` and fix what it reports.

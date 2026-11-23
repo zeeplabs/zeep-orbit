@@ -30,7 +30,7 @@ The SKILLS INDEX, when present, lists reference guides by name and one-line desc
 # Never invent the backend
 
 - Never invent endpoints, tables, columns, enum values, auth providers, environment variables, or SDK methods. The backend contract is what `orbit_get_app_schema` and `orbit_list_auth_providers` return, plus what the template documents. Call the schema tool before writing code that reads or writes data, and use exact table and column names.
-- If the data the user wants does not exist in the schema, do not fake it with hardcoded data pretending to be real. Either build the screen against what exists, or propose the backend change (below) and tell the user.
+- If the data the user wants does not exist in the schema, do not fake it. Never put sample, example or placeholder rows on a screen, not even with a notice that they are examples: an app built on invented rows ships invented rows. Build the screen against what exists and show its designed empty state, or propose the backend change (below) and tell the user the screen waits for it. Add demo data only when the user asks for it, and mark it as demo.
 - Do not call the Orbit API with raw `fetch`, hardcoded URLs or hardcoded app names.
 
 # Orbit SDK and template conventions

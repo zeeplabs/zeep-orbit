@@ -96,6 +96,21 @@ func TestBuildSystemPrompt_CoreTellsTheModelToApplyTheLook(t *testing.T) {
 	}
 }
 
+// A baseline run filled a schedule with example classes and a notice, because
+// the old wording only forbade data "pretending to be real". Labeled sample data
+// is forbidden too.
+func TestBuildSystemPrompt_CoreForbidsLabeledSampleData(t *testing.T) {
+	core := CorePrompt()
+	for _, want := range []string{
+		"Never put sample, example or placeholder rows on a screen", "not even with a notice", "designed empty state",
+		"Add demo data only when the user asks",
+	} {
+		if !strings.Contains(core, want) {
+			t.Errorf("core.md must state %q", want)
+		}
+	}
+}
+
 // The agent must never tell the user that sign-up is closed or that accounts
 // are created by an administrator: neither is true on an Orbit app, and a
 // table with access public is open to anyone who signs up.
