@@ -6,7 +6,14 @@ import { useApps, useBuilderSessions, useStartBuilderProject, type BuilderBacken
 import { recentSessions } from '@/components/layout/SimpleSidebar'
 
 const NEW_BACKEND = '__new__'
-const SUGGESTION_KEYS = ['home.suggestion1', 'home.suggestion2', 'home.suggestion3', 'home.suggestion4'] as const
+// Each chip shows a short title and fills the composer with the full example prompt, so the user
+// sees how much detail to give: who uses it, what it stores, who signs in, the look.
+const SUGGESTIONS = [
+  { title: 'home.suggestion1', prompt: 'home.suggestion1Prompt' },
+  { title: 'home.suggestion2', prompt: 'home.suggestion2Prompt' },
+  { title: 'home.suggestion3', prompt: 'home.suggestion3Prompt' },
+  { title: 'home.suggestion4', prompt: 'home.suggestion4Prompt' },
+] as const
 const CONTINUE_LIMIT = 3
 
 /**
@@ -82,7 +89,7 @@ export default function HomeChatPage() {
           rows={3}
           placeholder={t('home.composerPlaceholder')}
           aria-describedby="home-prompt-hint"
-          className="block w-full resize-none border-0 bg-transparent p-0 text-base leading-relaxed text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
+          className="block max-h-64 min-h-[4.5rem] w-full resize-none overflow-y-auto border-0 bg-transparent p-0 text-base [field-sizing:content] leading-relaxed text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
         />
         <p id="home-prompt-hint" className="sr-only">
           {t('home.composerHint')}
@@ -121,15 +128,15 @@ export default function HomeChatPage() {
       </form>
 
       <ul aria-label={t('home.suggestionsLabel')} className="m-0 mt-5 flex list-none flex-wrap justify-center gap-2 p-0">
-        {SUGGESTION_KEYS.map((key) => (
-          <li key={key}>
+        {SUGGESTIONS.map(({ title, prompt: promptKey }) => (
+          <li key={title}>
             <button
               type="button"
-              onClick={() => fillSuggestion(t(key))}
+              onClick={() => fillSuggestion(t(promptKey))}
               disabled={pending}
               className="rounded-full border border-[var(--border)] bg-transparent px-3.5 py-1.5 text-[13px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--hover-surface)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
             >
-              {t(key)}
+              {t(title)}
             </button>
           </li>
         ))}
