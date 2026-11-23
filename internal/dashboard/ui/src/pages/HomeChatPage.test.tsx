@@ -123,12 +123,16 @@ describe('HomeChatPage composer', () => {
 })
 
 describe('HomeChatPage suggestions', () => {
-  test('a chip fills the composer and does not send', async () => {
+  test('a chip fills the composer with a full example prompt and does not send', async () => {
     setup()
     const list = screen.getByRole('list', { name: 'Suggestions' })
     expect(within(list).getAllByRole('button')).toHaveLength(4)
     await userEvent.click(within(list).getByRole('button', { name: 'A task board for a team' }))
-    expect(box()).toHaveValue('A task board for a team')
+    const filled = (box() as HTMLTextAreaElement).value
+    expect(filled).toContain('A task board for my team of six people')
+    // A real brief, not the chip title: it names the data, who signs in and the look.
+    expect(filled.length).toBeGreaterThan(200)
+    expect(filled).toMatch(/signs in/)
     expect(box()).toHaveFocus()
     expect(h.mutate).not.toHaveBeenCalled()
   })

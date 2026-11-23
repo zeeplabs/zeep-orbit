@@ -132,3 +132,27 @@ button:not(:disabled),
 .brand-accent-bar {
   background: linear-gradient(to right, rgba(var(--brand-primary-rgb), 0.4), rgba(var(--brand-secondary-rgb), 0.4), transparent);
 }
+
+/* Soft scrollbar: thin and invisible until the list is hovered or focused, so
+ * long lists (sidebar recents) do not show a heavy track at rest. */
+.soft-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.soft-scroll:hover,
+.soft-scroll:focus-within {
+  scrollbar-color: var(--border-strong) transparent;
+}
+@supports not (scrollbar-color: auto) {
+  .soft-scroll::-webkit-scrollbar {
+    width: 6px;
+  }
+  .soft-scroll::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 9999px;
+  }
+  .soft-scroll:hover::-webkit-scrollbar-thumb,
+  .soft-scroll:focus-within::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+  }
+}

@@ -126,6 +126,20 @@ func TestBuildSystemPrompt_CoreStatesThatSignUpIsOpen(t *testing.T) {
 	}
 }
 
+// A screen that reads a table that is not public must sit behind sign-in, or
+// the first thing a signed-out visitor sees is an unauthorized error.
+func TestBuildSystemPrompt_CoreGatesScreensOfRestrictedTables(t *testing.T) {
+	core := CorePrompt()
+	for _, want := range []string{
+		"answers `unauthorized` to a visitor who is not signed in", "behind sign-in",
+		"never make a screen that reads such a table the first screen of a signed-out visitor",
+	} {
+		if !strings.Contains(strings.ToLower(core), strings.ToLower(want)) {
+			t.Errorf("core.md must state %q", want)
+		}
+	}
+}
+
 func TestBuildSystemPrompt_OversizedTemplateGuideTruncated(t *testing.T) {
 	guide := strings.Repeat("g", MaxTemplateGuideChars+500)
 	out := BuildSystemPrompt("core", "", guide, "", fullSession())
@@ -267,5 +281,17 @@ func TestBuildSystemPrompt_SessionContextCaps(t *testing.T) {
 	}
 	if !strings.Contains(out, "Backend app: crm (id: app-1)") {
 		t.Fatal("app identity missing from session context")
+	}
+}
+
+func TestBuildSystemPrompt_CoreAsksForAPlanTitle(t *testing.T) {
+	core := CorePrompt()
+	for _, want := range []string{
+		"Every plan has a `title`",
+		"Ask for a name with `ask_user` only when the project is ambiguous",
+	} {
+		if !strings.Contains(core, want) {
+			t.Errorf("core.md must state %q", want)
+		}
 	}
 }

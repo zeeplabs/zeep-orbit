@@ -450,6 +450,7 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool), aiChatLimiterMW).Post("/api/builder/sessions", builderH.CreateSession)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/builder/sessions", builderH.ListSessions)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/builder/sessions/{id}", builderH.GetSession)
+		r.With(dashboard.RequireAuth(pool)).Patch("/api/builder/sessions/{id}", builderH.RenameSession)
 		r.With(dashboard.RequireAuth(pool), aiChatLimiterMW).Delete("/api/builder/sessions/{id}", builderH.DeleteSession)
 		r.With(dashboard.RequireAuth(pool), aiChatLimiterMW).Post("/api/builder/sessions/{id}/messages", builderH.CreateMessage)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/builder/sessions/{id}/events", builderH.ListEvents)

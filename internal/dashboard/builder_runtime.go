@@ -221,11 +221,32 @@ func (rt *BuilderRuntime) HandlerConfig() BuilderHandlerConfig {
 		return BuilderHandlerConfig{}
 	}
 	return BuilderHandlerConfig{
-		Store:         rt.store,
-		Sandbox:       rt.sandbox,
-		PreviewSigner: rt.signer,
-		Poke:          rt.worker.Poke,
+		Store:          rt.store,
+		Sandbox:        rt.sandbox,
+		PreviewSigner:  rt.signer,
+		Poke:           rt.worker.Poke,
+		NamingProvider: rt.namingProvider,
 	}
+}
+
+// namingProvider is the model client for project naming: the planning model when
+// the settings name one (cheaper), else the build model. nil when no provider
+// can be built, which makes naming use its fallback.
+func (rt *BuilderRuntime) namingProvider(ctx context.Context) provider.Provider {
+	s, err := GetBuilderSettings(ctx, rt.pool)
+	if err != nil {
+		rt.log.Warn("builder: read settings for project naming failed", "err", err)
+		return nil
+	}
+	if s.PlanningModel != "" {
+		if p := rt.resolvePlanningProvider(ctx, s.Provider, s.PlanningModel); p != nil {
+			return p
+		}
+	}
+	if p, ok := rt.buildProvider(ctx, s.Provider, ""); ok {
+		return p
+	}
+	return nil
 }
 
 // Start runs the turn worker in its own goroutine until ctx is cancelled or

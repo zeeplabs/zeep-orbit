@@ -17,6 +17,9 @@ const BriefFileName = "ORBIT_BRIEF.md"
 // not part of it (see [RenderProgress]).
 func RenderBrief(p *Plan) string {
 	var b strings.Builder
+	if p.Title != "" {
+		fmt.Fprintf(&b, "Title: %s\n", p.Title)
+	}
 	fmt.Fprintf(&b, "Summary: %s\n", p.Summary)
 
 	b.WriteString("\nScreens:\n")
