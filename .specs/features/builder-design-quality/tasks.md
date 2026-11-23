@@ -10,7 +10,7 @@ Commits only when the user asks (AGENTS.md §2); never add Claude/Anthropic attr
 
 **Spec**: `.specs/features/builder-design-quality/spec.md`
 **Design**: `.specs/features/builder-design-quality/design.md`
-**Status**: Draft 2026-11-23. Nothing implemented. Branch `feat/builder-design-quality` (worktree `.claude/worktrees/builder-design-quality`) from `origin/develop`.
+**Status**: 2026-11-23. Done and committed: T1 (baseline), T2 (required direction), T3 (plan card shows it). T2 retested on the real model (see `validation.md` section 4). Next: T4, T5, T6, T7. Branch `feat/builder-design-quality` (worktree `.claude/worktrees/builder-design-quality`) from `origin/develop`.
 
 ## Gate Check Commands
 
