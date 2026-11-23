@@ -21,7 +21,7 @@ import (
 
 // testBuildPlanV2 revises testBuildPlan: the first milestone is already built
 // and a third one is added.
-const testBuildPlanV2 = `{"summary":"A CRM for a clinic, with a calendar.","screens":[{"name":"Patients","purpose":"List patients"}],"assumptions":["Email sign-in"],` +
+const testBuildPlanV2 = `{"summary":"A CRM for a clinic, with a calendar.","screens":[{"name":"Patients","purpose":"List patients"}],"look":{"direction":"calm and clinical"},"assumptions":["Email sign-in"],` +
 	`"milestones":[{"title":"Patient list","deliverable":"See the list","done":true},{"title":"Patient record","deliverable":"Open one"},{"title":"Calendar","deliverable":"Book a visit"}]}`
 
 // callGet calls fn as user with a GET and several chi URL params.

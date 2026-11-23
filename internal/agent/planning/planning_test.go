@@ -118,7 +118,11 @@ func validPlan() map[string]any {
 			{"table": "patients", "holds": "People the clinic attends", "access": "signed_in"},
 			{"table": "notes", "holds": "Notes per visit", "access": "role", "access_note": "doctors write, reception reads"},
 		},
-		"look":         map[string]any{"style": "clean", "colors": "teal", "ui_language": "pt-BR"},
+		"look": map[string]any{
+			"style": "clean", "colors": "teal", "ui_language": "pt-BR",
+			"direction": "calm and clinical", "type": "humanist sans, generous size", "density": "airy",
+			"motion": "short fades when a record opens and when a save succeeds",
+		},
 		"assumptions":  []string{"Email and password sign-in"},
 		"out_of_scope": []string{"Billing"},
 		"milestones": []map[string]any{
@@ -310,5 +314,87 @@ func TestClean(t *testing.T) {
 		if got := Clean(in); got != want {
 			t.Errorf("Clean(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestParsePlan_LookFieldsKeptAndBounded(t *testing.T) {
+	p, err := ParsePlan(mustJSON(t, validPlan()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Look.Direction != "calm and clinical" || p.Look.Type == "" || p.Look.Density != "airy" || p.Look.Motion == "" {
+		t.Fatalf("look fields lost: %+v", p.Look)
+	}
+
+	limits := map[string]int{"direction": maxLookDirection, "type": maxLookType, "density": maxLookDensity, "motion": maxLookMotion}
+	for key, max := range limits {
+		m := validPlan()
+		look := m["look"].(map[string]any)
+		look[key] = strings.Repeat("x", max+1)
+		if _, err := ParsePlan(mustJSON(t, m)); err == nil || !strings.Contains(err.Error(), "look."+key) {
+			t.Errorf("look.%s over %d characters: err = %v", key, max, err)
+		}
+		look[key] = strings.Repeat("x", max)
+		if _, err := ParsePlan(mustJSON(t, m)); err != nil {
+			t.Errorf("look.%s at the limit refused: %v", key, err)
+		}
+	}
+}
+
+func TestPlan_RequireLook(t *testing.T) {
+	// A plan approved before the direction existed still parses: stored briefs
+	// are read with ParsePlan and must not break.
+	old := validPlan()
+	delete(old["look"].(map[string]any), "direction")
+	p, err := ParsePlan(mustJSON(t, old))
+	if err != nil {
+		t.Fatalf("a plan without a direction must still parse: %v", err)
+	}
+	if err := p.RequireLook(); err == nil || !strings.Contains(err.Error(), "look.direction: required") {
+		t.Errorf("a new proposal without a direction must be refused, got %v", err)
+	}
+
+	noLook := validPlan()
+	delete(noLook, "look")
+	p, err = ParsePlan(mustJSON(t, noLook))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.RequireLook(); err == nil {
+		t.Error("a proposal with no look at all must be refused")
+	}
+
+	// The user's own style and colors alone do not satisfy it: the direction is
+	// the planner's decision.
+	styleOnly := validPlan()
+	styleOnly["look"] = map[string]any{"style": "dark", "colors": "amber"}
+	p, _ = ParsePlan(mustJSON(t, styleOnly))
+	if p.RequireLook() == nil {
+		t.Error("style and colors without a direction must be refused")
+	}
+
+	p, _ = ParsePlan(mustJSON(t, validPlan()))
+	if err := p.RequireLook(); err != nil {
+		t.Errorf("a plan with a direction was refused: %v", err)
+	}
+}
+
+func TestParsePlan_WorstCaseLookStillFitsTheBrief(t *testing.T) {
+	// Every look field at its limit, on top of a plan that is already large: the
+	// brief must stay under MaxBriefChars, because a longer one is refused at
+	// proposal time and the model has to shorten it.
+	m := validPlan()
+	m["look"] = map[string]any{
+		"style": strings.Repeat("s", maxLookFieldChars), "colors": strings.Repeat("c", maxLookFieldChars),
+		"ui_language": strings.Repeat("l", maxUILanguageChars), "reference": strings.Repeat("r", maxLookFieldChars),
+		"direction": strings.Repeat("d", maxLookDirection), "type": strings.Repeat("t", maxLookType),
+		"density": strings.Repeat("n", maxLookDensity), "motion": strings.Repeat("m", maxLookMotion),
+	}
+	p, err := ParsePlan(mustJSON(t, m))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := utf8.RuneCountInString(RenderBrief(p)); n > MaxBriefChars {
+		t.Fatalf("a small plan with a worst-case look renders to %d characters, over %d", n, MaxBriefChars)
 	}
 }

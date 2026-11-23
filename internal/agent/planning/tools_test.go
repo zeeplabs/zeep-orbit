@@ -49,6 +49,11 @@ func TestTools_RegisterAndValidate(t *testing.T) {
 	if res := dispatch(ToolProposeBuildPlan, mustJSON(t, validPlan())); res.IsError {
 		t.Errorf("valid plan refused: %s", res.Content)
 	}
+	noDirection := validPlan()
+	delete(noDirection["look"].(map[string]any), "direction")
+	if res := dispatch(ToolProposeBuildPlan, mustJSON(t, noDirection)); !res.IsError || !strings.Contains(res.Content, "look.direction: required") {
+		t.Errorf("plan without a direction must be a tool error the model can fix: %+v", res)
+	}
 	bad := validPlan()
 	delete(bad, "assumptions")
 	if res := dispatch(ToolProposeBuildPlan, mustJSON(t, bad)); !res.IsError || !strings.Contains(res.Content, "assumptions: required") {

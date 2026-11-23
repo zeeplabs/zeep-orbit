@@ -38,7 +38,7 @@ type Look struct {
 }
 ```
 
-- Same `field()` validation as the others, `maxLookFieldChars` 200 each. `Validate` rejects a plan whose `Look.Direction` and `Look.Style` are both empty (DQ-01) with an actionable message. Existing stored plans stay valid: the rule applies at propose time only.
+- Same `field()` validation as the others, `maxLookFieldChars` 200 each. `(*Plan).RequireLook()` rejects a proposal whose `Look.Direction` is empty (DQ-01); the `propose_build_plan` handler calls it after `ParsePlan`. `ParsePlan` itself stays tolerant because it also reads stored briefs (`builder_runtime.go` `briefInput`), which have no direction. The user's own style and colors alone do not satisfy it: the direction is the planner's decision. The tool schema lists `look` and `look.direction` as required.
 - `lookText` renders the new fields. Budget: the worst case adds about 4 x 200 characters to a brief that is capped at 6000; the existing "plan too long" error already protects the cap. **To measure in T1:** brief size of the 12 eval briefs before and after.
 - `proposeBuildPlanDescription` and the planning prompt tell the planner to choose the direction from the audience and job of the app, and not to reuse one direction for every project (DQ-04). The directions listed are examples, not an enum: free text, so a company can say "our brand".
 - Frontend: the plan card shows the direction and lets the user edit it (DQ-03). It renders from the plan JSON, so no new endpoint. `[not verified]` how the plan card lists `Look` today: read `internal/dashboard/ui` plan components in T3.

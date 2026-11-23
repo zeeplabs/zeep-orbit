@@ -90,7 +90,7 @@ Priority: P1 = MVP, P2 = next, P3 = after feasibility.
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| DQ-01 | `Look` is required in a proposed plan (plan validation rejects an empty look with an actionable message). | P1 |
+| DQ-01 | A proposed plan must carry `look.direction` (the tool call is refused with an actionable message when it is empty). Plans approved before this are still read: the check applies to new proposals only, not to `ParsePlan`. | P1 |
 | DQ-02 | `Look` carries a visual direction chosen for the project type: mood, palette intent, type pairing, density, and where motion goes. Fields stay short; the rendered brief still fits `MaxBriefChars`. | P1 |
 | DQ-03 | The visual direction is shown to the user in the plan card and can be edited like any other part of the plan. | P1 |
 | DQ-04 | The planner is instructed to derive the direction from the audience and job of the app, and to avoid repeating the previous generic choice (evidence: distinct directions across the eval briefs). | P1 |
