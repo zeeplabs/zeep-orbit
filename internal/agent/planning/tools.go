@@ -52,7 +52,7 @@ const proposeBuildPlanDescription = "Propose the build plan for the user to appr
 	"Put everything you decided without the user saying it under \"assumptions\". " +
 	"\"data\" is what the app stores, in words, and who can reach it; the tables themselves are created later with a backend proposal. " +
 	"\"milestones\" are in build order and each one is small enough to end in one working build the user can see; the first one must already show something usable. " +
-	"Keep it short: one line per item. When you revise an approved plan, send the whole plan again and mark milestones that are already built with \"done\": true."
+	"Keep it short: one line per item, written in the user's language. When you revise an approved plan, send the whole plan again and mark milestones that are already built with \"done\": true."
 
 const proposeBuildPlanSchema = `{
   "type": "object",
