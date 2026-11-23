@@ -7,4 +7,4 @@ Gate: Go `go build ./... && go vet ./... && gofmt -l cmd internal && go test -p 
 - **T3 (done)** Title generator: `titlegen` (model call, strict JSON parse, sanitize, heuristic fallback) with a fake provider test; wiring in `BuilderHandlerConfig`/server; `CreateSession` uses `prompt`. Tests.
 - **T4 (done)** Plan `title`: `planning.Plan.Title`, tool schema (required), `RequireTitle` in the handler, planner prompt (PT-06), `ApproveBuildPlan` sets the title. Tests.
 - **T5 (done)** UI: inline rename in the builder header, title in the plan card, chat home sends `prompt`. i18n, tests.
-- **T6** Verify on the local stack with the real model (cost confirmed first); CHANGELOG; validation note.
+- **T6 (done)** Verify on the local stack with the real model (cost confirmed first); CHANGELOG; validation note.
