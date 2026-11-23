@@ -34,6 +34,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/zeeplabs/zeep-orbit/internal/agent/provider"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/sandbox"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/store"
 	"github.com/zeeplabs/zeep-orbit/internal/github"
@@ -172,9 +173,13 @@ type createBuilderSessionRequest struct {
 	// TemplateID is a github_templates id from GET /api/builder/templates;
 	// empty selects the built-in default template.
 	TemplateID string `json:"template_id"`
-	// Title is optional; it defaults to the backend app's name ("Untitled
-	// app" for a new backend).
+	// Title is optional. Empty, it is generated from Prompt when one is sent,
+	// else it defaults to the backend app's name ("Untitled app" for a new
+	// backend). A title the caller sends is kept as is.
 	Title string `json:"title"`
+	// Prompt is the user's first message. It is only read to name the project
+	// (title and new backend name); it is not stored and not sent to the agent.
+	Prompt string `json:"prompt"`
 	// Locale is the language of the user's UI (e.g. "pt-BR"); it defaults to
 	// the first tag of Accept-Language, then "en". The agent replies in it.
 	Locale string `json:"locale"`
@@ -323,12 +328,26 @@ func (h *BuilderHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusServiceUnavailable, builderNotConfiguredMsg)
 			return
 		}
-		backendName = deriveBuilderAppName(title, randomSuffix())
 	}
 
 	health, ok := h.requireAvailable(w, r)
 	if !ok {
 		return
+	}
+
+	// Naming runs after the cheap checks and the availability probe, and
+	// before the backend exists, because the app name cannot change later.
+	slugSource := title
+	if title == "" && strings.TrimSpace(req.Prompt) != "" {
+		var p provider.Provider
+		if h.naming != nil {
+			p = h.naming(r.Context())
+		}
+		names := generateProjectNames(r.Context(), p, h.logger, req.Prompt)
+		title, slugSource = names.Title, names.Slug
+	}
+	if mode == builderBackendModeNew {
+		backendName = deriveBuilderAppName(slugSource, randomSuffix())
 	}
 
 	apiURL, ok := h.apiBaseURL(r)
