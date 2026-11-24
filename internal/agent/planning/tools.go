@@ -81,7 +81,7 @@ const proposeBuildPlanSchema = `{
         "properties": {
           "table": {"type": "string", "description": "Name of the thing stored, for example \"patients\"."},
           "holds": {"type": "string", "description": "What it holds, one line."},
-          "access": {"type": "string", "enum": ["public", "signed_in", "owner", "role"], "description": "Who can reach it: public (anyone, signed in or not), signed_in (any signed-in user; sign-up is open, so anyone can create an account and this is NOT limited to a team), owner (each user only their own rows), role (depends on the user's role; explain in access_note)."},
+          "access": {"type": "string", "enum": ["public", "signed_in", "owner", "role"], "description": "Who can reach it. Every request to the data needs a signed-in account, there is no anonymous read: public (no row protection, every account reads and edits it; a visitor with no account is still refused), signed_in (any signed-in user; sign-up is open, so anyone can create an account and this is NOT limited to a team), owner (each user only their own rows), role (depends on the user's role; explain in access_note)."},
           "access_note": {"type": "string", "description": "Required for role: which role can do what."}
         }
       }

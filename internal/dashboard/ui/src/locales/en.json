@@ -1651,7 +1651,7 @@
   "builder.page.plan.data": "Data",
   "builder.page.plan.dataHint": "Tables are created later, when you confirm a backend change.",
   "builder.page.plan.accessLabel": "Access",
-  "builder.page.plan.access.public": "Open to everyone",
+  "builder.page.plan.access.public": "Any account, no row protection",
   "builder.page.plan.access.signed_in": "Any account (anyone can sign up)",
   "builder.page.plan.access.owner": "Each user sees only their own data",
   "builder.page.plan.access.role": "Restricted by role",
