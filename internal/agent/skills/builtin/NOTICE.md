@@ -1,7 +1,7 @@
 # Built-in skills: provenance and attributions
 
 Every built-in skill under this directory is authored or adapted for the Zeep
-Orbit AI Builder (React + Vite + TypeScript + plain CSS + `HashRouter`, with
+Orbit AI Builder (React + Vite + TypeScript + `HashRouter`, with
 the builder's own tools). Each `SKILL.md` records its provenance in the
 `source` frontmatter field. Skills that say "Written for the Orbit builder" are
 original work of this project.

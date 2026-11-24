@@ -1,15 +1,19 @@
 # Orbit frontend template - guide for the AI agent
 
 ## Stack
-Vite 7, React 19, TypeScript (strict), React Router 7, plain CSS (`src/index.css`),
-`@zeeptech/orbit-client` for the backend. No Tailwind or UI kit: write small
-components and use the CSS variables in `src/index.css`.
+Vite 7, React 19, TypeScript (strict), React Router 7, Tailwind CSS 4,
+`@zeeptech/orbit-client` for the backend. A small UI kit (`orbit-ui`) is in
+`src/components/ui`: use its components first and create a new one only when the
+kit has none. Its API is in `UI_KIT.md`. The design tokens (colors, type, radius,
+shadow, motion) are CSS variables at the top of `src/index.css`: change the
+look there, not inside components.
 
 ## Layout
 - `src/main.tsx` - entry; `HashRouter` (the preview is served under a changing URL path). Do not replace it with `BrowserRouter`.
 - `src/App.tsx` - layout and `<Routes>`. Register every new page here.
 - `src/pages/` - one file per route (`FooPage.tsx`).
-- `src/components/` - reusable UI.
+- `src/components/ui/` - the UI kit (see `UI_KIT.md`). Import from `../components/ui`.
+- `src/components/` - your own reusable UI.
 - `src/lib/orbit.ts` - the only module that talks to the backend.
 - `src/lib/storage.ts` - storage that falls back to memory when browser storage is blocked.
 - `src/orbit.config.ts` - generated (API URL, app name). Never edit.
@@ -37,7 +41,7 @@ await signIn(email, password) // stores the JWT; call getOrbit() again afterward
 - The app runs under a changing sub-path in preview (the build base is relative):
   import assets from `src/` or use relative paths, never absolute `/something` URLs
   for assets (use `<Link to="/x">` for navigation).
-- No new dependencies unless the task cannot be done without them.
+- No new dependencies unless the task cannot be done without them. Tailwind, the kit (built on `@base-ui/react`) and `lucide-react` for icons are already installed; do not add another component library or icon package.
 - Text files only. Do not touch `node_modules`, `dist`, `.git`.
 - Keep `npm run lint` and `npx tsc -b` green before finishing a turn.
 - UI copy follows the user's language; code, identifiers and comments in English.

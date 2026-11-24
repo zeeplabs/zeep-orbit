@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { getOrbit, isOrbitConfigured } from '../lib/orbit'
 import { ORBIT_APP_NAME } from '../orbit.config'
+import { Button } from './ui'
 
 // Example of reading from the Orbit backend through the SDK. Replace
 // "your_table" with a real table of the backend app when you build a page.
@@ -9,7 +10,7 @@ export default function BackendStatus() {
   const [message, setMessage] = useState('')
 
   if (!isOrbitConfigured) {
-    return <p className="muted">Backend not configured yet (orbit.config.ts holds placeholders).</p>
+    return <p className="text-muted-foreground">Backend not configured yet (orbit.config.ts holds placeholders).</p>
   }
 
   async function check() {
@@ -26,11 +27,13 @@ export default function BackendStatus() {
 
   return (
     <div>
-      <p className="muted">Connected app: {ORBIT_APP_NAME}</p>
-      <button type="button" onClick={() => void check()} disabled={state === 'loading'}>
+      <p className="mb-3 text-muted-foreground">Connected app: {ORBIT_APP_NAME}</p>
+      <Button onClick={() => void check()} disabled={state === 'loading'}>
         {state === 'loading' ? 'Checking...' : 'Test backend call'}
-      </button>
-      {state !== 'idle' && state !== 'loading' && <p className={state}>{message}</p>}
+      </Button>
+      {state !== 'idle' && state !== 'loading' && (
+        <p className={state === 'ok' ? 'mt-3 text-success' : 'mt-3 text-danger'}>{message}</p>
+      )}
     </div>
   )
 }

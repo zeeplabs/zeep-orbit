@@ -71,6 +71,7 @@ const (
 	maxTreeDepth       = 3
 	maxTreeLines       = 300
 	templateGuideFile  = "ORBIT_AGENT.md"
+	templateManifest   = "orbit-template.json"
 	providerUnavailMsg = "builder model provider is not available"
 )
 
@@ -454,6 +455,15 @@ func (rt *BuilderRuntime) promptSource(ctx context.Context, s *store.Session) (a
 		rt.log.Warn("builder: workspace scan for the prompt failed", "session", s.ID, "err", err)
 	}
 	in.TemplateGuide = scan.guide
+	// A declared UI kit goes first in the template section, so the size cap
+	// that trims the guide never cuts it.
+	block, kerr := scan.kitBlock()
+	if kerr != nil {
+		rt.log.Warn("builder: template ui_kit ignored", "session", s.ID, "err", kerr)
+	}
+	if block != "" {
+		in.TemplateGuide = block + "\n\n" + scan.guide
+	}
 	in.Session.FileTree = scan.tree
 
 	brief, err := rt.briefInput(ctx, s.ID, scan.brief)
@@ -508,6 +518,42 @@ type workspaceScan struct {
 	tree  string
 	// brief is the content of planning.BriefFileName, "" when absent.
 	brief string
+	// manifest is orbit-template.json, read up to agent.MaxKitManifestBytes+1
+	// (one byte over, so an oversized file is rejected rather than truncated).
+	manifest []byte
+	// files holds every listed regular file's path, to check a kit's paths.
+	files map[string]bool
+}
+
+// kitBlock returns the prompt block of the template's declared UI kit. It is ""
+// with no error when the template declares none. A declaration whose
+// components directory, tokens file or notes file is not in the workspace is an
+// error and yields no block.
+func (w workspaceScan) kitBlock() (string, error) {
+	if len(w.manifest) == 0 {
+		return "", nil
+	}
+	kit, err := agent.ParseUIKit(w.manifest)
+	if err != nil || kit == nil {
+		return "", err
+	}
+	if !w.files[kit.Tokens] {
+		return "", fmt.Errorf("ui_kit.tokens %q is not a file of the template", kit.Tokens)
+	}
+	if kit.Notes != "" && !w.files[kit.Notes] {
+		return "", fmt.Errorf("ui_kit.notes %q is not a file of the template", kit.Notes)
+	}
+	hasComponents := false
+	for name := range w.files {
+		if strings.HasPrefix(name, kit.Components+"/") {
+			hasComponents = true
+			break
+		}
+	}
+	if !hasComponents {
+		return "", fmt.Errorf("ui_kit.components %q has no files in the template", kit.Components)
+	}
+	return kit.PromptBlock(), nil
 }
 
 func scanWorkspaceArchive(r io.Reader) (guide, tree string, err error) {
@@ -562,6 +608,18 @@ func scanWorkspaceFiles(r io.Reader) (scan workspaceScan, err error) {
 			} else {
 				guide = strings.ToValidUTF8(string(b), "")
 			}
+		}
+		if scan.files == nil {
+			scan.files = map[string]bool{}
+		}
+		scan.files[name] = true
+		if name == templateManifest && scan.manifest == nil {
+			b, rerr := io.ReadAll(io.LimitReader(tr, agent.MaxKitManifestBytes+1))
+			if rerr != nil {
+				err = rerr
+				break
+			}
+			scan.manifest = b
 		}
 		if name == planning.BriefFileName && scan.brief == "" {
 			// One byte over the cap is read on purpose: an oversized file then

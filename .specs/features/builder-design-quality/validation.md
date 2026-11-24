@@ -220,3 +220,75 @@ Totals: P1 6, baseline 0, tie 0.
 - **Limits:** one reviewer who knows the project, one run per brief, five briefs, and the baseline is a single older run. A 6-0 result from one person is a strong signal for this sample, not a measured effect size. The same reviewer's section 7 verdicts on c1, c3 list and e1 went the other way, so the preference is not stable across runs of the same brief.
 - **Cost (M1 counters on the screen):** c1 $0.2233, c3 $0.3639, c4 $0.2733, e1 $0.1835, about $1.04 for the four runs; c2 run A was $0.3856 earlier.
 - **Decision input:** this removes the main reason to adjust skill v3 before P2. It does not replace an independent reviewer or the P3 visual check. Moving to P2 stays Julio's call.
+
+## 9. T8: default template with Tailwind and the Orbit kit (measured 2026-11-23)
+
+Decisions (design §3.2, left open there):
+- **Tailwind 4.3.5 with `@tailwindcss/vite` 4.3.5**, both exact and in `devDependencies` (like Vite). CSS-first theme: the tokens are plain `:root` variables, mapped to utilities with `@theme inline`, so the "tokens first" rule edits one file.
+- **No component library and no icon package.** The 14 kit pieces (Button, Label, Input, Textarea, Select, Checkbox, FormField, Card, Badge, Table, Dialog, Tabs, Toast, EmptyState, Skeleton) are hand-written, with the native `<select>` and `<dialog>` for keyboard and focus behavior. Icons stay inline SVG, as the skill already says. The only added packages are Tailwind and its Vite plugin plus their transitive dependencies; no Radix, no `lucide-react`, no `clsx`, no `tailwind-merge` (a 3-line `cn` helper instead).
+- Reason: each added package is supply-chain surface (AGENTS.md §9 spirit) and the native elements cover the accessibility needs of a first kit. The cost is that Select and Dialog are less styleable than a headless library; revisit if a brief needs a custom listbox.
+
+Measurements, same machine, warm npm cache:
+
+| | Old template | New template |
+| --- | --- | --- |
+| `npm ci` | 1.9 s | about 4 s (node 22 bookworm container, cold install) |
+| `npm run build` | 1.8 s | 2.0 s on the host; 4 s `tsc` + `vite build` in the container |
+| `node_modules` | 108 MB | 143 MB in the container (130 MB on the host) |
+| CSS in `dist` | 0.74 kB | 13.3 kB (3.75 kB gzip) |
+| JS in `dist` | 265 kB | 267 kB |
+
+The two columns are not an identical setup (host warm cache versus a fresh container), so the install times are indicative, not a benchmark. The lockfile carries the native binaries for linux glibc and musl, arm64 and x64, and the install and build ran green in `node:22-bookworm-slim`, the base of `Dockerfile.builder`. `npm run lint` and `npx tsc -b` are green. `vite build --base ./` keeps the relative asset paths the preview needs.
+
+Not yet done for T8: a built session on the local stack previewing under the token path with the new template (needs an image build), and a visual check of the new default screens.
+
+Found while doing it, left for T9 because they change prompts and skills: `core.md` says the template uses "plain CSS", and the skills `orbit-react-patterns` and `orbit-responsive-layout` say "plain CSS" or "no framework". Both are wrong for the default template now, and wrong-for-some-templates if they only say Tailwind, so the wording should become template-neutral ("follow the template guide").
+
+### 9.1 Decision change after web research (same day)
+
+The first T8 cut used native `<select>` and `<dialog>` and no icon package. After checking the options (shadcn/ui changelog of 2026-07-02 makes Base UI its default and says Radix stays supported; npm facts read on 2026-11-23), the maintainer chose to use libraries for the interactive parts:
+
+- **`@base-ui/react` 1.9.0** (MIT, React 17-19 peer, 5 direct dependencies) behind the kit's `Dialog`, `Select` and `Tabs`. The agent imports only from `components/ui`, so the library stays an implementation detail.
+- **`lucide-react` 1.78.0** (ISC, no dependencies) for icons, named imports only.
+- Not chosen: Radix (many small packages, ecosystem moving to Base UI), React Aria Components (6.9 MB unpacked), Phosphor (last npm release 2025-05), HeroUI/MUI/Chakra (ship their own look, which conflicts with the tokens-first rule).
+
+Measured in a temp copy before adopting: Dialog + Select + Tabs + 5 icons added +86 kB JS (+29 kB gzip) and `node_modules` went from 143 MB to 205 MB (+62 MB, 51 MB of it the Lucide package on disk; only used icons are bundled). In the committed default template the home page imports none of them, so the production build is unchanged at 266.7 kB JS (84.7 kB gzip) and 16.65 kB CSS; an app pays only for what its screens import.
+
+Checks after the change: `npm run lint`, `npx tsc -b`, `vite build --base ./` and `npm ci --dry-run` (lockfile in sync) are green. **Not verified yet:** the real behavior of the three Base UI components in a browser (open, keyboard, focus, positioning under the relative base) and in a builder session; the browser tool did not respond when tried.
+
+### 9.2 Browser check of the kit (2026-11-23, Chrome, demo page outside the repo)
+
+Dialog, Select, Tabs, Toast and the empty state were exercised on a throwaway page built from the template (all five imported, so the library code was in the bundle):
+
+- **Dialog:** opens centered over a dimmed backdrop, focuses its first field, closes with Escape, and focus goes back to the button that opened it.
+- **Select:** opens, ArrowDown plus Enter picks an option and the controlled value updates; clicking the label focuses the trigger (same `id`).
+- **Toast:** appears bottom right with the success color.
+- **Two changes found by looking:** (1) arrow keys only moved focus between tabs, Base UI's default being manual activation, so `Tabs` now sets `activateOnFocus`; (2) the Select list opened over the trigger and wider than it (Base UI aligns the selected item with the trigger), so it now uses `alignItemWithTrigger={false}` and opens below at the trigger's width.
+- Not checked: a screen reader, Firefox and Safari, a phone-width viewport, and the kit inside a real builder session (needs the image build; next step).
+
+## 10. T8 + T9 on a real builder session (2026-11-23, beta2 stack with images built from this branch)
+
+Setup: Orbit and the builder images built from `feat/builder-design-quality-p2` (default template v2: Tailwind, `orbit-ui` kit with Base UI and lucide; `ui_kit` read by the backend), the real npm registry through the stack's registry proxy, `node_modules` and `dist` removed from the template before the image build so nothing was cached. Two projects, each approved at the plan card and built to milestone 1; the proposed backend tables were confirmed on throwaway backends.
+
+| | Project 1 (pt-BR) | Project 2 (en) |
+| --- | --- | --- |
+| Brief | repair-shop service orders, list with search and filter, dialog to create | independent bookshop catalogue, filter by genre, staff edit |
+| Title at creation, then after approving the plan | "Gestão de Ordens de Serviço", then "Ordens da Oficina" | "Bookshop Catalogue" (the plan kept it) |
+| Milestone 1 cost (session counter) | US$ 0,3391 (estimate US$ 0,195 to 0,271) | US$ 0,1714 (estimate US$ 0,197 to 0,283) |
+| Build and preview | built; preview loads under the token path | built; preview loads |
+| Look | blue split-panel sign-in with the app's name and a headline | warm paper background, serif headings, oxblood accent, no sample books |
+
+What this shows:
+
+- **The install works through the proxy.** `npm ci` with Tailwind, `@tailwindcss/vite`, `@base-ui/react` and `lucide-react` succeeded, the build passed, and the preview rendered with `--base ./`. This was the main unknown after T8.
+- **The agent uses the kit.** Project 1: pages import `Button`, `FormField`, `Input`, `Select`, `Table`, `Td`, `Th`, `Skeleton`, `EmptyState`, `Card` from `components/ui`; no `<button>`, `<input>`, `<select>` or `<table>` outside the kit; lucide for icons; no dependency added. Project 2: `Badge`, `Button`, `Card`, `EmptyState`, `Input`, `Skeleton`; one raw `<button>` for a genre filter chip (the kit has no chip) and no hardcoded hex color outside `index.css`.
+- **Identity comes from the tokens.** The two apps rewrote `:root` in `src/index.css` (project 2: `--background: #f5eee1`, `--primary: #85301f`, a serif `--font-heading`) and look clearly different, with the same components. This is DQ-16 on two samples, not a comparison against a rubric.
+- **The agent read the kit's code, not `UI_KIT.md`.** It loaded `orbit-frontend-design`, listed `src/components/ui`, and read `index.ts`, `Table.tsx`, `Field.tsx`, `Button.tsx`. Whether the kit block reached the prompt is shown only indirectly (the kit was used); the prompt itself was not inspected.
+- **Plan title on approval (PT-05) on the real model:** the project 1 title changed from the generated one to the plan's on approval.
+
+What it does not show:
+
+- Two projects, one reviewer, no baseline run on the same briefs with the old template, so this does not say the result is better than before; it says the kit is used and the pipeline works.
+- Only milestone 1 (sign-in and list). Dialog, Tabs, Select and Toast were not exercised by the generated code, so the Base UI parts are validated only by the earlier demo page (section 9.2), not inside a generated app.
+- The bookshop catalogue shows "We could not load the books: unauthorized" to a signed-out visitor although the plan said customers browse without signing in. It is the known behavior (a `public` table has no row protection but a request without a signed-in account is still refused), not a result of this change; it needs its own fix or a planner rule.
+- Candidate kit addition: a chip or toggle-button component (project 2 wrote its own).

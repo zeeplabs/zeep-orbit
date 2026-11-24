@@ -4,13 +4,13 @@ import NotFoundPage from './pages/NotFoundPage'
 
 export default function App() {
   return (
-    <div className="app">
-      <header className="app-header">
-        <Link to="/" className="brand">
+    <div className="min-h-screen">
+      <header className="border-b border-border bg-surface px-6 py-4">
+        <Link to="/" className="font-semibold text-foreground no-underline">
           Orbit Frontend App
         </Link>
       </header>
-      <main className="app-main">
+      <main className="page mx-auto max-w-3xl px-6 py-8">
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="*" element={<NotFoundPage />} />

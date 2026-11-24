@@ -1,12 +1,16 @@
 import { Link } from 'react-router-dom'
+import { EmptyState } from '../components/ui'
 
 export default function NotFoundPage() {
   return (
-    <section>
-      <h1>Page not found</h1>
-      <p>
-        <Link to="/">Back to home</Link>
-      </p>
-    </section>
+    <EmptyState
+      title="Page not found"
+      description="The address does not match any page of this app."
+      action={
+        <Link to="/" className="text-primary underline">
+          Back to home
+        </Link>
+      }
+    />
   )
 }

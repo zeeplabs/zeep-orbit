@@ -1,3 +1,4 @@
+import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
@@ -6,5 +7,5 @@ import { defineConfig } from 'vite'
 // base, so assets resolve under the per-token preview path); the published
 // static site is served from the domain root.
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
 })
