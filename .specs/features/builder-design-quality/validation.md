@@ -292,3 +292,21 @@ What it does not show:
 - Only milestone 1 (sign-in and list). Dialog, Tabs, Select and Toast were not exercised by the generated code, so the Base UI parts are validated only by the earlier demo page (section 9.2), not inside a generated app.
 - The bookshop catalogue shows "We could not load the books: unauthorized" to a signed-out visitor although the plan said customers browse without signing in. It is the known behavior (a `public` table has no row protection but a request without a signed-in account is still refused), not a result of this change; it needs its own fix or a planner rule.
 - Candidate kit addition: a chip or toggle-button component (project 2 wrote its own).
+
+## 11. Chip and the #63 access rule on a real session (2026-11-24, beta2, builder image from feat/kit-chip)
+
+One session, brief "I want an app for my small bookshop." (same as e1), all four questions "Decide for me", milestone 1 only, then one follow-up message. Models unchanged (build claude-sonnet-5-5, planning claude-haiku-5-5).
+
+| Check | Result |
+|---|---|
+| Plan wording about visitors (#63) | Assumptions say "Browsing the catalogue needs a signed-in account, because every request to the data needs one." No promise of anonymous browsing. Same brief in section 10 promised the opposite. |
+| Sign-in screen | Says "Your catalogue is private to your account." |
+| Milestone 1 | Done, US$0.2884 (estimate US$0.1949 to 0.2947). Workspace has `Chip.tsx`; the generated code did not use it because milestone 1 has search but no category filter. |
+| Follow-up "Add a genre to each book and a row of genre filters" | Backend proposal for one `genre` column, confirmed. Code uses `<Chip selected={genre === g} onClick=...>` inside `role="group"` with `aria-label="Filter by genre"`, plus `Badge`, `Table` and `EmptyState` from the kit. Follow-up cost US$0.1548; session total US$0.4432. |
+
+Limits:
+
+- One session, one brief, one run. It shows the rule and the guide line are followed in this case; it is not a rate.
+- The plan has an awkward sentence: "Until a staff rule exists, sharing the catalogue with staff is not possible; nothing here says sign-up is closed." Not changed here.
+- Signed-out behavior of the running app was not re-checked: the platform still answers 401 to an anonymous read (see ADR-012); only the wording changed.
+- The `Chip` visual was not reviewed in the browser beyond the generated code; the sign-in screen was the only page looked at.

@@ -26,6 +26,7 @@ Add a token the same way: a variable in `:root` and a `--color-*` line in `@them
 | `FormField` | `id`, `label`, `hint?`, `error?`, children | Wraps label and control; the control needs the same `id` |
 | `Card` | div props | Surface with border and shadow |
 | `Badge` | `tone` neutral, success, warning, danger | Put the status in the text |
+| `Chip` | `selected`, button props | Filter or category toggle (`aria-pressed`); a row of them filters what is on screen. Status goes in `Badge`, views in `Tabs` |
 | `Table`, `Th`, `Td` | `numeric?` on `Th` and `Td` | `Table` scrolls sideways on narrow screens; `numeric` right-aligns with tabular numbers |
 | `Dialog` | `open`, `onClose`, `title`, `description?`, children | Base UI dialog: focus trap, Escape and scroll lock included; has its own close button |
 | `Tabs` | `items: {id, label, content}[]`, `initial?` | Base UI tabs: arrow-key navigation |
