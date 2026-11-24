@@ -84,6 +84,9 @@ const (
 const (
 	BackendOriginExisting = "existing"
 	BackendOriginBuilder  = "builder"
+	// BackendOriginNone marks a project with no backend app (a site); its
+	// BackendAppID is empty.
+	BackendOriginNone = "none"
 )
 
 // Template kinds (builder_sessions.template_kind).
@@ -229,7 +232,8 @@ type NewMessage struct {
 
 // CreateSessionParams are the inputs of CreateSession.
 type CreateSessionParams struct {
-	OwnerUserID     string
+	OwnerUserID string
+	// BackendAppID is empty only with BackendOriginNone.
 	BackendAppID    string
 	Title           string
 	TemplateKind    string
@@ -244,7 +248,7 @@ type CreateSessionParams struct {
 	Phase string
 }
 
-const sessionColumns = `id, owner_user_id, backend_app_id, title, template_kind, template_id,
+const sessionColumns = `id, owner_user_id, COALESCE(backend_app_id::text, ''), title, template_kind, template_id,
 	template_version, prompt_version_id, locale, status, head_sha, head_turn_seq,
 	frontend_app_id, published_sha, tokens_in, tokens_out, created_at, updated_at, backend_origin, phase, title_locked`
 
@@ -279,8 +283,8 @@ func scanTurn(row pgx.Row) (*Turn, error) {
 // CreateSession inserts a session owned by p.OwnerUserID. Authorization on the
 // backend app (>= viewer) is the caller's job.
 func (s *Store) CreateSession(ctx context.Context, p CreateSessionParams) (*Session, error) {
-	if p.OwnerUserID == "" || p.BackendAppID == "" || p.TemplateVersion == "" {
-		return nil, fmt.Errorf("%w: owner, backend app and template version are required", ErrInvalidArgument)
+	if p.OwnerUserID == "" || p.TemplateVersion == "" {
+		return nil, fmt.Errorf("%w: owner and template version are required", ErrInvalidArgument)
 	}
 	if p.TemplateKind != TemplateDefault && p.TemplateKind != TemplateGitHub {
 		return nil, fmt.Errorf("%w: template kind must be %q or %q", ErrInvalidArgument, TemplateDefault, TemplateGitHub)
@@ -293,8 +297,13 @@ func (s *Store) CreateSession(ctx context.Context, p CreateSessionParams) (*Sess
 	if origin == "" {
 		origin = BackendOriginExisting
 	}
-	if origin != BackendOriginExisting && origin != BackendOriginBuilder {
-		return nil, fmt.Errorf("%w: backend origin must be %q or %q", ErrInvalidArgument, BackendOriginExisting, BackendOriginBuilder)
+	if origin != BackendOriginExisting && origin != BackendOriginBuilder && origin != BackendOriginNone {
+		return nil, fmt.Errorf("%w: backend origin must be %q, %q or %q", ErrInvalidArgument, BackendOriginExisting, BackendOriginBuilder, BackendOriginNone)
+	}
+	// A backend app is required unless the project has none, and a project
+	// with none must not carry one.
+	if (origin == BackendOriginNone) != (p.BackendAppID == "") {
+		return nil, fmt.Errorf("%w: a backend app is required unless the backend origin is %q, and not allowed with it", ErrInvalidArgument, BackendOriginNone)
 	}
 	phase := p.Phase
 	if phase == "" {
@@ -306,7 +315,7 @@ func (s *Store) CreateSession(ctx context.Context, p CreateSessionParams) (*Sess
 	sess, err := scanSession(s.pool.QueryRow(ctx,
 		`INSERT INTO zeep_system.builder_sessions
 		   (owner_user_id, backend_app_id, title, template_kind, template_id, template_version, prompt_version_id, locale, backend_origin, phase)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		 VALUES ($1, NULLIF($2, '')::uuid, $3, $4, $5, $6, $7, $8, $9, $10)
 		 RETURNING `+sessionColumns,
 		p.OwnerUserID, p.BackendAppID, p.Title, p.TemplateKind, p.TemplateID, p.TemplateVersion, p.PromptVersionID, locale, origin, phase,
 	))

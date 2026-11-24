@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -1139,6 +1140,90 @@ func TestCreateSession_BackendOrigin(t *testing.T) {
 	}
 	if byID.BackendOrigin != store.BackendOriginBuilder {
 		t.Errorf("GetSessionByID origin = %q, want %q", byID.BackendOrigin, store.BackendOriginBuilder)
+	}
+}
+
+// A project with no backend (builder-no-backend T2): origin "none" and an empty
+// backend app id go together, in both directions, and the session reads back
+// through every path with an empty id.
+func TestCreateSession_NoBackend(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	base := store.CreateSessionParams{OwnerUserID: e.userA, TemplateKind: store.TemplateDefault, TemplateVersion: "v0", BackendOrigin: store.BackendOriginNone}
+
+	sess, err := e.st.CreateSession(ctx, base)
+	if err != nil {
+		t.Fatalf("create with no backend: %v", err)
+	}
+	if sess.BackendAppID != "" || sess.BackendOrigin != store.BackendOriginNone {
+		t.Errorf("created: app id %q, origin %q; want empty and %q", sess.BackendAppID, sess.BackendOrigin, store.BackendOriginNone)
+	}
+	got, err := e.st.GetSession(ctx, e.userA, sess.ID)
+	if err != nil || got.BackendAppID != "" || got.BackendOrigin != store.BackendOriginNone {
+		t.Errorf("GetSession: %+v, %v", got, err)
+	}
+	byID, err := e.st.GetSessionByID(ctx, sess.ID)
+	if err != nil || byID.BackendAppID != "" {
+		t.Errorf("GetSessionByID: %+v, %v", byID, err)
+	}
+	list, err := e.st.ListSessions(ctx, e.userA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, s := range list {
+		if s.ID == sess.ID {
+			found = true
+			if s.BackendAppID != "" {
+				t.Errorf("ListSessions app id = %q, want empty", s.BackendAppID)
+			}
+		}
+	}
+	if !found {
+		t.Error("session with no backend missing from ListSessions")
+	}
+
+	// The column really holds NULL, not an empty string or a zero UUID.
+	var isNull bool
+	if err := e.pool.QueryRow(ctx, `SELECT backend_app_id IS NULL FROM zeep_system.builder_sessions WHERE id = $1`, sess.ID).Scan(&isNull); err != nil || !isNull {
+		t.Errorf("backend_app_id IS NULL = %v, err %v", isNull, err)
+	}
+
+	// "none" with an app id, and any other origin without one, are rejected.
+	withID := base
+	withID.BackendAppID = e.appA
+	if _, err := e.st.CreateSession(ctx, withID); !errors.Is(err, store.ErrInvalidArgument) {
+		t.Errorf("none with an app id: want ErrInvalidArgument, got %v", err)
+	}
+	for _, origin := range []string{"", store.BackendOriginExisting, store.BackendOriginBuilder} {
+		p := base
+		p.BackendOrigin = origin
+		if _, err := e.st.CreateSession(ctx, p); !errors.Is(err, store.ErrInvalidArgument) {
+			t.Errorf("origin %q without an app id: want ErrInvalidArgument, got %v", origin, err)
+		}
+	}
+}
+
+// Provisioning twice leaves the widened CHECK and the nullable column in place
+// (the migration runs at every start).
+func TestProvision_NoBackendMigrationIsIdempotent(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	if err := dashboard.ProvisionZeepSystem(ctx, e.pool); err != nil {
+		t.Fatalf("second provision: %v", err)
+	}
+	var def string
+	if err := e.pool.QueryRow(ctx, `SELECT pg_get_constraintdef(oid) FROM pg_constraint
+		WHERE conname = 'builder_sessions_backend_origin_check' AND conrelid = 'zeep_system.builder_sessions'::regclass`).Scan(&def); err != nil {
+		t.Fatalf("read constraint: %v", err)
+	}
+	if !strings.Contains(def, "none") {
+		t.Errorf("constraint = %s, want it to allow 'none'", def)
+	}
+	var nullable string
+	if err := e.pool.QueryRow(ctx, `SELECT is_nullable FROM information_schema.columns
+		WHERE table_schema = 'zeep_system' AND table_name = 'builder_sessions' AND column_name = 'backend_app_id'`).Scan(&nullable); err != nil || nullable != "YES" {
+		t.Errorf("backend_app_id nullable = %q, err %v", nullable, err)
 	}
 }
 

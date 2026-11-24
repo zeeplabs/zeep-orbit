@@ -820,6 +820,26 @@ func provisionZeepSystemOnce(ctx context.Context, pool *db.Pool) error {
 		`ALTER TABLE zeep_system.builder_sessions
 		   ADD COLUMN IF NOT EXISTS backend_origin TEXT NOT NULL DEFAULT 'existing'
 		   CHECK (backend_origin IN ('existing', 'builder'))`,
+		// Projects without a backend (builder-no-backend spec, T2). A session
+		// may have no backend app (backend_origin 'none'). The first statement
+		// is idempotent; the second widens the inline CHECK once, guarded so a
+		// later start does not rewrite it (provisioning is already serialized
+		// by the advisory lock above).
+		`ALTER TABLE zeep_system.builder_sessions ALTER COLUMN backend_app_id DROP NOT NULL`,
+		`DO $$
+		 BEGIN
+		   IF NOT EXISTS (
+		     SELECT 1 FROM pg_constraint
+		      WHERE conname = 'builder_sessions_backend_origin_check'
+		        AND conrelid = 'zeep_system.builder_sessions'::regclass
+		        AND pg_get_constraintdef(oid) LIKE '%none%'
+		   ) THEN
+		     ALTER TABLE zeep_system.builder_sessions DROP CONSTRAINT IF EXISTS builder_sessions_backend_origin_check;
+		     ALTER TABLE zeep_system.builder_sessions
+		       ADD CONSTRAINT builder_sessions_backend_origin_check
+		       CHECK (backend_origin IN ('existing', 'builder', 'none'));
+		   END IF;
+		 END $$`,
 		// Project title (builder-project-title spec, T1). True once the user
 		// renamed the session: the plan's title never overwrites it. Additive.
 		`ALTER TABLE zeep_system.builder_sessions
