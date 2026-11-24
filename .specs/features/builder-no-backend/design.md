@@ -10,7 +10,7 @@ Three layers, in this order, each shippable on its own:
 
 ## Layer 1: session without a backend
 
-- `builder_sessions.backend_app_id` becomes nullable in `provisioner.go` (`ALTER COLUMN ... DROP NOT NULL`, idempotent). `backend_origin` accepts `none`; `store.BackendOriginNone`.
+- `builder_sessions.backend_app_id` becomes nullable in `provisioner.go` (`ALTER COLUMN ... DROP NOT NULL`, idempotent). `backend_origin` accepts `none`; `store.BackendOriginNone`. The column has an inline `CHECK (backend_origin IN ('existing', 'builder'))` (`provisioner.go`), so the migration also drops that constraint (auto-named `builder_sessions_backend_origin_check`) and adds one that includes `none`; both statements idempotent.
 - `store.CreateSessionParams.BackendAppID` empty is valid only with `BackendOrigin == none` (the existing check at `store.go:282` becomes: backend id required unless origin is `none`). `Session.BackendAppID` stays a string, empty for `none`; scanning uses `COALESCE(backend_app_id::text, '')`. The HTTP view returns `backend_app_id: null` for `none` (a `*string` in the view only), so a client cannot mistake an empty string for an id; the store keeps a plain string.
 - `resolveBuilderBackend` gets `builderBackendModeNone = "none"`; same validation style as `new`.
 - Readers, each with the empty case:
@@ -18,7 +18,7 @@ Three layers, in this order, each shippable on its own:
   - `builder_proposals.go`: backend proposals on a `none` session answer 409 (English error).
   - `builder_runtime.go promptSource`: skip the `zeep_system.apps` name lookup.
   - `agent/prompt.go`: no "Backend app" line; adds the no-backend sentence.
-  - `builder_publish.go`: pass NULL, not an empty string, to `FrontendAppInput.BackendAppID` (that field is a string today and the insert would store `''` into a UUID column; use `*string` or a NULLIF at the insert). Verify the deploy step reads no backend data.
+  - `builder_publish.go`: no change needed. `CreateFrontendApp` already stores an empty id as NULL (`NULLIF($9, '')::uuid`), and the publish role check is on the frontend app (`AppRef{FrontendAppID}`), not on the backend.
   - `builder_common.go` view, `ProjectsPage`/`projects.ts` grouping and the builder header.
 
 ## Layer 2: template `site` and prompt
@@ -41,6 +41,14 @@ Three layers, in this order, each shippable on its own:
 
 ## Open questions
 
-1. Does anything in publish/deploy (`builder_publish.go`, `deploy-provider-integration`) read the session's backend? Verify in T1 before anything else.
+1. ~~Does anything in publish/deploy read the session's backend?~~ Answered in T1: no (see below).
 2. Skill filtering versus wording (see Layer 2).
 3. Should `site` ship one starter page or a small multi-section home? Decide with a blind review like builder-design-quality.
+
+## T1 result (2026-11-24, read-only)
+
+- Publish and deploy do not read the session's backend. `builder_publish.go` uses `sess.BackendAppID` once, to fill the frontend app record; `frontend_apps.backend_app_id` is already nullable and `CreateFrontendApp` stores `''` as NULL. No CORS or allowed-origin setup appears in publish, deploy or the frontend app code.
+- Role checks on the publish path are on the frontend app. Backend role checks exist only in `builder_proposals.go` (line 198) and `builder_tools.go` (line 183), both backend-only paths that a `none` session never reaches once tools are gated.
+- New finding: the `backend_origin` CHECK constraint must be widened (see Layer 1). Missing from the first draft.
+- Correction to the first draft: it said publish must pass NULL instead of an empty string. It already does.
+- Other `BackendAppID` references (`rbac.go`, `app_members*.go`, `apps_store.go`, `frontend_apps*.go`) belong to other tables and need no change.

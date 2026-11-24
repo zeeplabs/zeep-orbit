@@ -4,7 +4,7 @@ Gate: Go `go build ./... && go vet ./... && gofmt -l cmd internal && go test -p 
 
 Nothing is implemented. Order matters: layers 1 and 2 are invisible to users; layer 3 changes the default and ships last. Everything stays on beta until the maintainer authorizes `latest`.
 
-- **T1** Verify the open question: read publish and deploy for any use of the session's backend id (`builder_publish.go`, `deploy-provider-integration`). Write the result into design.md. Done when: a list of every reader of `BackendAppID` in builder code with "needs empty case: yes/no".
+- **T1 (done 2026-11-24)** Verify the open question: read publish and deploy for any use of the session's backend id (`builder_publish.go`, `deploy-provider-integration`). Write the result into design.md. Done when: a list of every reader of `BackendAppID` in builder code with "needs empty case: yes/no".
 - **T2** Store and migration: nullable `backend_app_id`, `BackendOriginNone`, create check, scan with COALESCE, tests (create with none, reject empty id with another origin, existing rows unchanged).
 - **T3** API: `resolveBuilderBackend` mode `none`, create handler path, audit fields, `backend_app_id: null` in the HTTP view. Tests for NB-01 and NB-10, including "none + app id" rejected.
 - **T4** Readers: tools gating, proposals 409, prompt without the backend line, runtime name lookup, publish with NULL. Tests per reader.
