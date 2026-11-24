@@ -80,7 +80,7 @@ const (
 
 // Access values of a data entry: who can reach the table.
 const (
-	AccessPublic   = "public"    // anyone, signed in or not
+	AccessPublic   = "public"    // no row protection: every account reads and edits it; a request still needs a signed-in account
 	AccessSignedIn = "signed_in" // any signed-in user
 	AccessOwner    = "owner"     // each user only their own rows
 	AccessRole     = "role"      // depends on the user's role (see the note)

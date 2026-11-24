@@ -78,7 +78,7 @@ func TestRenderBrief_PublicAccessIsExplicit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !p.HasPublicData() || !strings.Contains(RenderBrief(p), "posts [open to everyone, signed in or not]") {
+	if !p.HasPublicData() || !strings.Contains(RenderBrief(p), "posts [no row protection: every account reads and edits it (a visitor with no account is still refused)]") {
 		t.Errorf("public access must be spelled out:\n%s", RenderBrief(p))
 	}
 }

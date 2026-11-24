@@ -131,8 +131,10 @@ func TestBuildSystemPrompt_CoreStatesThatSignUpIsOpen(t *testing.T) {
 func TestBuildSystemPrompt_CoreGatesScreensOfRestrictedTables(t *testing.T) {
 	core := CorePrompt()
 	for _, want := range []string{
-		"answers `unauthorized` to a visitor who is not signed in", "behind sign-in",
-		"never make a screen that reads such a table the first screen of a signed-out visitor",
+		"gets `unauthorized` from every table, `public` ones included", "behind sign-in",
+		"cannot show data to a signed-out visitor",
+		"never make a screen that reads data the first screen of a signed-out visitor",
+		"do not promise it",
 	} {
 		if !strings.Contains(strings.ToLower(core), strings.ToLower(want)) {
 			t.Errorf("core.md must state %q", want)

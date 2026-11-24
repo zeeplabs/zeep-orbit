@@ -87,7 +87,7 @@ func accessText(d DataEntry) string {
 	var who string
 	switch d.Access {
 	case AccessPublic:
-		who = "open to everyone, signed in or not"
+		who = "no row protection: every account reads and edits it (a visitor with no account is still refused)"
 	case AccessSignedIn:
 		who = "any signed-in user (anyone can create an account, so this is not limited to a team)"
 	case AccessOwner:

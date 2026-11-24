@@ -1651,7 +1651,7 @@
   "builder.page.plan.data": "Dados",
   "builder.page.plan.dataHint": "As tabelas são criadas depois, quando você confirmar uma alteração no backend.",
   "builder.page.plan.accessLabel": "Acesso",
-  "builder.page.plan.access.public": "Aberto para todos",
+  "builder.page.plan.access.public": "Qualquer conta, sem proteção por linha",
   "builder.page.plan.access.signed_in": "Qualquer conta (qualquer pessoa pode se cadastrar)",
   "builder.page.plan.access.owner": "Cada usuário vê só os próprios dados",
   "builder.page.plan.access.role": "Restrito por perfil",
