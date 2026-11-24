@@ -11,7 +11,7 @@ Three layers, in this order, each shippable on its own:
 ## Layer 1: session without a backend
 
 - `builder_sessions.backend_app_id` becomes nullable in `provisioner.go` (`ALTER COLUMN ... DROP NOT NULL`, idempotent). `backend_origin` accepts `none`; `store.BackendOriginNone`.
-- `store.CreateSessionParams.BackendAppID` empty is valid only with `BackendOrigin == none` (the existing check at `store.go:282` becomes: backend id required unless origin is `none`). `Session.BackendAppID` stays a string, empty for `none`; scanning uses `COALESCE(backend_app_id::text, '')`. JSON stays `backend_app_id: ""`? No: the API returns `null` for none so clients cannot mistake it for an id. Decision: `*string` in the HTTP view only; the store keeps the string.
+- `store.CreateSessionParams.BackendAppID` empty is valid only with `BackendOrigin == none` (the existing check at `store.go:282` becomes: backend id required unless origin is `none`). `Session.BackendAppID` stays a string, empty for `none`; scanning uses `COALESCE(backend_app_id::text, '')`. The HTTP view returns `backend_app_id: null` for `none` (a `*string` in the view only), so a client cannot mistake an empty string for an id; the store keeps a plain string.
 - `resolveBuilderBackend` gets `builderBackendModeNone = "none"`; same validation style as `new`.
 - Readers, each with the empty case:
   - `builder_tools.go ownerAndApp` already returns the model-visible unavailable message for an empty id; the tool list for the turn drops backend tools instead of relying on the error.
@@ -31,7 +31,7 @@ Three layers, in this order, each shippable on its own:
 
 ## Layer 3: entry points
 
-- Dropdown order: No backend (default), New backend, Existing backend. Stored per user in localStorage like `orbit.mode`? No: the dropdown resets to the default on each visit so the default stays meaningful; revisit if people complain.
+- Dropdown order: No backend (default), New backend, Existing backend. The choice is not remembered between visits, so the default stays the default; revisit if people complain.
 - Planner question (NB-05): a rule in `core.md` plus the planning prompt. It is a normal `ask_user` question with two options and "decide for me", so it costs one question and no new UI.
 - Measure before release (see Risks in the spec): a fixed set of briefs, count of how many reach the data question, cost of a site run versus an app run.
 
