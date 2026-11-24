@@ -265,3 +265,30 @@ Dialog, Select, Tabs, Toast and the empty state were exercised on a throwaway pa
 - **Toast:** appears bottom right with the success color.
 - **Two changes found by looking:** (1) arrow keys only moved focus between tabs, Base UI's default being manual activation, so `Tabs` now sets `activateOnFocus`; (2) the Select list opened over the trigger and wider than it (Base UI aligns the selected item with the trigger), so it now uses `alignItemWithTrigger={false}` and opens below at the trigger's width.
 - Not checked: a screen reader, Firefox and Safari, a phone-width viewport, and the kit inside a real builder session (needs the image build; next step).
+
+## 10. T8 + T9 on a real builder session (2026-11-23, beta2 stack with images built from this branch)
+
+Setup: Orbit and the builder images built from `feat/builder-design-quality-p2` (default template v2: Tailwind, `orbit-ui` kit with Base UI and lucide; `ui_kit` read by the backend), the real npm registry through the stack's registry proxy, `node_modules` and `dist` removed from the template before the image build so nothing was cached. Two projects, each approved at the plan card and built to milestone 1; the proposed backend tables were confirmed on throwaway backends.
+
+| | Project 1 (pt-BR) | Project 2 (en) |
+| --- | --- | --- |
+| Brief | repair-shop service orders, list with search and filter, dialog to create | independent bookshop catalogue, filter by genre, staff edit |
+| Title at creation, then after approving the plan | "Gestão de Ordens de Serviço", then "Ordens da Oficina" | "Bookshop Catalogue" (the plan kept it) |
+| Milestone 1 cost (session counter) | US$ 0,3391 (estimate US$ 0,195 to 0,271) | US$ 0,1714 (estimate US$ 0,197 to 0,283) |
+| Build and preview | built; preview loads under the token path | built; preview loads |
+| Look | blue split-panel sign-in with the app's name and a headline | warm paper background, serif headings, oxblood accent, no sample books |
+
+What this shows:
+
+- **The install works through the proxy.** `npm ci` with Tailwind, `@tailwindcss/vite`, `@base-ui/react` and `lucide-react` succeeded, the build passed, and the preview rendered with `--base ./`. This was the main unknown after T8.
+- **The agent uses the kit.** Project 1: pages import `Button`, `FormField`, `Input`, `Select`, `Table`, `Td`, `Th`, `Skeleton`, `EmptyState`, `Card` from `components/ui`; no `<button>`, `<input>`, `<select>` or `<table>` outside the kit; lucide for icons; no dependency added. Project 2: `Badge`, `Button`, `Card`, `EmptyState`, `Input`, `Skeleton`; one raw `<button>` for a genre filter chip (the kit has no chip) and no hardcoded hex color outside `index.css`.
+- **Identity comes from the tokens.** The two apps rewrote `:root` in `src/index.css` (project 2: `--background: #f5eee1`, `--primary: #85301f`, a serif `--font-heading`) and look clearly different, with the same components. This is DQ-16 on two samples, not a comparison against a rubric.
+- **The agent read the kit's code, not `UI_KIT.md`.** It loaded `orbit-frontend-design`, listed `src/components/ui`, and read `index.ts`, `Table.tsx`, `Field.tsx`, `Button.tsx`. Whether the kit block reached the prompt is shown only indirectly (the kit was used); the prompt itself was not inspected.
+- **Plan title on approval (PT-05) on the real model:** the project 1 title changed from the generated one to the plan's on approval.
+
+What it does not show:
+
+- Two projects, one reviewer, no baseline run on the same briefs with the old template, so this does not say the result is better than before; it says the kit is used and the pipeline works.
+- Only milestone 1 (sign-in and list). Dialog, Tabs, Select and Toast were not exercised by the generated code, so the Base UI parts are validated only by the earlier demo page (section 9.2), not inside a generated app.
+- The bookshop catalogue shows "We could not load the books: unauthorized" to a signed-out visitor although the plan said customers browse without signing in. It is the known behavior (a `public` table has no row protection but a request without a signed-in account is still refused), not a result of this change; it needs its own fix or a planner rule.
+- Candidate kit addition: a chip or toggle-button component (project 2 wrote its own).
