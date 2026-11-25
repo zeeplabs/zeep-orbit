@@ -2,7 +2,7 @@
 
 Gate: Go `go build ./... && go vet ./... && gofmt -l cmd internal && go test -p 1 -parallel 4 ./...`; UI `npx tsc -b`, `npm test`, `npm run build`, i18n JSON valid. Template: `npm ci && npx tsc -b && npm run build` in each template.
 
-Status 2026-11-25: T1 to T8 are done and merged into `develop` (#66 to #72). T9 (measurement with the real model), T10 (docs) and T11 (phase 2) are open. Order matters: layers 1 and 2 are invisible to users; layer 3 changes the default and ships last. Everything stays on beta until the maintainer authorizes `latest`.
+Status 2026-11-25: T1 to T9 are done (T2 to T8 merged as #66 to #72). T9 found that the "No backend" default sends every app prompt to a static plan, so the chat home default went back to "New backend" (see validation.md). T10 (docs) and T11 (phase 2, now the most valuable part: attach a backend to the session) are open. Order matters: layers 1 and 2 are invisible to users; layer 3 changes the default and ships last. Everything stays on beta until the maintainer authorizes `latest`.
 
 - **T1 (done 2026-11-24)** Verify the open question: read publish and deploy for any use of the session's backend id (`builder_publish.go`, `deploy-provider-integration`). Write the result into design.md. Done when: a list of every reader of `BackendAppID` in builder code with "needs empty case: yes/no".
 - **T2 (done, #66)** Store and migration: nullable `backend_app_id`, `BackendOriginNone`, create check, scan with COALESCE, tests (create with none, reject empty id with another origin, existing rows unchanged).
@@ -12,7 +12,7 @@ Status 2026-11-25: T1 to T8 are done and merged into `develop` (#66 to #72). T9 
 - **T6 (done, #70)** Prompt and skills: `core.md` no-backend section, skill index filter or wording, `prompt_test.go` pins, `builtin.lock` if a skill text changes (`go test ./internal/agent/skills -run TestBuiltinLint -update-lock`).
 - **T7 (done, #71)** Planner: the data question rule and the assumptions line. Tests on the planning prompt and a case where a clear site skips the question.
 - **T8 (done, #72)** UI: dropdown with "No backend" first and default, builder header (`BackendLink`, with a `/?backend=new` link), project list, i18n en and pt-BR, CHANGELOG, tests. The plan card needed no change (no backend section in it). The advanced new-session dialog is unchanged.
-- **T9** Measure on the local stack with the real model (cost confirmed first): the five earlier app briefs with the new default (how many reach the data question; any that become a site wrongly) and two site briefs (landing page, one-pager). Write a validation.md.
+- **T9 (done 2026-11-25, see validation.md)** Measure on the local stack with the real model (cost confirmed first): the five earlier app briefs with the new default (how many reach the data question; any that become a site wrongly) and two site briefs (landing page, one-pager). Write a validation.md.
 - **T10** Docs and CHANGELOG, README rows if user-facing, `ai-frontend-builder.md` section.
 - **T11 (phase 2)** Add a backend later (NB-08): separate spec section first.
 

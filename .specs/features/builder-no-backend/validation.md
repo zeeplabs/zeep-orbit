@@ -33,7 +33,9 @@ Other things the plans did right: no invented business facts (every plan lists w
 2. **Flip the default back to "New backend"** until NB-08 exists, keeping "No backend" one click away. One-line change in `HomeChatPage.tsx`; the planner question and the `site` template stay. Sites lose one click, apps keep working as before.
 3. **Choose from the first message**: if the message reads as an app, the home preselects "New backend"; otherwise "No backend". Needs a way to tell them apart before the session exists (a keyword rule is brittle; the planner already does it, one step too late).
 
-Recommendation: 2 now, then 1 when NB-08 lands. Reason: the measurement shows the planner already recognizes apps, but the project it recognizes them in cannot become one.
+**Decision (maintainer, 2026-11-25): option 2.** The chat home goes back to "New backend" as the default and keeps "No backend (a site)" one click away; revisit with option 1 when NB-08 lands.
+
+Recommendation that led to it: 2 now, then 1 when NB-08 lands. Reason: the measurement shows the planner already recognizes apps, but the project it recognizes them in cannot become one.
 
 ## Not covered
 
@@ -44,4 +46,4 @@ Recommendation: 2 now, then 1 when NB-08 lands. Reason: the measurement shows th
 
 ## Found while preparing the run (separate fix)
 
-`useStartBuilderProject` keeps a pending session keyed by `backendKey`, and `none` and `new` both map to `'new'`. If the first send fails and the user switches between "No backend" and "New backend", the retry would reuse the session created for the other choice. Fix: key it by the mode. Not fixed in this branch.
+`useStartBuilderProject` keeps a pending session keyed by `backendKey`, and `none` and `new` both map to `'new'`. If the first send fails and the user switches between "No backend" and "New backend", the retry would reuse the session created for the other choice. Fix: key it by the mode. Fixed together with the default (PR "chat home defaults back to a new backend").
