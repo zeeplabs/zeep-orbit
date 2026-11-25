@@ -216,3 +216,29 @@ func TestScanWorkspaceFiles_BriefFile(t *testing.T) {
 		t.Errorf("tree = %q", scan.tree)
 	}
 }
+
+// builder-no-backend T4: the prompt source of a session with no backend says
+// so and does not look up a backend app.
+func TestBuilderRuntime_PromptSourceNoBackend(t *testing.T) {
+	rt := newTestBuilderRuntime(t)
+	e := newBHEnv(t)
+	ctx := context.Background()
+	t.Cleanup(func() {
+		_, _ = rt.pool.Exec(context.Background(), `TRUNCATE zeep_system.builder_sessions CASCADE`)
+	})
+	sess, err := rt.store.CreateSession(ctx, store.CreateSessionParams{
+		OwnerUserID: e.owner.ID, Title: "t", TemplateKind: store.TemplateDefault, TemplateVersion: "v0",
+		BackendOrigin: store.BackendOriginNone,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt.sandbox = archiveSandbox{data: tarOf(t, map[string]string{"src/main.tsx": "x"}, []string{"src/main.tsx"})}
+	in, err := rt.promptSource(ctx, sess)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !in.Session.NoBackend || in.Session.BackendAppID != "" || in.Session.BackendAppName != "" {
+		t.Errorf("session context = %+v, want NoBackend and no app", in.Session)
+	}
+}

@@ -293,7 +293,7 @@ func (r *run) run(ctx context.Context) (*outcome, error) {
 		return &outcome{status: store.TurnCompleted, commit: true}, nil
 	}
 
-	pin := PromptInput{Session: SessionContext{BackendAppID: r.sess.BackendAppID, Locale: r.sess.Locale}}
+	pin := PromptInput{Session: SessionContext{BackendAppID: r.sess.BackendAppID, NoBackend: r.noBackend(), Locale: r.sess.Locale}}
 	if r.deps.Prompt != nil {
 		if pin, err = r.deps.Prompt(ctx, r.sess); err != nil {
 			r.log.Error("agent prompt source failed", "session", r.sess.ID, "err", err)

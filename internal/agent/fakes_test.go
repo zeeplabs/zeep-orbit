@@ -495,7 +495,7 @@ func newHarness(t *testing.T, script ...scriptStep) *harness {
 		t.Fatalf("register workspace tools: %v", err)
 	}
 	if err := h.reg.Register(tools.Tool{
-		Name: "propose_backend_change", Description: "propose", Kind: tools.KindProposal,
+		Name: "propose_backend_change", Description: "propose", Kind: tools.KindProposal, NeedsBackend: true,
 		Schema: json.RawMessage(`{"type":"object"}`),
 		Handler: func(_ context.Context, c tools.Call) (tools.Result, error) {
 			if string(c.Arguments) == `{"bad":true}` {

@@ -413,6 +413,7 @@ func (unavailableProvider) Model() string { return "" }
 func (rt *BuilderRuntime) promptSource(ctx context.Context, s *store.Session) (agent.PromptInput, error) {
 	in := agent.PromptInput{Session: agent.SessionContext{
 		BackendAppID: s.BackendAppID,
+		NoBackend:    s.BackendOrigin == store.BackendOriginNone,
 		Locale:       s.Locale,
 	}}
 
@@ -438,11 +439,13 @@ func (rt *BuilderRuntime) promptSource(ctx context.Context, s *store.Session) (a
 	}
 	in.SkillsIndex = index
 
-	var name string
-	if err := rt.pool.QueryRow(ctx, `SELECT name FROM zeep_system.apps WHERE id = $1`, s.BackendAppID).Scan(&name); err != nil {
-		rt.log.Warn("builder: backend app name unavailable for the prompt", "session", s.ID)
-	} else {
-		in.Session.BackendAppName = name
+	if s.BackendAppID != "" {
+		var name string
+		if err := rt.pool.QueryRow(ctx, `SELECT name FROM zeep_system.apps WHERE id = $1`, s.BackendAppID).Scan(&name); err != nil {
+			rt.log.Warn("builder: backend app name unavailable for the prompt", "session", s.ID)
+		} else {
+			in.Session.BackendAppName = name
+		}
 	}
 
 	sctx, cancel := context.WithTimeout(ctx, builderPromptScanTimeout)

@@ -70,6 +70,7 @@ const (
 	builderProposalBusyMsg     = "proposal is being resolved, try again in a moment"
 	builderForbiddenMsg        = "forbidden"
 	builderBackendNotFoundMsg  = "backend app not found"
+	builderNoBackendMsg        = "this project has no backend"
 	builderPlanStaleMsg        = "the backend schema changed since this plan was proposed; reject it and ask the agent to re-plan"
 	builderProposalRejectedMsg = "The user rejected this proposal (rejected by user). It was NOT applied. Do not retry the same change; ask the user what they want instead, or continue without it."
 )
@@ -185,6 +186,10 @@ func (h *BuilderHandler) proposalRoute(w http.ResponseWriter, r *http.Request) (
 func (h *BuilderHandler) ConfirmProposal(w http.ResponseWriter, r *http.Request) {
 	user, sess, turn, ok := h.proposalRoute(w, r)
 	if !ok {
+		return
+	}
+	if sess.BackendAppID == "" {
+		h.writeError(w, http.StatusConflict, builderNoBackendMsg)
 		return
 	}
 	if h.dashboard == nil {
