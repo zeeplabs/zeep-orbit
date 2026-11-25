@@ -31,10 +31,12 @@ export default function HomeChatPage() {
   const recents = recentSessions(sessions, CONTINUE_LIMIT)
 
   const [prompt, setPrompt] = useState('')
-  // "No backend" is the default: most first requests are a page. `?backend=new` (the link in a
-  // project with no backend) opens the home with a new backend preselected.
+  // "New backend" stays the default: the real-model run of builder-no-backend (validation.md) showed
+  // that an app prompt on "No backend" ends in a plan that does not build the app, and a project
+  // cannot gain a backend yet. `?backend=none` opens the home on "No backend (a site)";
+  // `?backend=new` (the link in a project with no backend) on "New backend".
   const [searchParams] = useSearchParams()
-  const [backendValue, setBackendValue] = useState(searchParams.get('backend') === 'new' ? NEW_BACKEND : NO_BACKEND)
+  const [backendValue, setBackendValue] = useState(searchParams.get('backend') === 'none' ? NO_BACKEND : NEW_BACKEND)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const pending = start.isPending
@@ -111,8 +113,8 @@ export default function HomeChatPage() {
             disabled={pending}
             className="min-w-0 max-w-[60%] truncate rounded-[8px] border border-[var(--border-strong)] bg-transparent px-2.5 py-1.5 text-[13px] text-[var(--text-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <option value={NO_BACKEND}>{t('home.backendNone')}</option>
             <option value={NEW_BACKEND}>{t('builder.newSession.backendNew')}</option>
+            <option value={NO_BACKEND}>{t('home.backendNone')}</option>
             {apps.length > 0 && (
               <optgroup label={t('home.backendExistingGroup')}>
                 {apps.map((app) => (

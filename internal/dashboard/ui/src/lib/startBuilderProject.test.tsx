@@ -159,6 +159,31 @@ describe('useStartBuilderProject', () => {
     expect(calls.some((c) => c.method === 'DELETE')).toBe(false)
   })
 
+  // "No backend" and "New backend" are different projects: a retry after switching between them must not
+  // reuse the session that was created for the other choice.
+  test('switching between no backend and a new backend on the retry starts a new session', async () => {
+    let created = 0
+    const bodies: Array<Record<string, unknown> | null> = []
+    const calls = stubFetch({
+      'POST /builder/sessions': () => json(201, { id: `s${++created}` }),
+      'POST /builder/sessions/s1/messages': () => json(400, { error: 'message is empty' }),
+      'POST /builder/sessions/s2/messages': () => json(202, {}),
+    })
+    const { result } = setup()
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({ prompt, backend: { mode: 'none' }, locale: 'en' }),
+      ).rejects.toThrow()
+    })
+    await act(async () => {
+      await result.current.mutateAsync({ prompt, backend: { mode: 'new' }, locale: 'en' })
+    })
+    for (const c of calls) if (c.url.endsWith('/builder/sessions') && c.method === 'POST') bodies.push(c.body)
+    expect(created).toBe(2)
+    expect(bodies.map((b) => (b?.backend as { mode: string }).mode)).toEqual(['none', 'new'])
+    await waitFor(() => expect(result.current.data).toEqual({ id: 's2' }))
+  })
+
   test('a failed create shows the error and posts no message', async () => {
     const calls = stubFetch({
       'POST /builder/sessions': () => json(429, { error: 'builder rate limit reached' }),
