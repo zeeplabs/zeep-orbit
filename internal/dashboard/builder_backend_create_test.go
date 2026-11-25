@@ -40,6 +40,10 @@ func TestResolveBuilderBackend(t *testing.T) {
 		{name: "existing ids differ", b: &builderBackendRequest{Mode: "existing", AppID: id}, legacy: other, wantErrSub: "differ"},
 		{name: "new with app id", b: &builderBackendRequest{Mode: "new", AppID: id}, wantErrSub: "cannot be combined"},
 		{name: "new with legacy id", b: &builderBackendRequest{Mode: "new"}, legacy: id, wantErrSub: "cannot be combined"},
+		{name: "none", b: &builderBackendRequest{Mode: "none"}, wantMode: "none"},
+		{name: "none with spaces", b: &builderBackendRequest{Mode: " none "}, wantMode: "none"},
+		{name: "none with app id", b: &builderBackendRequest{Mode: "none", AppID: id}, wantErrSub: "cannot be combined"},
+		{name: "none with legacy id", b: &builderBackendRequest{Mode: "none"}, legacy: id, wantErrSub: "cannot be combined"},
 		{name: "unknown mode", b: &builderBackendRequest{Mode: "cloud"}, wantErrSub: "must be"},
 		{name: "empty mode", b: &builderBackendRequest{}, wantErrSub: "must be"},
 	}
@@ -197,7 +201,7 @@ func TestBuilderCreate_ExistingBackend_BothFormsKeepOrigin(t *testing.T) {
 			t.Fatalf("%s: want 201, got %d: %s", name, w.Code, w.Body.String())
 		}
 		got := decodeJSON[BuilderSessionView](t, w)
-		if got.BackendOrigin != store.BackendOriginExisting || got.BackendAppID != e.appA {
+		if got.BackendOrigin != store.BackendOriginExisting || got.BackendAppID == nil || *got.BackendAppID != e.appA {
 			t.Errorf("%s: %+v", name, got)
 		}
 	}
@@ -213,6 +217,9 @@ func TestBuilderCreate_BackendSelectionInvalid400(t *testing.T) {
 		"new with app id":    fmt.Sprintf(`{"backend":{"mode":"new","app_id":%q}}`, e.appA),
 		"new with legacy id": fmt.Sprintf(`{"backend":{"mode":"new"},"backend_app_id":%q}`, e.appA),
 		"unknown mode":       `{"backend":{"mode":"cloud"}}`,
+		"none with app id":   fmt.Sprintf(`{"backend":{"mode":"none","app_id":%q}}`, e.appA),
+		"none with legacy":   fmt.Sprintf(`{"backend":{"mode":"none"},"backend_app_id":%q}`, e.appA),
+		"none with template": `{"backend":{"mode":"none"},"template_id":"11111111-1111-1111-1111-111111111111"}`,
 		"empty backend":      `{"backend":{}}`,
 		"existing no id":     `{"backend":{"mode":"existing"}}`,
 		"existing bad id":    `{"backend":{"mode":"existing","app_id":"nope"}}`,
@@ -312,5 +319,70 @@ func TestBuilderCreate_ExistingBackend_FailureKeepsTheApp(t *testing.T) {
 	}
 	if n := e.auditCount(t, "app.delete"); n != 0 {
 		t.Errorf("no app.delete expected, got %d", n)
+	}
+}
+
+// A project with no backend (builder-no-backend T3): no app is created, the
+// session has no backend app, the workspace starts from the site template with
+// no generated orbit.config.ts, and the API returns backend_app_id null.
+func TestBuilderCreate_NoBackend_CreatesSessionOnly(t *testing.T) {
+	e := newBBEnv(t)
+	e.fake.siteTemplate = true
+	before := e.appCount(t)
+
+	w := e.create(t, e.owner, `{"backend":{"mode":"none"},"title":"Padaria Central"}`)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("want 201, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"backend_app_id":null`) {
+		t.Errorf("backend_app_id must be null in the response: %s", w.Body.String())
+	}
+	got := decodeJSON[BuilderSessionView](t, w)
+	if got.BackendAppID != nil || got.BackendOrigin != store.BackendOriginNone {
+		t.Errorf("backend app %v, origin %q; want nil and %q", got.BackendAppID, got.BackendOrigin, store.BackendOriginNone)
+	}
+	if got.Title != "Padaria Central" {
+		t.Errorf("title = %q", got.Title)
+	}
+	if n := e.appCount(t); n != before {
+		t.Errorf("no app may be created: %d -> %d", before, n)
+	}
+	if n := e.auditCount(t, "app.create"); n != 0 {
+		t.Errorf("app.create audit rows = %d, want 0", n)
+	}
+
+	if len(e.fake.inits) != 1 || e.fake.inits[0].template != "site" {
+		t.Fatalf("want exactly one Init from the site template, got %+v", e.fake.inits)
+	}
+	if _, has := e.fake.files[got.ID]["src/orbit.config.ts"]; has {
+		t.Error("a project with no backend must not get a generated orbit.config.ts")
+	}
+
+	var meta string
+	if err := e.pool.QueryRow(context.Background(),
+		`SELECT metadata::text FROM zeep_system.audit_log WHERE action = 'builder.session.create' AND resource_id = $1`, got.ID,
+	).Scan(&meta); err != nil || !strings.Contains(meta, `"backend_origin": "none"`) {
+		t.Errorf("session audit must record the origin: %v %s", err, meta)
+	}
+
+	// Read paths return the same shape.
+	gw := e.get(t, e.owner, got.ID)
+	if gw.Code != http.StatusOK || !strings.Contains(gw.Body.String(), `"backend_app_id":null`) {
+		t.Errorf("GET session: %d %s", gw.Code, gw.Body.String())
+	}
+}
+
+// Until the site template exists in the builder image, creating a project with
+// no backend fails cleanly: no usable session is left behind.
+func TestBuilderCreate_NoBackend_UnknownSiteTemplateLeavesNothing(t *testing.T) {
+	e := newBBEnv(t) // the fake does not know "site" unless siteTemplate is set
+	w := e.create(t, e.owner, `{"backend":{"mode":"none"}}`)
+	if w.Code < 400 {
+		t.Fatalf("want an error, got %d: %s", w.Code, w.Body.String())
+	}
+	var live int
+	if err := e.pool.QueryRow(context.Background(),
+		`SELECT count(*) FROM zeep_system.builder_sessions WHERE status <> 'archived'`).Scan(&live); err != nil || live != 0 {
+		t.Errorf("live sessions = %d, err %v; want 0", live, err)
 	}
 }

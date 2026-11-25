@@ -67,6 +67,10 @@ const (
 	// builderDefaultTemplateDir is the name of the template built into the
 	// builder image (BUILDER_TEMPLATES_DIR/default).
 	builderDefaultTemplateDir = "default"
+	// builderSiteTemplateDir is the built-in template of a project with no
+	// backend (builder-no-backend). It lives in the builder image (added by
+	// task T5); until then a create with no backend fails cleanly at Init.
+	builderSiteTemplateDir = "site"
 )
 
 // BuilderStatus is the body of GET /api/builder/status.
@@ -165,7 +169,8 @@ func (h *BuilderHandler) Status(w http.ResponseWriter, r *http.Request) {
 type createBuilderSessionRequest struct {
 	// Backend selects the backend: {"mode":"new"} makes the builder create an
 	// empty app together with the session, {"mode":"existing","app_id":...}
-	// uses one the caller can see.
+	// uses one the caller can see, {"mode":"none"} makes a project with no
+	// backend (a site).
 	Backend *builderBackendRequest `json:"backend"`
 	// BackendAppID is the legacy form of Backend{existing}: the Orbit backend
 	// app the project talks to. Still accepted when Backend is absent.
@@ -287,6 +292,11 @@ func (h *BuilderHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusBadRequest, "backend_app_id must be a valid app id")
 		return
 	}
+	if mode == builderBackendModeNone && strings.TrimSpace(req.TemplateID) != "" {
+		// Company templates are written against a backend (SDK, orbit.config.ts).
+		h.writeError(w, http.StatusBadRequest, `template_id cannot be combined with backend mode "none"`)
+		return
+	}
 	title := cleanBuilderTitle(req.Title)
 	if utf8.RuneCountInString(title) > builderMaxTitleRunes {
 		h.writeError(w, http.StatusBadRequest, "title is too long")
@@ -323,7 +333,7 @@ func (h *BuilderHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		backendName = app.Name
-	} else {
+	} else if mode == builderBackendModeNew {
 		if h.dashboard == nil {
 			h.writeError(w, http.StatusServiceUnavailable, builderNotConfiguredMsg)
 			return
@@ -350,12 +360,16 @@ func (h *BuilderHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		backendName = deriveBuilderAppName(slugSource, randomSuffix())
 	}
 
-	apiURL, ok := h.apiBaseURL(r)
-	if !ok {
-		h.serverError(w, r, errors.New("cannot determine the public API base URL for the generated project"))
-		return
+	// A project with no backend has no connection info to generate.
+	var config []byte
+	if mode != builderBackendModeNone {
+		apiURL, ok := h.apiBaseURL(r)
+		if !ok {
+			h.serverError(w, r, errors.New("cannot determine the public API base URL for the generated project"))
+			return
+		}
+		config = renderOrbitConfig(apiURL, backendName)
 	}
-	config := renderOrbitConfig(apiURL, backendName)
 
 	ctx, cancel := context.WithTimeout(r.Context(), builderInitTimeout)
 	defer cancel()
@@ -371,6 +385,9 @@ func (h *BuilderHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	if app != nil {
 		params.BackendAppID = app.ID
 	}
+	if mode == builderBackendModeNone {
+		params.BackendOrigin = store.BackendOriginNone
+	}
 	if params.Title == "" {
 		params.Title = backendName
 		if app == nil {
@@ -381,6 +398,10 @@ func (h *BuilderHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	if templateID == "" {
 		params.TemplateKind = store.TemplateDefault
 		params.TemplateVersion = health.DefaultTemplateVersion
+		if mode == builderBackendModeNone {
+			// The site template's version is not in the health response yet (T5).
+			params.TemplateVersion = ""
+		}
 		if params.TemplateVersion == "" {
 			params.TemplateVersion = "unknown"
 		}
@@ -448,7 +469,12 @@ func (h *BuilderHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := h.initWorkspace(ctx, sess.ID, tt, config)
+	var res sandbox.InitResult
+	if mode == builderBackendModeNone {
+		res, err = h.sandbox.Init(ctx, sess.ID, sandbox.TemplateSource{Name: builderSiteTemplateDir})
+	} else {
+		res, err = h.initWorkspace(ctx, sess.ID, tt, config)
+	}
 	if err != nil {
 		h.abortNewSession(ctx, user.ID, sess.ID)
 		h.createFailure(w, r, tt, err)
