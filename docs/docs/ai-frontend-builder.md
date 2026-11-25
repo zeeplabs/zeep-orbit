@@ -46,6 +46,17 @@ When the builder is available, the dashboard opens on a chat-style home instead 
 - **API.** Each row of `GET /dashboard/api/builder/sessions` carries `brief_version`, `milestones_total` and `milestones_done` (zeros when the session has no brief), computed for the whole list in two queries.
 - **On a phone** the sidebar is replaced by a bottom bar (Chat, My projects, More); More opens a sheet with New project, recent projects and the account actions.
 
+## Projects without a backend
+
+A project can be a static site or landing page with no backend app. On the chat home, the backend selector offers **No backend (a site)** next to **New backend** (the default) and the existing apps. `POST /dashboard/api/builder/sessions` accepts `backend: {"mode": "none"}`; `template_id` is rejected in this mode.
+
+- **What it creates.** A session with `backend_origin = none` and `backend_app_id = null` (the HTTP view returns `null`). No Orbit app, no `orbit.config.ts`, no SDK, no login. The workspace starts from the `site` template (`builder/templates/site`): Vite, React, TypeScript, Tailwind and the same `orbit-ui` kit as the default template, one page of anchor sections. The session keeps `template_kind = default`; `backend_origin` is what tells the two apart.
+- **What the agent cannot do.** `orbit_get_app_schema`, `orbit_list_auth_providers`, `propose_backend_change` and `propose_backend_plan` are hidden and answer "unknown tool". Confirming a backend proposal on such a session returns `409` (`this project has no backend`). The prompt says so and tells the agent not to invent business facts and to use links for contact, not a form that stores data.
+- **Planning.** A planning turn asks whether the project saves data or has accounts. If the user says yes, the plan covers the static part only and says the project needs a new project with a backend.
+- **Limit today.** A project cannot gain a backend later. This is why **New backend** stays the default: in the measurement with the real model, app briefs sent to "No backend" ended in plans that do not build the app. Attaching a backend later is a planned follow-up (see `.specs/features/builder-no-backend/`).
+- **Builder image.** `Dockerfile.builder` copies both templates; the builder health reports `site_template_version`, which Orbit pins on the session.
+- **Upgrade.** The migration makes `backend_app_id` nullable and widens the `backend_origin` check to accept `none`. It is idempotent and runs with the rest of the provisioning.
+
 ## Enabling it
 
 Orbit reads three variables on its side (the builder daemon and the proxy have their own, listed under [Environment variables](#environment-variables)).

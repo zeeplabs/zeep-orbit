@@ -75,6 +75,38 @@ jobs:
         # Capping concurrent subtests keeps peak connections well under 100.
         run: go test -p 1 -parallel 4 ./...
 
+  templates:
+    name: Builder template (${{ matrix.template }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        template: [default, site]
+    defaults:
+      run:
+        working-directory: builder/templates/${{ matrix.template }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # The same steps the builder runs for a session (install, typecheck, lint,
+      # build), so a template that does not build fails here, not in a user's preview.
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
   e2e:
     name: E2E (Playwright)
     runs-on: ubuntu-latest
