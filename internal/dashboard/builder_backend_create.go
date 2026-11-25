@@ -15,6 +15,8 @@ import (
 const (
 	builderBackendModeNew      = "new"
 	builderBackendModeExisting = "existing"
+	// builderBackendModeNone is a project with no backend app (a site).
+	builderBackendModeNone = "none"
 
 	// builderDefaultSessionTitle names a new-backend session created without a
 	// title. API strings are English; the UI shows its own placeholder.
@@ -46,6 +48,11 @@ func resolveBuilderBackend(b *builderBackendRequest, legacyAppID string) (mode, 
 			return "", "", errors.New(`backend mode "new" cannot be combined with an app id`)
 		}
 		return builderBackendModeNew, "", nil
+	case builderBackendModeNone:
+		if legacy != "" || strings.TrimSpace(b.AppID) != "" {
+			return "", "", errors.New(`backend mode "none" cannot be combined with an app id`)
+		}
+		return builderBackendModeNone, "", nil
 	case builderBackendModeExisting:
 		id := strings.TrimSpace(b.AppID)
 		switch {
@@ -56,7 +63,7 @@ func resolveBuilderBackend(b *builderBackendRequest, legacyAppID string) (mode, 
 		}
 		return builderBackendModeExisting, id, nil
 	default:
-		return "", "", errors.New(`backend mode must be "new" or "existing"`)
+		return "", "", errors.New(`backend mode must be "new", "existing" or "none"`)
 	}
 }
 

@@ -43,11 +43,12 @@ type bhFakeSandbox struct {
 	files map[string]map[string]string // session id -> path -> content
 	n     int
 
-	health     sandbox.Health
-	healthErr  error
-	initErr    error
-	initErrOn  int // fail only the Nth Init call (1-based); 0 = every call
-	destroyErr error
+	health       sandbox.Health
+	healthErr    error
+	siteTemplate bool // the fake knows the "site" template
+	initErr      error
+	initErrOn    int // fail only the Nth Init call (1-based); 0 = every call
+	destroyErr   error
 
 	inits     []bhInitCall
 	destroyed []string
@@ -97,6 +98,8 @@ func (f *bhFakeSandbox) Init(ctx context.Context, id string, tmpl sandbox.Templa
 	switch {
 	case tmpl.Name == "default":
 		f.files[id] = bhDefaultTemplateFiles()
+	case tmpl.Name == "site" && f.siteTemplate:
+		f.files[id] = map[string]string{"package.json": `{"name":"site-template"}` + "\n", "TEMPLATE_VERSION": "1\n", "src/App.tsx": "export default function App() { return null }\n"}
 	case tmpl.Name != "":
 		return sandbox.InitResult{}, &sandbox.Error{Status: http.StatusNotFound, Code: "unknown_template", Message: "unknown template"}
 	default:
@@ -506,8 +509,8 @@ func TestBuilderCreate_ViewerCanCreate_RecordsVersionsLocaleAndTurn0(t *testing.
 	if got.PromptVersionID == nil || *got.PromptVersionID != pv.ID {
 		t.Errorf("prompt version not pinned: %+v want %s", got.PromptVersionID, pv.ID)
 	}
-	if got.BackendAppID != e.appA {
-		t.Errorf("backend app = %s, want %s", got.BackendAppID, e.appA)
+	if got.BackendAppID == nil || *got.BackendAppID != e.appA {
+		t.Errorf("backend app = %v, want %s", got.BackendAppID, e.appA)
 	}
 
 	// Owner is the caller, not anybody else.

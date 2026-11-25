@@ -282,8 +282,9 @@ func (h *BuilderHandler) decodeBuilderBody(w http.ResponseWriter, r *http.Reques
 // BuilderSessionView is the API shape of a session. It carries no chat content
 // and no tokens of any kind.
 type BuilderSessionView struct {
-	ID              string    `json:"id"`
-	BackendAppID    string    `json:"backend_app_id"`
+	ID string `json:"id"`
+	// BackendAppID is null for a project with no backend (backend_origin "none").
+	BackendAppID    *string   `json:"backend_app_id"`
 	Title           string    `json:"title"`
 	TemplateKind    string    `json:"template_kind"`
 	TemplateID      *string   `json:"template_id"`
@@ -309,8 +310,12 @@ type BuilderSessionView struct {
 }
 
 func newBuilderSessionView(s *store.Session) BuilderSessionView {
+	var backendID *string
+	if s.BackendAppID != "" {
+		backendID = &s.BackendAppID
+	}
 	return BuilderSessionView{
-		ID: s.ID, BackendAppID: s.BackendAppID, Title: s.Title,
+		ID: s.ID, BackendAppID: backendID, Title: s.Title,
 		TemplateKind: s.TemplateKind, TemplateID: s.TemplateID, TemplateVersion: s.TemplateVersion,
 		PromptVersionID: s.PromptVersionID, Locale: s.Locale, Status: s.Status,
 		HeadSHA: s.HeadSHA, HeadTurnSeq: s.HeadTurnSeq,
