@@ -2013,9 +2013,10 @@ export interface BuilderTurn {
 
 export interface BuilderSession {
   id: string
-  backend_app_id: string
-  /** 'builder' when the AI builder created the backend app together with the session. */
-  backend_origin: 'existing' | 'builder'
+  /** null for a project with no backend (backend_origin 'none'). */
+  backend_app_id: string | null
+  /** 'builder' when the AI builder created the backend app together with the session; 'none' when there is no backend. */
+  backend_origin: 'existing' | 'builder' | 'none'
   title: string
   template_kind: 'default' | 'github'
   template_id: string | null
@@ -2170,10 +2171,10 @@ export interface BuilderUsageRange {
 export const BUILDER_USAGE_LIMITS = { maxRangeDays: 366, defaultRangeDays: 30 } as const
 
 /** Body of POST /builder/sessions. Empty/absent template_id selects the built-in default template. */
-export type BuilderBackendChoice = { mode: 'new' } | { mode: 'existing'; app_id: string }
+export type BuilderBackendChoice = { mode: 'new' } | { mode: 'existing'; app_id: string } | { mode: 'none' }
 
 export interface CreateBuilderSessionInput {
-  /** 'new' makes the builder create an empty backend app with the session. */
+  /** 'new' makes the builder create an empty backend app with the session; 'none' makes a project with no backend (a site). */
   backend?: BuilderBackendChoice
   /** Legacy form of `backend: { mode: 'existing' }`; do not combine with `backend`. */
   backend_app_id?: string
