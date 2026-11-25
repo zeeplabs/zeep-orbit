@@ -242,3 +242,53 @@ func TestBuilderRuntime_PromptSourceNoBackend(t *testing.T) {
 		t.Errorf("session context = %+v, want NoBackend and no app", in.Session)
 	}
 }
+
+// builder-no-backend T6: a session with no backend does not list the built-in
+// skills written for backend screens; a session with one still does.
+func TestBuilderRuntime_PromptSourceSkillsIndexByBackend(t *testing.T) {
+	rt := newTestBuilderRuntime(t)
+	e := newBHEnv(t)
+	ctx := context.Background()
+	t.Cleanup(func() {
+		_, _ = rt.pool.Exec(context.Background(), `TRUNCATE zeep_system.builder_sessions CASCADE`)
+	})
+	rt.sandbox = archiveSandbox{data: tarOf(t, map[string]string{"src/main.tsx": "x"}, []string{"src/main.tsx"})}
+
+	withBackend, err := rt.store.CreateSession(ctx, store.CreateSessionParams{
+		OwnerUserID: e.owner.ID, BackendAppID: e.appA, Title: "t", TemplateKind: store.TemplateDefault, TemplateVersion: "v0",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	noBackend, err := rt.store.CreateSession(ctx, store.CreateSessionParams{
+		OwnerUserID: e.owner.ID, Title: "t", TemplateKind: store.TemplateDefault, TemplateVersion: "v0",
+		BackendOrigin: store.BackendOriginNone,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	in, err := rt.promptSource(ctx, withBackend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"orbit-crud-screens", "orbit-forms-and-states", "orbit-frontend-design"} {
+		if !strings.Contains(in.SkillsIndex, name) {
+			t.Errorf("a session with a backend must list %s:\n%s", name, in.SkillsIndex)
+		}
+	}
+	in, err = rt.promptSource(ctx, noBackend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"orbit-crud-screens", "orbit-forms-and-states"} {
+		if strings.Contains(in.SkillsIndex, name) {
+			t.Errorf("a session with no backend must not list %s", name)
+		}
+	}
+	for _, name := range []string{"orbit-frontend-design", "orbit-accessibility", "orbit-responsive-layout"} {
+		if !strings.Contains(in.SkillsIndex, name) {
+			t.Errorf("a session with no backend must still list %s", name)
+		}
+	}
+}

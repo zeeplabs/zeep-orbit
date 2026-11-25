@@ -431,6 +431,9 @@ func (rt *BuilderRuntime) promptSource(ctx context.Context, s *store.Session) (a
 	if err != nil {
 		return agent.PromptInput{}, err
 	}
+	if in.Session.NoBackend {
+		entries = skills.ForNoBackend(entries)
+	}
 	index, dropped := skills.RenderIndex(entries, agent.MaxSkillsIndexChars)
 	if len(dropped) > 0 {
 		// Only reachable when the index is over budget (for example after an

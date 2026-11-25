@@ -319,3 +319,30 @@ func TestBuildSystemPrompt_NoBackendSaysSoAndNamesNoApp(t *testing.T) {
 		t.Error("a project with no backend must not name a backend app")
 	}
 }
+
+func TestBuildSystemPrompt_CoreHasANoBackendSection(t *testing.T) {
+	core := CorePrompt()
+	for _, want := range []string{
+		"# Projects with no backend",
+		"`Backend: none`",
+		"Never invent facts about the user's business",
+		"do not fake it with a form that goes nowhere",
+		`the sections "Never invent the backend", "Orbit SDK and template conventions", "Access and sign-up" and "Backend changes" do not apply`,
+	} {
+		if !strings.Contains(core, want) {
+			t.Errorf("core.md must state %q", want)
+		}
+	}
+	// Every section the no-backend section says it replaces still exists, so a
+	// rename would not leave it pointing at nothing.
+	for _, h := range []string{"# Never invent the backend", "# Orbit SDK and template conventions", "# Access and sign-up", "# Backend changes"} {
+		if !strings.Contains(core, h+"\n") {
+			t.Errorf("core.md lost the section %q that the no-backend section refers to", h)
+		}
+	}
+	// The line the session context prints must be the one the section keys on.
+	sc := SessionContext{NoBackend: true}
+	if out := BuildSystemPrompt("core", "", "", "", sc); !strings.Contains(out, "Backend: none.") {
+		t.Error("the session context must print the Backend: none line")
+	}
+}
