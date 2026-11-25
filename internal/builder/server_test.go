@@ -979,6 +979,27 @@ func TestActiveTracker(t *testing.T) {
 
 // ---- health, logging, middleware ----
 
+// The health response carries the site template's version once the image has one.
+func TestServerHealth_SiteTemplateVersion(t *testing.T) {
+	f := newSrvFixture(t, srvOpts{})
+	var h HealthResponse
+	decodeBody(t, f.do(rq{method: "GET", id: HealthSessionID, path: "/v1/health"}), 200, &h)
+	if h.SiteTemplateVersion != "" {
+		t.Fatalf("no site template yet, got %q", h.SiteTemplateVersion)
+	}
+	site := filepath.Join(f.tmpl, SiteTemplateName)
+	if err := os.MkdirAll(site, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(site, "TEMPLATE_VERSION"), []byte("3\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	decodeBody(t, f.do(rq{method: "GET", id: HealthSessionID, path: "/v1/health"}), 200, &h)
+	if h.SiteTemplateVersion != "3" || h.DefaultTemplateVersion != "7" {
+		t.Fatalf("health: %+v", h)
+	}
+}
+
 func TestServerHealth(t *testing.T) {
 	f := newSrvFixture(t, srvOpts{})
 	wantErr(t, f.do(rq{method: "GET", id: "-", path: "/v1/health", token: new(string)}), 401, "unauthorized")

@@ -344,6 +344,9 @@ func TestBuilderCreate_NoBackend_CreatesSessionOnly(t *testing.T) {
 	if got.Title != "Padaria Central" {
 		t.Errorf("title = %q", got.Title)
 	}
+	if got.TemplateKind != store.TemplateDefault || got.TemplateVersion != "1" {
+		t.Errorf("template = %s@%s, want the site template's own version (default@1)", got.TemplateKind, got.TemplateVersion)
+	}
 	if n := e.appCount(t); n != before {
 		t.Errorf("no app may be created: %d -> %d", before, n)
 	}

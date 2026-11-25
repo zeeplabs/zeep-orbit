@@ -63,7 +63,7 @@ type bhInitCall struct {
 func newBHFakeSandbox() *bhFakeSandbox {
 	return &bhFakeSandbox{
 		files:  map[string]map[string]string{},
-		health: sandbox.Health{Capacity: 4, Version: "test", DefaultTemplateVersion: "7"},
+		health: sandbox.Health{Capacity: 4, Version: "test", DefaultTemplateVersion: "7", SiteTemplateVersion: "1"},
 	}
 }
 

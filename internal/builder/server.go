@@ -61,6 +61,8 @@ const (
 
 	// DefaultTemplateName is the template served for ?template=default.
 	DefaultTemplateName = "default"
+	// SiteTemplateName is the template of a project with no backend.
+	SiteTemplateName = "site"
 
 	templateVersionFile = "TEMPLATE_VERSION"
 
@@ -245,6 +247,9 @@ type HealthResponse struct {
 	Version string `json:"version"`
 	// DefaultTemplateVersion is the TEMPLATE_VERSION of the default template.
 	DefaultTemplateVersion string `json:"default_template_version"`
+	// SiteTemplateVersion is the TEMPLATE_VERSION of the site template ("" when
+	// the image has none).
+	SiteTemplateVersion string `json:"site_template_version"`
 }
 
 // ---- configuration ----
@@ -816,6 +821,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request, _ *call) {
 		Capacity:               s.capacity,
 		Version:                s.version,
 		DefaultTemplateVersion: s.templateVersion(filepath.Join(s.templatesDir, DefaultTemplateName)),
+		SiteTemplateVersion:    s.templateVersion(filepath.Join(s.templatesDir, SiteTemplateName)),
 	})
 }
 
