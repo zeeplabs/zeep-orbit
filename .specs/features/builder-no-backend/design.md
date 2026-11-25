@@ -24,7 +24,7 @@ Three layers, in this order, each shippable on its own:
 ## Layer 2: template `site` and prompt
 
 - `builder/templates/site/`: Vite + React + TypeScript + Tailwind, `orbit-ui` kit, tokens in `src/index.css`, routes limited to what a site needs (a single page plus an optional second one), `index.html` with title and description meta, `public/` for images. No `@zeep/*` SDK, no `orbit.config.ts`, no `BackendStatus`, no sign-in.
-- Selection: today `builderDefaultTemplateDir = "default"` and `store.TemplateDefault`. Add `store.TemplateSite = "site"` (`template_kind` check accepts it) and a `templateDirForBackendMode` helper. The hidden `github_templates` row used by publish (`ensureBuilderDefaultTemplate`) gets a sibling for `site`.
+- Selection (as built): `builderSiteTemplateDir = "site"` next to `builderDefaultTemplateDir`; the create handler Inits the workspace straight from `site` when the mode is `none`. No new `template_kind` and no second hidden template row: `orbit-template.json` of the two templates is the same (static site, `dist`), so publish treats both as the built-in default. The session pins the site template's own version, reported by the builder health (`site_template_version`).
 - Kit single source: move `builder/templates/default/src/components/ui`, `src/lib/cn.ts` and the token block that the kit reads to `builder/templates/_kit/`, and copy them into both templates in `Dockerfile.builder`. In the repo the two copies stay checked in (so `npm run build` of each template works on its own) and a Go test compares them and fails on a difference. `[Incerto]`: copy-at-build alone would make local template builds fail; the checked-in copy plus a test is the simpler option and is the proposal.
 - Prompt: `core.md` gets a short section for sessions with no backend. Same cap discipline as before: pin text in `prompt_test.go`.
 - Skills: the index for a `none` session leaves out `orbit-crud-screens` and `orbit-forms-and-states` (they teach data screens against the SDK). If that filter is a bigger change than it looks, the fallback is one sentence in each skill's description saying "not for sites"; both are small, choose when implementing.
@@ -38,6 +38,13 @@ Three layers, in this order, each shippable on its own:
 ## Phase 2: add a backend later (NB-08)
 
 `attachBackend(sessionID)`: creates the app through the same operation as `new`, sets `backend_app_id` and `backend_origin = builder` in one update guarded by `backend_app_id IS NULL`, then writes the data layer into the workspace from `builder/templates/default` (SDK dependency, `orbit.config.ts`, auth files) in one commit and tells the agent in the next turn. Needs its own spec section on conflicts with files the agent already changed, so it is deliberately not in the first release.
+
+## As built (2026-11-25)
+
+- Deviation: `template_kind` stays `default` (see Layer 2). `backend_origin = none` is the only marker.
+- The planner's "yes, it stores data" cannot refuse: a planning turn must end in `propose_build_plan`. So the plan covers only the static part and says the saving part needs a project with a backend; the builder header offers `/?backend=new`. This stands until phase 2.
+- Skill filtering was done in the index (`skills.ForNoBackend`), not by rewording the skills. `orbit-react-patterns` stays listed.
+- The advanced new-session dialog does not offer "No backend"; only the chat home does.
 
 ## Open questions
 

@@ -1,6 +1,6 @@
 # Builder projects without a backend (sites, landing pages)
 
-**Status**: Draft 2026-11-24, not implemented. Decisions 1 to 3 confirmed by the maintainer the same day; the rest is proposal.
+**Status**: 2026-11-25: NB-01 to NB-07, NB-09 and NB-10 implemented and merged into `develop` (#66 to #72); NB-08 (add a backend later) is phase 2 and not started. Decisions 1 to 3 confirmed by the maintainer 2026-11-24. The risk of the new default is not measured yet (task T9).
 
 ## Problem
 
