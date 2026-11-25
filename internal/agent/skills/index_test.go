@@ -133,3 +133,28 @@ func TestIndexCharsMatchesRenderedText(t *testing.T) {
 		t.Fatalf("delta %d", d)
 	}
 }
+
+func TestForNoBackendDropsOnlyBuiltinSkillsThatNeedABackend(t *testing.T) {
+	in := []Entry{
+		ent("orbit-crud-screens", "list and detail screens", OriginBuiltin),
+		ent("orbit-forms-and-states", "forms", OriginBuiltin),
+		ent("orbit-frontend-design", "look", OriginBuiltin),
+		ent("orbit-accessibility", "a11y", OriginBuiltin),
+		// A company skill with the same name as a built-in is the company's own.
+		ent("orbit-crud-screens", "company version", OriginCustom),
+		ent("invoice-layout", "company rule", OriginCustom),
+	}
+	got := ForNoBackend(in)
+	var names []string
+	for _, e := range got {
+		names = append(names, string(e.Source)+":"+e.Name)
+	}
+	want := string(OriginBuiltin) + ":orbit-frontend-design," + string(OriginBuiltin) + ":orbit-accessibility," +
+		string(OriginCustom) + ":orbit-crud-screens," + string(OriginCustom) + ":invoice-layout"
+	if strings.Join(names, ",") != want {
+		t.Errorf("got %v, want %s", names, want)
+	}
+	if len(in) != 6 {
+		t.Error("the input slice must not change")
+	}
+}

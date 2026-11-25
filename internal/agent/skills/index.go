@@ -10,6 +10,28 @@ import (
 // prompt builder (headerSkills), like every other prompt section.
 const indexIntro = "Load a skill with load_skill(name) BEFORE writing code when its description matches the task. Do not load skills that do not match."
 
+// needsBackend names the built-in skills written for screens that read and
+// write an Orbit backend through the SDK. A project with no backend does not
+// list them: they would send the model toward forms and lists with nothing to
+// talk to.
+var needsBackend = map[string]bool{
+	"orbit-crud-screens":     true,
+	"orbit-forms-and-states": true,
+}
+
+// ForNoBackend returns entries without the built-in skills that need a
+// backend. Custom skills are kept: the company wrote them for its own rules.
+func ForNoBackend(entries []Entry) []Entry {
+	out := make([]Entry, 0, len(entries))
+	for _, e := range entries {
+		if e.Source == OriginBuiltin && needsBackend[e.Name] {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
 // RenderIndex renders the enabled entries as the skills index text: the intro
 // sentence and one "- name: description" line per skill, built-ins first and
 // then custom skills, each group by name. Descriptions are sanitized again so
