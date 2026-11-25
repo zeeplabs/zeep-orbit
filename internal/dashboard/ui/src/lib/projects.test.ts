@@ -33,6 +33,13 @@ describe('sessionStatus', () => {
 describe('buildProjectCards', () => {
   const apps = [app('a1', 'clinic'), app('a2', 'shop'), app('a3', 'blog')]
 
+  test('a session with no backend has a null backend id and no name, and uses up no backend', () => {
+    const cards = buildProjectCards([session({ id: 'site', backend_app_id: null, backend_origin: 'none' })], apps)
+    expect(cards[0]).toMatchObject({ kind: 'session', sessionId: 'site', backendAppId: null, backendName: '' })
+    // every visible backend still shows as backend-only
+    expect(cards.filter((c) => c.kind === 'backend-only').map((c) => c.backendAppId)).toEqual(['a3', 'a1', 'a2'])
+  })
+
   test('sessions newest first, then backends no session uses, by name', () => {
     const cards = buildProjectCards(
       [

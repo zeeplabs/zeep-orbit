@@ -23,9 +23,9 @@ function Where() {
   return <output data-testid="where">{useLocation().pathname}</output>
 }
 
-function setup() {
+function setup(entry = '/') {
   return render(
-    <MemoryRouter initialEntries={['/']}>
+    <MemoryRouter initialEntries={[entry]}>
       <Routes>
         <Route path="/" element={<HomeChatPage />} />
         <Route path="*" element={<Where />} />
@@ -60,13 +60,13 @@ describe('HomeChatPage composer', () => {
     expect(send()).toBeEnabled()
   })
 
-  test('Enter sends the trimmed prompt with a new backend and the UI language', async () => {
+  test('Enter sends the trimmed prompt with no backend by default and the UI language', async () => {
     setup()
     await userEvent.type(box(), '  an app for my clinic  {Enter}')
     expect(h.mutate).toHaveBeenCalledTimes(1)
     expect(h.mutate.mock.calls[0][0]).toEqual({
       prompt: '  an app for my clinic  ',
-      backend: { mode: 'new' },
+      backend: { mode: 'none' },
       locale: 'en',
     })
   })
@@ -146,18 +146,39 @@ describe('HomeChatPage backend choice', () => {
     ]
     setup()
     const select = screen.getByRole('combobox', { name: 'Backend' })
-    expect(select).toHaveValue('__new__')
+    expect(select).toHaveValue('__none__')
     expect(within(select).getByRole('group', { name: 'Use an existing backend' })).toBeInTheDocument()
     await userEvent.selectOptions(select, 'a2')
     await userEvent.type(box(), 'add a report{Enter}')
     expect(h.mutate.mock.calls[0][0].backend).toEqual({ mode: 'existing', app_id: 'a2' })
   })
 
-  test('without apps there is only the new backend option', () => {
+  test('without apps there are only the no-backend and new-backend options, no-backend first', () => {
     setup()
     const select = screen.getByRole('combobox', { name: 'Backend' })
-    expect(within(select).getAllByRole('option')).toHaveLength(1)
+    const options = within(select).getAllByRole('option')
+    expect(options.map((o) => o.textContent)).toEqual(['No backend (a site)', 'New backend'])
     expect(within(select).queryByRole('group')).not.toBeInTheDocument()
+  })
+
+  test('choosing a new backend sends mode new', async () => {
+    setup()
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Backend' }), '__new__')
+    await userEvent.type(box(), 'an app for my clinic{Enter}')
+    expect(h.mutate.mock.calls[0][0].backend).toEqual({ mode: 'new' })
+  })
+
+  test('?backend=new (the link in a project with no backend) preselects a new backend', async () => {
+    setup('/?backend=new')
+    const select = screen.getByRole('combobox', { name: 'Backend' })
+    expect(select).toHaveValue('__new__')
+    await userEvent.type(box(), 'an app for my clinic{Enter}')
+    expect(h.mutate.mock.calls[0][0].backend).toEqual({ mode: 'new' })
+  })
+
+  test('any other ?backend value keeps the default', () => {
+    setup('/?backend=whatever')
+    expect(screen.getByRole('combobox', { name: 'Backend' })).toHaveValue('__none__')
   })
 })
 

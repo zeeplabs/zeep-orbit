@@ -175,3 +175,17 @@ describe('ProjectsPage states', () => {
     expect(h.apps.refetch).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('ProjectsPage project with no backend', () => {
+  test('its card says so and has no backend link', () => {
+    h.apps.data = [app('a1', 'clinic')]
+    h.sessions.data = [session({ id: 'site', title: 'Padaria Central', backend_app_id: null, backend_origin: 'none' })]
+    setup()
+    const card = screen.getByRole('heading', { name: 'Padaria Central' }).closest('article') as HTMLElement
+    expect(within(card).getByText('No backend')).toBeInTheDocument()
+    expect(within(card).getByRole('link', { name: 'Open chat' })).toHaveAttribute('href', '/builder/site')
+    expect(within(card).queryByRole('link', { name: 'Backend' })).not.toBeInTheDocument()
+    // The visible backend that no session uses still gets its own card.
+    expect(screen.getByRole('heading', { name: 'clinic' })).toBeInTheDocument()
+  })
+})

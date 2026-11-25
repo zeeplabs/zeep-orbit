@@ -85,6 +85,7 @@ function ProjectCardView({
               {t('projects.backendLabel')}: <span className="font-mono text-[var(--text-secondary)]">{card.backendName}</span>
             </span>
           )}
+          {card.kind === 'session' && card.backendAppId === null && <span>{t('projects.noBackend')}</span>}
           <span>{t('projects.updatedAt', { date })}</span>
         </div>
         <div className="mt-auto flex flex-wrap gap-2">
@@ -93,24 +94,28 @@ function ProjectCardView({
               <Link to={`/builder/${card.sessionId}`} className={ACTION_CLASS}>
                 {t('projects.openChat')}
               </Link>
-              <Link to={`/apps/${card.backendAppId}`} className={ACTION_CLASS}>
-                {t('projects.backend')}
-              </Link>
+              {card.backendAppId && (
+                <Link to={`/apps/${card.backendAppId}`} className={ACTION_CLASS}>
+                  {t('projects.backend')}
+                </Link>
+              )}
             </>
           ) : (
-            <>
-              <Link to={`/apps/${card.backendAppId}`} className={ACTION_CLASS}>
-                {t('projects.openBackend')}
-              </Link>
-              <button
-                type="button"
-                className={ACTION_CLASS}
-                disabled={busy}
-                onClick={() => onCreateFrontend(card.backendAppId)}
-              >
-                {creating ? t('projects.creating') : t('projects.createFrontend')}
-              </button>
-            </>
+            card.backendAppId && (
+              <>
+                <Link to={`/apps/${card.backendAppId}`} className={ACTION_CLASS}>
+                  {t('projects.openBackend')}
+                </Link>
+                <button
+                  type="button"
+                  className={ACTION_CLASS}
+                  disabled={busy}
+                  onClick={() => onCreateFrontend(card.backendAppId as string)}
+                >
+                  {creating ? t('projects.creating') : t('projects.createFrontend')}
+                </button>
+              </>
+            )
           )}
         </div>
       </article>

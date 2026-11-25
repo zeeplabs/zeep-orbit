@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Icon } from '@/components/ui/icon'
 import { BriefButton } from '@/components/patterns/builder/BriefDrawer'
 import { ChatPanel } from '@/components/patterns/builder/ChatPanel'
+import { BackendLink } from '@/components/patterns/builder/BackendLink'
 import { PreviewPanel } from '@/components/patterns/builder/PreviewPanel'
 import { ProjectTitleField } from '@/components/patterns/builder/ProjectTitleField'
 import { SessionActions } from '@/components/patterns/builder/SessionActions'
@@ -165,14 +166,7 @@ export default function BuilderPage() {
               <Icon name="arrow_back" size={14} />
               {t('builder.page.back')}
             </Link>
-            <Link
-              to={`/apps/${encodeURIComponent(session.backend_app_id)}`}
-              className="inline-flex items-center gap-1 underline-offset-2 hover:underline"
-              style={{ color: 'var(--text-secondary)' }}
-            >
-              <Icon name="database" size={14} />
-              {t('builder.page.backendApp')}
-            </Link>
+            <BackendLink backendAppId={session.backend_app_id} />
             {session.backend_origin === 'builder' && (
               <span className="inline-flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
                 <Icon name="auto_awesome" size={14} />

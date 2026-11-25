@@ -12,8 +12,9 @@ export interface ProjectCard {
   key: string
   sessionId?: string
   title: string
-  backendAppId: string
-  /** Empty when the backend is not in the visible apps list. */
+  /** null for a project with no backend. */
+  backendAppId: string | null
+  /** Empty when the backend is not in the visible apps list, or there is none. */
   backendName: string
   status: ProjectStatus
   milestone?: { done: number; total: number }
@@ -36,7 +37,7 @@ export function sessionStatus(s: BuilderSession): ProjectStatus {
  */
 export function buildProjectCards(sessions: BuilderSession[], apps: AppDef[]): ProjectCard[] {
   const appById = new Map(apps.map((a) => [a.id, a]))
-  const used = new Set(sessions.map((s) => s.backend_app_id))
+  const used = new Set(sessions.map((s) => s.backend_app_id).filter((id): id is string => id !== null))
 
   const fromSessions: ProjectCard[] = [...sessions]
     .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))
@@ -48,7 +49,7 @@ export function buildProjectCards(sessions: BuilderSession[], apps: AppDef[]): P
         sessionId: s.id,
         title: s.title,
         backendAppId: s.backend_app_id,
-        backendName: appById.get(s.backend_app_id)?.name ?? '',
+        backendName: (s.backend_app_id && appById.get(s.backend_app_id)?.name) || '',
         status,
         ...(status === 'building'
           ? { milestone: { done: s.milestones_done ?? 0, total: s.milestones_total ?? 0 } }

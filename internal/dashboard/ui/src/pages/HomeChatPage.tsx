@@ -1,11 +1,12 @@
 import { useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/ui/icon'
 import { useApps, useBuilderSessions, useStartBuilderProject, type BuilderBackendChoice } from '@/lib/api'
 import { recentSessions } from '@/components/layout/SimpleSidebar'
 
 const NEW_BACKEND = '__new__'
+const NO_BACKEND = '__none__'
 // Each chip shows a short title and fills the composer with the full example prompt, so the user
 // sees how much detail to give: who uses it, what it stores, who signs in, the look.
 const SUGGESTIONS = [
@@ -30,7 +31,10 @@ export default function HomeChatPage() {
   const recents = recentSessions(sessions, CONTINUE_LIMIT)
 
   const [prompt, setPrompt] = useState('')
-  const [backendValue, setBackendValue] = useState(NEW_BACKEND)
+  // "No backend" is the default: most first requests are a page. `?backend=new` (the link in a
+  // project with no backend) opens the home with a new backend preselected.
+  const [searchParams] = useSearchParams()
+  const [backendValue, setBackendValue] = useState(searchParams.get('backend') === 'new' ? NEW_BACKEND : NO_BACKEND)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const pending = start.isPending
@@ -39,7 +43,11 @@ export default function HomeChatPage() {
   function submit() {
     if (!canSend) return
     const backend: BuilderBackendChoice =
-      backendValue === NEW_BACKEND ? { mode: 'new' } : { mode: 'existing', app_id: backendValue }
+      backendValue === NO_BACKEND
+        ? { mode: 'none' }
+        : backendValue === NEW_BACKEND
+          ? { mode: 'new' }
+          : { mode: 'existing', app_id: backendValue }
     start.mutate(
       { prompt, backend, locale: i18n.language },
       { onSuccess: (session) => navigate(`/builder/${session.id}`) },
@@ -103,6 +111,7 @@ export default function HomeChatPage() {
             disabled={pending}
             className="min-w-0 max-w-[60%] truncate rounded-[8px] border border-[var(--border-strong)] bg-transparent px-2.5 py-1.5 text-[13px] text-[var(--text-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
+            <option value={NO_BACKEND}>{t('home.backendNone')}</option>
             <option value={NEW_BACKEND}>{t('builder.newSession.backendNew')}</option>
             {apps.length > 0 && (
               <optgroup label={t('home.backendExistingGroup')}>
