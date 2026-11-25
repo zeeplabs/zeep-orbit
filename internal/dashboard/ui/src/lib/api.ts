@@ -3398,7 +3398,7 @@ export function useStartBuilderProject(): UseMutationResult<
   return useMutation({
     mutationFn: async ({ prompt, backend, locale }: StartBuilderProjectInput) => {
       const content = prompt.trim()
-      const backendKey = backend.mode === 'existing' ? `existing:${backend.app_id}` : 'new'
+      const backendKey = backend.mode === 'existing' ? `existing:${backend.app_id}` : backend.mode
 
       let session: BuilderSession
       if (pending.current && pending.current.backendKey === backendKey) {
