@@ -383,6 +383,7 @@ func (s *httpSandbox) Health(ctx context.Context) (Health, error) {
 		Capacity:               resp.Capacity,
 		Version:                resp.Version,
 		DefaultTemplateVersion: resp.DefaultTemplateVersion,
+		SiteTemplateVersion:    resp.SiteTemplateVersion,
 	}, nil
 }
 

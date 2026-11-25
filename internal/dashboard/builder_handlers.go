@@ -68,8 +68,8 @@ const (
 	// builder image (BUILDER_TEMPLATES_DIR/default).
 	builderDefaultTemplateDir = "default"
 	// builderSiteTemplateDir is the built-in template of a project with no
-	// backend (builder-no-backend). It lives in the builder image (added by
-	// task T5); until then a create with no backend fails cleanly at Init.
+	// backend (builder-no-backend). It lives in the builder image next to the
+	// default template; a builder image without it fails the create at Init.
 	builderSiteTemplateDir = "site"
 )
 
@@ -399,8 +399,7 @@ func (h *BuilderHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		params.TemplateKind = store.TemplateDefault
 		params.TemplateVersion = health.DefaultTemplateVersion
 		if mode == builderBackendModeNone {
-			// The site template's version is not in the health response yet (T5).
-			params.TemplateVersion = ""
+			params.TemplateVersion = health.SiteTemplateVersion
 		}
 		if params.TemplateVersion == "" {
 			params.TemplateVersion = "unknown"

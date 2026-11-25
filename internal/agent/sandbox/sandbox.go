@@ -129,6 +129,9 @@ type Health struct {
 	Capacity               int
 	Version                string
 	DefaultTemplateVersion string
+	// SiteTemplateVersion is the version of the template of a project with no
+	// backend; empty when the builder image has none.
+	SiteTemplateVersion string
 }
 
 // Sandbox is the workspace the agent edits and builds in. Implementations

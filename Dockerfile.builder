@@ -50,9 +50,11 @@ RUN apt-get update \
 RUN mkdir -p /work /opt/templates \
     && chown 1000:1000 /work
 
-# Default template, root-owned and read-only for the builder user. The daemon
-# copies it into /work/<session>/ on Init.
+# Built-in templates, root-owned and read-only for the builder user. The daemon
+# copies one into /work/<session>/ on Init: "default" for a project with a
+# backend, "site" for a project with none.
 COPY builder/templates/default /opt/templates/default
+COPY builder/templates/site /opt/templates/site
 
 WORKDIR /work
 VOLUME ["/work"]
