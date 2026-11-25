@@ -346,3 +346,23 @@ func TestBuildSystemPrompt_CoreHasANoBackendSection(t *testing.T) {
 		t.Error("the session context must print the Backend: none line")
 	}
 }
+
+func TestBuildSystemPrompt_CoreAsksWhetherANoBackendProjectStoresData(t *testing.T) {
+	core := CorePrompt()
+	for _, want := range []string{
+		`Static site: no accounts and no stored data`,
+		"ask one `ask_user` question about it",
+		`"No, a page that presents it" and "Yes, it has to save information"`,
+		"needs a new project with a backend",
+		"Never plan sign-in, tables, accounts or stored data in a project with no backend",
+	} {
+		if !strings.Contains(core, want) {
+			t.Errorf("core.md must state %q", want)
+		}
+	}
+	// The rule lives in the Planning section, before the title rule it precedes.
+	i, j, k := strings.Index(core, "# Planning"), strings.Index(core, "Static site: no accounts"), strings.Index(core, "# Backend changes")
+	if !(i >= 0 && i < j && j < k) {
+		t.Errorf("the no-backend planning rule must sit inside the Planning section (positions %d, %d, %d)", i, j, k)
+	}
+}
