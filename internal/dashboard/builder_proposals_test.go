@@ -629,3 +629,26 @@ func TestBuilderTurnView_ExposesThePendingProposalOnlyWhileAwaiting(t *testing.T
 		t.Errorf("pending_proposal must be omitted once resolved: %s", raw)
 	}
 }
+
+// builder-no-backend T4: a session with no backend has nothing to confirm a
+// backend change against; the answer is 409 and nothing changes.
+func TestProposalConfirm_NoBackendSessionIs409(t *testing.T) {
+	e := newBPropEnv(t)
+	sess, err := e.st.CreateSession(context.Background(), store.CreateSessionParams{
+		OwnerUserID: e.owner.ID, TemplateKind: store.TemplateDefault, TemplateVersion: "v0", BackendOrigin: store.BackendOriginNone,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	turn, err := e.st.CreateTurn(context.Background(), e.owner.ID, sess.ID, store.KindChat, "hello")
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := e.confirm(t, e.owner, sess.ID, turn.ID)
+	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), "no backend") {
+		t.Fatalf("want 409 with a no-backend message, got %d: %s", w.Code, w.Body.String())
+	}
+	if e.builderAudits(t) != 0 {
+		t.Error("a refused confirm must leave no audit row")
+	}
+}

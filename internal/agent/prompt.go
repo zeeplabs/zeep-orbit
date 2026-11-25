@@ -52,8 +52,11 @@ const (
 type SessionContext struct {
 	BackendAppID   string
 	BackendAppName string
-	SchemaSummary  string
-	FileTree       string
+	// NoBackend marks a project with no backend app: the prompt says so
+	// instead of naming one.
+	NoBackend     bool
+	SchemaSummary string
+	FileTree      string
 	// Locale is the language of the user's interface (for example "pt-BR").
 	// It is only the fallback reply language: the language the user writes in
 	// wins, because the interface language is often not the one they type in.
@@ -136,7 +139,9 @@ func renderSessionContext(c SessionContext) string {
 		"nothing they wrote tells. Write every message in it, including each ask_user question and option and the "+
 		"build plan. App UI copy follows it; code, identifiers and code comments stay in English.\n", locale)
 
-	if id, name := strings.TrimSpace(c.BackendAppID), strings.TrimSpace(c.BackendAppName); id != "" || name != "" {
+	if c.NoBackend {
+		b.WriteString("Backend: none. This project has no backend app and no API: do not call or invent one, do not read or write app data, and do not add sign-in. It is a static site.\n")
+	} else if id, name := strings.TrimSpace(c.BackendAppID), strings.TrimSpace(c.BackendAppName); id != "" || name != "" {
 		fmt.Fprintf(&b, "Backend app: %s (id: %s)\n", orDash(name), orDash(id))
 	}
 	if s := capText(c.SchemaSummary, maxSchemaSummaryChars); s != "" {

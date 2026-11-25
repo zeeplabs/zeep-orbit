@@ -57,12 +57,18 @@ func (r *run) offered(k tools.Kind) bool {
 	return true
 }
 
+// noBackend reports whether this session is a project with no backend app.
+func (r *run) noBackend() bool { return r.sess.BackendOrigin == store.BackendOriginNone }
+
 // toolSpecs is what the model is offered: the registered tools of the kinds
 // this turn's mode allows, except load_skill when no skills are enabled (the
 // tool lives on the shared registry, so the offer is decided per turn).
 func (r *run) toolSpecs() []provider.ToolSpec {
 	return r.deps.Tools.SpecsWhere(func(t tools.Tool) bool {
 		if t.Name == skills.ToolLoadSkill && !r.skillsVisible {
+			return false
+		}
+		if t.NeedsBackend && r.noBackend() {
 			return false
 		}
 		return r.offered(t.Kind)
@@ -76,6 +82,10 @@ func (r *run) gatePlanning(c provider.ToolCall) (tools.Result, bool) {
 	kind, ok := r.deps.Tools.Kind(c.Name)
 	if !ok {
 		return tools.Result{}, false // Dispatch answers "unknown tool"
+	}
+	if r.noBackend() && r.deps.Tools.NeedsBackend(c.Name) {
+		// The tool does not exist in a project with no backend.
+		return tools.Result{Content: fmt.Sprintf("unknown tool %q", c.Name), IsError: true}, true
 	}
 	if !r.offered(kind) {
 		if r.planMode {

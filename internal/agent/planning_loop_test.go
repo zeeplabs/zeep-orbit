@@ -635,3 +635,24 @@ func TestPlanningProvider_NilKeepsTheBuildProvider(t *testing.T) {
 		t.Fatalf("build provider calls = %d, usage = %+v", h.prov.calls(), h.st.usage)
 	}
 }
+
+// A project with no backend (builder-no-backend T4): tools that work on the
+// backend are not offered, and a call to one is an unknown tool, not a pause.
+func TestNoBackend_BackendToolsAreNotOfferedAndDoNotExist(t *testing.T) {
+	h := newPlanHarness(t, store.ModeBuild,
+		scriptStep{resp: toolResp(provider.ToolCall{ID: "b1", Name: "propose_backend_change", Arguments: json.RawMessage(`{}`)})},
+		scriptStep{resp: textResp("ok, a static site")},
+	)
+	h.st.sess.BackendAppID, h.st.sess.BackendOrigin = "", store.BackendOriginNone
+	h.mustRun()
+
+	if got := offeredNames(h.prov.reqs[0].Tools); strings.Contains(got, "propose_backend_change") || !strings.Contains(got, "write_file") {
+		t.Fatalf("offered tools = %s", got)
+	}
+	if m := h.toolResult("b1"); !strings.Contains(m.Content, "unknown tool") || !parseToolMeta(m).IsError {
+		t.Errorf("a backend tool call must be an unknown tool: %q", m.Content)
+	}
+	if fin := h.finished(); fin.Status != store.TurnCompleted {
+		t.Fatalf("status = %q, want completed (no pause for a proposal)", fin.Status)
+	}
+}

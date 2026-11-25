@@ -127,6 +127,10 @@ type Tool struct {
 	Schema json.RawMessage
 	// Kind classifies the tool.
 	Kind Kind
+	// NeedsBackend marks a tool that works on the project's backend app. It is
+	// not offered, and a call to it answers "unknown tool", in a project that
+	// has no backend (builder-no-backend).
+	NeedsBackend bool
 	// KeepTail makes the registry keep the END of an oversized result (build
 	// output, logs: the error is at the bottom) instead of the start.
 	KeepTail bool
@@ -265,6 +269,14 @@ func (r *Registry) SpecsWhere(keep func(Tool) bool) []provider.ToolSpec {
 		out = append(out, provider.ToolSpec{Name: t.Name, Description: t.Description, Schema: t.Schema})
 	}
 	return out
+}
+
+// NeedsBackend reports whether a registered tool is marked NeedsBackend.
+func (r *Registry) NeedsBackend(name string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	t, ok := r.tools[name]
+	return ok && t.NeedsBackend
 }
 
 // Kind returns the kind of a registered tool.

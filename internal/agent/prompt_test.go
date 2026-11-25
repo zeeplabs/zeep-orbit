@@ -307,3 +307,15 @@ func TestBuildSystemPrompt_CoreDoesNotAssumeHowTheTemplateIsStyled(t *testing.T)
 		t.Error("core.md must send the model to the template guide for styling")
 	}
 }
+
+func TestBuildSystemPrompt_NoBackendSaysSoAndNamesNoApp(t *testing.T) {
+	sc := fullSession()
+	sc.BackendAppID, sc.BackendAppName, sc.NoBackend = "", "", true
+	out := BuildSystemPrompt("core", "", "", "", sc)
+	if !strings.Contains(out, "Backend: none. This project has no backend app and no API") {
+		t.Error("the prompt must say the project has no backend")
+	}
+	if strings.Contains(out, "Backend app:") {
+		t.Error("a project with no backend must not name a backend app")
+	}
+}
