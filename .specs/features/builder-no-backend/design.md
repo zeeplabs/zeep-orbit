@@ -77,3 +77,73 @@ Three layers, in this order, each shippable on its own:
 6. **Still open for T11b:** where the overlay lives in the default template (a directory excluded from the template's own build, or a list in `orbit-template.json`); the exact canned message and its language (the plan-language issue from validation.md applies: it must carry the session locale).
 
 Effect on the task list: T11c gains `ErrRevertAcrossBackend` and `AbandonPendingPlan`; no migration anywhere in NB-08.
+
+## T11b: design of NB-08 (2026-11-27)
+
+Builds on "T11a result". Nothing here is implemented.
+
+### Flow
+
+```
+POST /builder/sessions/{id}/backend {mode, app_id?}
+  handler: owner, builder available, mode valid, existing -> viewer on the app,
+           render src/orbit.config.ts (apiBaseURL + app name), derive the app name for "new"
+           (no app is created yet), one store tx: AbandonPendingPlan (if a plan/question card
+           is pending) + insert the attach_backend turn, payload in pending_proposal
+  -> 202 + the turn
+
+worker runAttach (no model call):
+  1  Builder.Overlay      write the overlay, collision check, dependency merge   (builder, new route)
+  2  Builder.Commit       one commit "Add backend", seq = turn.Seq
+  3  snapshot             like revert: the commit is safe before anything else
+  4  Deps.AttachBackend   create the app (mode new) + conditional UPDATE of the session and the
+                          frontend app link, one tx; the callback is provided by the dashboard
+  5  install + build      so the preview has the SDK
+  6  event backend_attached {mode, app_id, build}; turn completed
+```
+
+Why the app is created in step 4 and not in the handler: a failure in steps 1 to 3 then leaves nothing to clean up. The orbit.config.ts only needs the app name, which the handler derives (`deriveBuilderAppName`) before anything exists.
+
+### Decisions
+
+1. **The overlay is served by the builder, not embedded in Orbit.** New builder route `POST /v1/sessions/{id}/overlay` (signed like the others, `trackAdmit`): body `{ "name": "backend", "files": { "src/orbit.config.ts": "<rendered>" } }`. The builder reads the overlay directory from its own image, so the SDK version has one home next to the templates. Orbit sends only the one dynamic file.
+2. **Overlay location: `builder/templates/backend-overlay/`**, a sibling of `default` and `site`, never inside `default` (Init copies a template directory whole, so an overlay inside it would reach every default session). Contents: `overlay.json` (`files` to copy, `dependencies` to merge, `replace` list), `src/lib/orbit.ts`, `src/lib/storage.ts`, `ORBIT_AGENT.md`. `Dockerfile.builder` gets one `COPY` line. `TEMPLATE_VERSION` is not needed: it versions nothing a session pins.
+3. **No drift: checked-in copies plus an equality test**, the same pattern as the kit (T5). `internal/builder/templates_test.go` fails when `backend-overlay/src/lib/*` or `ORBIT_AGENT.md` differ from `default`, or when the overlay's `@zeeptech/orbit-client` version differs from `default/package.json`.
+4. **Collision rule.** For each file in `files`: if the path exists in the workspace the route answers `409 {"error":"overlay_conflict","paths":[...]}` and writes nothing (check everything first, then write). `replace` (only `ORBIT_AGENT.md`) is exempt: it is template guidance, not project code, so it is overwritten. `[Incerto]` if an agent notes in it will be lost; accepted, and the event lists the replaced paths.
+5. **Dependency merge.** Parse the workspace `package.json`, add `overlay.dependencies` under `dependencies`. If the key exists with another version the route fails with `overlay_conflict` (a site that added the SDK by hand is not expected). The file is rewritten with the same indentation. No lockfile edit: the install step falls back to `npm install` (T11a, point 4).
+6. **Compensation after step 3.** If `Deps.AttachBackend` fails (including "0 rows updated": someone attached first), the worker calls `Builder.Revert` to the previous head as a new commit, snapshots it and fails the turn with `attach_failed`. The workspace never keeps SDK files while the row says `none`. A created app is removed by the callback itself (BBE-02 code reused) before it returns the error.
+7. **`AbandonPendingPlan` (store).** In the same tx as the turn insert: lock the session row; read the active turn; if it is `awaiting_confirmation` and its pending proposal is `propose_build_plan` or `ask_user`, finish it `completed` with event `plan_dismissed {reason: "backend_added"}` and clear `pending_proposal`; any other active turn returns `ErrTurnActive` (409). A confirm-backend proposal never exists in a `none` session (the tools are hidden), so it is not handled.
+8. **After the attach, the planning message comes from the client.** When the attach turn completes the UI sends `POST .../messages {content, plan_first: true}` with a short i18n string (en and pt-BR) saying the project now has a backend and asking to plan the part that saves data. Because the string comes from the UI language, the plan-language problem of validation.md does not apply to it. The planner sees the backend tools because every reader keys on `backend_app_id` (T4).
+9. **`ErrRevertAcrossBackend`.** `CreateRevertTurn`: if an `attach_backend` turn with `seq` greater than the target exists, refuse. Query on `builder_turns` by `kind` and `seq`, in the existing lock.
+10. **Audit.** `builder.session.backend.attach` written by the handler at turn creation (`mode`, `app_id` for existing only, `turn_seq`); the app id of a new app is added by the callback in the event, not in the audit row (it does not exist yet).
+11. **Session view.** `GET /sessions/{id}` already carries `backend_app_id` and `backend_origin`; no new field. The builder page reloads the session when it sees `backend_attached`.
+
+### Failure matrix (one test each)
+
+| Point | State left | Expected |
+|---|---|---|
+| handler: session already has a backend | none | 409 `session already has a backend` |
+| handler: another turn running | none | 409 |
+| handler: existing app not visible | none | 404 |
+| overlay collision (step 1) | nothing written | turn failed `overlay_conflict`, row still `none`, no app |
+| commit or snapshot fails (2, 3) | at worst an uncommitted workspace | turn failed, no app, row `none`; the next turn commits or the revert cleans |
+| AttachBackend fails (4), mode new | overlay committed | revert commit, app removed, turn failed, row `none` |
+| two attaches at once | one wins | the loser gets 409 at the handler or `attach_failed` with a revert, and its app is removed |
+| build fails (5) | attached | turn completed, event says `build: failed`, the agent fixes it next turn |
+| revert to before the attach | none | 400 `cannot revert across a backend change` |
+
+### Interfaces added
+
+- `store`: `KindAttachBackend`, `AttachPayload`, `CreateAttachTurn(owner, session, payload)` (includes `AbandonPendingPlan`), `ErrRevertAcrossBackend`.
+- `sandbox.Sandbox`: `Overlay(ctx, sessionID, name string, files map[string]string) (OverlayResult, error)` with `ErrOverlayConflict{Paths}`; the HTTP client and the builder route.
+- `agent.Deps`: `AttachBackend func(ctx, sess *store.Session, p store.AttachPayload) (appID string, err error)`.
+- `dashboard`: `POST /builder/sessions/{id}/backend` handler, the `AttachBackend` callback (reuses `createBuilderBackend` and `removeCreatedBackend`).
+
+### UI (T11g)
+
+Builder header of a `none` session: **Add a backend** button with a menu "New backend" / existing apps. A confirmation dialog states what is created (an empty app, SDK files, no data yet) and that this cannot be undone. The plan card gets the same action (NB-08g) when the user answered "yes, it stores data". While the attach turn runs the composer is disabled, as for revert. Strings in `en.json` and `pt-BR.json`, including the planning message of decision 8.
+
+### Open questions left
+
+1. Whether `ORBIT_AGENT.md` should be replaced or merged (decision 4 chooses replace).
+2. Whether the advanced new-session dialog should also offer "No backend" now that it can be undone; out of NB-08.
