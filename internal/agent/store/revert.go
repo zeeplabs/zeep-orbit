@@ -96,6 +96,19 @@ func (s *Store) CreateRevertTurn(ctx context.Context, ownerUserID, sessionID str
 			return nil, ErrNoRevertTarget
 		}
 	}
+	// An attach that completed after the target would be undone in the files but
+	// not in the session row (NB-08d).
+	var crosses bool
+	if err := tx.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM zeep_system.builder_turns
+		 WHERE session_id = $1 AND kind = $2 AND status = 'completed' AND seq > $3)`,
+		sessionID, KindAttachBackend, turnSeq,
+	).Scan(&crosses); err != nil {
+		return nil, fmt.Errorf("builder store: create revert turn: check attach: %w", err)
+	}
+	if crosses {
+		return nil, ErrRevertAcrossBackend
+	}
 	var sha string
 	err = tx.QueryRow(ctx,
 		`SELECT commit_sha FROM zeep_system.builder_snapshots
