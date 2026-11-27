@@ -259,6 +259,15 @@ func (s *httpSandbox) Op(ctx context.Context, sessionID, opID string, op FileOp)
 	return OpResult{OK: resp.OK, Output: resp.Output, Replayed: resp.Replayed}, nil
 }
 
+func (s *httpSandbox) ApplyBackendOverlay(ctx context.Context, sessionID, opID string, files map[string]string) (OverlayResult, error) {
+	req := builder.OverlayRequest{OpID: opID, Name: builder.OverlayRouteName, Files: files}
+	var resp builder.OverlayResult
+	if err := s.postJSON(ctx, sessionID, "/overlay", req, maxSmallResponse, &resp); err != nil {
+		return OverlayResult{}, err
+	}
+	return OverlayResult{Written: resp.Written, Replaced: resp.Replaced, Dependencies: resp.Dependencies, Replayed: resp.Replayed}, nil
+}
+
 func (s *httpSandbox) Build(ctx context.Context, sessionID, opID string, step BuildStep, previewBase string) (BuildResult, error) {
 	req := builder.BuildRequest{OpID: opID, Step: string(step), PreviewBase: previewBase}
 	var resp builder.BuildResponse

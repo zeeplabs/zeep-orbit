@@ -37,6 +37,10 @@ func newBuilderServer(t *testing.T) (*httptest.Server, *builder.Signer) {
 	writeFile(t, filepath.Join(def, ".gitignore"), "node_modules/\ndist/\n.orbit/\n")
 	writeFile(t, filepath.Join(def, "src", "main.ts"), "export {}\n")
 
+	ov := filepath.Join(tmpl, "backend-overlay")
+	writeFile(t, filepath.Join(ov, "overlay.json"), `{"version":1,"files":["src/lib/sdk.ts"],"dynamic":["src/orbit.config.ts"],"replace":[],"dependencies":{"sdk":"1.0.0"}}`)
+	writeFile(t, filepath.Join(ov, "src", "lib", "sdk.ts"), "export {}\n")
+
 	script := func(name, body string) string {
 		p := filepath.Join(ctl, name)
 		if err := os.WriteFile(p, []byte("#!/bin/sh\n"+body+"\n"), 0o755); err != nil {
@@ -421,5 +425,46 @@ func TestNewHTTP_Validation(t *testing.T) {
 	}
 	if _, err := NewHTTP("https://builder.internal/base/", signer, nil); err != nil {
 		t.Errorf("valid URL rejected: %v", err)
+	}
+}
+
+func TestHTTPSandbox_ApplyBackendOverlay(t *testing.T) {
+	sb, _ := newClient(t)
+	ctx := context.Background()
+	if _, err := sb.Init(ctx, "s-ov", TemplateSource{Name: "default"}); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{"src/orbit.config.ts": "export const ORBIT_APP_NAME = 'x'\n"}
+
+	res, err := sb.ApplyBackendOverlay(ctx, "s-ov", "attach-1", files)
+	if err != nil {
+		t.Fatalf("ApplyBackendOverlay: %v", err)
+	}
+	if res.Replayed || len(res.Written) != 3 || len(res.Dependencies) != 1 || res.Dependencies[0] != "sdk" {
+		t.Errorf("result = %+v", res)
+	}
+	read, err := sb.Op(ctx, "s-ov", "", FileOp{Kind: OpReadFile, Path: "src/orbit.config.ts"})
+	if err != nil || !strings.Contains(read.Output, "ORBIT_APP_NAME") {
+		t.Errorf("config not written: %+v %v", read, err)
+	}
+
+	again, err := sb.ApplyBackendOverlay(ctx, "s-ov", "attach-1", files)
+	if err != nil || !again.Replayed {
+		t.Errorf("same op id must replay: %+v %v", again, err)
+	}
+
+	// A second attempt conflicts, the error says so, and the model-facing message keeps the paths.
+	_, err = sb.ApplyBackendOverlay(ctx, "s-ov", "attach-2", files)
+	if !IsOverlayConflict(err) {
+		t.Fatalf("want an overlay conflict, got %v", err)
+	}
+	if msg, ok := ToolMessage(err); !ok || !strings.Contains(msg, "src/lib/sdk.ts") {
+		t.Errorf("tool message = %q ok=%v, want the paths in conflict", msg, ok)
+	}
+	if IsOverlayConflict(errors.New("other")) || IsOverlayConflict(nil) {
+		t.Error("IsOverlayConflict must be false for other errors")
+	}
+	if _, err := sb.ApplyBackendOverlay(ctx, "unknown-session", "a", files); !errors.Is(err, ErrUnknownSession) {
+		t.Errorf("unknown session: got %v", err)
 	}
 }

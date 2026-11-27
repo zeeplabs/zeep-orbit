@@ -123,6 +123,27 @@ type CommitResult struct {
 	Bundle []byte
 }
 
+// OverlayResult is the outcome of [Sandbox.ApplyBackendOverlay].
+type OverlayResult struct {
+	// Written are the files created or rewritten (package.json when a
+	// dependency was added); Replaced are template guidance files overwritten.
+	Written  []string
+	Replaced []string
+	// Dependencies are the package names added to package.json.
+	Dependencies []string
+	Replayed     bool
+}
+
+// CodeOverlayConflict is the builder error code of a refused overlay.
+const CodeOverlayConflict = "overlay_conflict"
+
+// IsOverlayConflict reports whether err is a refused overlay: the message of
+// the error lists the paths in conflict.
+func IsOverlayConflict(err error) bool {
+	var e *Error
+	return errors.As(err, &e) && e.Code == CodeOverlayConflict
+}
+
 // Health is the builder's capacity report.
 type Health struct {
 	Active                 int
@@ -162,6 +183,12 @@ type Sandbox interface {
 	Commit(ctx context.Context, sessionID string, turnSeq int, message string) (CommitResult, error)
 	// Revert adds a commit whose tree equals toSHA (history is kept).
 	Revert(ctx context.Context, sessionID, toSHA string, turnSeq int) (CommitResult, error)
+	// ApplyBackendOverlay adds the backend data layer (SDK files, dependency,
+	// the template guide) to a workspace created with no backend. files holds
+	// the per-session files the overlay declares (src/orbit.config.ts). It
+	// refuses, writing nothing, when a file the overlay creates already exists
+	// ([IsOverlayConflict]). A repeated opID returns the stored result.
+	ApplyBackendOverlay(ctx context.Context, sessionID, opID string, files map[string]string) (OverlayResult, error)
 	// Archive streams the tree at sha ("" means HEAD) as a tar. The caller
 	// closes the reader, and ctx must outlive reading it.
 	Archive(ctx context.Context, sessionID, sha string) (io.ReadCloser, error)
@@ -356,6 +383,12 @@ func (r *restoring) Commit(ctx context.Context, sessionID string, turnSeq int, m
 func (r *restoring) Revert(ctx context.Context, sessionID, toSHA string, turnSeq int) (CommitResult, error) {
 	return WithRestore(ctx, r.Sandbox, sessionID, r.snapshots, func(ctx context.Context) (CommitResult, error) {
 		return r.Sandbox.Revert(ctx, sessionID, toSHA, turnSeq)
+	})
+}
+
+func (r *restoring) ApplyBackendOverlay(ctx context.Context, sessionID, opID string, files map[string]string) (OverlayResult, error) {
+	return WithRestore(ctx, r.Sandbox, sessionID, r.snapshots, func(ctx context.Context) (OverlayResult, error) {
+		return r.Sandbox.ApplyBackendOverlay(ctx, sessionID, opID, files)
 	})
 }
 

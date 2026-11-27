@@ -55,6 +55,9 @@ RUN mkdir -p /work /opt/templates \
 # backend, "site" for a project with none.
 COPY builder/templates/default /opt/templates/default
 COPY builder/templates/site /opt/templates/site
+# Added to a "site" workspace when a backend is attached later (NB-08): not a
+# template, never used by Init.
+COPY builder/templates/backend-overlay /opt/templates/backend-overlay
 
 WORKDIR /work
 VOLUME ["/work"]

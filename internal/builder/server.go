@@ -237,6 +237,16 @@ type RevertRequest struct {
 	TurnSeq int `json:"turn_seq"`
 }
 
+// OverlayRequest is the body of POST /v1/sessions/{id}/overlay.
+type OverlayRequest struct {
+	// OpID makes the call idempotent: a repeated id returns the stored result.
+	OpID string `json:"op_id"`
+	// Name is the overlay; only OverlayRouteName ("backend") exists.
+	Name string `json:"name"`
+	// Files are the per-session files the overlay declares as dynamic.
+	Files map[string]string `json:"files"`
+}
+
 // HealthResponse is the result of GET /v1/health.
 type HealthResponse struct {
 	// Active is the number of sessions with a request in flight.
@@ -400,6 +410,7 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("GET "+sess+"/build-log", s.route(routeOpts{maxBody: maxNoBodySize, timeout: smallTimeout, requireSession: true}, s.handleBuildLog))
 	mux.Handle("POST "+sess+"/commit", s.route(routeOpts{maxBody: maxSmallBody, timeout: commitTimeout, track: trackAlways, requireSession: true}, s.handleCommit))
 	mux.Handle("POST "+sess+"/revert", s.route(routeOpts{maxBody: maxSmallBody, timeout: commitTimeout, track: trackAlways, requireSession: true}, s.handleRevert))
+	mux.Handle("POST "+sess+"/overlay", s.route(routeOpts{maxBody: maxOpsBody, timeout: opsTimeout, track: trackAdmit, requireSession: true}, s.handleOverlay))
 	mux.Handle("GET "+sess+"/archive", s.route(routeOpts{maxBody: maxNoBodySize, timeout: archiveTimeout, requireSession: true}, s.handleArchive))
 	previewOpts := routeOpts{maxBody: maxNoBodySize, timeout: previewTimeout, requireSession: true, previewHeaders: true}
 	mux.Handle("GET "+sess+"/preview", s.route(previewOpts, s.handlePreview))
@@ -654,6 +665,8 @@ func mapError(err error) (status int, code, msg string) {
 		{ErrBundleTooLarge, http.StatusRequestEntityTooLarge, "bundle_too_large"},
 
 		{ErrOpIDReused, http.StatusConflict, "op_id_reused"},
+		{ErrOverlayConflict, http.StatusConflict, "overlay_conflict"},
+		{ErrOverlayInvalid, http.StatusUnprocessableEntity, "overlay_invalid"},
 		{ErrRepoExists, http.StatusConflict, "session_exists"},
 		{ErrRootNotEmpty, http.StatusConflict, "session_exists"},
 
@@ -892,6 +905,11 @@ func (s *Server) handleInit(w http.ResponseWriter, r *http.Request, c *call) {
 			s.fail(w, r, c.id, badRequest("invalid_request", "send either a tar body or ?template=, not both"))
 			return
 		}
+		if templateName == OverlayBackendName {
+			// The overlay is applied to an existing workspace, never a starting point.
+			s.fail(w, r, c.id, &apiError{http.StatusNotFound, "unknown_template", "unknown template"})
+			return
+		}
 		dir, err := s.resolveTemplate(templateName)
 		if err != nil {
 			s.fail(w, r, c.id, err)
@@ -1096,6 +1114,41 @@ func (s *Server) handleOps(w http.ResponseWriter, r *http.Request, c *call) {
 		s.log.Error("operation applied but not recorded", "session", c.id, "error", err, "cause", causeOf(err))
 	}
 	writeJSON(w, http.StatusOK, OpsResponse{OK: res.OK, Output: res.Output, Replayed: res.Replayed})
+}
+
+func (s *Server) handleOverlay(w http.ResponseWriter, r *http.Request, c *call) {
+	var req OverlayRequest
+	if !s.decodeJSON(w, r, c, &req) {
+		return
+	}
+	if req.Name != OverlayRouteName {
+		writeError(w, http.StatusUnprocessableEntity, "unknown_overlay", "unknown overlay")
+		return
+	}
+	dir, err := s.resolveTemplate(OverlayBackendName)
+	if err != nil {
+		var ae *apiError
+		if errors.As(err, &ae) {
+			writeError(w, ae.status, ae.code, ae.msg)
+			return
+		}
+		s.fail(w, r, c.id, err)
+		return
+	}
+	ws, err := s.registry.Get(c.id)
+	if err != nil {
+		s.fail(w, r, c.id, err)
+		return
+	}
+	res, err := ws.ApplyOverlay(req.OpID, dir, req.Files)
+	if err != nil {
+		if !(len(res.Written) > 0 && errors.Is(err, ErrOpLog)) {
+			s.fail(w, r, c.id, err)
+			return
+		}
+		s.log.Error("overlay applied but not recorded", "session", c.id, "error", err, "cause", causeOf(err))
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 
 func (s *Server) handleBuild(w http.ResponseWriter, r *http.Request, c *call) {

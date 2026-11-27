@@ -134,3 +134,59 @@ func TestTemplates_SiteHasNoBackendLayer(t *testing.T) {
 		}
 	}
 }
+
+// The overlay is a checked-in copy of what the default template has and the site
+// template lacks (builder-no-backend NB-08): this fails when they drift, so a
+// project that attaches a backend later gets the same SDK files and version as one
+// created with a backend.
+func TestTemplates_BackendOverlayMatchesDefault(t *testing.T) {
+	root := templatesRoot(t)
+	var m overlayManifestDoc
+	if err := json.Unmarshal(readTemplateFile(t, root, OverlayBackendName, "overlay.json"), &m); err != nil {
+		t.Fatalf("overlay.json: %v", err)
+	}
+	if m.Version != 1 {
+		t.Fatalf("overlay.json version = %d", m.Version)
+	}
+	for _, p := range append(append([]string{}, m.Files...), m.Replace...) {
+		if !bytes.Equal(readTemplateFile(t, root, OverlayBackendName, p), readTemplateFile(t, root, "default", p)) {
+			t.Errorf("%s differs between backend-overlay and default", p)
+		}
+	}
+	// The dynamic files exist in the default template (the overlay renders them per session).
+	for _, p := range m.Dynamic {
+		readTemplateFile(t, root, "default", p)
+	}
+	// Every overlay file is absent from the site template, or attaching would always conflict.
+	for _, p := range append(append([]string{}, m.Files...), m.Dynamic...) {
+		if _, err := os.Stat(filepath.Join(root, "site", filepath.FromSlash(p))); err == nil {
+			t.Errorf("%s exists in the site template: the overlay would conflict with a fresh site", p)
+		}
+	}
+	// The dependencies are at the default template's versions, and the site has none of them.
+	var def, site struct {
+		Dependencies map[string]string `json:"dependencies"`
+	}
+	if err := json.Unmarshal(readTemplateFile(t, root, "default", "package.json"), &def); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(readTemplateFile(t, root, "site", "package.json"), &site); err != nil {
+		t.Fatal(err)
+	}
+	for name, v := range m.Dependencies {
+		if def.Dependencies[name] != v {
+			t.Errorf("overlay dependency %s %s, default has %q", name, v, def.Dependencies[name])
+		}
+		if _, ok := site.Dependencies[name]; ok {
+			t.Errorf("site already depends on %s: the overlay would conflict with a fresh site", name)
+		}
+	}
+	// Dependencies the default has and the site lacks are all in the overlay.
+	for name := range def.Dependencies {
+		if _, inSite := site.Dependencies[name]; !inSite {
+			if _, inOverlay := m.Dependencies[name]; !inOverlay {
+				t.Errorf("default depends on %s, site does not, and the overlay does not add it", name)
+			}
+		}
+	}
+}

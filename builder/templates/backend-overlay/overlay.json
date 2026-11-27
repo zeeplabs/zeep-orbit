@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "files": ["src/lib/orbit.ts", "src/lib/storage.ts"],
+  "dynamic": ["src/orbit.config.ts"],
+  "replace": ["ORBIT_AGENT.md"],
+  "dependencies": {
+    "@zeeptech/orbit-client": "0.1.0",
+    "react-router-dom": "7.18.4"
+  }
+}

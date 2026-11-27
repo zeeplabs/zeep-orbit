@@ -173,6 +173,9 @@ func (f *bhFakeSandbox) Commit(context.Context, string, int, string) (sandbox.Co
 func (f *bhFakeSandbox) Revert(context.Context, string, string, int) (sandbox.CommitResult, error) {
 	return sandbox.CommitResult{}, errors.New("bhFakeSandbox: Revert must not be called")
 }
+func (f *bhFakeSandbox) ApplyBackendOverlay(context.Context, string, string, map[string]string) (sandbox.OverlayResult, error) {
+	return sandbox.OverlayResult{}, errors.New("bhFakeSandbox: ApplyBackendOverlay must not be called")
+}
 func (f *bhFakeSandbox) Preview(string) http.Handler { return http.NotFoundHandler() }
 
 func (f *bhFakeSandbox) snapshot() (inits []bhInitCall, destroyed []string) {
