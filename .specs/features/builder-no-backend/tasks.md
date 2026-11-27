@@ -14,7 +14,7 @@ Status 2026-11-25: T1 to T10 are done (T2 to T8 merged as #66 to #72). T9 found 
 - **T8 (done, #72)** UI: dropdown with "No backend" first and default, builder header (`BackendLink`, with a `/?backend=new` link), project list, i18n en and pt-BR, CHANGELOG, tests. The plan card needed no change (no backend section in it). The advanced new-session dialog is unchanged.
 - **T9 (done 2026-11-25, see validation.md)** Measure on the local stack with the real model (cost confirmed first): the five earlier app briefs with the new default (how many reach the data question; any that become a site wrongly) and two site briefs (landing page, one-pager). Write a validation.md.
 - **T10 (done 2026-11-25)** Docs and CHANGELOG, README bullet in the 4 languages, `ai-frontend-builder.md` section "Projects without a backend", CI job `templates` (default and site: install, typecheck, lint, build).
-- **T11 (phase 2, NB-08, see "NB-08 in detail" in spec.md)** Spec written 2026-11-27, awaiting approval of the three decisions. Tasks, in order:
+- **T11 (phase 2, NB-08, see "NB-08 in detail" in spec.md)** Spec approved 2026-11-27 (existing backends too; published sessions allowed once T11a verifies CORS and the link; revert across an attach refused). Tasks, in order:
   - **T11a** Verify (no code): publish and CORS with a backend attached after publish; the revert rules; how plan/revise carries a new brief version. Write the results into design.md.
   - **T11b** Design: overlay location and format, the `attach_backend` turn kind, the conditional update, planner card action. Needs T11a.
   - **T11c** Store and turn: `KindAttachBackend`, `AttachBackend` conditional update, migration if the turn-kind CHECK needs widening. Tests per failure point (NB-08e).

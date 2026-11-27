@@ -27,7 +27,7 @@ Every builder session creates or reuses an Orbit backend app. `builder_sessions.
 
 ## NB-08 in detail (phase 2): add a backend to a project that has none
 
-Status: spec only, not started. Written 2026-11-27 after T9 (validation.md): app briefs sent to "No backend" end in a plan that does not build the app, so the user starts again; this section is what lets the default go back to "No backend".
+Status: spec approved 2026-11-27, implementation not started. Written 2026-11-27 after T9 (validation.md): app briefs sent to "No backend" end in a plan that does not build the app, so the user starts again; this section is what lets the default go back to "No backend".
 
 ### Behavior
 
@@ -44,7 +44,7 @@ A session with `backend_origin = none` can be given a backend once. After it, th
 - **NB-08h UI.** The builder header for a `none` session shows **Add a backend** (menu: new, or an existing app) in place of the "Start a project with a backend" link, with a confirmation that says what is created (an empty Orbit app, the SDK files, no data yet). The progress is the turn's, as for revert. Every string in `en.json` and `pt-BR.json`.
 - **NB-08i Default.** When NB-08a to NB-08h are merged and measured, the chat-home default returns to "No backend". The measurement repeats T9's five app briefs plus the "yes" answer, and counts how many end in an app. That change is its own PR.
 
-### Decisions to confirm before design
+### Decisions (confirmed by the maintainer 2026-11-27, all three as recommended)
 
 1. **Existing backends too?** Recommended yes: it costs one `existing` branch and a user with a backend should not have to create another. Alternative: new only.
 2. **Published sessions.** A session that was already published has a static frontend app. Attaching afterwards means the published site must be allowed by the backend's CORS and the frontend app row linked to it. `[Incerto]`: T1 found that publish does not read the session's backend id, so this may need nothing, or a CORS update; verify first (T11a). Recommended: allow, once verified.
