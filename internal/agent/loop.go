@@ -100,6 +100,9 @@ type Deps struct {
 	// Default tools.PreviewBuildBase: pass the same function the workspace
 	// tools were registered with.
 	PreviewBase func(sessionID string) string
+	// AttachBackend runs the backend step of an attach_backend turn. Nil makes
+	// such a turn fail with attach_unavailable.
+	AttachBackend AttachFunc
 	// Clock defaults to time.Now.
 	Clock func() time.Time
 	// Logger receives the raw errors that must never reach users or events.
@@ -271,6 +274,8 @@ func (r *run) run(ctx context.Context) (*outcome, error) {
 	case store.KindChat:
 	case store.KindRevert:
 		return r.runRevert(ctx)
+	case store.KindAttachBackend:
+		return r.runAttach(ctx)
 	default:
 		return &outcome{status: store.TurnFailed, code: CodeUnsupportedTurn}, nil
 	}

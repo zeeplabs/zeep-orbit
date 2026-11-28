@@ -37,6 +37,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -106,6 +107,10 @@ type BuilderRuntime struct {
 	// providerHTTP is the SSRF-guarded client handed to the LLM adapter. Tests
 	// replace it; nothing outside this package can.
 	providerHTTP *http.Client
+
+	// attach is the attach_backend callback; the handler sets it (see
+	// SetAttachBackend). Read for every turn by prepareDeps.
+	attach atomic.Pointer[agent.AttachFunc]
 
 	mu     sync.Mutex
 	cancel context.CancelFunc
@@ -213,6 +218,13 @@ func newBuilderToolRegistry(pool *db.Pool, sb sandbox.Sandbox, st *store.Store, 
 	return reg, nil
 }
 
+// SetAttachBackend sets the callback attach_backend turns run (the handler
+// owns the app creation, so it lives outside the runtime). Turns claimed before
+// it is set fail with attach_unavailable.
+func (rt *BuilderRuntime) SetAttachBackend(fn agent.AttachFunc) {
+	rt.attach.Store(&fn)
+}
+
 // HandlerConfig is the part of BuilderHandlerConfig that comes from the
 // runtime. On a nil runtime it is the zero config: untyped-nil Sandbox, no
 // store, no signer, no Poke (every builder route but status is then a 503).
@@ -222,11 +234,12 @@ func (rt *BuilderRuntime) HandlerConfig() BuilderHandlerConfig {
 		return BuilderHandlerConfig{}
 	}
 	return BuilderHandlerConfig{
-		Store:          rt.store,
-		Sandbox:        rt.sandbox,
-		PreviewSigner:  rt.signer,
-		Poke:           rt.worker.Poke,
-		NamingProvider: rt.namingProvider,
+		Store:            rt.store,
+		Sandbox:          rt.sandbox,
+		PreviewSigner:    rt.signer,
+		Poke:             rt.worker.Poke,
+		NamingProvider:   rt.namingProvider,
+		SetAttachBackend: rt.SetAttachBackend,
 	}
 }
 
@@ -314,6 +327,9 @@ func (rt *BuilderRuntime) prepareDeps(ctx context.Context, base agent.Deps) agen
 		ContextWindowTokens: s.ContextWindowTokens,
 	}
 	base.PlanningEnabled = s.PlanningMode != BuilderPlanningOff
+	if fn := rt.attach.Load(); fn != nil {
+		base.AttachBackend = *fn
+	}
 	base.Provider = rt.resolveProvider(ctx, s.Provider)
 	// The planning model only matters when it differs from the build model.
 	if s.PlanningModel != "" && s.PlanningModel != base.Provider.Model() {
