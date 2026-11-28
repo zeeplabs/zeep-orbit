@@ -95,7 +95,14 @@ func (r *run) runRevert(ctx context.Context) (*outcome, error) {
 // revertBuild rebuilds the restored tree and returns the RevertBuild* status.
 // The error is only a cancellation of ctx or a lost lease.
 func (r *run) revertBuild(ctx, tctx context.Context) (string, error) {
-	const step = sandbox.StepBuild
+	return r.buildStep(ctx, tctx, sandbox.StepBuild, "revert-"+r.turn.ID+"-build")
+}
+
+// buildStep runs one build step for a turn that makes no model call (revert,
+// attach) and reports it with build_started and build_succeeded/build_failed
+// events. It returns the RevertBuild* status. The error is only a cancellation
+// of ctx or a lost lease.
+func (r *run) buildStep(ctx, tctx context.Context, step sandbox.BuildStep, opID string) (string, error) {
 	if err := r.emit(ctx, EventBuildStarted, map[string]any{"step": string(step)}); err != nil {
 		return "", err
 	}
@@ -103,7 +110,7 @@ func (r *run) revertBuild(ctx, tctx context.Context) (string, error) {
 	if r.deps.PreviewBase != nil {
 		previewBase = r.deps.PreviewBase
 	}
-	res, err := r.deps.Builder.Build(tctx, r.sess.ID, "revert-"+r.turn.ID+"-build", step, previewBase(r.sess.ID))
+	res, err := r.deps.Builder.Build(tctx, r.sess.ID, opID, step, previewBase(r.sess.ID))
 	switch {
 	case err == nil:
 	case ctx.Err() != nil:
@@ -111,7 +118,7 @@ func (r *run) revertBuild(ctx, tctx context.Context) (string, error) {
 	case tctx.Err() != nil:
 		return RevertBuildFailed, r.emit(ctx, EventBuildFailed, map[string]any{"step": string(step), "tail": "build timed out"})
 	default:
-		r.log.Error("agent revert build failed to run", "turn", r.turn.ID, "session", r.sess.ID, "err", err)
+		r.log.Error("agent build step failed to run", "turn", r.turn.ID, "session", r.sess.ID, "step", step, "err", err)
 		return RevertBuildError, nil
 	}
 	if res.ExitCode != 0 || res.TimedOut {
@@ -120,7 +127,7 @@ func (r *run) revertBuild(ctx, tctx context.Context) (string, error) {
 			tail = "build timed out"
 		}
 		if err := r.emit(ctx, EventBuildFailed, map[string]any{"step": string(step), "tail": tail}); err != nil {
-			return "", fmt.Errorf("revert build event: %w", err)
+			return "", fmt.Errorf("%s event: %w", step, err)
 		}
 		return RevertBuildFailed, nil
 	}

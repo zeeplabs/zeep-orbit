@@ -35,6 +35,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 
+	"github.com/zeeplabs/zeep-orbit/internal/agent"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/provider"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/sandbox"
 	"github.com/zeeplabs/zeep-orbit/internal/agent/store"
@@ -104,6 +105,11 @@ type BuilderHandlerConfig struct {
 	// and backend name). Optional: nil, or a nil result, makes naming use the
 	// heuristic fallback.
 	NamingProvider func(ctx context.Context) provider.Provider
+	// SetAttachBackend, when set, receives the callback the turn worker runs for
+	// an attach_backend turn (NB-08). In production it is
+	// BuilderRuntime.SetAttachBackend: the runtime is built before the handler,
+	// so the handler hands the callback over when it is built.
+	SetAttachBackend func(agent.AttachFunc)
 }
 
 // BuilderHandler serves the /dashboard/api/builder/sessions* routes and the
@@ -151,6 +157,9 @@ func NewBuilderHandler(pool *db.Pool, cfg BuilderHandlerConfig) *BuilderHandler 
 	}
 	if h.healthTimeout <= 0 {
 		h.healthTimeout = defaultBuilderHealthTimeout
+	}
+	if cfg.SetAttachBackend != nil {
+		cfg.SetAttachBackend(h.attachBackend)
 	}
 	return h
 }
