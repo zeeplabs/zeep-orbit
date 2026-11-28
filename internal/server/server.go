@@ -456,6 +456,7 @@ func newRouter(reg *registry.Registry, h *Handler, pool *db.Pool, logger *zap.Lo
 		r.With(dashboard.RequireAuth(pool)).Get("/api/builder/sessions/{id}/events", builderH.ListEvents)
 		r.With(dashboard.RequireAuth(pool)).Get("/api/builder/sessions/{id}/usage", builderH.SessionUsage)
 		r.With(dashboard.RequireAuth(pool), aiChatLimiterMW).Post("/api/builder/sessions/{id}/revert", builderH.RevertSession)
+		r.With(dashboard.RequireAuth(pool), aiChatLimiterMW).Post("/api/builder/sessions/{id}/backend", builderH.AttachBackend)
 		r.With(dashboard.RequireAuth(pool), aiChatLimiterMW).Post("/api/builder/sessions/{id}/turns/{turn}/confirm", builderH.ConfirmProposal)
 		r.With(dashboard.RequireAuth(pool), aiChatLimiterMW).Post("/api/builder/sessions/{id}/turns/{turn}/reject", builderH.RejectProposal)
 		r.With(dashboard.RequireAuth(pool), aiChatLimiterMW).Post("/api/builder/sessions/{id}/turns/{turn}/answers", builderH.AnswerQuestions)
